@@ -1,0 +1,144 @@
+---
+import { Icon } from "astro-icon/components";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Brand from "../../components/Brand.astro";
+---
+
+<BaseLayout
+  title="Convite para uma casa na Nina"
+  description="Abra este convite no app Nina para participar da organização da casa."
+  canonical="/invite/"
+  noindex
+>
+  <header class="invite-header page-shell">
+    <Brand />
+    <a class="text-link" href="/">Conhecer a Nina</a>
+  </header>
+
+  <main class="invite-page">
+    <section class="invite-card" data-invite-card>
+      <div class="invite-avatar-wrap">
+        <img src="/images/nina-app-icon.png" alt="Nina" width="104" height="104" />
+        <span><Icon name="ph:house-fill" size={25} /></span>
+      </div>
+      <p class="eyebrow mint">Convite da Nina</p>
+      <h1 data-invite-title>Você foi convidado para uma casa.</h1>
+      <p class="invite-description" data-invite-description>
+        Estou verificando o convite para deixar tudo pronto.
+      </p>
+      <div class="invite-code" data-invite-code hidden>
+        <span>Código</span>
+        <strong></strong>
+        <button type="button" aria-label="Copiar código" data-copy-code>
+          <Icon name="ph:copy-bold" size={19} />
+        </button>
+      </div>
+      <div class="invite-status" data-invite-status>
+        <span class="spinner" aria-hidden="true"></span>
+        Verificando convite
+      </div>
+      <div class="invite-actions" data-invite-actions hidden>
+        <a class="button button-primary button-large" href="#" data-open-app>
+          Abrir no app Nina
+          <Icon name="ph:arrow-square-out-bold" size={19} />
+        </a>
+        <button class="button button-secondary" type="button" data-copy-code>
+          Copiar código
+        </button>
+      </div>
+      <p class="invite-footnote">
+        Se a Nina ainda não estiver instalada, guarde o código e use-o ao criar sua conta.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    const pathParts = window.location.pathname.split("/").filter(Boolean);
+    const rawCode = pathParts.at(-1) === "invite" ? "" : pathParts.at(-1) ?? "";
+    const code = rawCode.toLowerCase().replace(/[^a-z0-9-]/g, "");
+    const title = document.querySelector("[data-invite-title]");
+    const description = document.querySelector("[data-invite-description]");
+    const codeBox = document.querySelector("[data-invite-code]");
+    const codeValue = codeBox?.querySelector("strong");
+    const status = document.querySelector("[data-invite-status]");
+    const actions = document.querySelector("[data-invite-actions]");
+    const openApp = document.querySelector("[data-open-app]");
+
+    const showError = (message: string) => {
+      if (title) title.textContent = "Este convite não está disponível.";
+      if (description) description.textContent = message;
+      if (status) status.innerHTML = '<span class="status-dot error"></span> Convite inválido';
+      codeBox?.setAttribute("hidden", "");
+      actions?.setAttribute("hidden", "");
+    };
+
+    const showInvite = (familyName: string, verified: boolean) => {
+      if (title) title.textContent = `${familyName} quer você por perto.`;
+      if (description) {
+        description.textContent =
+          "Abra a Nina para entrar nesta casa e dividir tarefas, lembretes e combinados.";
+      }
+      if (codeValue) codeValue.textContent = code;
+      codeBox?.removeAttribute("hidden");
+      actions?.removeAttribute("hidden");
+      if (status) {
+        status.innerHTML = verified
+          ? '<span class="status-dot success"></span> Convite confirmado'
+          : '<span class="status-dot neutral"></span> Código pronto para usar';
+      }
+      if (openApp instanceof HTMLAnchorElement) {
+        openApp.href = `nina://invite/${encodeURIComponent(code)}`;
+      }
+    };
+
+    const showUnverified = () => {
+      if (title) title.textContent = "Abra este convite na Nina.";
+      if (description) {
+        description.textContent =
+          "Não foi possível confirmar o convite no site agora. O app fará a verificação antes de entrar.";
+      }
+      if (codeValue) codeValue.textContent = code;
+      codeBox?.removeAttribute("hidden");
+      actions?.removeAttribute("hidden");
+      if (status) {
+        status.innerHTML = '<span class="status-dot neutral"></span> Verificação pendente';
+      }
+      if (openApp instanceof HTMLAnchorElement) {
+        openApp.href = `nina://invite/${encodeURIComponent(code)}`;
+      }
+    };
+
+    const copyCode = async () => {
+      if (!code) return;
+      await navigator.clipboard.writeText(code);
+      document.querySelectorAll("[data-copy-code]").forEach((button) => {
+        const previous = button.textContent;
+        if (button.textContent?.trim() === "Copiar código") button.textContent = "Copiado";
+        setTimeout(() => {
+          if (previous) button.textContent = previous;
+        }, 1600);
+      });
+    };
+
+    document.querySelectorAll("[data-copy-code]").forEach((button) => {
+      button.addEventListener("click", copyCode);
+    });
+
+    if (code.length < 12) {
+      showError("Peça um novo link para a pessoa que convidou você.");
+    } else {
+      fetch(`/api/invite/${encodeURIComponent(code)}`)
+        .then(async (response) => {
+          const payload = (await response.json()) as {
+            valid: boolean;
+            verified?: boolean;
+            familyName?: string | null;
+            error?: string;
+          };
+          if (!response.ok || !payload.valid) throw new Error(payload.error ?? "invalid");
+          showInvite(payload.familyName ?? "Uma casa na Nina", payload.verified === true);
+        })
+        .catch(showUnverified);
+    }
+  </script>
+</BaseLayout>

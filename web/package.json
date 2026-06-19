@@ -1,0 +1,26 @@
+{
+  "name": "nina-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1",
+    "build": "astro check && astro build",
+    "preview": "wrangler pages dev dist --ip 127.0.0.1",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@astrojs/sitemap": "^3.6.0",
+    "@fontsource/fraunces": "^5.2.9",
+    "@fontsource/nunito-sans": "^5.2.7",
+    "@iconify-json/ph": "^1.2.2",
+    "astro": "^5.16.6",
+    "astro-icon": "^1.1.5",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260611.1",
+    "wrangler": "^4.61.0"
+  }
+}

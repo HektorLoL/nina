@@ -1,0 +1,16 @@
+{
+  "name": "Nina",
+  "short_name": "Nina",
+  "description": "Organização da casa com mais leveza.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fffaf0",
+  "theme_color": "#38c2b8",
+  "icons": [
+    {
+      "src": "/images/nina-app-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    }
+  ]
+}

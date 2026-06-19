@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /invite/
+
+Sitemap: https://ninai.app/sitemap-index.xml

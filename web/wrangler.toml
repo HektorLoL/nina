@@ -1,0 +1,6 @@
+name = "nina-web"
+compatibility_date = "2026-06-11"
+pages_build_output_dir = "./dist"
+
+[vars]
+NINA_APP_SCHEME = "nina"

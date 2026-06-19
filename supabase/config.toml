@@ -1,0 +1,44 @@
+project_id = "Nina"
+
+[storage.vector]
+enabled = false
+max_buckets = 10
+max_indexes = 5
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = []
+
+[auth.email]
+enable_signup = false
+double_confirm_changes = false
+enable_confirmations = true
+max_frequency = "60s"
+otp_length = 6
+otp_expiry = 3600
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.external.apple]
+enabled = true
+client_id = "com.heitor.nina"
+secret = ""
+redirect_uri = ""
+url = ""
+skip_nonce_check = false
+email_optional = false
+
+[functions.nina-chat]
+verify_jwt = true
+
+[functions.nina-maintenance]
+verify_jwt = false
+
+[functions.premium-subscription-sync]
+verify_jwt = true
+
+[functions.app-store-server-notifications]
+verify_jwt = false

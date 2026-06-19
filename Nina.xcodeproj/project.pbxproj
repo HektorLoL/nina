@@ -1,0 +1,600 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B00000000000000000000001 /* NinaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000001 /* NinaApp.swift */; };
+		B00000000000000000000002 /* AppRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000002 /* AppRootView.swift */; };
+		B00000000000000000000003 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000003 /* Models.swift */; };
+		B00000000000000000000004 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000004 /* AppStore.swift */; };
+		B00000000000000000000005 /* MockNinaEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000005 /* MockNinaEngine.swift */; };
+		B00000000000000000000006 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000006 /* Theme.swift */; };
+		B00000000000000000000007 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000007 /* Components.swift */; };
+		B00000000000000000000008 /* NinaChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000008 /* NinaChatView.swift */; };
+		B00000000000000000000009 /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000009 /* TodayView.swift */; };
+		B0000000000000000000000A /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000A /* TasksView.swift */; };
+		B0000000000000000000000B /* HouseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000B /* HouseView.swift */; };
+		B0000000000000000000000C /* Sheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000C /* Sheets.swift */; };
+		B0000000000000000000000D /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000D /* AuthSession.swift */; };
+		B0000000000000000000000E /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000E /* LoginView.swift */; };
+		B0000000000000000000000F /* OnboardingTutorialView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000000000000000000000F /* OnboardingTutorialView.swift */; };
+		B00000000000000000000010 /* ProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000010 /* ProfileStore.swift */; };
+		B00000000000000000000011 /* ProfileEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000011 /* ProfileEditorView.swift */; };
+		B00000000000000000000012 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000012 /* Haptics.swift */; };
+		B00000000000000000000013 /* HomeSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000013 /* HomeSetupView.swift */; };
+		B00000000000000000000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000020 /* Assets.xcassets */; };
+		B00000000000000000000021 /* BackendConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000014 /* BackendConfiguration.swift */; };
+		B00000000000000000000022 /* SupabaseAuthClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000015 /* SupabaseAuthClient.swift */; };
+		B00000000000000000000023 /* RemoteHomeBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000016 /* RemoteHomeBackend.swift */; };
+		B00000000000000000000024 /* RemoteProfileBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000017 /* RemoteProfileBackend.swift */; };
+		B00000000000000000000025 /* InviteLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000023 /* InviteLinks.swift */; };
+		B00000000000000000000026 /* PremiumSubscriptionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000024 /* PremiumSubscriptionStore.swift */; };
+		B00000000000000000000027 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000025 /* PrivacyInfo.xcprivacy */; };
+		B00000000000000000000028 /* LocalNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000026 /* LocalNotifications.swift */; };
+		B00000000000000000000030 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = C00000000000000000000002 /* Supabase */; };
+		D00000000000000000000001 /* AuthSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000001 /* AuthSessionTests.swift */; };
+		D00000000000000000000002 /* AppStoreAuthorizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000002 /* AppStoreAuthorizationTests.swift */; };
+		D00000000000000000000003 /* InviteLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000003 /* InviteLinkTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D00000000000000000000050 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A00000000000000000000010;
+			remoteInfo = Nina;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		F00000000000000000000001 /* NinaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NinaApp.swift; sourceTree = "<group>"; };
+		F00000000000000000000002 /* AppRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRootView.swift; sourceTree = "<group>"; };
+		F00000000000000000000003 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		F00000000000000000000004 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		F00000000000000000000005 /* MockNinaEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockNinaEngine.swift; sourceTree = "<group>"; };
+		F00000000000000000000006 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		F00000000000000000000007 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		F00000000000000000000008 /* NinaChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NinaChatView.swift; sourceTree = "<group>"; };
+		F00000000000000000000009 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		F0000000000000000000000A /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
+		F0000000000000000000000B /* HouseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseView.swift; sourceTree = "<group>"; };
+		F0000000000000000000000C /* Sheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sheets.swift; sourceTree = "<group>"; };
+		F0000000000000000000000D /* AuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSession.swift; sourceTree = "<group>"; };
+		F0000000000000000000000E /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		F0000000000000000000000F /* OnboardingTutorialView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingTutorialView.swift; sourceTree = "<group>"; };
+		F00000000000000000000010 /* ProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStore.swift; sourceTree = "<group>"; };
+		F00000000000000000000011 /* ProfileEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEditorView.swift; sourceTree = "<group>"; };
+		F00000000000000000000012 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
+		F00000000000000000000013 /* HomeSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSetupView.swift; sourceTree = "<group>"; };
+		F00000000000000000000014 /* BackendConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendConfiguration.swift; sourceTree = "<group>"; };
+		F00000000000000000000015 /* SupabaseAuthClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseAuthClient.swift; sourceTree = "<group>"; };
+		F00000000000000000000016 /* RemoteHomeBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteHomeBackend.swift; sourceTree = "<group>"; };
+		F00000000000000000000017 /* RemoteProfileBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteProfileBackend.swift; sourceTree = "<group>"; };
+		F00000000000000000000018 /* Nina.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Nina.xcconfig; sourceTree = "<group>"; };
+		F00000000000000000000019 /* SupabaseSecrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/SupabaseSecrets.xcconfig.example; sourceTree = "<group>"; };
+		F00000000000000000000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F00000000000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F00000000000000000000022 /* Nina.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Nina.entitlements; sourceTree = "<group>"; };
+		F00000000000000000000023 /* InviteLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteLinks.swift; sourceTree = "<group>"; };
+		F00000000000000000000024 /* PremiumSubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumSubscriptionStore.swift; sourceTree = "<group>"; };
+		F00000000000000000000025 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F00000000000000000000026 /* LocalNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotifications.swift; sourceTree = "<group>"; };
+		F00000000000000000000030 /* Nina.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Nina.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E00000000000000000000001 /* AuthSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionTests.swift; sourceTree = "<group>"; };
+		E00000000000000000000002 /* AppStoreAuthorizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreAuthorizationTests.swift; sourceTree = "<group>"; };
+		E00000000000000000000003 /* InviteLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteLinkTests.swift; sourceTree = "<group>"; };
+		E00000000000000000000030 /* NinaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NinaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A00000000000000000000011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000030 /* Supabase in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000041 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A00000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000002 /* Nina */,
+				D00000000000000000000004 /* NinaTests */,
+				A00000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A00000000000000000000002 /* Nina */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000001 /* NinaApp.swift */,
+				F00000000000000000000002 /* AppRootView.swift */,
+				F00000000000000000000003 /* Models.swift */,
+				F00000000000000000000004 /* AppStore.swift */,
+				F00000000000000000000005 /* MockNinaEngine.swift */,
+				F00000000000000000000006 /* Theme.swift */,
+				F00000000000000000000007 /* Components.swift */,
+				F00000000000000000000008 /* NinaChatView.swift */,
+				F00000000000000000000009 /* TodayView.swift */,
+				F0000000000000000000000A /* TasksView.swift */,
+				F0000000000000000000000B /* HouseView.swift */,
+				F0000000000000000000000C /* Sheets.swift */,
+				F0000000000000000000000D /* AuthSession.swift */,
+				F0000000000000000000000E /* LoginView.swift */,
+				F0000000000000000000000F /* OnboardingTutorialView.swift */,
+				F00000000000000000000010 /* ProfileStore.swift */,
+				F00000000000000000000011 /* ProfileEditorView.swift */,
+				F00000000000000000000012 /* Haptics.swift */,
+				F00000000000000000000013 /* HomeSetupView.swift */,
+				F00000000000000000000014 /* BackendConfiguration.swift */,
+				F00000000000000000000015 /* SupabaseAuthClient.swift */,
+				F00000000000000000000016 /* RemoteHomeBackend.swift */,
+				F00000000000000000000017 /* RemoteProfileBackend.swift */,
+				F00000000000000000000023 /* InviteLinks.swift */,
+				F00000000000000000000024 /* PremiumSubscriptionStore.swift */,
+				F00000000000000000000026 /* LocalNotifications.swift */,
+				F00000000000000000000018 /* Nina.xcconfig */,
+				F00000000000000000000019 /* SupabaseSecrets.xcconfig.example */,
+				F00000000000000000000021 /* Info.plist */,
+				F00000000000000000000022 /* Nina.entitlements */,
+				F00000000000000000000025 /* PrivacyInfo.xcprivacy */,
+				F00000000000000000000020 /* Assets.xcassets */,
+			);
+			path = Nina;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F00000000000000000000030 /* Nina.app */,
+				E00000000000000000000030 /* NinaTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D00000000000000000000004 /* NinaTests */ = {
+			isa = PBXGroup;
+			children = (
+				E00000000000000000000001 /* AuthSessionTests.swift */,
+				E00000000000000000000002 /* AppStoreAuthorizationTests.swift */,
+				E00000000000000000000003 /* InviteLinkTests.swift */,
+			);
+			path = NinaTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A00000000000000000000010 /* Nina */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A00000000000000000000031 /* Build configuration list for PBXNativeTarget "Nina" */;
+			buildPhases = (
+				A00000000000000000000012 /* Sources */,
+				A00000000000000000000011 /* Frameworks */,
+				A00000000000000000000013 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Nina;
+			packageProductDependencies = (
+				C00000000000000000000002 /* Supabase */,
+			);
+			productName = Nina;
+			productReference = F00000000000000000000030 /* Nina.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D00000000000000000000040 /* NinaTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D00000000000000000000030 /* Build configuration list for PBXNativeTarget "NinaTests" */;
+			buildPhases = (
+				D00000000000000000000042 /* Sources */,
+				D00000000000000000000041 /* Frameworks */,
+				D00000000000000000000043 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D00000000000000000000051 /* PBXTargetDependency */,
+			);
+			name = NinaTests;
+			packageProductDependencies = (
+			);
+			productName = NinaTests;
+			productReference = E00000000000000000000030 /* NinaTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A00000000000000000000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					A00000000000000000000010 = {
+						CreatedOnToolsVersion = 26.5;
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
+					};
+					D00000000000000000000040 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = A00000000000000000000010;
+					};
+				};
+			};
+			buildConfigurationList = A00000000000000000000030 /* Build configuration list for PBXProject "Nina" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = "pt-BR";
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				"pt-BR",
+				en,
+				Base,
+			);
+			mainGroup = A00000000000000000000001;
+			packageReferences = (
+				C00000000000000000000001 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
+			productRefGroup = A00000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A00000000000000000000010 /* Nina */,
+				D00000000000000000000040 /* NinaTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A00000000000000000000013 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000020 /* Assets.xcassets in Resources */,
+				B00000000000000000000027 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000043 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A00000000000000000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000001 /* NinaApp.swift in Sources */,
+				B00000000000000000000002 /* AppRootView.swift in Sources */,
+				B00000000000000000000003 /* Models.swift in Sources */,
+				B00000000000000000000004 /* AppStore.swift in Sources */,
+				B00000000000000000000005 /* MockNinaEngine.swift in Sources */,
+				B00000000000000000000006 /* Theme.swift in Sources */,
+				B00000000000000000000007 /* Components.swift in Sources */,
+				B00000000000000000000008 /* NinaChatView.swift in Sources */,
+				B00000000000000000000009 /* TodayView.swift in Sources */,
+				B0000000000000000000000A /* TasksView.swift in Sources */,
+				B0000000000000000000000B /* HouseView.swift in Sources */,
+				B0000000000000000000000C /* Sheets.swift in Sources */,
+				B0000000000000000000000D /* AuthSession.swift in Sources */,
+				B0000000000000000000000E /* LoginView.swift in Sources */,
+				B0000000000000000000000F /* OnboardingTutorialView.swift in Sources */,
+				B00000000000000000000010 /* ProfileStore.swift in Sources */,
+				B00000000000000000000011 /* ProfileEditorView.swift in Sources */,
+				B00000000000000000000012 /* Haptics.swift in Sources */,
+				B00000000000000000000013 /* HomeSetupView.swift in Sources */,
+				B00000000000000000000021 /* BackendConfiguration.swift in Sources */,
+				B00000000000000000000022 /* SupabaseAuthClient.swift in Sources */,
+				B00000000000000000000023 /* RemoteHomeBackend.swift in Sources */,
+				B00000000000000000000024 /* RemoteProfileBackend.swift in Sources */,
+				B00000000000000000000025 /* InviteLinks.swift in Sources */,
+				B00000000000000000000026 /* PremiumSubscriptionStore.swift in Sources */,
+				B00000000000000000000028 /* LocalNotifications.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000042 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D00000000000000000000001 /* AuthSessionTests.swift in Sources */,
+				D00000000000000000000002 /* AppStoreAuthorizationTests.swift in Sources */,
+				D00000000000000000000003 /* InviteLinkTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D00000000000000000000051 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A00000000000000000000010 /* Nina */;
+			targetProxy = D00000000000000000000050 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C00000000000000000000001 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.46.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C00000000000000000000002 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C00000000000000000000001 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A00000000000000000000021 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A00000000000000000000022 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A00000000000000000000023 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F00000000000000000000018 /* Nina.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Nina/Nina.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = 97PL8KQA8L;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Nina/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heitor.nina;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A00000000000000000000024 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F00000000000000000000018 /* Nina.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Nina/Nina.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = 97PL8KQA8L;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Nina/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heitor.nina;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D00000000000000000000021 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 97PL8KQA8L;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heitor.nina.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Nina.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Nina";
+			};
+			name = Debug;
+		};
+		D00000000000000000000022 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 97PL8KQA8L;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.heitor.nina.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Nina.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Nina";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A00000000000000000000030 /* Build configuration list for PBXProject "Nina" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00000000000000000000021 /* Debug */,
+				A00000000000000000000022 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00000000000000000000031 /* Build configuration list for PBXNativeTarget "Nina" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00000000000000000000023 /* Debug */,
+				A00000000000000000000024 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D00000000000000000000030 /* Build configuration list for PBXNativeTarget "NinaTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D00000000000000000000021 /* Debug */,
+				D00000000000000000000022 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A00000000000000000000000 /* Project object */;
+}

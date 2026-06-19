@@ -1,0 +1,12 @@
+DerivedData/
+*.xcuserstate
+.DS_Store
+Nina.xcodeproj/project.xcworkspace/xcuserdata/
+Nina/Config/SupabaseSecrets.xcconfig
+supabase/.env.local
+web/.astro/
+web/.dev.vars
+web/.npm-cache/
+web/.wrangler/
+web/dist/
+web/node_modules/

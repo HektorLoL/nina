@@ -1,0 +1,160 @@
+---
+import { Icon } from "astro-icon/components";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Brand from "../components/Brand.astro";
+
+const updatedAt = "16 de junho de 2026";
+---
+
+<BaseLayout
+  title="Política de Privacidade — Nina"
+  description="Como a Nina coleta, usa, protege, exporta e apaga dados pessoais no app de organização doméstica."
+  canonical="/privacidade"
+>
+  <header class="site-header is-scrolled">
+    <div class="header-inner page-shell">
+      <Brand />
+      <nav class="desktop-nav" aria-label="Navegação principal">
+        <a href="/">Início</a>
+        <a href="mailto:oi@ninai.app">Contato</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="policy-page page-shell">
+    <section class="policy-hero">
+      <p class="eyebrow lavender">Privacidade</p>
+      <h1>Política de Privacidade</h1>
+      <p>
+        A Nina organiza rotinas domésticas, tarefas, lembretes, compras, documentos e memórias
+        confirmadas. Esta política explica quais dados são tratados, por quê, como você controla
+        esses dados e como exercer seus direitos.
+      </p>
+      <span>Atualizada em {updatedAt}</span>
+    </section>
+
+    <section class="policy-grid" aria-label="Resumo de privacidade">
+      <article>
+        <Icon name="ph:shield-check-fill" size={28} />
+        <h2>Sem venda de dados</h2>
+        <p>Não vendemos dados pessoais e não usamos dados da casa para publicidade comportamental.</p>
+      </article>
+      <article>
+        <Icon name="ph:sparkle-fill" size={28} />
+        <h2>IA com consentimento</h2>
+        <p>A conversa online com a Nina exige consentimento claro para processamento de IA e memória.</p>
+      </article>
+      <article>
+        <Icon name="ph:download-simple-fill" size={28} />
+        <h2>Exportação e exclusão</h2>
+        <p>O app permite exportar dados em JSON, apagar histórico privado e iniciar exclusão da conta.</p>
+      </article>
+    </section>
+
+    <article class="policy-content">
+      <h2>1. Quem controla os dados</h2>
+      <p>
+        A controladora dos dados é a operação responsável pela Nina. Para dúvidas, solicitações de
+        privacidade ou exercício de direitos previstos na LGPD, entre em contato pelo email
+        <a href="mailto:oi@ninai.app">oi@ninai.app</a>. Antes da publicação comercial, os dados
+        formais da pessoa jurídica e do encarregado devem ser preenchidos nos metadados legais da
+        loja e nesta página.
+      </p>
+
+      <h2>2. Dados que a Nina trata</h2>
+      <p>
+        Tratamos dados de conta, como identificador de login da Apple, email vinculado e nome de
+        perfil; dados da casa, como nome da casa, participantes, papéis, convites e permissões;
+        conteúdo criado pelos usuários, como tarefas, lembretes, listas de compras, mensagens,
+        anexos, documentos, fotos, memórias confirmadas e insights; preferências de uso e
+        consentimento; dados técnicos necessários para autenticação, segurança, sincronização,
+        prevenção de abuso, custo e diagnóstico.
+      </p>
+
+      <h2>3. Dados sobre crianças, saúde e documentos</h2>
+      <p>
+        A Nina pode receber dados sensíveis ou delicados quando um adulto registra rotinas de
+        crianças, escola, saúde, medicamentos, documentos ou padrões emocionais da casa. A conversa
+        com a Nina é restrita a adultos. Adultos responsáveis devem evitar enviar dados
+        desnecessários e devem ter legitimidade para registrar informações de crianças ou outros
+        membros da casa.
+      </p>
+
+      <h2>4. Como usamos os dados</h2>
+      <p>
+        Usamos dados para criar e manter sua conta, sincronizar a casa entre aparelhos, permitir
+        convites, organizar tarefas e lembretes, processar mensagens e anexos enviados à Nina,
+        gerar propostas de organização, manter memórias confirmadas, proteger o serviço, controlar
+        limites de uso, responder suporte, cumprir obrigações legais e melhorar a confiabilidade do
+        produto sem vender ou compartilhar dados para anúncios.
+      </p>
+
+      <h2>5. IA e memória da Nina</h2>
+      <p>
+        A Nina só processa conversas online depois de consentimento no app. Mensagens, anexos e
+        contexto necessário da casa são enviados por uma função segura no backend para provedores de
+        IA, incluindo OpenAI, para gerar respostas e propostas. O backend configura chamadas de IA
+        com armazenamento de resposta desativado quando disponível. Nada vira tarefa, lembrete ou
+        memória confirmada sem ação do usuário. Memórias pessoais começam privadas e só são
+        compartilhadas com escolha explícita.
+      </p>
+
+      <h2>6. Compartilhamento e operadores</h2>
+      <p>
+        Compartilhamos dados apenas com operadores necessários para operar a Nina, como Supabase
+        para autenticação, banco de dados, storage e funções de backend; OpenAI para processamento
+        de IA; Apple para autenticação e distribuição do app; e provedores de hospedagem do site.
+        Esses operadores devem tratar dados conforme nossas instruções e medidas de segurança.
+      </p>
+
+      <h2>7. Bases legais LGPD</h2>
+      <p>
+        As bases legais podem incluir execução de contrato e procedimentos preliminares para operar
+        a conta e a casa; consentimento para recursos de IA e memória; legítimo interesse para
+        segurança, prevenção de abuso, diagnóstico e melhoria operacional proporcional; cumprimento
+        de obrigação legal ou regulatória quando aplicável; e proteção da vida ou da saúde apenas
+        quando estritamente necessário em situações compatíveis com a lei.
+      </p>
+
+      <h2>8. Retenção</h2>
+      <p>
+        Histórico privado da Nina e propostas resolvidas são removidos automaticamente após 30 dias
+        no backend. Logs operacionais de IA sem conteúdo doméstico e insights expiram após 90 dias.
+        Memórias confirmadas, tarefas, lembretes e dados da casa permanecem enquanto forem úteis
+        para a conta ou a casa, até exclusão pelo usuário, exclusão da conta ou outra base legal de
+        retenção.
+      </p>
+
+      <h2>9. Seus controles</h2>
+      <p>
+        No app, você pode revogar consentimento de IA, apagar histórico privado da Nina, editar ou
+        apagar memórias que pertencem a você, exportar dados em JSON, sair da conta e iniciar a
+        exclusão da conta. Quando uma casa é compartilhada, alguns registros da casa podem continuar
+        visíveis aos demais participantes sem vínculo com a conta apagada.
+      </p>
+
+      <h2>10. Direitos LGPD</h2>
+      <p>
+        Você pode solicitar confirmação de tratamento, acesso, correção, anonimização, bloqueio,
+        eliminação, portabilidade, informação sobre compartilhamento, revisão de consentimento e
+        oposição quando cabível. Envie a solicitação para <a href="mailto:oi@ninai.app">oi@ninai.app</a>.
+        Podemos pedir informações adicionais para confirmar identidade e proteger a casa.
+      </p>
+
+      <h2>11. Segurança</h2>
+      <p>
+        Usamos autenticação, regras de acesso por casa, escopo privado para conversas adultas,
+        storage privado para fotos de perfil, limites de anexos, retenção automática e funções de
+        backend para manter segredos fora do app. Nenhum sistema é infalível; caso identifiquemos
+        incidente relevante, seguiremos as obrigações legais aplicáveis.
+      </p>
+
+      <h2>12. Alterações</h2>
+      <p>
+        Podemos atualizar esta política conforme o produto evoluir. Mudanças relevantes serão
+        comunicadas no app ou nesta página, e recursos que dependam de consentimento poderão pedir
+        nova confirmação.
+      </p>
+    </article>
+  </main>
+</BaseLayout>

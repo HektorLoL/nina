@@ -1,0 +1,2104 @@
+import StoreKit
+import SwiftUI
+import UIKit
+
+enum TaskEditorMode: Hashable {
+    case add(sectionID: String)
+    case edit(UUID)
+}
+
+struct SettingsSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(AuthSessionStore.self) private var authSession
+    @Environment(OnboardingStore.self) private var onboardingStore
+    @Environment(ProfileStore.self) private var profileStore
+    @Environment(PremiumSubscriptionStore.self) private var premiumStore
+    #if DEBUG
+    @Environment(BackendDiagnosticsStore.self) private var backendDiagnostics
+    #endif
+    @Environment(RouterPath.self) private var router
+    @Environment(\.dismiss) private var dismiss
+
+    @AppStorage("nina.notificationsEnabled") private var notificationsEnabled = true
+    @AppStorage("nina.smartSuggestionsEnabled") private var smartSuggestionsEnabled = true
+    @AppStorage("nina.weeklyDigestEnabled") private var weeklyDigestEnabled = false
+    @AppStorage("nina.quietHoursEnabled") private var quietHoursEnabled = true
+
+    private var inviteURL: URL {
+        store.inviteURL
+    }
+
+    private var versionLabel: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "\(version) (\(build))"
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                premiumSection
+                accountSection
+                ninaSection
+                houseSection
+                privacySection
+                aboutSection
+                #if DEBUG
+                developerSection
+                #endif
+            }
+            .padding(18)
+            .padding(.bottom, 24)
+        }
+        .ninaSheetBackground()
+        .navigationTitle("Ajustes")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Fechar") {
+                    Haptics.selection()
+                    dismiss()
+                }
+            }
+        }
+        .onChange(of: notificationsEnabled) { _, _ in
+            store.synchronizeLocalNotifications()
+        }
+    }
+
+    private var header: some View {
+        SoftCard(padding: 18) {
+            HStack(spacing: 16) {
+                NinaAvatarView(size: 68)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Nina")
+                        .font(.title2.weight(.black))
+                        .foregroundStyle(NinaTheme.ink)
+
+                    Text("Ajustes da casa, privacidade e lembretes.")
+                        .font(.subheadline)
+                        .foregroundStyle(NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private var premiumSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Premium")
+                .font(.subheadline.weight(.black))
+                .foregroundStyle(NinaTheme.muted)
+                .padding(.horizontal, 2)
+
+            PremiumTeaserCard(
+                style: .settings,
+                entitlement: premiumStore.entitlement,
+                priceLabel: premiumStore.primaryPriceLabel
+            ) {
+                router.presentedSheet = .premium
+            }
+        }
+    }
+
+    private var accountSection: some View {
+        SettingsGroup(title: "Conta") {
+            if let user = authSession.currentUser {
+                let profile = profileStore.profile(for: user)
+
+                NavigationLink {
+                    ProfileEditorView(user: user)
+                } label: {
+                    ProfileSettingsRow(
+                        profile: profile,
+                        user: user,
+                        photoData: profileStore.photoData(for: profile)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                SettingsDivider()
+
+                NavigationLink {
+                    EmailAccessView()
+                } label: {
+                    SettingsActionRow(
+                        title: user.linkedProviders.contains(.email) ? "Email de acesso" : "Vincular email",
+                        subtitle: user.linkedProviders.contains(.email)
+                            ? (user.email ?? "Email verificado")
+                            : "Adicione uma forma alternativa de entrar.",
+                        systemName: "envelope.badge.shield.half.filled",
+                        tone: .lavender
+                    )
+                }
+                .buttonStyle(.plain)
+
+                SettingsDivider()
+
+                NavigationLink {
+                    AccountDeletionView()
+                } label: {
+                    SettingsActionRow(
+                        title: "Apagar conta",
+                        subtitle: "Remove sua conta e dados pessoais associados.",
+                        systemName: "trash.fill",
+                        tone: .coral
+                    )
+                }
+                .buttonStyle(.plain)
+
+                SettingsDivider()
+            }
+
+            Button {
+                Haptics.lightImpact()
+                onboardingStore.replayTutorial()
+                dismiss()
+            } label: {
+                SettingsActionRow(
+                    title: "Ver tutorial",
+                    subtitle: "Rever como usar a Nina.",
+                    systemName: "play.circle.fill",
+                    tone: .sky
+                )
+            }
+            .buttonStyle(.plain)
+
+            SettingsDivider()
+
+            Button {
+                Haptics.warning()
+                Task {
+                    await authSession.signOut()
+                    onboardingStore.cancelReplay()
+                    dismiss()
+                }
+            } label: {
+                SettingsActionRow(
+                    title: "Sair",
+                    subtitle: "Encerrar a sessão neste aparelho.",
+                    systemName: "rectangle.portrait.and.arrow.right.fill",
+                    tone: .coral
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(authSession.isSigningIn)
+            .opacity(authSession.isSigningIn ? 0.62 : 1)
+        }
+    }
+
+    private var ninaSection: some View {
+        SettingsGroup(title: "Nina") {
+            SettingsToggleRow(
+                title: "Sugestões automáticas",
+                subtitle: "Criar tarefas e lembretes a partir da conversa.",
+                systemName: "sparkles",
+                tone: .mint,
+                isOn: $smartSuggestionsEnabled
+            )
+
+            SettingsDivider()
+
+            SettingsToggleRow(
+                title: "Notificações",
+                subtitle: "Avisos de tarefas, compras e lembretes próximos.",
+                systemName: "bell.badge.fill",
+                tone: .amber,
+                isOn: $notificationsEnabled
+            )
+
+            SettingsDivider()
+
+            SettingsToggleRow(
+                title: "Resumo semanal",
+                subtitle: "Uma visão curta da semana da casa.",
+                systemName: "calendar.badge.clock",
+                tone: .sky,
+                isOn: $weeklyDigestEnabled
+            )
+        }
+    }
+
+    private var houseSection: some View {
+        SettingsGroup(title: "Casa") {
+            SettingsInfoRow(
+                title: store.familyGroup.name,
+                subtitle: store.familyLimitLabel,
+                value: "\(store.remainingFamilySlots) vagas",
+                systemName: "house.and.flag.fill",
+                tone: .mint
+            )
+
+            SettingsDivider()
+
+            if store.canInviteMorePeople {
+                ShareLink(item: inviteURL) {
+                    SettingsActionRow(
+                        title: "Compartilhar convite",
+                        subtitle: store.familyGroup.inviteCode,
+                        systemName: "square.and.arrow.up.fill",
+                        tone: .sky
+                    )
+                }
+                .buttonStyle(.plain)
+            } else {
+                SettingsInfoRow(
+                    title: "Convites pausados",
+                    subtitle: "A casa já chegou ao limite de pessoas.",
+                    value: "limite",
+                    systemName: "person.crop.circle.badge.exclamationmark",
+                    tone: .coral
+                )
+            }
+        }
+    }
+
+    private var privacySection: some View {
+        SettingsGroup(title: "Privacidade") {
+            NavigationLink {
+                PrivacyConsentSettingsView()
+            } label: {
+                SettingsActionRow(
+                    title: "Consentimento de IA",
+                    subtitle: store.hasAIMemoryConsent ? "Ativo para conversas e memórias." : "Necessário antes da conversa online.",
+                    systemName: store.hasAIMemoryConsent ? "checkmark.shield.fill" : "lock.shield.fill",
+                    tone: store.hasAIMemoryConsent ? .mint : .lavender
+                )
+            }
+            .buttonStyle(.plain)
+
+            SettingsDivider()
+
+            NavigationLink {
+                PrivacyExportView()
+            } label: {
+                SettingsActionRow(
+                    title: "Exportar meus dados",
+                    subtitle: "Gera um arquivo JSON com os dados desta casa.",
+                    systemName: "square.and.arrow.up.fill",
+                    tone: .sky
+                )
+            }
+            .buttonStyle(.plain)
+
+            SettingsDivider()
+
+            SettingsToggleRow(
+                title: "Horário silencioso",
+                subtitle: "Reduzir avisos durante a noite.",
+                systemName: "moon.fill",
+                tone: .sky,
+                isOn: $quietHoursEnabled
+            )
+        }
+    }
+
+    private var aboutSection: some View {
+        SettingsGroup(title: "Sobre") {
+            SettingsInfoRow(
+                title: "Versão",
+                subtitle: "Nina para organização da casa",
+                value: versionLabel,
+                systemName: "info.circle.fill",
+                tone: .mint
+            )
+        }
+    }
+
+    #if DEBUG
+    private var developerSection: some View {
+        SettingsGroup(title: "Desenvolvimento") {
+            NavigationLink {
+                BackendDebugView()
+            } label: {
+                SettingsActionRow(
+                    title: "Debug do backend",
+                    subtitle: "\(backendDiagnostics.environment.title) · \(backendDiagnostics.activeRequestCount) ativa(s)",
+                    systemName: "ladybug.fill",
+                    tone: .coral
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+    #endif
+}
+
+#if DEBUG
+private struct BackendDebugView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(AuthSessionStore.self) private var authSession
+    @Environment(ProfileStore.self) private var profileStore
+    @Environment(BackendDiagnosticsStore.self) private var diagnostics
+
+    @State private var isRefreshing = false
+
+    private var userID: String {
+        authSession.currentUser?.id ?? "Sem sessão"
+    }
+
+    private var familyID: String {
+        store.hasActiveHome ? store.familyGroup.id.uuidString : "Sem casa ativa"
+    }
+
+    private var lastSyncLabel: String {
+        guard let date = diagnostics.lastSyncAt else { return "Ainda não sincronizou" }
+        return date.formatted(date: .abbreviated, time: .standard)
+    }
+
+    private var lastErrorLabel: String {
+        diagnostics.lastError ?? "Nenhum erro registrado"
+    }
+
+    private var isBusy: Bool {
+        isRefreshing || store.isSyncingHome
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionTitle(
+                    title: "Diagnóstico do backend",
+                    subtitle: "Estado local desta instalação de desenvolvimento."
+                )
+
+                SettingsGroup(title: "Identidade") {
+                    DebugValueRow(title: "User ID", value: userID)
+                    SettingsDivider()
+                    DebugValueRow(title: "Family ID", value: familyID)
+                }
+
+                SettingsGroup(title: "Conexão") {
+                    DebugValueRow(
+                        title: "Ambiente",
+                        value: diagnostics.environment.title,
+                        detail: diagnostics.environment.detail
+                    )
+                    SettingsDivider()
+                    DebugValueRow(
+                        title: "Último sync",
+                        value: lastSyncLabel,
+                        detail: diagnostics.lastOperation
+                    )
+                    SettingsDivider()
+                    DebugValueRow(
+                        title: "Requisições ativas",
+                        value: "\(diagnostics.activeRequestCount)"
+                    )
+                }
+
+                SettingsGroup(title: "Último erro") {
+                    DebugValueRow(
+                        title: diagnostics.lastErrorAt?.formatted(date: .abbreviated, time: .standard)
+                            ?? "Sem falhas",
+                        value: lastErrorLabel,
+                        isError: diagnostics.lastError != nil
+                    )
+                }
+
+                PrimaryCapsuleButton(
+                    title: isRefreshing ? "Atualizando..." : "Atualizar agora",
+                    systemName: "arrow.clockwise"
+                ) {
+                    refresh()
+                }
+                .disabled(isBusy)
+                .opacity(isBusy ? 0.62 : 1)
+
+                Text("Atualiza o perfil e os dados compartilhados da casa usando o usuário autenticado atual.")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(18)
+            .padding(.bottom, 24)
+        }
+        .ninaSheetBackground()
+        .navigationTitle("Debug")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func refresh() {
+        guard !isBusy else { return }
+
+        Haptics.selection()
+        isRefreshing = true
+        Task {
+            await profileStore.refreshProfile(for: authSession.currentUser)
+            await store.refreshHomeFromRemote(for: authSession.currentUser)
+            isRefreshing = false
+        }
+    }
+}
+
+private struct DebugValueRow: View {
+    var title: String
+    var value: String
+    var detail: String? = nil
+    var isError = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption.weight(.black))
+                .foregroundStyle(NinaTheme.muted)
+
+            Text(value)
+                .font(.subheadline.weight(.heavy))
+                .foregroundStyle(isError ? NinaTheme.coral : NinaTheme.ink)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(NinaTheme.muted)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+    }
+}
+#endif
+
+private struct EmailAccessView: View {
+    @Environment(AuthSessionStore.self) private var authSession
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var email = ""
+    @State private var code = ""
+    @State private var didComplete = false
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case email
+        case code
+    }
+
+    private var isWaitingForCode: Bool {
+        authSession.pendingEmailChange != nil
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionTitle(
+                    title: "Email de acesso",
+                    subtitle: "Confirme um email pessoal para entrar com um código quando não usar a Apple."
+                )
+
+                SoftCard(padding: 16) {
+                    VStack(spacing: 14) {
+                        SettingsInfoRow(
+                            title: "Email atual",
+                            subtitle: authSession.currentUser?.linkedProviders.contains(.email) == true
+                                ? (authSession.currentUser?.email ?? "Email verificado")
+                                : "Somente Apple",
+                            value: authSession.currentUser?.linkedProviders.contains(.email) == true
+                                ? "verificado"
+                                : "Apple",
+                            systemName: "person.badge.key.fill",
+                            tone: .mint
+                        )
+
+                        Divider()
+
+                        LoginLikeField(
+                            title: "Novo email",
+                            systemName: "envelope.fill",
+                            text: $email,
+                            placeholder: "voce@exemplo.com",
+                            keyboardType: .emailAddress
+                        )
+                        .focused($focusedField, equals: .email)
+                        .disabled(isWaitingForCode)
+
+                        if isWaitingForCode {
+                            Divider()
+
+                            LoginLikeField(
+                                title: "Código",
+                                systemName: "number.circle.fill",
+                                text: $code,
+                                placeholder: "000000",
+                                keyboardType: .numberPad
+                            )
+                            .focused($focusedField, equals: .code)
+                            .onChange(of: code) { _, newValue in
+                                code = String(newValue.filter(\.isNumber).prefix(6))
+                            }
+                        }
+                    }
+                }
+
+                if let errorMessage = authSession.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.circle.fill")
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(NinaTheme.coral)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if didComplete {
+                    Label("Email confirmado e pronto para login por código.", systemImage: "checkmark.seal.fill")
+                        .font(.subheadline.weight(.heavy))
+                        .foregroundStyle(NinaTheme.mint)
+                }
+
+                PrimaryCapsuleButton(
+                    title: isWaitingForCode ? "Confirmar email" : "Enviar código",
+                    systemName: isWaitingForCode ? "checkmark" : "paperplane.fill"
+                ) {
+                    isWaitingForCode ? verifyChange() : requestChange()
+                }
+                .disabled(authSession.isRequestingCode || authSession.isSigningIn)
+                .opacity(authSession.isRequestingCode || authSession.isSigningIn ? 0.6 : 1)
+
+                if isWaitingForCode {
+                    Button("Usar outro email") {
+                        authSession.pendingEmailChange = nil
+                        code = ""
+                        focusedField = .email
+                    }
+                    .font(.headline.weight(.heavy))
+                    .foregroundStyle(NinaTheme.sky)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(18)
+        }
+        .ninaSheetBackground()
+        .navigationTitle("Email de acesso")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            email = authSession.pendingEmailChange ?? authSession.currentUser?.email ?? ""
+        }
+        .toolbar {
+            if didComplete {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Concluir") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func requestChange() {
+        focusedField = nil
+        Task {
+            if await authSession.requestEmailChange(email: email) {
+                email = authSession.pendingEmailChange ?? email
+                focusedField = .code
+            }
+        }
+    }
+
+    private func verifyChange() {
+        focusedField = nil
+        Task {
+            didComplete = await authSession.verifyEmailChange(email: email, code: code)
+        }
+    }
+}
+
+private struct PrivacyConsentSettingsView: View {
+    @Environment(AppStore.self) private var store
+
+    private var acceptedLabel: String {
+        guard let acceptedAt = store.aiMemoryConsent?.acceptedAt else {
+            return "Ainda não aceito"
+        }
+        return acceptedAt.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionTitle(
+                    title: "Consentimento de IA",
+                    subtitle: "Controle quando a Nina pode processar conversas, anexos e memórias confirmadas para recursos de IA."
+                )
+
+                SettingsGroup(title: "Status") {
+                    SettingsInfoRow(
+                        title: store.hasAIMemoryConsent ? "Consentimento ativo" : "Consentimento pendente",
+                        subtitle: acceptedLabel,
+                        value: store.hasAIMemoryConsent ? "ativo" : "pausado",
+                        systemName: store.hasAIMemoryConsent ? "checkmark.shield.fill" : "lock.shield.fill",
+                        tone: store.hasAIMemoryConsent ? .mint : .lavender
+                    )
+                }
+
+                SoftCard(padding: 16) {
+                    PrivacyBulletRow(
+                        systemName: "sparkles",
+                        text: "A Nina usa mensagens, fotos, documentos e dados confirmados da casa para responder e propor organização."
+                    )
+                    PrivacyBulletRow(
+                        systemName: "checkmark.circle.fill",
+                        text: "Tarefas, lembretes e memórias só entram na casa depois da sua confirmação."
+                    )
+                    PrivacyBulletRow(
+                        systemName: "person.fill",
+                        text: "Memórias pessoais começam privadas; compartilhar com a casa exige escolha explícita."
+                    )
+                    PrivacyBulletRow(
+                        systemName: "trash.fill",
+                        text: "Revogar pausa novas conversas online. Dados já criados podem ser apagados nas telas de memória e histórico."
+                    )
+                }
+
+                if store.hasAIMemoryConsent {
+                    Button(role: .destructive) {
+                        Haptics.warning()
+                        store.revokeAIMemoryConsent()
+                    } label: {
+                        Label("Revogar consentimento", systemImage: "xmark.shield.fill")
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(NinaTheme.coral)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(NinaTheme.coral.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    PrimaryCapsuleButton(title: "Aceitar processamento da Nina", systemName: "checkmark.shield.fill") {
+                        Haptics.success()
+                        store.grantAIMemoryConsent()
+                    }
+                }
+            }
+            .padding(18)
+            .padding(.bottom, 24)
+        }
+        .ninaSheetBackground()
+        .navigationTitle("Consentimento")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct PrivacyExportView: View {
+    @Environment(AppStore.self) private var store
+    @State private var exportURL: URL?
+    @State private var exportError: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionTitle(
+                    title: "Exportar dados",
+                    subtitle: "Gere um arquivo JSON com os dados locais sincronizados desta casa."
+                )
+
+                SoftCard(padding: 16) {
+                    PrivacyBulletRow(systemName: "house.fill", text: "Inclui casa, participantes, tarefas, compras, lembretes e insights.")
+                    PrivacyBulletRow(systemName: "bubble.left.and.bubble.right.fill", text: "Inclui o histórico privado da Nina carregado neste aparelho.")
+                    PrivacyBulletRow(systemName: "lock.fill", text: "Inclui o status do consentimento de IA salvo para esta conta.")
+                }
+
+                if let exportError {
+                    Label(exportError, systemImage: "exclamationmark.circle.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(NinaTheme.coral)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                PrimaryCapsuleButton(title: "Gerar exportação", systemName: "doc.badge.arrow.up.fill") {
+                    generateExport()
+                }
+
+                if let exportURL {
+                    ShareLink(item: exportURL) {
+                        Label("Compartilhar arquivo JSON", systemImage: "square.and.arrow.up.fill")
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(NinaTheme.sky)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(NinaTheme.sky.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(18)
+            .padding(.bottom, 24)
+        }
+        .ninaSheetBackground()
+        .navigationTitle("Exportar")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func generateExport() {
+        do {
+            let data = try store.makePrivacyExportData()
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent(store.privacyExportFilename)
+            try data.write(to: url, options: .atomic)
+            exportURL = url
+            exportError = nil
+            Haptics.success()
+        } catch {
+            exportURL = nil
+            exportError = "Não foi possível gerar a exportação agora."
+            Haptics.error()
+        }
+    }
+}
+
+private struct AccountDeletionView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(AuthSessionStore.self) private var authSession
+    @Environment(OnboardingStore.self) private var onboardingStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var isShowingConfirmation = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionTitle(
+                    title: "Apagar conta",
+                    subtitle: "Remove sua conta Nina e dados pessoais associados que não precisem ser mantidos por obrigação legal."
+                )
+
+                SoftCard(padding: 16) {
+                    PrivacyBulletRow(systemName: "person.crop.circle.badge.xmark", text: "Sua sessão, perfil, foto e acesso às casas serão removidos.")
+                    PrivacyBulletRow(systemName: "lock.fill", text: "Conversas privadas, propostas pendentes e memórias pessoais da Nina serão apagadas.")
+                    PrivacyBulletRow(systemName: "person.2.fill", text: "Em casas compartilhadas, tarefas e registros da casa podem continuar para os demais participantes sem sua conta vinculada.")
+                }
+
+                if let errorMessage = authSession.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.circle.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(NinaTheme.coral)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button(role: .destructive) {
+                    Haptics.warning()
+                    isShowingConfirmation = true
+                } label: {
+                    Label(
+                        authSession.isDeletingAccount ? "Apagando..." : "Apagar minha conta",
+                        systemImage: "trash.fill"
+                    )
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(NinaTheme.coral, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(authSession.isDeletingAccount)
+                .opacity(authSession.isDeletingAccount ? 0.62 : 1)
+            }
+            .padding(18)
+            .padding(.bottom, 24)
+        }
+        .ninaSheetBackground()
+        .navigationTitle("Apagar conta")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Apagar sua conta Nina?", isPresented: $isShowingConfirmation) {
+            Button("Cancelar", role: .cancel) {}
+            Button("Apagar conta", role: .destructive) {
+                deleteAccount()
+            }
+        } message: {
+            Text("Esta ação remove sua conta e dados pessoais associados. Ela não pode ser desfeita.")
+        }
+    }
+
+    private func deleteAccount() {
+        Task {
+            if await authSession.deleteAccount() {
+                store.clearLocalDataForActiveUser()
+                onboardingStore.cancelReplay()
+                dismiss()
+            }
+        }
+    }
+}
+
+private struct PrivacyBulletRow: View {
+    var systemName: String
+    var text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemName)
+                .font(.caption.weight(.black))
+                .foregroundStyle(NinaTheme.mint)
+                .frame(width: 20, height: 20)
+
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct LoginLikeField: View {
+    var title: String
+    var systemName: String
+    @Binding var text: String
+    var placeholder: String
+    var keyboardType: UIKeyboardType
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconBubble(systemName: systemName, tone: .lavender, size: 40)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(NinaTheme.muted)
+
+                TextField(placeholder, text: $text)
+                    .font(.headline.weight(.semibold))
+                    .keyboardType(keyboardType)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textContentType(keyboardType == .emailAddress ? .emailAddress : .oneTimeCode)
+            }
+        }
+    }
+}
+
+private struct SettingsGroup<Content: View>: View {
+    var title: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.subheadline.weight(.black))
+                .foregroundStyle(NinaTheme.muted)
+                .padding(.horizontal, 2)
+
+            SoftCard(padding: 0) {
+                VStack(spacing: 0) {
+                    content
+                }
+            }
+        }
+    }
+}
+
+private struct SettingsToggleRow: View {
+    var title: String
+    var subtitle: String
+    var systemName: String
+    var tone: MemberTone
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconBubble(systemName: systemName, tone: tone, size: 40)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline.weight(.heavy))
+                    .foregroundStyle(NinaTheme.ink)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            Toggle(title, isOn: $isOn)
+                .labelsHidden()
+                .tint(NinaTheme.mint)
+        }
+        .padding(14)
+        .accessibilityElement(children: .combine)
+        .onChange(of: isOn) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            Haptics.selection()
+        }
+    }
+}
+
+private struct ProfileSettingsRow: View {
+    var profile: UserProfile
+    var user: AuthUser
+    var photoData: Data?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ProfileAvatarView(profile: profile, photoData: photoData, size: 44)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(profile.displayName)
+                    .font(.headline.weight(.heavy))
+                    .foregroundStyle(NinaTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+
+                Text("Meu perfil · \(user.email ?? "Email não vinculado")")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(NinaTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(user.provider.title)
+                .font(.caption.weight(.black))
+                .foregroundStyle(profile.avatar.tone.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.black))
+                .foregroundStyle(NinaTheme.muted)
+        }
+        .padding(14)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct SettingsInfoRow: View {
+    var title: String
+    var subtitle: String
+    var value: String
+    var systemName: String
+    var tone: MemberTone
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconBubble(systemName: systemName, tone: tone, size: 40)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline.weight(.heavy))
+                    .foregroundStyle(NinaTheme.ink)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .font(.caption.weight(.black))
+                .foregroundStyle(tone.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(14)
+    }
+}
+
+private struct SettingsActionRow: View {
+    var title: String
+    var subtitle: String
+    var systemName: String
+    var tone: MemberTone
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconBubble(systemName: systemName, tone: tone, size: 40)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline.weight(.heavy))
+                    .foregroundStyle(NinaTheme.ink)
+
+                Text(subtitle)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(NinaTheme.muted)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 12)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.black))
+                .foregroundStyle(NinaTheme.muted)
+        }
+        .padding(14)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct SettingsDivider: View {
+    var body: some View {
+        Divider()
+            .padding(.leading, 66)
+    }
+}
+
+struct PremiumBenefitsSheet: View {
+    @Environment(AuthSessionStore.self) private var authSession
+    @Environment(PremiumSubscriptionStore.self) private var premiumStore
+    @Environment(\.dismiss) private var dismiss
+
+    private let plan = PremiumPlan.mock
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                hero
+                statusCard
+                productsSection
+                benefitsSection
+                restoreArea
+            }
+            .padding(18)
+            .padding(.bottom, 28)
+        }
+        .ninaSheetBackground()
+        .navigationTitle("Premium")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Fechar") {
+                    Haptics.selection()
+                    dismiss()
+                }
+            }
+        }
+        .task {
+            await premiumStore.configure(for: authSession.currentUser)
+        }
+    }
+
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 14) {
+                PremiumHeroMedallion()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(premiumStore.entitlement.statusTitle, systemImage: premiumStore.entitlement.isActive ? "checkmark.seal.fill" : "sparkles")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(NinaTheme.premiumInk)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.white.opacity(0.36), in: Capsule())
+
+                    Text(plan.name)
+                        .font(.system(size: 31, weight: .black, design: .rounded))
+                        .foregroundStyle(NinaTheme.premiumInk)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(plan.heroTitle)
+                        .font(.headline.weight(.heavy))
+                        .foregroundStyle(NinaTheme.premiumInk.opacity(0.82))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Text(plan.heroSubtitle)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(NinaTheme.premiumInk.opacity(0.78))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NinaTheme.premiumGradient, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(.white.opacity(0.58), lineWidth: 1)
+        )
+        .shadow(color: NinaTheme.gold.opacity(0.30), radius: 24, x: 0, y: 14)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var statusCard: some View {
+        SoftCard(padding: 18) {
+            HStack(alignment: .center, spacing: 14) {
+                IconBubble(
+                    systemName: premiumStore.entitlement.isActive ? "checkmark.seal.fill" : "creditcard.fill",
+                    tone: premiumStore.entitlement.isActive ? .mint : .amber,
+                    size: 48
+                )
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(premiumStore.entitlement.statusTitle)
+                        .font(.title3.weight(.black))
+                        .foregroundStyle(NinaTheme.ink)
+
+                    Text(premiumStore.entitlement.renewalSummary)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 10)
+
+                Text(premiumStore.entitlement.environment ?? "App Store")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(NinaTheme.gold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(NinaTheme.gold.opacity(0.16), in: Capsule())
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var productsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(title: "Planos", subtitle: "A assinatura é processada com segurança pelo App Store.")
+
+            if premiumStore.isLoadingProducts {
+                SoftCard(padding: 18) {
+                    HStack(spacing: 12) {
+                        ProgressView()
+                            .tint(NinaTheme.mint)
+
+                        Text("Carregando planos Premium...")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(NinaTheme.muted)
+                    }
+                }
+            } else if premiumStore.products.isEmpty {
+                SoftCard(padding: 18) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Planos indisponíveis", systemImage: "exclamationmark.triangle.fill")
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(NinaTheme.ink)
+
+                        Text(premiumStore.productLoadMessage ?? "Configure os produtos Premium no App Store Connect ou em um arquivo StoreKit local.")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            } else {
+                SoftCard(padding: 0) {
+                    VStack(spacing: 0) {
+                        ForEach(premiumStore.products, id: \.id) { product in
+                            PremiumProductRow(
+                                product: product,
+                                isCurrent: premiumStore.entitlement.isActive
+                                    && premiumStore.entitlement.productID == product.id,
+                                isBusy: premiumStore.isPurchasing || premiumStore.isSyncingBackend
+                            ) {
+                                Task {
+                                    Haptics.lightImpact()
+                                    await premiumStore.purchase(product)
+                                }
+                            }
+
+                            if product.id != premiumStore.products.last?.id {
+                                Divider()
+                                    .padding(.leading, 66)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var benefitsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(title: "Benefícios premium", subtitle: "Pensado para deixar a organização da casa mais leve.")
+
+            SoftCard(padding: 0) {
+                VStack(spacing: 0) {
+                    ForEach(plan.benefits) { benefit in
+                        PremiumBenefitRow(benefit: benefit)
+
+                        if benefit.id != plan.benefits.last?.id {
+                            Divider()
+                                .padding(.leading, 66)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var restoreArea: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                Task {
+                    Haptics.lightImpact()
+                    await premiumStore.restorePurchases()
+                }
+            } label: {
+                Label(premiumStore.isRestoring ? "Restaurando..." : "Restaurar compras", systemImage: "arrow.clockwise")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(NinaTheme.premiumInk)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(NinaTheme.premiumGradient, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(.white.opacity(0.62), lineWidth: 1)
+                    )
+                    .shadow(color: NinaTheme.gold.opacity(0.24), radius: 16, x: 0, y: 8)
+            }
+            .buttonStyle(.plain)
+            .disabled(premiumStore.isRestoring)
+            .opacity(premiumStore.isRestoring ? 0.62 : 1)
+
+            if let statusMessage = premiumStore.statusMessage, !statusMessage.isEmpty {
+                Label(statusMessage, systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(NinaTheme.mint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let errorMessage = premiumStore.errorMessage, !errorMessage.isEmpty {
+                Label(errorMessage, systemImage: "exclamationmark.circle.fill")
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(NinaTheme.coral)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text("Ao assinar, o App Store confirma o pagamento e a Nina registra a transação verificada no servidor para manter seu acesso Premium atualizado.")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct PremiumProductRow: View {
+    var product: Product
+    var isCurrent: Bool
+    var isBusy: Bool
+    var action: () -> Void
+
+    private var renewalLabel: String {
+        guard let period = product.subscription?.subscriptionPeriod else {
+            return "Assinatura Premium"
+        }
+        return "Renova a cada \(period.localizedTitle)"
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            IconBubble(systemName: isCurrent ? "checkmark.seal.fill" : "crown.fill", tone: isCurrent ? .mint : .amber, size: 42)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(product.displayName)
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(NinaTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(renewalLabel)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(NinaTheme.muted)
+            }
+
+            Spacer(minLength: 10)
+
+            Button(action: action) {
+                Text(isCurrent ? "Atual" : product.displayPrice)
+                    .font(.subheadline.weight(.black))
+                    .foregroundStyle(isCurrent ? NinaTheme.mint : .white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(isCurrent ? NinaTheme.mint.opacity(0.14) : NinaTheme.mint, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(isCurrent || isBusy)
+            .opacity(isBusy && !isCurrent ? 0.62 : 1)
+        }
+        .padding(14)
+    }
+}
+
+private extension Product.SubscriptionPeriod {
+    var localizedTitle: String {
+        let unitTitle: String
+        switch unit {
+        case .day:
+            unitTitle = value == 1 ? "dia" : "dias"
+        case .week:
+            unitTitle = value == 1 ? "semana" : "semanas"
+        case .month:
+            unitTitle = value == 1 ? "mês" : "meses"
+        case .year:
+            unitTitle = value == 1 ? "ano" : "anos"
+        @unknown default:
+            unitTitle = "período"
+        }
+
+        return value == 1 ? unitTitle : "\(value) \(unitTitle)"
+    }
+}
+
+private struct PremiumHeroMedallion: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.white.opacity(0.36))
+
+            Circle()
+                .stroke(.white.opacity(0.64), lineWidth: 1)
+
+            Image(systemName: "crown.fill")
+                .font(.system(size: 29, weight: .black))
+                .foregroundStyle(NinaTheme.premiumInk)
+
+            Image(systemName: "sparkle")
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(.white)
+                .offset(x: 20, y: -20)
+        }
+        .frame(width: 66, height: 66)
+        .shadow(color: NinaTheme.premiumInk.opacity(0.14), radius: 12, x: 0, y: 8)
+    }
+}
+
+private struct PremiumBenefitRow: View {
+    var benefit: PremiumBenefit
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            IconBubble(systemName: benefit.systemName, tone: benefit.tone, size: 42)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(benefit.title)
+                    .font(.headline.weight(.heavy))
+                    .foregroundStyle(NinaTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(benefit.detail)
+                    .font(.subheadline)
+                    .foregroundStyle(NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+    }
+}
+
+struct TaskEditorSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    var mode: TaskEditorMode
+    @State private var title = ""
+    @State private var subtitle = ""
+    @State private var owner = "Casa"
+    @State private var dueDate = Date()
+    @State private var category: TaskCategory = .home
+    @State private var priority: TaskPriority = .normal
+    @State private var localTaskCategories: [TaskCategory] = []
+    @State private var isCategoryDropdownExpanded = false
+    @State private var isCreatingCategory = false
+    @State private var newCategoryTitle = ""
+    @State private var didLoad = false
+    @State private var loadedTaskVersion: Int?
+
+    private var isEditing: Bool {
+        if case .edit = mode { true } else { false }
+    }
+
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var ownerOptions: [String] {
+        var options = ["Casa"]
+        for member in store.familyGroup.members where member.role != .assistant {
+            if !options.contains(member.name) {
+                options.append(member.name)
+            }
+        }
+
+        if !owner.isEmpty, !options.contains(owner) {
+            options.append(owner)
+        }
+
+        return options
+    }
+
+    private var categoryOptions: [TaskCategory] {
+        let categories = store.availableTaskCategories + localTaskCategories
+        return categories.contains(where: { $0.id == category.id }) ? categories : categories + [category]
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionTitle(
+                    title: isEditing ? "Editar tarefa" : "Nova tarefa",
+                    subtitle: "Mantenha simples. A casa precisa lembrar, não complicar."
+                )
+
+                editorFields
+
+                PrimaryCapsuleButton(title: isEditing ? "Salvar tarefa" : "Criar tarefa", systemName: "checkmark") {
+                    save()
+                }
+                .disabled(trimmedTitle.isEmpty)
+                .opacity(trimmedTitle.isEmpty ? 0.5 : 1)
+            }
+            .padding(18)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .ninaSheetBackground()
+        .navigationTitle(isEditing ? "Editar" : "Adicionar")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Fechar") {
+                    Haptics.selection()
+                    dismiss()
+                }
+            }
+        }
+        .onAppear(perform: loadIfNeeded)
+    }
+
+    private var editorFields: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SoftCard {
+                TextField("O que precisa ser feito?", text: $title, axis: .vertical)
+                    .lineLimit(1...3)
+                    .font(.headline)
+                    .textFieldStyle(.plain)
+
+                Divider()
+
+                TextField("Detalhe opcional", text: $subtitle, axis: .vertical)
+                    .lineLimit(1...3)
+                    .textFieldStyle(.plain)
+            }
+
+            SoftCard {
+                ownerMenu
+
+                Divider()
+
+                DatePicker(selection: $dueDate, displayedComponents: .date) {
+                    Label("Quando", systemImage: "calendar")
+                        .foregroundStyle(NinaTheme.muted)
+                }
+                .datePickerStyle(.compact)
+            }
+
+            SoftCard {
+                categoryMenu
+            }
+
+            SoftCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Prioridade", systemImage: priority.symbolName)
+                        .font(.subheadline.weight(.heavy))
+                        .foregroundStyle(NinaTheme.muted)
+
+                    Picker("Prioridade", selection: $priority) {
+                        ForEach(TaskPriority.allCases) { item in
+                            Text(item.title).tag(item)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
+        }
+    }
+
+    private var ownerMenu: some View {
+        Menu {
+            ForEach(ownerOptions, id: \.self) { option in
+                Button {
+                    owner = option
+                } label: {
+                    Label(option, systemImage: owner == option ? "checkmark" : "person.fill")
+                }
+            }
+        } label: {
+            TaskEditorMenuRow(
+                title: "Responsável",
+                value: owner,
+                systemName: "person.fill",
+                tone: .sky
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var categoryMenu: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Categoria")
+                .font(.subheadline.weight(.heavy))
+                .foregroundStyle(NinaTheme.muted)
+
+            Button {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                    isCategoryDropdownExpanded.toggle()
+                }
+            } label: {
+                TaskEditorMenuRow(
+                    title: "Tipo da tarefa",
+                    value: category.title,
+                    systemName: category.symbolName,
+                    tone: category.tone
+                )
+            }
+            .buttonStyle(.plain)
+
+            if isCategoryDropdownExpanded {
+                Divider()
+
+                VStack(spacing: 0) {
+                    ForEach(categoryOptions) { item in
+                        Button {
+                            category = item
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                                isCategoryDropdownExpanded = false
+                            }
+                        } label: {
+                            TaskCategoryChoiceRow(
+                                category: item,
+                                isSelected: category.id == item.id
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        if item.id != categoryOptions.last?.id {
+                            Divider()
+                                .padding(.leading, 30)
+                        }
+                    }
+
+                    Divider()
+
+                    Button {
+                        newCategoryTitle = ""
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                            isCategoryDropdownExpanded = false
+                            isCreatingCategory = true
+                        }
+                    } label: {
+                        TaskCategoryChoiceRow(
+                            category: TaskCategory.custom(id: "new-category", title: "Nova categoria", tone: .mint),
+                            isSelected: false,
+                            overrideSymbolName: "plus.circle.fill"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            if isCreatingCategory {
+                Divider()
+
+                HStack(spacing: 10) {
+                    TextField("Nome da nova categoria", text: $newCategoryTitle)
+                        .textFieldStyle(.plain)
+                        .font(.body.weight(.semibold))
+
+                    Button {
+                        createCategory()
+                    } label: {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(NinaTheme.mint)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(newCategoryTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(newCategoryTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                            isCreatingCategory = false
+                        }
+                        newCategoryTitle = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(NinaTheme.muted)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private func loadIfNeeded() {
+        guard !didLoad else { return }
+        didLoad = true
+
+        guard case .edit(let id) = mode,
+              let task = store.tasks.first(where: { $0.id == id }) else {
+            return
+        }
+
+        title = task.title
+        subtitle = task.subtitle
+        owner = task.owner
+        dueDate = task.dueAt ?? Self.date(fromDueLabel: task.dueLabel)
+        category = task.category
+        priority = task.priority
+        loadedTaskVersion = task.version
+    }
+
+    private func save() {
+        guard !trimmedTitle.isEmpty else {
+            Haptics.error()
+            return
+        }
+
+        let dueLabel = Self.dueLabel(for: dueDate)
+        let dueAt = AppStore.reminderDate(onSameDayAs: dueDate)
+        let categoryForSave = persistedCategoryIfNeeded(category)
+        Haptics.success()
+        switch mode {
+        case .add(let sectionID):
+            store.addTask(
+                title: title,
+                subtitle: subtitle,
+                owner: owner,
+                dueLabel: dueLabel,
+                dueAt: dueAt,
+                category: categoryForSave,
+                priority: priority,
+                sectionID: sectionID
+            )
+        case .edit(let id):
+            store.updateTask(
+                id: id,
+                title: title,
+                subtitle: subtitle,
+                owner: owner,
+                dueLabel: dueLabel,
+                dueAt: dueAt,
+                category: categoryForSave,
+                priority: priority,
+                expectedVersion: loadedTaskVersion
+            )
+        }
+
+        dismiss()
+    }
+
+    private func createCategory() {
+        let trimmedTitle = newCategoryTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else {
+            Haptics.error()
+            return
+        }
+
+        if let existing = categoryOptions.first(where: { $0.title.caseInsensitiveCompare(trimmedTitle) == .orderedSame }) {
+            Haptics.selection()
+            category = existing
+            newCategoryTitle = ""
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                isCreatingCategory = false
+                isCategoryDropdownExpanded = false
+            }
+            return
+        }
+
+        let newCategory = TaskCategory.custom(
+            id: "custom-local-\(UUID().uuidString)",
+            title: trimmedTitle,
+            tone: nextLocalCategoryTone
+        )
+
+        Haptics.success()
+        localTaskCategories.append(newCategory)
+        category = newCategory
+        newCategoryTitle = ""
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            isCreatingCategory = false
+            isCategoryDropdownExpanded = false
+        }
+    }
+
+    private var nextLocalCategoryTone: MemberTone {
+        let tones: [MemberTone] = [.lavender, .amber, .sky, .coral, .mint]
+        return tones[(store.customTaskCategories.count + localTaskCategories.count) % tones.count]
+    }
+
+    private func persistedCategoryIfNeeded(_ selectedCategory: TaskCategory) -> TaskCategory {
+        if store.availableTaskCategories.contains(where: { $0.id == selectedCategory.id }) {
+            return selectedCategory
+        }
+
+        return store.addTaskCategory(title: selectedCategory.title) ?? selectedCategory
+    }
+
+    private static func dueLabel(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return "Hoje"
+        }
+
+        if calendar.isDateInTomorrow(date) {
+            return "Amanhã"
+        }
+
+        return dueDateFormatter.string(from: date)
+    }
+
+    private static func date(fromDueLabel label: String) -> Date {
+        let normalized = label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+
+        if normalized.contains("amanha"),
+           let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: .now) {
+            return tomorrow
+        }
+
+        if normalized.contains("hoje") {
+            return .now
+        }
+
+        if let date = dueDateFormatter.date(from: label) {
+            return date
+        }
+
+        return .now
+    }
+
+    private static let dueDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter
+    }()
+}
+
+private struct TaskEditorMenuRow: View {
+    var title: String
+    var value: String
+    var systemName: String
+    var tone: MemberTone
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Label(title, systemImage: systemName)
+                .foregroundStyle(NinaTheme.muted)
+
+            Spacer(minLength: 12)
+
+            HStack(spacing: 8) {
+                Text(value)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(NinaTheme.ink)
+                    .lineLimit(1)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(tone.color)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct TaskCategoryChoiceRow: View {
+    var category: TaskCategory
+    var isSelected: Bool
+    var overrideSymbolName: String?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: overrideSymbolName ?? category.symbolName)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(category.tone.color)
+                .frame(width: 20)
+
+            Text(category.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(NinaTheme.ink)
+
+            Spacer()
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(NinaTheme.mint)
+            }
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+    }
+}
+
+enum ShoppingEditorMode: Hashable {
+    case add
+    case edit(UUID)
+}
+
+struct ShoppingEditorSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    var mode: ShoppingEditorMode
+    @State private var title = ""
+    @State private var amount = ""
+    @State private var owner = "Casa"
+    @State private var didLoad = false
+
+    private var isEditing: Bool {
+        if case .edit = mode { true } else { false }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionTitle(
+                    title: isEditing ? "Editar compra" : "Novo item",
+                    subtitle: "Lista rápida para mercado, farmácia e coisas da casa."
+                )
+
+                SoftCard {
+                    TextField("Item", text: $title)
+                        .font(.headline)
+                        .textFieldStyle(.plain)
+
+                    Divider()
+
+                    TextField("Quantidade", text: $amount)
+                        .textFieldStyle(.plain)
+
+                    Divider()
+
+                    HStack {
+                        Label("Responsável", systemImage: "person.fill")
+                            .foregroundStyle(NinaTheme.muted)
+                        TextField("Casa", text: $owner)
+                            .multilineTextAlignment(.trailing)
+                            .textFieldStyle(.plain)
+                    }
+                }
+
+                PrimaryCapsuleButton(title: isEditing ? "Salvar item" : "Adicionar item", systemName: "cart.fill") {
+                    save()
+                }
+                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1)
+            }
+            .padding(18)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .ninaSheetBackground()
+        .navigationTitle(isEditing ? "Editar" : "Adicionar")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Fechar") {
+                    Haptics.selection()
+                    dismiss()
+                }
+            }
+        }
+        .onAppear(perform: loadIfNeeded)
+    }
+
+    private func loadIfNeeded() {
+        guard !didLoad else { return }
+        didLoad = true
+
+        guard case .edit(let id) = mode,
+              let item = store.shoppingItems.first(where: { $0.id == id }) else {
+            return
+        }
+
+        title = item.title
+        amount = item.amount
+        owner = item.owner
+    }
+
+    private func save() {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            Haptics.error()
+            return
+        }
+
+        Haptics.success()
+        switch mode {
+        case .add:
+            store.addShoppingItem(title: title, amount: amount, owner: owner)
+        case .edit(let id):
+            store.updateShoppingItem(id: id, title: title, amount: amount, owner: owner)
+        }
+
+        dismiss()
+    }
+}
+
+struct InviteFamilySheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    private var inviteURL: URL {
+        store.inviteURL
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SectionTitle(title: "Convidar família", subtitle: "Link simulado para validar o fluxo de grupo familiar.")
+
+            SoftCard {
+                HStack(spacing: 14) {
+                    IconBubble(systemName: "link", tone: .mint)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(store.familyGroup.name)
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(NinaTheme.ink)
+
+                        Text(inviteURL.absoluteString)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(NinaTheme.muted)
+                            .textSelection(.enabled)
+                    }
+                }
+
+                HStack {
+                    Label(store.familyLimitLabel, systemImage: "person.2.fill")
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(NinaTheme.muted)
+
+                    Spacer()
+
+                    Text(store.canInviteMorePeople ? "\(store.remainingFamilySlots) vagas" : "limite cheio")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(store.canInviteMorePeople ? NinaTheme.mint : NinaTheme.coral)
+                }
+            }
+
+            if store.canInviteMorePeople {
+                ShareLink(item: inviteURL) {
+                    Label("Compartilhar convite", systemImage: "square.and.arrow.up.fill")
+                        .font(.headline.weight(.black))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(NinaTheme.sky, in: Capsule())
+                }
+            } else {
+                Label("Limite de família atingido", systemImage: "person.crop.circle.badge.exclamationmark")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(NinaTheme.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(NinaTheme.line.opacity(0.45), in: Capsule())
+            }
+
+            Spacer()
+        }
+        .padding(18)
+        .ninaSheetBackground()
+        .navigationTitle("Convite")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Fechar") {
+                    Haptics.selection()
+                    dismiss()
+                }
+            }
+        }
+    }
+}
+
+struct MemberDetailSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    var memberID: UUID
+
+    var body: some View {
+        VStack {
+            if let member = store.familyGroup.members.first(where: { $0.id == memberID }) {
+                MemberDetailContent(member: member)
+            } else {
+                ContentUnavailableView("Participante não encontrado", systemImage: "person.crop.circle")
+            }
+
+            Spacer()
+        }
+        .padding(18)
+        .ninaSheetBackground()
+        .navigationTitle("Participante")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Fechar") {
+                    Haptics.selection()
+                    dismiss()
+                }
+            }
+        }
+    }
+}
+
+struct SuggestionDetailSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    var suggestion: NinaSuggestion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SectionTitle(title: suggestion.title, subtitle: "Sugestão criada pela Nina local.")
+
+            SoftCard {
+                HStack(spacing: 12) {
+                    IconBubble(systemName: suggestion.symbolName, tone: suggestion.category.tone)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(suggestion.detail)
+                            .font(.body.weight(.bold))
+                            .foregroundStyle(NinaTheme.ink)
+
+                        Text("\(suggestion.payloadOwner) · \(suggestion.payloadDueLabel)")
+                            .font(.subheadline)
+                            .foregroundStyle(NinaTheme.muted)
+                    }
+                }
+
+                Divider()
+
+                Text(suggestion.payloadDetail)
+                    .font(.subheadline)
+                    .foregroundStyle(NinaTheme.muted)
+            }
+
+            PrimaryCapsuleButton(title: suggestion.actionTitle, systemName: "plus.circle.fill") {
+                Haptics.success()
+                store.applySuggestion(suggestion)
+                dismiss()
+            }
+
+            Spacer()
+        }
+        .padding(18)
+        .ninaSheetBackground()
+        .navigationTitle("Sugestão")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Fechar") {
+                    Haptics.selection()
+                    dismiss()
+                }
+            }
+        }
+    }
+}
+
+#Preview("Task sheet") {
+    NavigationStack {
+        TaskEditorSheet(mode: .add(sectionID: AppStore.houseTasksSectionID))
+            .environment(AppStore())
+    }
+}

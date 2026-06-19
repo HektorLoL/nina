@@ -1,0 +1,372 @@
+---
+import { Icon } from "astro-icon/components";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Brand from "../components/Brand.astro";
+import PhoneShot from "../components/PhoneShot.astro";
+
+const steps = [
+  {
+    number: "1",
+    icon: "ph:chat-circle-dots",
+    title: "Você fala",
+    text: "Conte o que precisa, por voz ou texto. Pode ser uma coisa só ou várias de uma vez.",
+    tone: "mint",
+  },
+  {
+    number: "2",
+    icon: "ph:sparkle",
+    title: "A Nina entende",
+    text: "Ela organiza, prioriza e junta com o que já existe na casa e na agenda de cada um.",
+    tone: "sky",
+  },
+  {
+    number: "3",
+    icon: "ph:users-three",
+    title: "Todo mundo resolve",
+    text: "Tarefas, lembretes e compras vão para as pessoas certas. Clareza para todos.",
+    tone: "coral",
+  },
+];
+
+const features = [
+  "Entende prioridades e prazos",
+  "Distribui tarefas de forma justa",
+  "Lembra no momento certo",
+  "Se ajusta quando a vida muda",
+];
+
+const faq = [
+  {
+    question: "A Nina funciona sem internet?",
+    answer:
+      "Algumas informações já carregadas continuam visíveis, mas conversa, sincronização e convites precisam de internet.",
+  },
+  {
+    question: "Posso usar se moro sozinho?",
+    answer:
+      "Sim. A Nina também funciona como uma memória prática para tarefas, compras, documentos e lembretes pessoais.",
+  },
+  {
+    question: "Como a Nina ajuda a dividir as tarefas?",
+    answer:
+      "Ela reúne o que está pendente, mostra quem está concentrando mais demandas e sugere ajustes para a família decidir.",
+  },
+  {
+    question: "Posso editar ou cancelar algo que a Nina criou?",
+    answer:
+      "Pode. Você mantém o controle e consegue editar, concluir ou excluir tarefas e itens organizados pela Nina.",
+  },
+  {
+    question: "A Nina funciona no iPhone e Android?",
+    answer:
+      "A primeira versão está sendo preparada para iPhone. A expansão para outras plataformas será comunicada depois.",
+  },
+];
+---
+
+<BaseLayout
+  title="Nina — menos coisas na cabeça, mais casa acontecendo junto"
+  description="Fale do seu jeito. A Nina transforma lembranças soltas em tarefas, lembretes e uma rotina mais leve para toda a casa."
+>
+  <header class="site-header" data-header>
+    <div class="header-inner page-shell">
+      <Brand />
+      <nav class="desktop-nav" aria-label="Navegação principal">
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#recursos">O que a Nina faz</a>
+        <a href="#privacidade">Privacidade</a>
+        <a href="#duvidas">Dúvidas</a>
+      </nav>
+      <button class="button button-primary header-cta" type="button" data-open-waitlist>
+        Quero conhecer
+      </button>
+      <button
+        class="menu-button"
+        type="button"
+        aria-label="Abrir menu"
+        aria-expanded="false"
+        aria-controls="mobile-menu"
+        data-menu-button
+      >
+        <Icon name="ph:list-bold" size={24} />
+      </button>
+    </div>
+    <nav id="mobile-menu" class="mobile-nav" aria-label="Navegação móvel" data-mobile-menu>
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#recursos">O que a Nina faz</a>
+      <a href="#privacidade">Privacidade</a>
+      <a href="#duvidas">Dúvidas</a>
+      <button class="button button-primary" type="button" data-open-waitlist>Quero conhecer</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero page-shell" aria-labelledby="hero-title">
+      <div class="hero-copy reveal">
+        <p class="eyebrow coral">Conversa que vira alívio</p>
+        <h1 id="hero-title">
+          <span class="title-line">Jogue as coisas</span>
+          <span class="title-line">da casa aqui.</span>
+          <span class="title-line title-accent">A Nina organiza.</span>
+        </h1>
+        <p class="hero-lede">
+          Você fala. A Nina transforma bagunça mental em tarefas, lembretes e clareza para todo
+          mundo da casa. Menos cobrança, mais vida junto.
+        </p>
+        <button class="button button-primary button-large" type="button" data-open-waitlist>
+          Quero conhecer a Nina
+          <Icon name="ph:arrow-right-bold" size={19} />
+        </button>
+        <p class="hand-note" aria-hidden="true">É rápido, é leve, é da casa.</p>
+      </div>
+
+      <div class="hero-product reveal" aria-label="Prévia do aplicativo Nina">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <PhoneShot
+          src="/images/nina-chat.jpg"
+          alt="Tela de conversa do aplicativo Nina"
+          class="hero-phone"
+          eager
+        />
+        <article class="floating-note note-mint note-one">
+          <Icon name="ph:check-circle-fill" size={20} />
+          <p><strong>Ideia solta</strong>Comprar presente da professora até sexta</p>
+        </article>
+        <article class="floating-note note-amber note-two">
+          <Icon name="ph:bell-fill" size={20} />
+          <p><strong>Lembrete</strong>Renovar plano de internet</p>
+        </article>
+        <article class="floating-note note-sky note-three">
+          <Icon name="ph:check-square-fill" size={20} />
+          <p><strong>Tarefa criada</strong>Levar roupas para doação</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="como-funciona" class="steps-section page-shell reveal">
+      <div class="section-heading centered">
+        <p class="eyebrow mint">Sem precisar aprender um sistema</p>
+        <h2>Da conversa à ação, em 3 passos</h2>
+      </div>
+      <div class="steps-grid">
+        {
+          steps.map((step, index) => (
+            <article class={`step step-${step.tone}`}>
+              <div class="step-top">
+                <span class="step-number">{step.number}</span>
+                <span class="step-icon"><Icon name={step.icon} size={28} /></span>
+              </div>
+              <h3>{step.title}</h3>
+              <p>{step.text}</p>
+              {index < steps.length - 1 && (
+                <Icon class="step-arrow" name="ph:arrow-right" size={28} aria-hidden="true" />
+              )}
+            </article>
+          ))
+        }
+      </div>
+    </section>
+
+    <section id="recursos" class="product-section page-shell reveal">
+      <div class="product-copy">
+        <p class="eyebrow mint">Organização que se adapta à sua casa</p>
+        <h2>Da bagunça mental para a rotina leve.</h2>
+        <p>
+          A Nina entende o contexto da casa e cria um plano prático que funciona de verdade.
+        </p>
+        <ul class="check-list">
+          {
+            features.map((feature) => (
+              <li><Icon name="ph:check-circle-fill" size={21} />{feature}</li>
+            ))
+          }
+        </ul>
+      </div>
+      <div class="phone-gallery" aria-label="Telas reais do aplicativo Nina">
+        <PhoneShot src="/images/nina-tasks.jpg" alt="Tela de tarefas do aplicativo Nina" class="phone-left" />
+        <PhoneShot src="/images/nina-today.jpg" alt="Tela Hoje do aplicativo Nina" class="phone-center" />
+        <PhoneShot src="/images/nina-house.jpg" alt="Tela Casa do aplicativo Nina" class="phone-right" />
+      </div>
+    </section>
+
+    <section class="balance-section page-shell reveal">
+      <div class="balance-copy">
+        <p class="eyebrow coral">Equilíbrio que todo mundo sente</p>
+        <h2>Menos sobrecarga, mais parceria.</h2>
+        <p>
+          A Nina mostra como está a carga de cada um e ajuda a encontrar um equilíbrio possível
+          para a realidade da sua família.
+        </p>
+        <div class="gentle-callout">
+          <Icon name="ph:scales-fill" size={27} />
+          <span>Pequenos ajustes hoje, uma casa mais leve sempre.</span>
+        </div>
+      </div>
+      <div class="workload-card" aria-label="Exemplo de carga doméstica">
+        <div class="workload-header">
+          <div>
+            <h3>Carga da casa esta semana</h3>
+            <p>Um retrato para conversar, não para cobrar.</p>
+          </div>
+          <Icon name="ph:heart-straight-fill" size={26} />
+        </div>
+        <div class="workload-row">
+          <span>Mirna</span>
+          <div class="bar"><i style="--progress: 82%; --tone: var(--coral)"></i></div>
+          <strong>82%</strong>
+        </div>
+        <div class="workload-row">
+          <span>Heitor</span>
+          <div class="bar"><i style="--progress: 48%; --tone: var(--sky)"></i></div>
+          <strong>48%</strong>
+        </div>
+        <div class="workload-row">
+          <span>Casa</span>
+          <div class="bar"><i style="--progress: 64%; --tone: var(--amber)"></i></div>
+          <strong>64%</strong>
+        </div>
+        <div class="nina-suggestion">
+          <img src="/images/nina-app-icon.png" alt="" width="42" height="42" />
+          <p><strong>Sugestão da Nina</strong>Que tal dividir a rotina da cozinha nesta semana?</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="support-grid page-shell">
+      <article id="privacidade" class="privacy-panel reveal">
+        <div class="privacy-icon">
+          <Icon name="ph:shield-check-fill" size={58} />
+        </div>
+        <div>
+          <p class="eyebrow lavender">Privacidade de verdade</p>
+          <h2>Seus dados ficam só com você.</h2>
+          <p>
+            A Nina usa acesso autenticado e regras de segurança para proteger cada casa. Nada de
+            anúncios ou venda de informações.
+          </p>
+          <ul class="check-list compact">
+            <li><Icon name="ph:lock-key-fill" size={18} />Acesso protegido</li>
+            <li><Icon name="ph:database-fill" size={18} />Dados isolados por casa</li>
+            <li><Icon name="ph:user-circle-check-fill" size={18} />Você mantém o controle</li>
+          </ul>
+          <a class="text-link privacy-policy-link" href="/privacidade">Ler política de privacidade</a>
+        </div>
+      </article>
+
+      <section id="duvidas" class="faq-panel reveal" aria-labelledby="faq-title">
+        <p class="eyebrow sky">Direto ao ponto</p>
+        <h2 id="faq-title">Dúvidas frequentes</h2>
+        <div class="faq-list">
+          {
+            faq.map((item) => (
+              <details>
+                <summary>
+                  {item.question}
+                  <Icon name="ph:plus-bold" size={17} />
+                </summary>
+                <p>{item.answer}</p>
+              </details>
+            ))
+          }
+        </div>
+      </section>
+    </section>
+
+    <section class="final-cta page-shell reveal">
+      <img src="/images/nina-app-icon.png" alt="Nina sorrindo" width="124" height="124" />
+      <div class="final-copy">
+        <p class="speech">Pronta para ter uma casa mais leve?</p>
+        <h2>A Nina já está esperando a sua mensagem.</h2>
+      </div>
+      <ul class="check-list compact">
+        <li><Icon name="ph:check-circle-fill" size={18} />Organiza sua casa do seu jeito</li>
+        <li><Icon name="ph:check-circle-fill" size={18} />Reduz a carga mental do dia a dia</li>
+        <li><Icon name="ph:check-circle-fill" size={18} />Mais conexão e tempo juntos</li>
+      </ul>
+      <button class="button button-primary button-large" type="button" data-open-waitlist>
+        Quero conhecer a Nina
+      </button>
+    </section>
+  </main>
+
+  <footer class="site-footer page-shell">
+    <Brand compact />
+    <p>Nina © {new Date().getFullYear()}. Organização da casa com mais leveza.</p>
+    <nav aria-label="Links legais">
+      <a href="/privacidade">Privacidade</a>
+      <a href="mailto:oi@ninai.app">Contato</a>
+    </nav>
+  </footer>
+
+  <dialog class="waitlist-dialog" data-waitlist-dialog aria-labelledby="waitlist-title">
+    <button class="dialog-close" type="button" aria-label="Fechar" data-close-waitlist>
+      <Icon name="ph:x-bold" size={20} />
+    </button>
+    <img src="/images/nina-app-icon.png" alt="" width="82" height="82" />
+    <p class="eyebrow mint">Chegando com calma</p>
+    <h2 id="waitlist-title">A lista da Nina abre em breve.</h2>
+    <p>
+      Ainda não estamos coletando emails. Quando a primeira versão estiver pronta, este será o
+      lugar para pedir acesso.
+    </p>
+    <button class="button button-secondary" type="button" data-close-waitlist>Entendi</button>
+  </dialog>
+
+  <script>
+    const menuButton = document.querySelector("[data-menu-button]");
+    const mobileMenu = document.querySelector("[data-mobile-menu]");
+    const header = document.querySelector("[data-header]");
+    const dialog = document.querySelector("[data-waitlist-dialog]");
+    const openButtons = document.querySelectorAll("[data-open-waitlist]");
+    const closeButtons = document.querySelectorAll("[data-close-waitlist]");
+
+    menuButton?.addEventListener("click", () => {
+      const isOpen = menuButton.getAttribute("aria-expanded") === "true";
+      menuButton.setAttribute("aria-expanded", String(!isOpen));
+      mobileMenu?.classList.toggle("is-open", !isOpen);
+    });
+
+    mobileMenu?.querySelectorAll("a").forEach((link) => {
+      link.addEventListener("click", () => {
+        menuButton?.setAttribute("aria-expanded", "false");
+        mobileMenu.classList.remove("is-open");
+      });
+    });
+
+    openButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        mobileMenu?.classList.remove("is-open");
+        menuButton?.setAttribute("aria-expanded", "false");
+        if (dialog instanceof HTMLDialogElement) dialog.showModal();
+      });
+    });
+
+    closeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        if (dialog instanceof HTMLDialogElement) dialog.close();
+      });
+    });
+
+    dialog?.addEventListener("click", (event) => {
+      if (event.target === dialog && dialog instanceof HTMLDialogElement) dialog.close();
+    });
+
+    const updateHeader = () => header?.classList.toggle("is-scrolled", window.scrollY > 16);
+    updateHeader();
+    window.addEventListener("scroll", updateHeader, { passive: true });
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12 },
+    );
+
+    document.querySelectorAll(".reveal").forEach((element) => observer.observe(element));
+  </script>
+</BaseLayout>

@@ -1,0 +1,21 @@
+---
+interface Props {
+  src: string;
+  alt: string;
+  class?: string;
+  eager?: boolean;
+}
+
+const { src, alt, class: className, eager = false } = Astro.props;
+---
+
+<figure class:list={["phone-shot", className]}>
+  <img
+    src={src}
+    alt={alt}
+    width="368"
+    height="800"
+    loading={eager ? "eager" : "lazy"}
+    fetchpriority={eager ? "high" : "auto"}
+  />
+</figure>

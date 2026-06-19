@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "97PL8KQA8L.com.heitor.nina"
+        ],
+        "components": [
+          {
+            "/": "/invite/*",
+            "comment": "Open Nina family invitations in the iOS app"
+          }
+        ]
+      }
+    ]
+  }
+}
