@@ -10,20 +10,20 @@ npm run dev
 ```
 
 Use `npm run preview` depois de `npm run build` para executar o resultado com
-Cloudflare Pages Functions.
+Cloudflare Workers.
 
-## Cloudflare Pages
+## Cloudflare Workers
 
 - Build command: `npm run build`
-- Output directory: `dist`
+- Deploy command: `npm run deploy`
+- Root directory: `/web`
 - Variáveis:
-  - `SUPABASE_URL`
-  - `SUPABASE_PUBLISHABLE_KEY`
+  - `NINA_SUPABASE_URL`
+  - `NINA_SUPABASE_PUBLISHABLE_KEY`
 
 Conecte `ninai.app` como domínio principal. O arquivo
 `public/.well-known/apple-app-site-association` habilita Universal Links para
 `/invite/*`.
 
 Configure `www.ninai.app` no Cloudflare para redirecionar permanentemente para
-`https://ninai.app`. Redirecionamentos entre hosts não são aceitos no arquivo
-`_redirects` do Pages.
+`https://ninai.app`.

@@ -1,6 +1,11 @@
-name = "nina-web"
-compatibility_date = "2026-06-11"
-pages_build_output_dir = "./dist"
+name = "nina"
+main = "./src/worker.ts"
+compatibility_date = "2026-06-16"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/invite/*"]
 
 [vars]
 NINA_APP_SCHEME = "nina"
