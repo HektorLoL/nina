@@ -113,9 +113,17 @@ struct TodayView: View {
         }
     }
 
+    private func agendaTasks(relativeTo referenceDate: Date) -> [TaskItem] {
+        let calendar = Calendar.current
+        return store.openTasks.filter {
+            $0.belongsOnAgenda(for: referenceDate, calendar: calendar)
+        }
+    }
+
     private func overdueTodayCount(relativeTo referenceDate: Date) -> Int {
-        todayTasks(relativeTo: referenceDate).count {
-            $0.isOverdue(relativeTo: referenceDate)
+        let calendar = Calendar.current
+        return agendaTasks(relativeTo: referenceDate).count {
+            $0.isOverdue(relativeTo: referenceDate, calendar: calendar)
         }
     }
 
@@ -129,23 +137,38 @@ struct TodayView: View {
         }
     }
 
+    @ViewBuilder
     private var overloadCard: some View {
-        SoftCard {
-            HStack(alignment: .top, spacing: 12) {
-                IconBubble(systemName: "heart.text.square.fill", tone: .coral)
+        let snapshot = store.workloadSnapshot
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Sinal de sobrecarga")
-                        .font(.headline.weight(.black))
-                        .foregroundStyle(NinaTheme.ink)
+        if snapshot.hasAnyLoad {
+            SoftCard {
+                HStack(alignment: .top, spacing: 12) {
+                    IconBubble(
+                        systemName: snapshot.isConclusive && !snapshot.isBalanced
+                            ? "heart.text.square.fill"
+                            : "chart.bar.fill",
+                        tone: snapshot.isConclusive && !snapshot.isBalanced ? .coral : .mint
+                    )
 
-                    Text("A maior parte da gestão doméstica está caindo na Mirna. A Nina sugere revisar a divisão com calma.")
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(snapshot.headline)
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(NinaTheme.ink)
+
+                        Text(snapshot.message)
+                            .font(.subheadline)
+                            .foregroundStyle(NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text("Um retrato para conversar, não para cobrar.")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(NinaTheme.muted.opacity(0.8))
+                    }
                 }
-            }
 
-            WorkloadBars()
+                WorkloadBars(snapshot: snapshot)
+            }
         }
     }
 
@@ -213,13 +236,13 @@ struct TodayView: View {
     private func tasksForDisplay(relativeTo referenceDate: Date) -> [TaskItem] {
         let calendar = Calendar.current
         let visibleTasks = store.tasks.enumerated().filter { _, task in
-            (!task.isDone || store.pendingPriorityTaskIDs.contains(task.id))
-                && task.isDue(on: referenceDate, calendar: calendar)
+            if store.pendingPriorityTaskIDs.contains(task.id) { return true }
+            return task.belongsOnAgenda(for: referenceDate, calendar: calendar)
         }
 
         return visibleTasks.sorted { left, right in
-                let leftOverdue = left.element.isOverdue(relativeTo: referenceDate)
-                let rightOverdue = right.element.isOverdue(relativeTo: referenceDate)
+                let leftOverdue = left.element.isOverdue(relativeTo: referenceDate, calendar: calendar)
+                let rightOverdue = right.element.isOverdue(relativeTo: referenceDate, calendar: calendar)
                 if leftOverdue != rightOverdue {
                     return leftOverdue
                 }
@@ -623,11 +646,49 @@ private struct TodayStat: View {
 }
 
 struct WorkloadBars: View {
+    var snapshot: HouseholdWorkloadSnapshot
+
     var body: some View {
         VStack(spacing: 10) {
-            WorkloadBar(name: "Mirna", count: 82, progress: 0.92, tone: .coral)
-            WorkloadBar(name: "Heitor", count: 8, progress: 0.18, tone: .sky)
+            ForEach(snapshot.entries) { entry in
+                WorkloadBar(
+                    name: entry.name,
+                    count: entry.openCount,
+                    progress: barProgress(for: entry),
+                    tone: entry.tone
+                )
+            }
+
+            if snapshot.sharedCount > 0 {
+                WorkloadBar(
+                    name: "Casa",
+                    count: snapshot.sharedCount,
+                    progress: progress(for: snapshot.sharedCount),
+                    tone: .mint,
+                    isShared: true
+                )
+            }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func barProgress(for entry: HouseholdWorkloadEntry) -> CGFloat {
+        progress(for: entry.openCount)
+    }
+
+    private func progress(for count: Int) -> CGFloat {
+        let scale = max(snapshot.maxOpenCount, snapshot.sharedCount)
+        guard scale > 0 else { return 0 }
+        return CGFloat(count) / CGFloat(scale)
+    }
+
+    private var accessibilityLabel: String {
+        var parts = snapshot.entries.map { "\($0.name): \($0.openCount) tarefas abertas" }
+        if snapshot.sharedCount > 0 {
+            parts.append("Casa, sem responsável: \(snapshot.sharedCount) tarefas abertas")
+        }
+        return parts.joined(separator: ". ")
     }
 }
 
@@ -636,17 +697,18 @@ private struct WorkloadBar: View {
     var count: Int
     var progress: CGFloat
     var tone: MemberTone
+    var isShared = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text(name)
+                Text(isShared ? "Casa · sem responsável" : name)
                     .font(.caption.weight(.black))
                     .foregroundStyle(NinaTheme.ink)
 
                 Spacer()
 
-                Text("\(count) tarefas")
+                Text(count == 1 ? "1 tarefa" : "\(count) tarefas")
                     .font(.caption.weight(.heavy))
                     .foregroundStyle(NinaTheme.muted)
             }
@@ -657,7 +719,7 @@ private struct WorkloadBar: View {
                         .fill(NinaTheme.line.opacity(0.8))
 
                     Capsule()
-                        .fill(tone.color)
+                        .fill(isShared ? NinaTheme.muted.opacity(0.42) : tone.color)
                         .frame(width: proxy.size.width * min(progress, 1))
                 }
             }

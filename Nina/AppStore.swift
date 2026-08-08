@@ -310,6 +310,14 @@ final class AppStore {
         tasks.filter(\.isDone)
     }
 
+    var workloadSnapshot: HouseholdWorkloadSnapshot {
+        HouseholdWorkload.snapshot(tasks: tasks, members: familyGroup.members)
+    }
+
+    func openTaskCount(for member: HouseholdMember) -> Int {
+        HouseholdWorkload.openTaskCount(for: member, in: tasks)
+    }
+
     func tasks(in sectionID: String) -> [TaskItem] {
         tasks.filter { $0.sectionID == sectionID }
     }
@@ -1735,6 +1743,36 @@ final class AppStore {
         }
     }
 
+    func deleteShoppingItem(_ id: ShoppingItem.ID) {
+        guard shoppingItems.contains(where: { $0.id == id }) else { return }
+        shoppingItems.removeAll { $0.id == id }
+        persistActivityLocally()
+        enqueueRemoteMutation(errorMessage: "Não foi possível apagar o item da lista.") {
+            backend,
+            familyID,
+            _ in
+            try await backend.deleteShoppingItem(id, familyID: familyID)
+        }
+    }
+
+    @discardableResult
+    func clearCheckedShoppingItems() -> Int {
+        let checkedIDs = shoppingItems.filter(\.isChecked).map(\.id)
+        guard !checkedIDs.isEmpty else { return 0 }
+
+        shoppingItems.removeAll(where: \.isChecked)
+        persistActivityLocally()
+        for id in checkedIDs {
+            enqueueRemoteMutation(errorMessage: "Não foi possível limpar os itens comprados.") {
+                backend,
+                familyID,
+                _ in
+                try await backend.deleteShoppingItem(id, familyID: familyID)
+            }
+        }
+        return checkedIDs.count
+    }
+
     private var nextTaskSectionTone: MemberTone {
         let tones: [MemberTone] = [.lavender, .sky, .coral, .amber, .mint]
         return tones[taskSections.count % tones.count]
@@ -2449,19 +2487,14 @@ enum PreviewData {
         ShoppingItem(title: "Frutas para lancheira", amount: "5 dias", owner: "Mirna", isChecked: true)
     ]
 
+    // Demo insights never assert a metric about the household: the live workload card is the only
+    // surface allowed to put a number on who is carrying what.
     static let insights: [HouseholdInsight] = [
         HouseholdInsight(
-            title: "Carga mental concentrada",
-            message: "Mirna criou 82 tarefas nos últimos 30 dias. Heitor criou 8. A Nina recomenda revisar a divisão.",
-            metric: "82 x 8",
-            symbolName: "chart.bar.fill",
-            tone: .coral
-        ),
-        HouseholdInsight(
-            title: "Semana mais pesada",
-            message: "Aumentaram mensagens sobre saúde, escola e tarefas atrasadas.",
-            metric: "+34%",
-            symbolName: "heart.text.square.fill",
+            title: "Resumo da semana",
+            message: "Toda semana a Nina reúne o que ficou pendente, o que foi concluído e onde a casa está pesando mais.",
+            metric: "Semanal",
+            symbolName: "calendar.badge.clock",
             tone: .lavender
         )
     ]

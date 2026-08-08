@@ -246,6 +246,8 @@ select is(
   'the database preparation completes'
 );
 
+reset role;
+
 select is(
   (
     select created_by

@@ -637,6 +637,10 @@ struct TaskCard: View {
                 .accessibilityAction(named: Text("Editar tarefa"), openEditor)
         } else {
             baseCard
+                .onTapGesture(perform: openEditor)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel("Abrir \(task.title)")
+                .accessibilityAction(named: Text(isMarkedComplete ? "Cancelar conclusão" : "Concluir"), toggleTask)
         }
     }
 
@@ -677,6 +681,10 @@ struct TaskCard: View {
                     Label("Semente · sem data definida", systemImage: "leaf.fill")
                         .font(.caption2.weight(.black))
                         .foregroundStyle(NinaTheme.mint)
+                } else if isOverdue {
+                    Label("Atrasada", systemImage: "exclamationmark.circle.fill")
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(NinaTheme.coral)
                 } else if task.recurrence != .none {
                     Label(task.recurrence.explicitTitle, systemImage: "repeat")
                         .font(.caption2.weight(.black))
@@ -693,7 +701,7 @@ struct TaskCard: View {
 
                 Text(task.kind == .seed ? "Plante depois" : dynamicDueLabel)
                     .font(.caption2.weight(.heavy))
-                    .foregroundStyle(NinaTheme.muted)
+                    .foregroundStyle(task.kind == .seed ? NinaTheme.muted : dueLabelTone)
 
                 if task.priority != .normal {
                     Label(task.priority.title, systemImage: task.priority.symbolName)
@@ -738,8 +746,16 @@ struct TaskCard: View {
     }
 
     private var dynamicDueLabel: String {
-        guard let date = task.effectiveDueDate else { return task.dueLabel }
+        guard let date = task.displayDate(relativeTo: referenceDate) else { return task.dueLabel }
         return TaskEditorSheet.dateLabel(for: date, relativeTo: referenceDate)
+    }
+
+    private var isOverdue: Bool {
+        !isMarkedComplete && task.isOverdue(relativeTo: referenceDate)
+    }
+
+    private var dueLabelTone: Color {
+        isOverdue ? NinaTheme.coral : NinaTheme.muted
     }
 
     @ViewBuilder
@@ -777,6 +793,7 @@ struct TaskCard: View {
 }
 
 struct MemberDetailContent: View {
+    @Environment(AppStore.self) private var store
     var member: HouseholdMember
 
     var body: some View {
@@ -800,13 +817,13 @@ struct MemberDetailContent: View {
                 .foregroundStyle(NinaTheme.ink)
 
             HStack {
-                Text("Tarefas nos últimos 30 dias")
+                Text("Tarefas abertas agora")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(NinaTheme.muted)
 
                 Spacer()
 
-                Text("\(member.taskCount)")
+                Text("\(store.openTaskCount(for: member))")
                     .font(.title3.weight(.black))
                     .foregroundStyle(member.tone.color)
             }

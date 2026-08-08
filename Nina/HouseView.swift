@@ -278,7 +278,7 @@ struct HouseView: View {
                                 }
                             }
 
-                            Text("\(member.taskCount) tarefas")
+                            Text(memberTaskSummary(for: member))
                                 .font(.caption.weight(.heavy))
                                 .foregroundStyle(NinaTheme.muted)
 
@@ -476,10 +476,51 @@ private extension HouseView {
         VStack(alignment: .leading, spacing: 12) {
             SectionTitle(title: "Insights familiares", subtitle: "Dados simples para conversas melhores.")
 
+            workloadCard
+
             ForEach(store.insights) { insight in
                 InsightCard(insight: insight)
             }
         }
+    }
+
+    @ViewBuilder
+    var workloadCard: some View {
+        let snapshot = store.workloadSnapshot
+
+        if snapshot.hasAnyLoad {
+            SoftCard {
+                HStack(alignment: .top, spacing: 12) {
+                    IconBubble(
+                        systemName: "chart.bar.fill",
+                        tone: snapshot.isConclusive && !snapshot.isBalanced ? .coral : .mint
+                    )
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(snapshot.headline)
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(NinaTheme.ink)
+
+                        Text(snapshot.message)
+                            .font(.subheadline)
+                            .foregroundStyle(NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text("Um retrato para conversar, não para cobrar.")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(NinaTheme.muted.opacity(0.8))
+                    }
+                }
+
+                WorkloadBars(snapshot: snapshot)
+            }
+        }
+    }
+
+    func memberTaskSummary(for member: HouseholdMember) -> String {
+        guard member.role != .assistant else { return "Sempre por perto" }
+        let count = store.openTaskCount(for: member)
+        return count == 1 ? "1 tarefa aberta" : "\(count) tarefas abertas"
     }
 
     private func validateDrafts() {
@@ -669,10 +710,6 @@ private struct InsightCard: View {
                         .foregroundStyle(NinaTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-
-            if insight.title.contains("Carga") {
-                WorkloadBars()
             }
         }
     }

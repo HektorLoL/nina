@@ -199,8 +199,9 @@ select is(
   'all sensitive public tables have row level security enabled'
 );
 
-select ok(
-  not has_table('public', 'reminders'),
+select hasnt_table(
+  'public',
+  'reminders',
   'reminders are unified into tasks and no separate table remains'
 );
 

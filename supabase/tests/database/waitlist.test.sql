@@ -242,6 +242,8 @@ create temporary table waitlist_test_tokens (
   token text not null
 );
 
+grant select on waitlist_test_tokens to service_role;
+
 insert into waitlist_test_tokens (label, token)
 select 'original', unsubscribe_token
 from public.waitlist_signups

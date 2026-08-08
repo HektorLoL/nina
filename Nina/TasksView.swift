@@ -22,6 +22,10 @@ struct TasksView: View {
     @State private var selectedSectionID = AppStore.houseTasksSectionID
     @State private var isPresentingSectionCreator = false
     @State private var sectionPendingDeletion: TaskSectionDescriptor?
+    @State private var searchQuery = ""
+    @State private var selectedFilter: TaskListFilter = .all
+    @State private var isShowingCompleted = false
+    @State private var isConfirmingShoppingClear = false
 
     private static let shoppingSectionID = "shopping-list"
 
@@ -45,6 +49,11 @@ struct TasksView: View {
             .padding(.bottom, 104)
         }
         .ninaScreenBackground()
+        .searchable(
+            text: $searchQuery,
+            placement: .navigationBarDrawer(displayMode: .automatic),
+            prompt: "Buscar por título, responsável ou categoria"
+        )
         .navigationTitle("Tarefas")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -92,6 +101,26 @@ struct TasksView: View {
                     "\(taskCount) \(taskCount == 1 ? "tarefa será movida" : "tarefas serão movidas") para “Tarefas da casa”."
                 )
             }
+        }
+        .alert("Limpar os itens comprados?", isPresented: $isConfirmingShoppingClear) {
+            Button("Cancelar", role: .cancel) {}
+            Button("Limpar", role: .destructive) {
+                clearBoughtShoppingItems()
+            }
+        } message: {
+            let count = store.shoppingItems.count(where: \.isChecked)
+            Text(
+                count == 1
+                    ? "1 item comprado sai da lista da casa."
+                    : "\(count) itens comprados saem da lista da casa."
+            )
+        }
+    }
+
+    private func clearBoughtShoppingItems() {
+        Haptics.success()
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
+            store.clearCheckedShoppingItems()
         }
     }
 
@@ -165,42 +194,222 @@ struct TasksView: View {
     }
 
     private func taskList(for section: TaskSectionDescriptor, sectionID: String) -> some View {
-        let tasks = store.tasks(in: sectionID)
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            let allTasks = store.tasks(in: sectionID)
+            let open = visibleOpenTasks(in: sectionID, relativeTo: context.date)
+            let completed = allTasks.filter(\.isDone)
 
-        return TimelineView(.periodic(from: .now, by: 60)) { context in
             VStack(alignment: .leading, spacing: 12) {
                 SectionTitle(title: section.title, subtitle: section.subtitle)
 
-                if tasks.isEmpty {
+                if !allTasks.isEmpty {
+                    TaskFilterBar(
+                        selectedFilter: $selectedFilter,
+                        counts: filterCounts(in: sectionID, relativeTo: context.date)
+                    )
+                }
+
+                if allTasks.isEmpty {
                     TaskSectionEmptyState(section: section) {
                         Haptics.lightImpact()
                         router.presentedSheet = section.addDestination
                     }
+                } else if open.isEmpty {
+                    TaskFilterEmptyState(filter: selectedFilter, hasSearch: !trimmedQuery.isEmpty)
                 } else {
-                    ForEach(tasks) { task in
+                    ForEach(open) { task in
                         TaskCard(
                             task: task,
                             isMarkedComplete: task.isDone,
                             onToggle: toggleTask,
+                            togglesOnTap: false,
                             referenceDate: context.date
                         )
+                    }
+                }
+
+                if !completed.isEmpty, trimmedQuery.isEmpty, selectedFilter == .all {
+                    completedDisclosure(completed, referenceDate: context.date)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func completedDisclosure(_ completed: [TaskItem], referenceDate: Date) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                Haptics.selection()
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
+                    isShowingCompleted.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isShowingCompleted ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.black))
+                    Text(
+                        completed.count == 1
+                            ? "1 tarefa concluída"
+                            : "\(completed.count) tarefas concluídas"
+                    )
+                    .font(.subheadline.weight(.black))
+                    Spacer()
+                }
+                .foregroundStyle(NinaTheme.muted)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isShowingCompleted {
+                ForEach(completed) { task in
+                    TaskCard(
+                        task: task,
+                        isMarkedComplete: true,
+                        onToggle: toggleTask,
+                        togglesOnTap: false,
+                        referenceDate: referenceDate
+                    )
+                }
+            }
+        }
+        .padding(.top, 6)
+    }
+
+    private var trimmedQuery: String {
+        searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func visibleOpenTasks(in sectionID: String, relativeTo referenceDate: Date) -> [TaskItem] {
+        let calendar = Calendar.current
+        return store.openTasks(in: sectionID)
+            .filter { selectedFilter.matches($0, referenceDate: referenceDate, calendar: calendar, currentUserName: store.currentFamilyMember?.name) }
+            .filter { matchesSearch($0) }
+            .sorted { left, right in
+                let leftOverdue = left.isOverdue(relativeTo: referenceDate, calendar: calendar)
+                let rightOverdue = right.isOverdue(relativeTo: referenceDate, calendar: calendar)
+                if leftOverdue != rightOverdue { return leftOverdue }
+
+                if left.priority.sortRank != right.priority.sortRank {
+                    return left.priority.sortRank > right.priority.sortRank
+                }
+
+                let leftDate = left.displayDate(relativeTo: referenceDate, calendar: calendar) ?? .distantFuture
+                let rightDate = right.displayDate(relativeTo: referenceDate, calendar: calendar) ?? .distantFuture
+                if leftDate != rightDate { return leftDate < rightDate }
+
+                return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
+            }
+    }
+
+    private func matchesSearch(_ task: TaskItem) -> Bool {
+        let query = trimmedQuery
+        guard !query.isEmpty else { return true }
+        return [task.title, task.subtitle, task.owner, task.category.title]
+            .contains { $0.localizedCaseInsensitiveContains(query) }
+    }
+
+    private func filterCounts(in sectionID: String, relativeTo referenceDate: Date) -> [TaskListFilter: Int] {
+        let calendar = Calendar.current
+        let open = store.openTasks(in: sectionID).filter(matchesSearch)
+        let currentUserName = store.currentFamilyMember?.name
+
+        return TaskListFilter.allCases.reduce(into: [:]) { counts, filter in
+            counts[filter] = open.count {
+                filter.matches($0, referenceDate: referenceDate, calendar: calendar, currentUserName: currentUserName)
+            }
+        }
+    }
+
+    private var shoppingList: some View {
+        let pending = store.shoppingItems.filter { !$0.isChecked && matchesShoppingSearch($0) }
+        let bought = store.shoppingItems.filter { $0.isChecked && matchesShoppingSearch($0) }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(
+                title: "Lista de compras",
+                subtitle: store.pendingShoppingItems.count == 1
+                    ? "1 item pendente"
+                    : "\(store.pendingShoppingItems.count) itens pendentes"
+            )
+
+            if store.shoppingItems.isEmpty {
+                ShoppingEmptyState {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .addShoppingItem
+                }
+            } else if pending.isEmpty, bought.isEmpty {
+                TaskFilterEmptyState(filter: .all, hasSearch: true)
+            } else {
+                ForEach(pending) { item in
+                    shoppingRow(item)
+                }
+
+                if pending.isEmpty {
+                    Text("Tudo comprado. Nada pendente na lista.")
+                        .font(.subheadline)
+                        .foregroundStyle(NinaTheme.muted)
+                        .padding(.vertical, 4)
+                }
+
+                if !bought.isEmpty {
+                    HStack {
+                        Text(bought.count == 1 ? "1 comprado" : "\(bought.count) comprados")
+                            .font(.subheadline.weight(.black))
+                            .foregroundStyle(NinaTheme.muted)
+
+                        Spacer()
+
+                        Button("Limpar comprados") {
+                            Haptics.warning()
+                            isConfirmingShoppingClear = true
+                        }
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(NinaTheme.coral)
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 6)
+
+                    ForEach(bought) { item in
+                        shoppingRow(item)
                     }
                 }
             }
         }
     }
 
-    private var shoppingList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionTitle(title: "Lista de compras", subtitle: "\(store.pendingShoppingItems.count) itens pendentes")
-
-            ForEach(store.shoppingItems) { item in
-                ShoppingRow(item: item)
-                    .onTapGesture {
-                        Haptics.lightImpact()
-                        router.presentedSheet = .editShoppingItem(item.id)
-                    }
+    private func shoppingRow(_ item: ShoppingItem) -> some View {
+        ShoppingRow(item: item, tone: shoppingTone(for: item))
+            .onTapGesture {
+                Haptics.lightImpact()
+                router.presentedSheet = .editShoppingItem(item.id)
             }
+            .contextMenu {
+                Button(role: .destructive) {
+                    deleteShoppingItem(item)
+                } label: {
+                    Label("Apagar item", systemImage: "trash")
+                }
+            }
+    }
+
+    private func shoppingTone(for item: ShoppingItem) -> MemberTone {
+        store.familyGroup.members
+            .first { $0.role != .assistant && $0.name.localizedCaseInsensitiveCompare(item.owner) == .orderedSame }?
+            .tone ?? .amber
+    }
+
+    private func matchesShoppingSearch(_ item: ShoppingItem) -> Bool {
+        let query = trimmedQuery
+        guard !query.isEmpty else { return true }
+        return [item.title, item.amount, item.owner]
+            .contains { $0.localizedCaseInsensitiveContains(query) }
+    }
+
+    private func deleteShoppingItem(_ item: ShoppingItem) {
+        Haptics.success()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.84)) {
+            store.deleteShoppingItem(item.id)
         }
     }
 
@@ -258,6 +467,140 @@ struct TasksView: View {
         let seedCount = store.openTasks(in: sectionID).count { $0.kind == .seed }
         let seedSummary = seedCount == 0 ? "" : " · \(seedCount) \(seedCount == 1 ? "semente" : "sementes")"
         return "\(counts.open) abertas · \(counts.completed) concluídas\(seedSummary)"
+    }
+}
+
+enum TaskListFilter: String, CaseIterable, Identifiable, Hashable {
+    case all
+    case mine
+    case overdue
+    case seeds
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "Todas"
+        case .mine: "Minhas"
+        case .overdue: "Atrasadas"
+        case .seeds: "Sementes"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .all: "tray.full.fill"
+        case .mine: "person.fill"
+        case .overdue: "exclamationmark.circle.fill"
+        case .seeds: "leaf.fill"
+        }
+    }
+
+    var tone: MemberTone {
+        switch self {
+        case .all: .mint
+        case .mine: .sky
+        case .overdue: .coral
+        case .seeds: .lavender
+        }
+    }
+
+    var emptyMessage: String {
+        switch self {
+        case .all: "Nada por aqui ainda."
+        case .mine: "Nenhuma tarefa está com você agora."
+        case .overdue: "Nada atrasado. A casa está em dia."
+        case .seeds: "Nenhuma semente guardada nesta seção."
+        }
+    }
+
+    func matches(
+        _ task: TaskItem,
+        referenceDate: Date,
+        calendar: Calendar,
+        currentUserName: String?
+    ) -> Bool {
+        switch self {
+        case .all:
+            true
+        case .mine:
+            currentUserName.map { task.owner.localizedCaseInsensitiveCompare($0) == .orderedSame } ?? false
+        case .overdue:
+            task.isOverdue(relativeTo: referenceDate, calendar: calendar)
+        case .seeds:
+            task.kind == .seed
+        }
+    }
+}
+
+private struct TaskFilterBar: View {
+    @Binding var selectedFilter: TaskListFilter
+    var counts: [TaskListFilter: Int]
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(TaskListFilter.allCases) { filter in
+                    let count = counts[filter] ?? 0
+                    let isSelected = selectedFilter == filter
+
+                    Button {
+                        Haptics.lightImpact()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            selectedFilter = filter
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: filter.symbolName)
+                                .font(.caption2.weight(.black))
+                            Text(filter.title)
+                                .font(.caption.weight(.black))
+                            Text("\(count)")
+                                .font(.caption2.weight(.heavy))
+                                .opacity(0.75)
+                        }
+                        .foregroundStyle(isSelected ? .white : filter.tone.color)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            isSelected ? filter.tone.color : filter.tone.softColor,
+                            in: Capsule()
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(count == 0 && filter != .all && !isSelected)
+                    .opacity(count == 0 && filter != .all && !isSelected ? 0.45 : 1)
+                    .accessibilityLabel("\(filter.title), \(count) tarefas")
+                    .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+        .scrollIndicators(.hidden)
+    }
+}
+
+private struct TaskFilterEmptyState: View {
+    var filter: TaskListFilter
+    var hasSearch: Bool
+
+    var body: some View {
+        SoftCard(padding: 18) {
+            HStack(spacing: 12) {
+                IconBubble(
+                    systemName: hasSearch ? "magnifyingglass" : filter.symbolName,
+                    tone: filter.tone,
+                    size: 40
+                )
+
+                Text(hasSearch ? "Nenhuma tarefa encontrada para essa busca." : filter.emptyMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+        }
     }
 }
 
@@ -480,9 +823,37 @@ private struct TaskSectionCreatorSheet: View {
     }
 }
 
+private struct ShoppingEmptyState: View {
+    var addItem: () -> Void
+
+    var body: some View {
+        SoftCard(padding: 18) {
+            HStack(spacing: 12) {
+                IconBubble(systemName: "cart.fill", tone: .amber, size: 40)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("A lista está vazia")
+                        .font(.headline.weight(.black))
+                        .foregroundStyle(NinaTheme.ink)
+
+                    Text("Some o que faltar em casa. A Nina também pode montar a lista com você.")
+                        .font(.subheadline)
+                        .foregroundStyle(NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            PrimaryCapsuleButton(title: "Adicionar item", systemName: "plus", action: addItem)
+        }
+    }
+}
+
 private struct ShoppingRow: View {
     @Environment(AppStore.self) private var store
     var item: ShoppingItem
+    var tone: MemberTone = .amber
 
     var body: some View {
         SoftCard(padding: 14) {
@@ -502,7 +873,7 @@ private struct ShoppingRow: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(item.isChecked ? "Marcar como pendente" : "Marcar como comprado")
 
-                IconBubble(systemName: "cart.fill", tone: .amber, size: 40)
+                IconBubble(systemName: "cart.fill", tone: tone, size: 40)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.title)
@@ -519,10 +890,10 @@ private struct ShoppingRow: View {
 
                 Text(item.owner)
                     .font(.caption.weight(.black))
-                    .foregroundStyle(NinaTheme.amber)
+                    .foregroundStyle(tone.color)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
-                    .background(MemberTone.amber.softColor, in: Capsule())
+                    .background(tone.softColor, in: Capsule())
             }
         }
     }

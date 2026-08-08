@@ -119,6 +119,7 @@ protocol RemoteHomeBackend {
     func deleteTask(_ taskID: UUID, familyID: UUID) async throws
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws
+    func deleteShoppingItem(_ itemID: UUID, familyID: UUID) async throws
     func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws
     func resolveNinaProposal(
         _ proposalID: UUID,
@@ -190,6 +191,10 @@ extension RemoteHomeBackend {
     }
 
     func deleteTask(_ taskID: UUID, familyID: UUID) async throws {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func deleteShoppingItem(_ itemID: UUID, familyID: UUID) async throws {
         throw RemoteHomeBackendError.operationUnavailable
     }
 
@@ -643,6 +648,18 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                 .from("shopping_items")
                 .update(ShoppingItemUpdateRow(item: item))
                 .eq("id", value: item.id)
+                .eq("family_id", value: familyID)
+                .execute()
+            return ()
+        }
+    }
+
+    func deleteShoppingItem(_ itemID: UUID, familyID: UUID) async throws {
+        try await perform(operation: "shopping_items.delete") {
+            _ = try await client
+                .from("shopping_items")
+                .delete()
+                .eq("id", value: itemID)
                 .eq("family_id", value: familyID)
                 .execute()
             return ()

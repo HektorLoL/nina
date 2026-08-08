@@ -510,13 +510,20 @@ struct TaskItem: Identifiable, Codable, Hashable {
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
     }
 
+    // A recurring task's stored dueAt goes stale as soon as one occurrence passes. Resolving the
+    // current period here is what keeps the screen and the scheduled notifications agreeing.
     func displayDate(
         relativeTo referenceDate: Date = .now,
         calendar: Calendar = .current
     ) -> Date? {
-        _ = referenceDate
-        _ = calendar
-        return effectiveDueDate
+        if let snoozedUntil, snoozedUntil > referenceDate {
+            return snoozedUntil
+        }
+
+        guard recurrence != .none, dueAt != nil else { return effectiveDueDate }
+
+        let periodStart = calendar.startOfDay(for: referenceDate).addingTimeInterval(-1)
+        return scheduledOccurrence(after: periodStart, calendar: calendar) ?? effectiveDueDate
     }
 
     var effectiveDueDate: Date? {
@@ -527,18 +534,43 @@ struct TaskItem: Identifiable, Codable, Hashable {
         on date: Date,
         calendar: Calendar = .current
     ) -> Bool {
-        guard !isDone, let effectiveDueDate else { return false }
-        return calendar.isDate(effectiveDueDate, inSameDayAs: date)
+        guard !isDone,
+              let displayDate = displayDate(relativeTo: date, calendar: calendar) else {
+            return false
+        }
+        return calendar.isDate(displayDate, inSameDayAs: date)
     }
 
     func isOverdue(
-        relativeTo referenceDate: Date = .now
+        relativeTo referenceDate: Date = .now,
+        calendar: Calendar = .current
     ) -> Bool {
         guard !isDone,
-              let deliveryDate = effectiveDueDate else {
+              let displayDate = displayDate(relativeTo: referenceDate, calendar: calendar) else {
             return false
         }
-        return deliveryDate < referenceDate
+        return displayDate < referenceDate
+    }
+
+    /// Due today or already past — the set a daily agenda must never drop.
+    func belongsOnAgenda(
+        for referenceDate: Date = .now,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard !isDone, kind == .task,
+              let displayDate = displayDate(relativeTo: referenceDate, calendar: calendar) else {
+            return false
+        }
+
+        guard let endOfDay = calendar.date(
+            byAdding: .day,
+            value: 1,
+            to: calendar.startOfDay(for: referenceDate)
+        ) else {
+            return calendar.isDate(displayDate, inSameDayAs: referenceDate)
+        }
+
+        return displayDate < endOfDay
     }
 
     func scheduledOccurrence(
@@ -623,6 +655,21 @@ struct ChatAttachment: Identifiable, Codable, Hashable {
     var byteCount: Int
     var thumbnailData: Data?
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case kind
+        case filename
+        case mimeType = "mime_type"
+        case byteCount = "byte_count"
+        case thumbnailData = "thumbnail_data"
+    }
+
+    private enum LocalCacheCodingKeys: String, CodingKey {
+        case mimeType
+        case byteCount
+        case thumbnailData
+    }
+
     init(
         id: UUID = UUID(),
         kind: ChatAttachmentKind,
@@ -637,6 +684,27 @@ struct ChatAttachment: Identifiable, Codable, Hashable {
         self.mimeType = mimeType
         self.byteCount = byteCount
         self.thumbnailData = thumbnailData
+    }
+
+    // Server rows carry only {kind, filename, mime_type, byte_count}; a required field here would
+    // fail the whole household snapshot and lock the user out of their home.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let cached = try? decoder.container(keyedBy: LocalCacheCodingKeys.self)
+
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        kind = ChatAttachmentKind(
+            rawValue: try container.decodeIfPresent(String.self, forKey: .kind) ?? ""
+        ) ?? .document
+        filename = try container.decodeIfPresent(String.self, forKey: .filename) ?? "Anexo"
+        mimeType = try container.decodeIfPresent(String.self, forKey: .mimeType)
+            ?? (cached.flatMap { try? $0.decodeIfPresent(String.self, forKey: .mimeType) } ?? nil)
+            ?? ""
+        byteCount = try container.decodeIfPresent(Int.self, forKey: .byteCount)
+            ?? (cached.flatMap { try? $0.decodeIfPresent(Int.self, forKey: .byteCount) } ?? nil)
+            ?? 0
+        thumbnailData = try container.decodeIfPresent(Data.self, forKey: .thumbnailData)
+            ?? (cached.flatMap { try? $0.decodeIfPresent(Data.self, forKey: .thumbnailData) } ?? nil)
     }
 }
 
@@ -751,6 +819,25 @@ struct NinaProposalPayload: Codable, Hashable {
         self.visibility = visibility
         self.confidence = confidence
         self.deduplicationKey = deduplicationKey
+    }
+
+    // Shares the household snapshot decode path with ChatAttachment: a required field here would
+    // turn one malformed proposal into a total loss of home access.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        detail = try container.decodeIfPresent(String.self, forKey: .detail) ?? ""
+        owner = try container.decodeIfPresent(String.self, forKey: .owner) ?? "Casa"
+        dueLabel = try container.decodeIfPresent(String.self, forKey: .dueLabel) ?? "Sem data"
+        dueAt = try container.decodeIfPresent(String.self, forKey: .dueAt)
+        categoryID = try container.decodeIfPresent(String.self, forKey: .categoryID) ?? TaskCategory.home.id
+        symbolName = try container.decodeIfPresent(String.self, forKey: .symbolName) ?? "sparkles"
+        amount = try container.decodeIfPresent(String.self, forKey: .amount) ?? ""
+        visibility = NinaMemoryVisibility(
+            rawValue: try container.decodeIfPresent(String.self, forKey: .visibility) ?? ""
+        )
+        confidence = try container.decodeIfPresent(Double.self, forKey: .confidence)
+        deduplicationKey = try container.decodeIfPresent(String.self, forKey: .deduplicationKey) ?? ""
     }
 
     var category: TaskCategory {

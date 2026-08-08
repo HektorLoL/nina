@@ -2365,9 +2365,63 @@ struct ShoppingEditorSheet: View {
     @State private var amount = ""
     @State private var owner = "Casa"
     @State private var didLoad = false
+    @State private var addedCount = 0
+    @State private var isShowingDeleteConfirmation = false
+    @FocusState private var isTitleFocused: Bool
 
     private var isEditing: Bool {
         if case .edit = mode { true } else { false }
+    }
+
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var ownerOptions: [String] {
+        var options = ["Casa"]
+        for member in store.familyGroup.members where member.role != .assistant {
+            if !options.contains(member.name) {
+                options.append(member.name)
+            }
+        }
+
+        if !owner.isEmpty, !options.contains(owner) {
+            options.append(owner)
+        }
+
+        return options
+    }
+
+    private var ownerMenu: some View {
+        Menu {
+            ForEach(ownerOptions, id: \.self) { option in
+                Button {
+                    owner = option
+                } label: {
+                    Label(option, systemImage: owner == option ? "checkmark" : "person.fill")
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Label("Responsável", systemImage: "person.fill")
+                    .foregroundStyle(NinaTheme.muted)
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 8) {
+                    Text(owner)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(NinaTheme.ink)
+                        .lineLimit(1)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(NinaTheme.sky)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     var body: some View {
@@ -2382,6 +2436,8 @@ struct ShoppingEditorSheet: View {
                     TextField("Item", text: $title)
                         .font(.headline)
                         .textFieldStyle(.plain)
+                        .focused($isTitleFocused)
+                        .submitLabel(.next)
 
                     Divider()
 
@@ -2390,22 +2446,65 @@ struct ShoppingEditorSheet: View {
 
                     Divider()
 
-                    HStack {
-                        Label("Responsável", systemImage: "person.fill")
-                            .foregroundStyle(NinaTheme.muted)
-                        TextField("Casa", text: $owner)
-                            .multilineTextAlignment(.trailing)
-                            .textFieldStyle(.plain)
-                    }
+                    ownerMenu
                 }
 
                 PrimaryCapsuleButton(title: isEditing ? "Salvar item" : "Adicionar item", systemName: "cart.fill") {
-                    save()
+                    save(keepingSheetOpen: false)
                 }
-                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .opacity(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1)
+                .disabled(trimmedTitle.isEmpty)
+                .opacity(trimmedTitle.isEmpty ? 0.5 : 1)
+
+                if !isEditing {
+                    Button {
+                        save(keepingSheetOpen: true)
+                    } label: {
+                        Label("Adicionar e continuar", systemImage: "plus.circle.fill")
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(NinaTheme.mint)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(NinaTheme.mint.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(trimmedTitle.isEmpty)
+                    .opacity(trimmedTitle.isEmpty ? 0.5 : 1)
+
+                    if addedCount > 0 {
+                        Text(
+                            addedCount == 1
+                                ? "1 item adicionado nesta sessão."
+                                : "\(addedCount) itens adicionados nesta sessão."
+                        )
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(NinaTheme.muted)
+                    }
+                }
+
+                if isEditing {
+                    Button(role: .destructive) {
+                        Haptics.warning()
+                        isShowingDeleteConfirmation = true
+                    } label: {
+                        Label("Apagar item", systemImage: "trash.fill")
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(NinaTheme.coral)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(NinaTheme.coral.opacity(0.1), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(18)
+        }
+        .alert("Apagar este item?", isPresented: $isShowingDeleteConfirmation) {
+            Button("Cancelar", role: .cancel) {}
+            Button("Apagar", role: .destructive) {
+                deleteItem()
+            }
+        } message: {
+            Text("O item sai da lista de compras da casa.")
         }
         .scrollDismissesKeyboard(.interactively)
         .ninaSheetBackground()
@@ -2436,8 +2535,8 @@ struct ShoppingEditorSheet: View {
         owner = item.owner
     }
 
-    private func save() {
-        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    private func save(keepingSheetOpen: Bool) {
+        guard !trimmedTitle.isEmpty else {
             Haptics.error()
             return
         }
@@ -2450,6 +2549,21 @@ struct ShoppingEditorSheet: View {
             store.updateShoppingItem(id: id, title: title, amount: amount, owner: owner)
         }
 
+        guard keepingSheetOpen else {
+            dismiss()
+            return
+        }
+
+        addedCount += 1
+        title = ""
+        amount = ""
+        isTitleFocused = true
+    }
+
+    private func deleteItem() {
+        guard case .edit(let id) = mode else { return }
+        Haptics.success()
+        store.deleteShoppingItem(id)
         dismiss()
     }
 }
