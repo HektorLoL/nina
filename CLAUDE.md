@@ -24,10 +24,10 @@ Practical consequences that persist:
 
 - **`git blame` is near-useless before 2026-08-08.** One commit covers seven
   weeks across five workstreams. The commit message enumerates them.
-- **CI has still never executed.** `.github/workflows/ci.yml` is committed now,
-  but GitHub Actions only runs it once the branch is pushed. Until you see a
-  green run, `docs/production-launch-runbook.md`'s claim that CI gates every PR
-  is aspirational. **Run the gates locally** (§11).
+- **CI now runs and is green.** First execution was 2026-08-08 on `main`; all
+  four jobs pass, with the pgTAP suite completing all 232 assertions. Its first
+  run failed 5 of 6 pgTAP files, which is how the `profiles` grant gap below was
+  found — treat a red database job as a real signal, not flakiness.
 - **Local secret files are intentionally untracked and have no backup**:
   `Nina/Config/SupabaseSecrets.xcconfig`, `config/production.env`,
   `supabase/.env.local`, `web/.dev.vars`. Each has a tracked `.example` sibling.
@@ -346,6 +346,16 @@ Other conventions:
   `FOR UPDATE`, then re-verify `family_id` still matches.
 - **Realtime** requires both `replica identity full` and a DO block adding the
   table to `supabase_realtime` that swallows `duplicate_object`.
+- **Grant explicitly. Never rely on Supabase's default privileges.** A freshly
+  provisioned database does not apply them, so a table with policies but no
+  `grant` denies every access — which is exactly what happened to
+  `public.profiles` until 2026-08-08. Any table with a policy `to authenticated`
+  needs a matching `grant`, and the grant should be no wider than the policies.
+- **`service_role` holds almost no table grants, by design.** Every privileged
+  server path is a SECURITY DEFINER RPC, so the Edge Functions never need direct
+  table access. If something fails with "permission denied … TO service_role",
+  the fix is virtually always to call the RPC (or, in a test, `reset role`) —
+  not to add the grant.
 
 `private` schema holds `nina_maintenance_config` (project URL + 32-byte shared
 secret) and is revoked from every client role. pg_cron runs
@@ -512,6 +522,18 @@ never delete it.
 
 RLS does **not** raise on UPDATE/DELETE — it filters rows. `throws_ok` passes
 vacuously; use `pg_temp.affected_rows($$…$$)` and assert 0.
+
+Three pgTAP traps that all cost a CI round-trip on 2026-08-08:
+
+- **A file aborts on the first error and blows its whole plan**, reported as
+  "Bad plan. You planned N but ran M" with *zero* failed assertions. Read the
+  first `ERROR:` line in the log; everything after it is noise.
+- **`has_table('public','x')` resolves to the `(table, description)` overload**
+  and returns text, so `not has_table(...)` fails to typecheck. Use
+  `hasnt_table(schema, table, description)`.
+- **A temp table belongs to the role that created it.** Reading a fixture table
+  after `set local role service_role` is denied; grant on it or stash the value
+  while privileged.
 
 ---
 
