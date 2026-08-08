@@ -4,24 +4,81 @@ struct RemoteHomeState {
     var familyGroup: FamilyGroup
     var permissionRole: FamilyPermissionRole
     var snapshot: AppDataSnapshot?
+    var inviteStatus: FamilyInviteStatus? = nil
+    var joinRequests: [FamilyJoinRequest] = []
 }
 
 struct FamilyInvitePreview: Hashable {
     var code: String
     var familyName: String?
     var isValid: Bool
+    var expiresAt: Date? = nil
+    var usesRemaining: Int? = nil
+}
+
+enum FamilyJoinOutcome {
+    case joined(RemoteHomeState)
+    case pending(FamilyJoinRequest)
 }
 
 enum HomeRealtimeEvent: Sendable {
+    case familyMembers
+    case taskSections
     case tasks
     case shoppingItems
-    case reminders
     case chatMessages
 }
 
 enum TaskUpdateResult {
     case updated(TaskItem)
     case conflict(current: TaskItem)
+}
+
+enum PostgresDateOnlyCodec {
+    static func string(from date: Date?, timeZone: TimeZone = .current) -> String? {
+        guard let date else { return nil }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+
+        guard let year = components.year,
+              let month = components.month,
+              let day = components.day else {
+            return nil
+        }
+
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    static func date(from value: String?, timeZone: TimeZone = .current) -> Date? {
+        guard let value else { return nil }
+        let parts = value.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let day = Int(parts[2]) else {
+            return nil
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        var components = DateComponents()
+        components.calendar = calendar
+        components.timeZone = timeZone
+        components.year = year
+        components.month = month
+        components.day = day
+
+        guard let date = calendar.date(from: components) else { return nil }
+        let resolved = calendar.dateComponents([.year, .month, .day], from: date)
+        guard resolved.year == year,
+              resolved.month == month,
+              resolved.day == day else {
+            return nil
+        }
+        return date
+    }
 }
 
 enum NinaProposalDecision: String, Equatable {
@@ -38,12 +95,19 @@ protocol RemoteHomeBackend {
     func loadHome(for user: AuthUser) async throws -> RemoteHomeState?
     func createHome(named name: String, owner: AuthUser?) async throws -> RemoteHomeState
     func joinHome(with inviteCode: String, member: AuthUser?) async throws -> RemoteHomeState
+    func requestHomeAccess(with inviteCode: String, member: AuthUser?) async throws -> FamilyJoinOutcome
+    func loadPendingJoinRequest() async throws -> FamilyJoinRequest?
     func previewInvite(code: String) async throws -> FamilyInvitePreview
     func updateFamilySettings(familyID: UUID, name: String) async throws -> RemoteHomeState
     func rotateFamilyInvite(familyID: UUID) async throws -> RemoteHomeState
     func addUnclaimedMember(_ member: HouseholdMember, familyID: UUID) async throws -> RemoteHomeState
     func updateFamilyMember(_ member: HouseholdMember) async throws -> RemoteHomeState
+    func removeFamilyMember(_ memberID: UUID) async throws -> RemoteHomeState
+    func approveJoinRequest(_ requestID: UUID, permissionRole: FamilyPermissionRole) async throws -> RemoteHomeState
+    func declineJoinRequest(_ requestID: UUID) async throws -> RemoteHomeState
+    func cancelJoinRequest(_ requestID: UUID) async throws
     func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws
+    func deleteTaskSection(_ sectionID: String, familyID: UUID) async throws
     func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws
     func createTask(_ task: TaskItem, familyID: UUID, currentUser: AuthUser) async throws
     func updateTask(_ task: TaskItem, familyID: UUID) async throws
@@ -52,9 +116,9 @@ protocol RemoteHomeBackend {
         expectedVersion: Int,
         familyID: UUID
     ) async throws -> TaskUpdateResult
+    func deleteTask(_ taskID: UUID, familyID: UUID) async throws
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws
-    func createReminder(_ reminder: ReminderItem, familyID: UUID, currentUser: AuthUser) async throws
     func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws
     func resolveNinaProposal(
         _ proposalID: UUID,
@@ -77,11 +141,42 @@ enum RemoteHomeBackendError: Error {
 }
 
 extension RemoteHomeBackend {
+    func requestHomeAccess(with inviteCode: String, member: AuthUser?) async throws -> FamilyJoinOutcome {
+        .joined(try await joinHome(with: inviteCode, member: member))
+    }
+
+    func loadPendingJoinRequest() async throws -> FamilyJoinRequest? {
+        nil
+    }
+
     func previewInvite(code: String) async throws -> FamilyInvitePreview {
         throw RemoteHomeBackendError.operationUnavailable
     }
 
     func rotateFamilyInvite(familyID: UUID) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func removeFamilyMember(_ memberID: UUID) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func approveJoinRequest(
+        _ requestID: UUID,
+        permissionRole: FamilyPermissionRole
+    ) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func declineJoinRequest(_ requestID: UUID) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func cancelJoinRequest(_ requestID: UUID) async throws {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func deleteTaskSection(_ sectionID: String, familyID: UUID) async throws {
         throw RemoteHomeBackendError.operationUnavailable
     }
 
@@ -92,6 +187,10 @@ extension RemoteHomeBackend {
     ) async throws -> TaskUpdateResult {
         try await updateTask(task, familyID: familyID)
         return .updated(task)
+    }
+
+    func deleteTask(_ taskID: UUID, familyID: UUID) async throws {
+        throw RemoteHomeBackendError.operationUnavailable
     }
 
     func resolveNinaProposal(
@@ -165,24 +264,60 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
     }
 
     func joinHome(with inviteCode: String, member: AuthUser?) async throws -> RemoteHomeState {
+        switch try await requestHomeAccess(with: inviteCode, member: member) {
+        case .joined(let state):
+            return state
+        case .pending:
+            throw RemoteHomeBackendError.operationUnavailable
+        }
+    }
+
+    func requestHomeAccess(
+        with inviteCode: String,
+        member: AuthUser?
+    ) async throws -> FamilyJoinOutcome {
         guard let normalizedInvite = AppStore.normalizedInviteCode(from: inviteCode) else {
             throw RemoteHomeBackendError.invalidInviteCode
         }
 
-        let context: HomeContextRow = try await perform(operation: "join_family_by_invite") {
+        let outcome: FamilyJoinOutcomeRow = try await perform(operation: "request_family_join") {
             try await client
                 .rpc(
-                    "join_family_by_invite",
+                    "request_family_join",
                     params: JoinFamilyByInviteParams(inviteCode: normalizedInvite)
                 )
                 .execute()
                 .value
         }
 
-        guard let state = try await loadRemoteState(from: context) else {
-            throw RemoteHomeBackendError.familyNotFound
+        switch outcome.status {
+        case "member":
+            guard let context = outcome.homeContext,
+                  let state = try await loadRemoteState(from: context) else {
+                throw RemoteHomeBackendError.familyNotFound
+            }
+            return .joined(state)
+        case "pending":
+            guard let request = outcome.request?.domainRequest else {
+                throw RemoteHomeBackendError.operationUnavailable
+            }
+            return .pending(request)
+        default:
+            throw RemoteHomeBackendError.operationUnavailable
         }
-        return state
+    }
+
+    func loadPendingJoinRequest() async throws -> FamilyJoinRequest? {
+        let request: FamilyJoinRequestRow? = try await perform(
+            operation: "get_pending_family_join_request"
+        ) {
+            try await client
+                .rpc("get_pending_family_join_request")
+                .execute()
+                .value
+        }
+
+        return request?.domainRequest
     }
 
     func previewInvite(code: String) async throws -> FamilyInvitePreview {
@@ -203,7 +338,9 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         return FamilyInvitePreview(
             code: normalizedInvite,
             familyName: preview.familyName,
-            isValid: preview.valid
+            isValid: preview.valid,
+            expiresAt: preview.expiresAt,
+            usesRemaining: preview.usesRemaining
         )
     }
 
@@ -258,7 +395,10 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                         relationship: member.relationship,
                         householdRole: member.role.rawValue,
                         tone: member.tone.rawValue,
-                        memoryNote: member.memoryNote
+                        memoryNote: member.memoryNote,
+                        birthDate: PostgresDateOnlyCodec.string(from: member.birthDate),
+                        petSpecies: member.petSpecies,
+                        petBreed: member.petBreed
                     )
                 )
                 .execute()
@@ -281,8 +421,12 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                         memberName: member.name,
                         relationship: member.relationship,
                         householdRole: member.role.rawValue,
+                        permissionRole: member.permissionRole.rawValue,
                         tone: member.tone.rawValue,
-                        memoryNote: member.memoryNote
+                        memoryNote: member.memoryNote,
+                        birthDate: PostgresDateOnlyCodec.string(from: member.birthDate),
+                        petSpecies: member.petSpecies,
+                        petBreed: member.petBreed
                     )
                 )
                 .execute()
@@ -295,6 +439,75 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         return state
     }
 
+    func removeFamilyMember(_ memberID: UUID) async throws -> RemoteHomeState {
+        let context: HomeContextRow = try await perform(operation: "remove_family_member") {
+            try await client
+                .rpc(
+                    "remove_family_member",
+                    params: MemberIDParams(targetMemberID: memberID)
+                )
+                .execute()
+                .value
+        }
+
+        guard let state = try await loadRemoteState(from: context) else {
+            throw RemoteHomeBackendError.familyNotFound
+        }
+        return state
+    }
+
+    func approveJoinRequest(
+        _ requestID: UUID,
+        permissionRole: FamilyPermissionRole
+    ) async throws -> RemoteHomeState {
+        let context: HomeContextRow = try await perform(operation: "approve_family_join_request") {
+            try await client
+                .rpc(
+                    "approve_family_join_request",
+                    params: ApproveJoinRequestParams(
+                        targetRequestID: requestID,
+                        grantedPermissionRole: permissionRole.rawValue
+                    )
+                )
+                .execute()
+                .value
+        }
+
+        guard let state = try await loadRemoteState(from: context) else {
+            throw RemoteHomeBackendError.familyNotFound
+        }
+        return state
+    }
+
+    func declineJoinRequest(_ requestID: UUID) async throws -> RemoteHomeState {
+        let context: HomeContextRow = try await perform(operation: "decline_family_join_request") {
+            try await client
+                .rpc(
+                    "decline_family_join_request",
+                    params: JoinRequestIDParams(targetRequestID: requestID)
+                )
+                .execute()
+                .value
+        }
+
+        guard let state = try await loadRemoteState(from: context) else {
+            throw RemoteHomeBackendError.familyNotFound
+        }
+        return state
+    }
+
+    func cancelJoinRequest(_ requestID: UUID) async throws {
+        try await perform(operation: "cancel_family_join_request") {
+            _ = try await client
+                .rpc(
+                    "cancel_family_join_request",
+                    params: JoinRequestIDParams(targetRequestID: requestID)
+                )
+                .execute()
+            return ()
+        }
+    }
+
     func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws {
         try await perform(operation: "task_sections.upsert") {
             _ = try await client
@@ -302,6 +515,21 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                 .upsert(
                     TaskSectionUpsertRow(section: section, familyID: familyID, sortOrder: sortOrder),
                     onConflict: "family_id,id"
+                )
+                .execute()
+            return ()
+        }
+    }
+
+    func deleteTaskSection(_ sectionID: String, familyID: UUID) async throws {
+        try await perform(operation: "delete_task_section") {
+            _ = try await client
+                .rpc(
+                    "delete_task_section",
+                    params: DeleteTaskSectionParams(
+                        familyID: familyID,
+                        sectionID: sectionID
+                    )
                 )
                 .execute()
             return ()
@@ -381,6 +609,18 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         }
     }
 
+    func deleteTask(_ taskID: UUID, familyID: UUID) async throws {
+        try await perform(operation: "tasks.delete") {
+            _ = try await client
+                .from("tasks")
+                .delete()
+                .eq("id", value: taskID)
+                .eq("family_id", value: familyID)
+                .execute()
+            return ()
+        }
+    }
+
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {
         try await perform(operation: "shopping_items.insert") {
             _ = try await client
@@ -407,30 +647,6 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                 .execute()
             return ()
         }
-    }
-
-    func createReminder(_ reminder: ReminderItem, familyID: UUID, currentUser: AuthUser) async throws {
-        try await perform(operation: "reminders.insert") {
-            _ = try await client
-                .from("reminders")
-                .insert(
-                    ReminderInsertRow(
-                        reminder: reminder,
-                        familyID: familyID,
-                        currentUserID: UUID(uuidString: currentUser.id)
-                    )
-                )
-                .execute()
-            return ()
-        }
-
-        // TODO(PRODUCTION_APNS): Shared family reminders need server-triggered
-        // APNs push notifications so every member's device is notified even
-        // when Nina is closed. This is intentionally deferred until production
-        // because the Push Notifications capability requires paid Apple
-        // Developer Program enrollment, and the current unpaid/free developer
-        // setup cannot enable APNs; local notifications cover simple on-device
-        // reminders for now.
     }
 
     func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {
@@ -516,16 +732,22 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
             table: "tasks",
             filter: filter
         )
+        let familyMemberChanges = channel.postgresChange(
+            AnyAction.self,
+            schema: "public",
+            table: "family_members",
+            filter: filter
+        )
+        let taskSectionChanges = channel.postgresChange(
+            AnyAction.self,
+            schema: "public",
+            table: "task_sections",
+            filter: filter
+        )
         let shoppingChanges = channel.postgresChange(
             AnyAction.self,
             schema: "public",
             table: "shopping_items",
-            filter: filter
-        )
-        let reminderChanges = channel.postgresChange(
-            AnyAction.self,
-            schema: "public",
-            table: "reminders",
             filter: filter
         )
         let chatChanges = channel.postgresChange(
@@ -553,6 +775,16 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
 
                 await withTaskGroup(of: Void.self) { group in
                     group.addTask {
+                        for await _ in familyMemberChanges {
+                            continuation.yield(.familyMembers)
+                        }
+                    }
+                    group.addTask {
+                        for await _ in taskSectionChanges {
+                            continuation.yield(.taskSections)
+                        }
+                    }
+                    group.addTask {
                         for await _ in taskChanges {
                             continuation.yield(.tasks)
                         }
@@ -560,11 +792,6 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                     group.addTask {
                         for await _ in shoppingChanges {
                             continuation.yield(.shoppingItems)
-                        }
-                    }
-                    group.addTask {
-                        for await _ in reminderChanges {
-                            continuation.yield(.reminders)
                         }
                     }
                     group.addTask {
@@ -596,7 +823,6 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         async let categoryRows = loadTaskCategories(familyID: familyID)
         async let taskRows = loadTasks(familyID: familyID)
         async let shoppingRows = loadShoppingItems(familyID: familyID)
-        async let reminderRows = loadReminders(familyID: familyID)
         async let ninaState = loadNinaState(familyID: familyID)
         async let insightRows = loadInsights(familyID: familyID)
 
@@ -606,7 +832,6 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
             customTaskCategories: categoryRows.map(\.domainCategory),
             tasks: taskRows.map(\.domainTask),
             shoppingItems: shoppingRows.map(\.domainItem),
-            reminders: reminderRows.map(\.domainReminder),
             insights: insightRows.map(\.domainInsight),
             ninaThread: ninaState.thread,
             ninaMemories: ninaState.memories
@@ -661,18 +886,6 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         }
     }
 
-    private func loadReminders(familyID: UUID) async throws -> [ReminderRow] {
-        try await perform(operation: "reminders.select") {
-            try await client
-                .from("reminders")
-                .select("id,title,detail,date_label,due_at,symbol_name,tone")
-                .eq("family_id", value: familyID)
-                .order("created_at", ascending: false)
-                .execute()
-                .value
-        }
-    }
-
     private func loadNinaState(familyID: UUID) async throws -> NinaStateRow {
         try await perform(operation: "get_current_nina_state") {
             try await client
@@ -710,7 +923,7 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
     }
 
     private static let taskColumns =
-        "id,section_id,title,subtitle,owner_label,due_label,due_at,category_id,category_snapshot,priority,is_done,created_by_label,version"
+        "id,task_kind,section_id,title,subtitle,owner_label,due_label,due_at,category_id,category_snapshot,priority,recurrence_rule,snoozed_until,is_done,created_by_label,version"
 }
 
 private struct HomeContextRow: Decodable {
@@ -718,12 +931,29 @@ private struct HomeContextRow: Decodable {
     var members: [FamilyMemberRow]
     var permissionRole: String?
     var membershipVerified: Bool
+    var activeInvite: FamilyInviteStatusRow?
+    var pendingJoinRequests: [FamilyJoinRequestRow]
 
     private enum CodingKeys: String, CodingKey {
         case family
         case members
         case permissionRole = "permission_role"
         case membershipVerified = "membership_verified"
+        case activeInvite = "active_invite"
+        case pendingJoinRequests = "pending_join_requests"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        family = try container.decodeIfPresent(FamilyRow.self, forKey: .family)
+        members = try container.decodeIfPresent([FamilyMemberRow].self, forKey: .members) ?? []
+        permissionRole = try container.decodeIfPresent(String.self, forKey: .permissionRole)
+        membershipVerified = try container.decodeIfPresent(Bool.self, forKey: .membershipVerified) ?? false
+        activeInvite = try container.decodeIfPresent(FamilyInviteStatusRow.self, forKey: .activeInvite)
+        pendingJoinRequests = try container.decodeIfPresent(
+            [FamilyJoinRequestRow].self,
+            forKey: .pendingJoinRequests
+        ) ?? []
     }
 
     var remoteState: RemoteHomeState? {
@@ -736,7 +966,9 @@ private struct HomeContextRow: Decodable {
         return RemoteHomeState(
             familyGroup: family.domainFamilyGroup(members: members),
             permissionRole: permissionRole,
-            snapshot: nil
+            snapshot: nil,
+            inviteStatus: activeInvite?.domainStatus,
+            joinRequests: pendingJoinRequests.map(\.domainRequest)
         )
     }
 }
@@ -853,6 +1085,9 @@ private struct FamilyMemberRow: Decodable {
     var tone: String
     var taskCount: Int
     var memoryNote: String
+    var birthDate: String?
+    var petSpecies: String
+    var petBreed: String
     var createdAt: Date
 
     private enum CodingKeys: String, CodingKey {
@@ -867,7 +1102,30 @@ private struct FamilyMemberRow: Decodable {
         case tone
         case taskCount = "task_count"
         case memoryNote = "memory_note"
+        case birthDate = "birth_date"
+        case petSpecies = "pet_species"
+        case petBreed = "pet_breed"
         case createdAt = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        familyID = try container.decode(UUID.self, forKey: .familyID)
+        userID = try container.decodeIfPresent(UUID.self, forKey: .userID)
+        name = try container.decode(String.self, forKey: .name)
+        relationship = try container.decodeIfPresent(String.self, forKey: .relationship) ?? ""
+        householdRole = try container.decodeIfPresent(String.self, forKey: .householdRole) ?? "adult"
+        permissionRole = try container.decodeIfPresent(String.self, forKey: .permissionRole) ?? "member"
+        identityState = try container.decodeIfPresent(String.self, forKey: .identityState)
+            ?? (userID == nil ? "unclaimed" : "claimed")
+        tone = try container.decodeIfPresent(String.self, forKey: .tone) ?? "mint"
+        taskCount = try container.decodeIfPresent(Int.self, forKey: .taskCount) ?? 0
+        memoryNote = try container.decodeIfPresent(String.self, forKey: .memoryNote) ?? ""
+        birthDate = try container.decodeIfPresent(String.self, forKey: .birthDate)
+        petSpecies = try container.decodeIfPresent(String.self, forKey: .petSpecies) ?? ""
+        petBreed = try container.decodeIfPresent(String.self, forKey: .petBreed) ?? ""
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 
     var domainMember: HouseholdMember {
@@ -881,7 +1139,10 @@ private struct FamilyMemberRow: Decodable {
             identityState: MemberIdentityState(rawValue: identityState) ?? (userID == nil ? .unclaimed : .claimed),
             tone: MemberTone(rawValue: tone) ?? .mint,
             taskCount: taskCount,
-            memoryNote: memoryNote
+            memoryNote: memoryNote,
+            birthDate: PostgresDateOnlyCodec.date(from: birthDate),
+            petSpecies: petSpecies,
+            petBreed: petBreed
         )
     }
 }
@@ -904,6 +1165,16 @@ private struct FamilyIDParams: Encodable {
     }
 }
 
+private struct DeleteTaskSectionParams: Encodable {
+    var familyID: UUID
+    var sectionID: String
+
+    private enum CodingKeys: String, CodingKey {
+        case familyID = "target_family_id"
+        case sectionID = "target_section_id"
+    }
+}
+
 private struct AddFamilyMemberParams: Encodable {
     var targetFamilyID: UUID
     var memberName: String
@@ -911,6 +1182,9 @@ private struct AddFamilyMemberParams: Encodable {
     var householdRole: String
     var tone: String
     var memoryNote: String
+    var birthDate: String?
+    var petSpecies: String
+    var petBreed: String
 
     private enum CodingKeys: String, CodingKey {
         case targetFamilyID = "target_family_id"
@@ -919,6 +1193,9 @@ private struct AddFamilyMemberParams: Encodable {
         case householdRole = "household_role"
         case tone
         case memoryNote = "memory_note"
+        case birthDate = "birth_date"
+        case petSpecies = "pet_species"
+        case petBreed = "pet_breed"
     }
 }
 
@@ -927,16 +1204,50 @@ private struct UpdateFamilyMemberParams: Encodable {
     var memberName: String
     var relationship: String
     var householdRole: String
+    var permissionRole: String
     var tone: String
     var memoryNote: String
+    var birthDate: String?
+    var petSpecies: String
+    var petBreed: String
 
     private enum CodingKeys: String, CodingKey {
         case targetMemberID = "target_member_id"
         case memberName = "member_name"
         case relationship
         case householdRole = "household_role"
+        case permissionRole = "permission_role"
         case tone
         case memoryNote = "memory_note"
+        case birthDate = "birth_date"
+        case petSpecies = "pet_species"
+        case petBreed = "pet_breed"
+    }
+}
+
+private struct MemberIDParams: Encodable {
+    var targetMemberID: UUID
+
+    private enum CodingKeys: String, CodingKey {
+        case targetMemberID = "target_member_id"
+    }
+}
+
+private struct JoinRequestIDParams: Encodable {
+    var targetRequestID: UUID
+
+    private enum CodingKeys: String, CodingKey {
+        case targetRequestID = "target_request_id"
+    }
+}
+
+private struct ApproveJoinRequestParams: Encodable {
+    var targetRequestID: UUID
+    var grantedPermissionRole: String
+
+    private enum CodingKeys: String, CodingKey {
+        case targetRequestID = "target_request_id"
+        case grantedPermissionRole = "granted_permission_role"
     }
 }
 
@@ -997,6 +1308,7 @@ private struct TaskCategoryUpsertRow: Encodable {
 private struct TaskInsertRow: Encodable {
     var id: UUID
     var familyID: UUID
+    var taskKind: String
     var sectionID: String
     var title: String
     var subtitle: String
@@ -1006,6 +1318,8 @@ private struct TaskInsertRow: Encodable {
     var categoryID: String
     var categorySnapshot: TaskCategory
     var priority: String
+    var recurrenceRule: String
+    var snoozedUntil: Date?
     var isDone: Bool
     var createdBy: UUID?
     var createdByLabel: String
@@ -1013,6 +1327,7 @@ private struct TaskInsertRow: Encodable {
     private enum CodingKeys: String, CodingKey {
         case id
         case familyID = "family_id"
+        case taskKind = "task_kind"
         case sectionID = "section_id"
         case title
         case subtitle
@@ -1022,6 +1337,8 @@ private struct TaskInsertRow: Encodable {
         case categoryID = "category_id"
         case categorySnapshot = "category_snapshot"
         case priority
+        case recurrenceRule = "recurrence_rule"
+        case snoozedUntil = "snoozed_until"
         case isDone = "is_done"
         case createdBy = "created_by"
         case createdByLabel = "created_by_label"
@@ -1030,6 +1347,7 @@ private struct TaskInsertRow: Encodable {
     init(task: TaskItem, familyID: UUID, currentUserID: UUID?) {
         id = task.id
         self.familyID = familyID
+        taskKind = task.kind.rawValue
         sectionID = task.sectionID
         title = task.title
         subtitle = task.subtitle
@@ -1039,6 +1357,8 @@ private struct TaskInsertRow: Encodable {
         categoryID = task.category.id
         categorySnapshot = task.category
         priority = task.priority.rawValue
+        recurrenceRule = task.recurrence.rawValue
+        snoozedUntil = task.snoozedUntil
         isDone = task.isDone
         createdBy = currentUserID
         createdByLabel = task.createdBy
@@ -1046,6 +1366,7 @@ private struct TaskInsertRow: Encodable {
 }
 
 private struct TaskUpdateRow: Encodable {
+    var taskKind: String
     var sectionID: String
     var title: String
     var subtitle: String
@@ -1055,10 +1376,13 @@ private struct TaskUpdateRow: Encodable {
     var categoryID: String
     var categorySnapshot: TaskCategory
     var priority: String
+    var recurrenceRule: String
+    var snoozedUntil: Date?
     var isDone: Bool
     var createdByLabel: String
 
     private enum CodingKeys: String, CodingKey {
+        case taskKind = "task_kind"
         case sectionID = "section_id"
         case title
         case subtitle
@@ -1068,11 +1392,14 @@ private struct TaskUpdateRow: Encodable {
         case categoryID = "category_id"
         case categorySnapshot = "category_snapshot"
         case priority
+        case recurrenceRule = "recurrence_rule"
+        case snoozedUntil = "snoozed_until"
         case isDone = "is_done"
         case createdByLabel = "created_by_label"
     }
 
     init(task: TaskItem) {
+        taskKind = task.kind.rawValue
         sectionID = task.sectionID
         title = task.title
         subtitle = task.subtitle
@@ -1082,6 +1409,8 @@ private struct TaskUpdateRow: Encodable {
         categoryID = task.category.id
         categorySnapshot = task.category
         priority = task.priority.rawValue
+        recurrenceRule = task.recurrence.rawValue
+        snoozedUntil = task.snoozedUntil
         isDone = task.isDone
         createdByLabel = task.createdBy
     }
@@ -1135,42 +1464,6 @@ private struct ShoppingItemUpdateRow: Encodable {
         amount = item.amount
         ownerLabel = item.owner
         isChecked = item.isChecked
-    }
-}
-
-private struct ReminderInsertRow: Encodable {
-    var id: UUID
-    var familyID: UUID
-    var title: String
-    var detail: String
-    var dateLabel: String
-    var dueAt: Date?
-    var symbolName: String
-    var tone: String
-    var createdBy: UUID?
-
-    private enum CodingKeys: String, CodingKey {
-        case id
-        case familyID = "family_id"
-        case title
-        case detail
-        case dateLabel = "date_label"
-        case dueAt = "due_at"
-        case symbolName = "symbol_name"
-        case tone
-        case createdBy = "created_by"
-    }
-
-    init(reminder: ReminderItem, familyID: UUID, currentUserID: UUID?) {
-        id = reminder.id
-        self.familyID = familyID
-        title = reminder.title
-        detail = reminder.detail
-        dateLabel = reminder.dateLabel
-        dueAt = reminder.dueAt
-        symbolName = reminder.symbolName
-        tone = reminder.tone.rawValue
-        createdBy = currentUserID
     }
 }
 
@@ -1255,6 +1548,7 @@ private struct TaskCategoryRow: Decodable {
 
 private struct TaskRow: Decodable {
     var id: UUID
+    var taskKind: String
     var sectionID: String
     var title: String
     var subtitle: String
@@ -1264,12 +1558,15 @@ private struct TaskRow: Decodable {
     var categoryID: String
     var categorySnapshot: TaskCategory
     var priority: String
+    var recurrenceRule: String
+    var snoozedUntil: Date?
     var isDone: Bool
     var createdByLabel: String
     var version: Int
 
     private enum CodingKeys: String, CodingKey {
         case id
+        case taskKind = "task_kind"
         case sectionID = "section_id"
         case title
         case subtitle
@@ -1279,6 +1576,8 @@ private struct TaskRow: Decodable {
         case categoryID = "category_id"
         case categorySnapshot = "category_snapshot"
         case priority
+        case recurrenceRule = "recurrence_rule"
+        case snoozedUntil = "snoozed_until"
         case isDone = "is_done"
         case createdByLabel = "created_by_label"
         case version
@@ -1287,6 +1586,7 @@ private struct TaskRow: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
+        taskKind = try container.decodeIfPresent(String.self, forKey: .taskKind) ?? TaskKind.task.rawValue
         sectionID = try container.decodeIfPresent(String.self, forKey: .sectionID)
             ?? TaskSectionDefaults.houseTasksID
         title = try container.decode(String.self, forKey: .title)
@@ -1301,6 +1601,8 @@ private struct TaskRow: Decodable {
             ?? TaskCategory.allCases.first(where: { $0.id == decodedCategoryID })
             ?? .custom(id: decodedCategoryID, title: decodedCategoryID.capitalized, tone: .lavender)
         priority = try container.decodeIfPresent(String.self, forKey: .priority) ?? TaskPriority.normal.rawValue
+        recurrenceRule = try container.decodeIfPresent(String.self, forKey: .recurrenceRule) ?? TaskRecurrence.none.rawValue
+        snoozedUntil = try container.decodeIfPresent(Date.self, forKey: .snoozedUntil)
         isDone = try container.decodeIfPresent(Bool.self, forKey: .isDone) ?? false
         createdByLabel = try container.decodeIfPresent(String.self, forKey: .createdByLabel) ?? "Manual"
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
@@ -1309,6 +1611,7 @@ private struct TaskRow: Decodable {
     var domainTask: TaskItem {
         TaskItem(
             id: id,
+            kind: TaskKind(rawValue: taskKind) ?? .task,
             title: title,
             subtitle: subtitle,
             owner: ownerLabel,
@@ -1316,6 +1619,8 @@ private struct TaskRow: Decodable {
             dueAt: dueAt,
             category: categorySnapshot,
             priority: TaskPriority(rawValue: priority) ?? .normal,
+            recurrence: TaskRecurrence(rawValue: recurrenceRule) ?? .none,
+            snoozedUntil: snoozedUntil,
             isDone: isDone,
             createdBy: createdByLabel,
             sectionID: sectionID,
@@ -1346,38 +1651,6 @@ private struct ShoppingItemRow: Decodable {
             amount: amount,
             owner: ownerLabel,
             isChecked: isChecked
-        )
-    }
-}
-
-private struct ReminderRow: Decodable {
-    var id: UUID
-    var title: String
-    var detail: String
-    var dateLabel: String
-    var dueAt: Date?
-    var symbolName: String
-    var tone: String
-
-    private enum CodingKeys: String, CodingKey {
-        case id
-        case title
-        case detail
-        case dateLabel = "date_label"
-        case dueAt = "due_at"
-        case symbolName = "symbol_name"
-        case tone
-    }
-
-    var domainReminder: ReminderItem {
-        ReminderItem(
-            id: id,
-            title: title,
-            detail: detail,
-            dateLabel: dateLabel,
-            dueAt: dueAt,
-            symbolName: symbolName,
-            tone: MemberTone(rawValue: tone) ?? .mint
         )
     }
 }
@@ -1484,10 +1757,91 @@ private struct JoinFamilyByInviteParams: Encodable {
 private struct InvitePreviewRow: Decodable {
     var valid: Bool
     var familyName: String?
+    var expiresAt: Date?
+    var usesRemaining: Int?
 
     private enum CodingKeys: String, CodingKey {
         case valid
         case familyName = "family_name"
+        case expiresAt = "expires_at"
+        case usesRemaining = "uses_remaining"
+    }
+}
+
+private struct FamilyInviteStatusRow: Decodable {
+    var code: String
+    var status: String
+    var expiresAt: Date
+    var maxUses: Int
+    var uses: Int
+    var usesRemaining: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case code
+        case status
+        case expiresAt = "expires_at"
+        case maxUses = "max_uses"
+        case uses
+        case usesRemaining = "uses_remaining"
+    }
+
+    var domainStatus: FamilyInviteStatus? {
+        guard let status = FamilyInviteLifecycleStatus(rawValue: status) else { return nil }
+        return FamilyInviteStatus(
+            code: code,
+            status: status,
+            expiresAt: expiresAt,
+            maxUses: maxUses,
+            uses: uses,
+            usesRemaining: usesRemaining
+        )
+    }
+}
+
+private struct FamilyJoinRequestRow: Decodable {
+    var id: UUID
+    var familyID: UUID
+    var familyName: String
+    var requesterUserID: UUID
+    var requesterName: String
+    var status: String
+    var createdAt: Date
+    var reviewedAt: Date?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case familyID = "family_id"
+        case familyName = "family_name"
+        case requesterUserID = "requester_user_id"
+        case requesterName = "requester_name"
+        case status
+        case createdAt = "created_at"
+        case reviewedAt = "reviewed_at"
+    }
+
+    var domainRequest: FamilyJoinRequest {
+        FamilyJoinRequest(
+            id: id,
+            familyID: familyID,
+            familyName: familyName,
+            requesterUserID: requesterUserID,
+            requesterName: requesterName,
+            status: FamilyJoinRequestStatus(rawValue: status) ?? .pending,
+            createdAt: createdAt,
+            reviewedAt: reviewedAt
+        )
+    }
+}
+
+private struct FamilyJoinOutcomeRow: Decodable {
+    var status: String
+    var homeContext: HomeContextRow?
+    var request: FamilyJoinRequestRow?
+
+    private enum CodingKeys: String, CodingKey {
+        case status
+        case homeContext = "home_context"
+        case request
     }
 }
 

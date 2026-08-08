@@ -577,10 +577,18 @@ private struct FlexiblePremiumChips: View {
 struct TaskDetailCard: View {
     var task: TaskItem
 
+    private var dynamicDueLabel: String {
+        guard let date = task.effectiveDueDate else { return task.dueLabel }
+        return TaskEditorSheet.dateLabel(for: date)
+    }
+
     var body: some View {
         SoftCard {
             HStack(spacing: 12) {
-                IconBubble(systemName: task.category.symbolName, tone: task.category.tone)
+                IconBubble(
+                    systemName: task.kind == .seed ? TaskKind.seed.symbolName : task.category.symbolName,
+                    tone: task.kind == .seed ? .mint : task.category.tone
+                )
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(task.title)
@@ -594,8 +602,13 @@ struct TaskDetailCard: View {
             }
 
             HStack(spacing: 8) {
+                if task.kind == .seed {
+                    Label("Semente", systemImage: "leaf.fill")
+                }
                 Label(task.owner, systemImage: "person.fill")
-                Label(task.dueLabel, systemImage: "clock.fill")
+                if task.kind == .task {
+                    Label(dynamicDueLabel, systemImage: "clock.fill")
+                }
                 Label(task.priority.title, systemImage: task.priority.symbolName)
                 Label(task.createdBy, systemImage: "sparkles")
             }
@@ -611,6 +624,7 @@ struct TaskCard: View {
     var isMarkedComplete: Bool
     var onToggle: (TaskItem) -> Void
     var togglesOnTap = true
+    var referenceDate: Date = .now
 
     var body: some View {
         if togglesOnTap {
@@ -642,7 +656,11 @@ struct TaskCard: View {
         HStack(spacing: 12) {
             completionControl
 
-            IconBubble(systemName: task.category.symbolName, tone: task.category.tone, size: 40)
+            IconBubble(
+                systemName: task.kind == .seed ? TaskKind.seed.symbolName : task.category.symbolName,
+                tone: task.kind == .seed ? .mint : task.category.tone,
+                size: 40
+            )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
@@ -650,10 +668,20 @@ struct TaskCard: View {
                     .foregroundStyle(NinaTheme.ink)
                     .strikethrough(isMarkedComplete)
 
-                Text(task.subtitle.isEmpty ? "\(task.owner) · \(task.dueLabel)" : task.subtitle)
+                Text(task.subtitle.isEmpty ? "\(task.owner) · \(dynamicDueLabel)" : task.subtitle)
                     .font(.subheadline)
                     .foregroundStyle(NinaTheme.muted)
                     .lineLimit(2)
+
+                if task.kind == .seed {
+                    Label("Semente · sem data definida", systemImage: "leaf.fill")
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(NinaTheme.mint)
+                } else if task.recurrence != .none {
+                    Label(task.recurrence.explicitTitle, systemImage: "repeat")
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(NinaTheme.mint)
+                }
             }
 
             Spacer()
@@ -663,7 +691,7 @@ struct TaskCard: View {
                     .font(.caption.weight(.black))
                     .foregroundStyle(task.category.tone.color)
 
-                Text(task.dueLabel)
+                Text(task.kind == .seed ? "Plante depois" : dynamicDueLabel)
                     .font(.caption2.weight(.heavy))
                     .foregroundStyle(NinaTheme.muted)
 
@@ -692,11 +720,26 @@ struct TaskCard: View {
     }
 
     private var taskCardBackground: Color {
-        isMarkedComplete ? NinaTheme.taskCard.opacity(0.62) : NinaTheme.taskCard
+        if isMarkedComplete {
+            return NinaTheme.taskCard.opacity(0.62)
+        }
+        return task.kind == .seed
+            ? NinaTheme.mint.opacity(0.055)
+            : NinaTheme.taskCard
     }
 
     private var taskCardStroke: Color {
-        isMarkedComplete ? NinaTheme.taskCardStroke.opacity(0.72) : NinaTheme.taskCardStroke
+        if isMarkedComplete {
+            return NinaTheme.taskCardStroke.opacity(0.72)
+        }
+        return task.kind == .seed
+            ? NinaTheme.mint.opacity(0.22)
+            : NinaTheme.taskCardStroke
+    }
+
+    private var dynamicDueLabel: String {
+        guard let date = task.effectiveDueDate else { return task.dueLabel }
+        return TaskEditorSheet.dateLabel(for: date, relativeTo: referenceDate)
     }
 
     @ViewBuilder

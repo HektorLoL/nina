@@ -42,23 +42,44 @@ final class InviteLinkStore {
     var pendingCode: String?
 
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let privateDataStore: any PrivateLocalDataStoring
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        privateDataStore: any PrivateLocalDataStoring = ProtectedLocalDataStore.shared
+    ) {
         self.defaults = defaults
-        pendingCode = defaults.string(forKey: Self.pendingCodeKey)
+        self.privateDataStore = privateDataStore
+        pendingCode = PrivateLocalDataAccess.loadString(
+            forKey: Self.pendingCodeKey,
+            ownerScope: PrivateLocalDataScope.pendingInvite,
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
     }
 
     @discardableResult
     func receive(_ url: URL) -> Bool {
         guard let code = InviteLinkParser.code(from: url) else { return false }
         pendingCode = code
-        defaults.set(code, forKey: Self.pendingCodeKey)
+        PrivateLocalDataAccess.writeStringBestEffort(
+            code,
+            forKey: Self.pendingCodeKey,
+            ownerScope: PrivateLocalDataScope.pendingInvite,
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
         return true
     }
 
     func clear() {
         pendingCode = nil
-        defaults.removeObject(forKey: Self.pendingCodeKey)
+        PrivateLocalDataAccess.removeData(
+            forKey: Self.pendingCodeKey,
+            ownerScope: PrivateLocalDataScope.pendingInvite,
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
     }
 }
 
@@ -89,7 +110,7 @@ struct InviteAcceptanceView: View {
                                     .font(.title2.weight(.black))
                                     .foregroundStyle(NinaTheme.ink)
 
-                                Text("Confirme antes de entrar e compartilhar a rotina.")
+                                Text("Envie seu pedido para uma pessoa responsável pela casa.")
                                     .font(.subheadline.weight(.bold))
                                     .foregroundStyle(NinaTheme.muted)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -107,8 +128,8 @@ struct InviteAcceptanceView: View {
                     }
 
                     PrimaryCapsuleButton(
-                        title: isJoining ? "Entrando..." : "Entrar nesta casa",
-                        systemName: "arrow.right.circle.fill"
+                        title: isJoining ? "Enviando..." : "Pedir para entrar",
+                        systemName: "paperplane.circle.fill"
                     ) {
                         acceptInvite()
                     }
@@ -149,7 +170,7 @@ struct InviteAcceptanceView: View {
             } else if let preview, preview.isValid {
                 SectionTitle(
                     title: preview.familyName ?? "Casa compartilhada",
-                    subtitle: "A Nina protege este convite com um código único."
+                    subtitle: invitePreviewSubtitle(preview)
                 )
 
                 Label(preview.code, systemImage: "lock.shield.fill")
@@ -194,5 +215,16 @@ struct InviteAcceptanceView: View {
                 errorMessage = store.syncErrorMessage ?? "Não foi possível entrar nesta casa."
             }
         }
+    }
+
+    private func invitePreviewSubtitle(_ preview: FamilyInvitePreview) -> String {
+        var parts = ["A Nina protege este convite com um código único."]
+        if let usesRemaining = preview.usesRemaining {
+            parts.append("\(usesRemaining) acessos disponíveis.")
+        }
+        if let expiresAt = preview.expiresAt {
+            parts.append("Expira em \(expiresAt.formatted(date: .abbreviated, time: .omitted)).")
+        }
+        return parts.joined(separator: " ")
     }
 }

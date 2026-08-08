@@ -1,0 +1,4 @@
+NINA_SUPABASE_URL=https://your-project-ref.supabase.co
+NINA_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your-key
+NINA_SUPABASE_SECRET_KEY=sb_secret_your-dedicated-worker-key
+NINA_WAITLIST_HASH_SALT=replace-with-a-random-value-of-at-least-32-characters

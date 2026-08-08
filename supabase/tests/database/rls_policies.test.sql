@@ -144,11 +144,6 @@ values
   ('51000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'Owner Item'),
   ('51000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000002', 'Outsider Item');
 
-insert into public.reminders (id, family_id, title)
-values
-  ('52000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'Owner Reminder'),
-  ('52000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000002', 'Outsider Reminder');
-
 insert into public.chat_messages (id, family_id, sender, text)
 values
   ('53000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'user', 'Owner Message'),
@@ -183,23 +178,30 @@ select is(
         'task_categories',
         'tasks',
         'shopping_items',
-        'reminders',
         'chat_messages',
         'memory_items',
         'household_insights',
         'family_snapshots',
         'invites',
+        'family_join_requests',
         'nina_chat_rate_limits',
         'nina_threads',
         'nina_ai_budget_months',
         'nina_ai_family_rate_limits',
         'nina_ai_runs',
-        'nina_proposals'
+        'nina_proposals',
+        'waitlist_signups',
+        'waitlist_submission_limits'
       )
       and pg_class.relrowsecurity
   ),
-  19,
+  21,
   'all sensitive public tables have row level security enabled'
+);
+
+select ok(
+  not has_table('public', 'reminders'),
+  'reminders are unified into tasks and no separate table remains'
 );
 
 set local role authenticated;
@@ -212,7 +214,6 @@ select is((select count(*)::integer from public.task_sections), 1, 'task section
 select is((select count(*)::integer from public.task_categories), 1, 'task categories are family scoped');
 select is((select count(*)::integer from public.tasks), 1, 'tasks are family scoped');
 select is((select count(*)::integer from public.shopping_items), 1, 'shopping items are family scoped');
-select is((select count(*)::integer from public.reminders), 1, 'reminders are family scoped');
 select is((select count(*)::integer from public.chat_messages), 1, 'chat messages are family scoped');
 select is((select count(*)::integer from public.memory_items), 1, 'memory items are family scoped');
 select is((select count(*)::integer from public.household_insights), 1, 'household insights are family scoped');

@@ -8,12 +8,17 @@ import {
   isUUID,
   jsonResponse,
   parseConfiguredKey,
+  readAppStoreJSONRequest,
   verifyTransaction,
 } from "../_shared/app-store.ts";
 
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
-    return jsonResponse({ error: "method_not_allowed" }, 405);
+    return jsonResponse(
+      { error: "method_not_allowed" },
+      405,
+      { Allow: "POST" },
+    );
   }
 
   const supabaseURL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -26,12 +31,9 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ error: "service_not_configured" }, 503);
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: "invalid_json" }, 400);
-  }
+  const parsedBody = await readAppStoreJSONRequest(request);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.value;
 
   if (!isPremiumSyncRequest(body)) {
     return jsonResponse({ error: "invalid_request" }, 400);

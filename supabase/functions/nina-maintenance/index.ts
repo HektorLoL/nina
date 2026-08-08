@@ -96,7 +96,7 @@ Deno.serve(async (request: Request) => {
     "SUPABASE_SERVICE_ROLE_KEY",
   );
   const openAIKey = Deno.env.get("OPENAI_API_KEY") ?? "";
-  if (!supabaseURL || !secretKey || !openAIKey) {
+  if (!supabaseURL || !secretKey) {
     return jsonResponse({ error: "service_not_configured" }, 503);
   }
 
@@ -120,6 +120,32 @@ Deno.serve(async (request: Request) => {
       event: "nina_retention_failed",
       code: retentionError.code,
     }));
+  }
+
+  const {
+    data: waitlistRetention,
+    error: waitlistRetentionError,
+  } = await admin.rpc("run_waitlist_retention");
+  if (waitlistRetentionError) {
+    console.error(JSON.stringify({
+      event: "waitlist_retention_failed",
+      code: waitlistRetentionError.code,
+    }));
+  }
+
+  if (!openAIKey) {
+    console.warn(JSON.stringify({
+      event: "nina_insights_skipped",
+      code: "openai_not_configured",
+    }));
+    return jsonResponse({
+      retention,
+      waitlist_retention: waitlistRetention,
+      candidates: 0,
+      completed: 0,
+      failed: 0,
+      insights: "skipped_not_configured",
+    }, retentionError || waitlistRetentionError ? 503 : 200);
   }
 
   const { data, error } = await admin.rpc("get_nina_weekly_candidates");
@@ -301,8 +327,9 @@ Deno.serve(async (request: Request) => {
 
   return jsonResponse({
     retention,
+    waitlist_retention: waitlistRetention,
     candidates: candidates.length,
     completed: completedCount,
     failed: failedCount,
-  });
+  }, retentionError || waitlistRetentionError ? 503 : 200);
 });

@@ -1,0 +1,703 @@
+# Nina — Operating Manual
+
+Last updated: 2026-08-08
+
+This is the working context for anyone (human or agent) making changes in this
+repository. It records what Nina is, the rules the code refuses to break, and
+the things that will silently go wrong if you don't know them. Read §1 and §2
+before touching anything.
+
+---
+
+## 1. Read this first — the repo state is not what `git log` says
+
+```
+3 commits total, all 2026-06-18/19, all by Heitor Castello
+141 tracked files | 52 modified (+8,027 / −4,815) | 37 untracked
+```
+
+Roughly seven weeks of continuous work exists **only in the working tree**.
+Untracked-but-critical includes: `.github/workflows/ci.yml`, `.github/dependabot.yml`,
+`docs/production-launch-runbook.md`, `Tools/production_preflight.ts` (+ test),
+`deno.json`, `deno.lock`, `config/`, 10 of the 24 SQL migrations,
+`Nina/PrivateLocalDataStore.swift`, `Nina/MemberManagementView.swift`,
+`Nina/OperationalDiagnostics.swift`, 2 of 5 iOS test files, 3 of 6 pgTAP suites,
+`web/src/waitlist.ts`, `web/src/legal.ts`, `web/tests/`, and all three
+`web/public/scripts/*.js`.
+
+**Never run `git checkout .`, `git stash`, `git clean -fd`, or `git reset --hard`.**
+There is no recovery path. Do not commit, push, or branch unless explicitly asked.
+
+Two consequences that mislead:
+
+- **CI has never run.** `ci.yml` is untracked, so no GitHub Actions run has ever
+  executed, even though `docs/production-launch-runbook.md` and
+  `supabase/README.md` both state that it gates every PR. Run the gates locally.
+- **`git log` / `git blame` / `git diff HEAD~1` are useless.** Unstaged
+  `git diff` *is* the changelog.
+
+A clean clone of `main` builds a landing page with a dead waitlist dialog, a
+permanently-spinning invite page, and no preflight, CI, or account-deletion
+module at all.
+
+---
+
+## 2. What Nina is
+
+**A Brazilian-Portuguese iOS app that lets a family dump the mental load of
+running a household into a chat with a character named Nina, who turns it into
+shared tasks, reminders, groceries, and undated "seeds" — and who quietly
+measures who is carrying more of the house.**
+
+- **Who.** Brazilian families, up to 8 people plus pets, iPhone-first. Built for
+  the *primary domestic manager* in a two-adult household. Children and pets are
+  profiles managed by adults, never users.
+- **The real problem.** Not task tracking — *the negotiation cost of task
+  tracking*. Routing coordination through a neutral third party so assigning
+  work stops being an interpersonal act. Secondary: reading Brazilian household
+  paperwork (boletos, receitas, comunicados escolares) out of a phone photo.
+- **Emotional positioning: relief, not productivity.** The design north star
+  file is literally `web/design-references/landing-conversa-alivio.png` —
+  *conversation → relief*. Login calls her "Sua amiga Nina" — a friend, not an
+  assistant. The workload feature is "Sinal de sobrecarga", subtitled
+  *"Um retrato para conversar, não para cobrar"*, never "who is slacking".
+- **Market: Brazil, exclusively.** pt-BR hardcoded with no localization catalog,
+  prices in reais (`R$ 24,90/mês`), Supabase in `sa-east-1` (São Paulo), LGPD/ANPD
+  compliance regime, domain `ninai.app`, bundle `com.heitor.nina`.
+
+### The three product primitives you must not flatten
+
+1. **Nina proposes; humans confirm.** Every AI output is a `nina_proposals` row
+   the user accepts. The prompt says it: *"Nunca diga que executou uma ação.
+   Toda proposta depende de confirmação humana."* This is not a safety feature
+   bolted on — it is the entire trust proposition, and it is a tested invariant
+   (`unconfirmed_mutations: 0` in the eval gate).
+2. **Sementes (seeds).** An intention you're allowed to have *without* a date.
+   `task_kind in ('task','seed')`; renders as "Semente" / "Plante depois". An
+   explicit anti-productivity-app stance: most task apps punish undated items;
+   Nina names them and lets the AI refuse to invent a date (`due_at: null`).
+3. **Nina is a household member who doesn't take a slot.** She is a real
+   `family_members` row (`household_role 'assistant'`, `user_id null`,
+   relationship `'IA da casa'`). UI copy: *"Limite: 8 pessoas na casa. A Nina não
+   ocupa vaga."*
+
+### Voice
+
+Second-person singular informal (`você`), warm, short sentences, no exclamation
+marks, no emoji. Nina is referred to as a person ("a Nina entende"), never as
+"the AI" or "the assistant". Read `Nina/MockNinaEngine.swift` before writing any
+assistant-facing string — it is the canonical corpus of her voice.
+
+---
+
+## 3. Architecture map
+
+Four surfaces, one product.
+
+| Surface | Stack | Entry point |
+|---|---|---|
+| iOS app | SwiftUI, iOS 17+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (24 files) |
+| Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
+| Web | Astro 7 static + Cloudflare Worker at `ninai.app` | `web/src/worker.ts` |
+
+**Only third-party iOS dependency: `supabase-swift` 2.46.0.** No analytics SDK,
+no crash reporter, no ad SDK — that absence is the mechanical proof behind the
+App Store "Data Used to Track You: No" label. Do not add one without revisiting
+`docs/privacy/app-store-privacy-labels.md`.
+
+**The trust model in one line:** the iOS app ships only a publishable/anon key,
+every table has RLS, and every privileged operation is a SECURITY DEFINER RPC —
+so a fully hostile client gains nothing.
+
+---
+
+## 4. Non-negotiable invariants
+
+These are enforced in multiple places on purpose. Breaking one is a security or
+product regression, not a refactor.
+
+### Identity & authorization
+
+- **A cached home never grants access.** `activateHomeContext` on remote failure
+  sets `.unavailable` and discards the cached `FamilyGroup`. Membership *is* the
+  authorization boundary; a cache fallback would let a removed member keep
+  reading household data offline. Locked by
+  `AppStoreAuthorizationTests.testFailedMembershipVerificationBlocksCachedHomeAccess`.
+- **Clients hold no DML on `families` / `family_members`.** The original policy
+  allowed `user_id = auth.uid()` in `WITH CHECK`, so any member could PATCH their
+  own row to `permission_role='owner'`. Migration `202606100004` revoked the
+  table privilege so the policy can never be reached. This is the single most
+  important invariant in the schema.
+- **Only an `owner` changes permission roles**, and `owner` can be neither
+  granted nor revoked via any RPC. An `admin` may not modify another
+  owner/admin. Nobody removes themselves, the owner, or the assistant row.
+- **A claimed member (`user_id is not null`) is forced to `household_role='adult'`** —
+  otherwise an admin could demote a real person to `child` and silently strip
+  their AI access.
+- **Possessing an invite link grants nothing.** `request_family_join` creates a
+  *pending* request; an owner/admin approves. Both the app and the public web
+  invite page state this. Invite tokens are `casa-` + 128 bits of
+  `gen_random_bytes(16)`, one active invite per family, 7-day expiry, ≤7 uses.
+- **8 non-assistant people per home**, enforced in three places (trigger,
+  `request_family_join` count, remaining-slot arithmetic) under a family
+  advisory lock taken *before* any row lock.
+
+### AI
+
+- **Nina never mutates household data.** Four read-only tools; every durable
+  change is a proposal resolved by `resolve_nina_proposal`.
+- **Adults only**, checked in the Edge Function *and* again inside
+  `begin_nina_chat_run` so a direct RPC call cannot bypass it.
+- **Chat threads are per-adult, not per-family.** `nina_threads` is unique on
+  (family_id, owner_user_id); one adult's private conversation must never reach
+  another adult's context, tools, or weekly insight.
+- **Memories start private.** Sharing is always a separate, explicit tap
+  ("Guardar para mim" vs "Compartilhar com a casa"), never a single accept.
+- **`store: false` on every OpenAI call.** OpenAI retains nothing. Asserted by a
+  source-scanning test.
+- **The monthly budget is a database CHECK**, not application logic:
+  `reserved_microusd + spent_microusd <= cap_microusd`, US$20/mo interactive +
+  US$5/mo insights. Reserve-then-settle: failed runs must still book actual
+  spend (`record_failed_nina_ai_run`), or induced failures run past the cap.
+- **Logs are content-free.** Only run ids, model, token counts, cost, latency,
+  and stable codes. A test greps every `console.info(JSON.stringify({…}))` and
+  fails if it references `body.message`, `assistant_reply`, `attachments`, or
+  `structured.reply`.
+- **Insight prompt constraint:** *"Não atribua culpa, intenção, saúde mental ou
+  valor moral."* You cannot show a couple a fairness chart without it becoming a
+  weapon; the prompt is where that is prevented.
+
+### Secrets & data protection
+
+- **No server credential in the iOS binary, an xcconfig, the Info.plist, or any
+  `PUBLIC_*` web variable.** Enforced four ways: `repository.secret-content`,
+  `artifact.credential-scan`, `artifact.publishable-key`, and
+  `SupabaseConfiguration` refusing at runtime to build a client from an
+  `sb_secret_` or non-`anon` JWT. A shipped service-role key cannot be revoked
+  from installed binaries.
+- **Sensitive local data never goes in `UserDefaults`.** Household snapshot,
+  profile + photo, AI consent, pending invite → `PrivateLocalDataAccess` →
+  `ProtectedLocalDataStore`: SHA256-opaque filenames,
+  `completeUntilFirstUserAuthentication`, `isExcludedFromBackup`, 32 MB cap.
+  Legacy defaults are removed *only after* the protected write succeeds.
+- **Account deletion order is photos → `prepare_account_deletion` → Auth user**,
+  each stage aborting the next on failure, plus a `BEFORE DELETE` trigger on
+  `auth.users` that re-runs the preparation idempotently to close races.
+- **The waitlist unsubscribe token lives in the URL fragment and nowhere else**:
+  `https://ninai.app/unsubscribe/#<token>`. A path or query would put a live
+  cancellation capability into HTTP access logs.
+- **The waitlist never confirms whether an address exists**, and unsubscribe
+  never confirms whether a token was valid. Both always return
+  `202 {accepted:true}`. Any deviation is an email-enumeration oracle.
+- **The raw client IP never leaves the Worker** — only `SHA-256(salt ‖ IP)`.
+- **Misconfiguration fails closed, never guesses.** No production fallback
+  endpoint or key, anywhere.
+
+### Monetization
+
+- **A purchased transaction is not `finish()`ed until the server records it**,
+  or StoreKit loses the redelivery path.
+- **`.appAccountToken(user.id)` on every purchase**, and
+  `premium-subscription-sync` rejects `appAccountToken !== auth.uid()` with 403.
+  Apple's JWS is validly signed for *someone* — the token is the only thing
+  binding it to a Nina account.
+- **`NINA_APP_STORE_ENVIRONMENT=production` in production.** Xcode and
+  LocalTesting chains are never accepted implicitly; an unrecognized value
+  throws rather than degrading.
+
+---
+
+## 5. iOS app
+
+### State layer
+
+`@MainActor @Observable final class AppStore` is the single central store
+(2,468 lines). Dependencies are protocol-typed and `@ObservationIgnored`;
+`BackendServices.make*` in `Nina/BackendConfiguration.swift` is the only
+resolver. Seven stores are injected once in `NinaApp.body`; views read them via
+`@Environment(AppStore.self)`.
+
+**Concurrency has no actors and no locks — correctness comes from re-validating
+after every `await`.** Four mechanisms, all of which you must preserve:
+
+1. **Context token.** Capture `let contextToken = currentHomeContextToken`
+   before any suspension; `guard isCurrentHomeContext(contextToken) else { return }`
+   after *every* await. `homeContextGeneration &+= 1` invalidates in-flight work
+   on sign-out or account switch.
+2. **Serialized write queue.** `enqueueRemoteMutation` chains via
+   `await previousTask?.value` for FIFO remote writes. Parallel writes would
+   reorder against server row versions.
+3. **Local revision guard.** `refreshHomeFromRemote` snapshots `localStateRevision`
+   and refuses to apply remote state if the user edited mid-flight.
+4. **Debounced realtime.** `AsyncStream<HomeRealtimeEvent>`, 2s reconnect,
+   180ms debounce, awaits pending mutations before refreshing.
+
+Copy the standard method skeleton verbatim for anything new: capture token →
+clear `syncErrorMessage` → branch on backend availability → `isSyncingHome = true`
+with `defer { finishSyncingHome(ifCurrent:) }` → re-check the token after each await.
+
+**Root routing** (`AppRootView.entryPhase`) evaluates in strict order:
+`signedOut` → `tutorial` → `homeLoading` → `invite` → then `homeAccessState`
+(`noHome` / `pendingApproval` / `unavailable` / `app`). Four tabs
+(Nina / Hoje / Tarefas / Casa) in a **custom pager, not `TabView`**, each with
+its own `RouterPath`.
+
+**Models.** Every persisted/synced model has a hand-written `init(from:)` using
+`decodeIfPresent(...) ?? default`. New fields must be additive with a default,
+never required. Models crossing the Supabase boundary use snake_case
+`CodingKeys`; locally-cached-only models stay camelCase.
+
+`TaskItem` carries both `dueLabel` (pt-BR display string) and `dueAt` (Date) in
+parallel, plus `version: Int` for optimistic concurrency. Recurrence expansion
+lives on the model (`scheduledOccurrence(after:)`).
+
+### Design system
+
+**`Nina/Theme.swift` is the only source of color.** There is not a single
+literal `Color(red:…)` outside it (except the Nina avatar's hair). Light/dark
+goes through `dynamic(light:dark:)` wrapping a `UIColor` trait closure — there
+is no asset catalog color set and no `@Environment(\.colorScheme)` branching.
+
+- **Accents:** `mint` (brand, `#38C2B8`), `coral` (destructive/overdue), `sky`
+  (informational), `amber` (attention/shopping), `gold` (premium only),
+  `lavender` (snoozed/recurrence/pet).
+- **Surfaces:** `ink`, `muted`, `cream`, `line`, `card`, `field`, `sheet`,
+  `cardStroke`, `shadow`. (`paper` is defined and unused; `taskCard`/`taskCardStroke`
+  are currently byte-identical to `card`/`cardStroke`.)
+- **Components take `tone: MemberTone`, never `Color`.** If a new concept needs
+  a color, give its model a `var tone: MemberTone`.
+
+**Typography:** no custom fonts, no scale constants — semantic `Font` styles with
+an explicit heavy weight. Distribution is the convention: `.black` ×132,
+`.bold` ×67, `.heavy` ×58. `design: .rounded` appears only at the two display
+sizes (34pt, 31pt).
+
+**Layout rules that hold everywhere:**
+
+- Screen: `ScrollView { VStack(alignment: .leading, spacing: 18) { … }.padding(18)
+  .padding(.bottom, 104) }.ninaScreenBackground()`. Sheets swap in
+  `.ninaSheetBackground()` and `.padding(.bottom, 24)`.
+- Radii: **24** = card, **18** = field, **28** = chat input / premium hero,
+  **30** = tab bar. Always `style: .continuous`. Pills use `Capsule()`.
+- One shadow token: `.cardShadow()`.
+- Backgrounds use the `in:` shape parameter, not `.background { } + .clipShape`.
+- Every custom-styled button carries `.buttonStyle(.plain)`. Universal.
+- Disabled states are expressed twice: `.disabled(cond)` **and** `.opacity(…)`.
+- Rows: `IconBubble(40)` + 12pt + title/subtitle VStack + trailing, in
+  `.padding(14)`; matching divider is `Divider().padding(.leading, 66)`.
+
+**Haptics are semantic, not decorative** (`Nina/Haptics.swift`):
+`selection()` = navigate/toggle/close/un-complete · `success()` = completion or
+successful write · `error()` = validation or network failure (fired from the
+store, not the view) · `lightImpact()` = open a sheet or press a chip ·
+`warning()` = *arming* a destructive action, right before the confirm alert,
+never on the confirm itself. Completing a task fires `success()` but
+un-completing fires `selection()` — copy that asymmetry.
+
+**Accessibility:** decorative overlays are `.allowsHitTesting(false)` +
+`.accessibilityHidden(true)`. `reduceMotion` must *disable* ambient animation,
+not shorten it. Icon-only buttons need an explicit label. `HouseView` collapses
+its grid when `dynamicTypeSize.isAccessibilitySize`.
+
+**All UI strings are pt-BR literals inline in the view.** There is no
+`Localizable.strings`, no `.xcstrings`, no `LocalizedStringKey`. Introducing
+`NSLocalizedString` would be a new pattern, not a fix.
+
+---
+
+## 6. Database
+
+24 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+the filename — on-disk mtimes do not match name order.
+
+**House style for every new object:**
+
+```sql
+-- table
+alter table public.x enable row level security;
+revoke all on table public.x from public, anon, authenticated;
+grant select, insert on table public.x to authenticated;  -- only what's needed
+
+-- function
+create function public.f(...) ... security definer
+  set search_path = pg_catalog, public, auth ...;
+revoke all on function public.f(...) from public, anon, authenticated, service_role;
+grant execute on function public.f(...) to authenticated;  -- exactly one role
+```
+
+Postgres grants `EXECUTE ... TO PUBLIC` on every new function by default. **A
+signature change silently creates a new function with fresh PUBLIC rights** —
+always re-run the revoke/grant block with the exact new argument list.
+
+Other conventions:
+
+- **No Postgres enums.** Closed value sets are `text` + a named CHECK, altered
+  with `drop constraint if exists` / `add constraint` so migrations re-run.
+- **Every mutation RPC returns `public.get_current_home_context()`** so the
+  client gets one fresh consistent snapshot instead of patching local state.
+- **Errors are stable snake_case English strings with deliberate SQLSTATEs**:
+  `28000` unauthenticated, `42501` denied, `22023` invalid argument, `23514`
+  limit reached, `P0001` business rule, `P0002` not found. Swift and pgTAP both
+  match on these.
+- **Public responses are non-enumerating.** `get_family_invite_preview` returns
+  `{valid:false}` for every failure mode.
+- **Lock order is global: family advisory lock first**
+  (`pg_advisory_xact_lock(hashtextextended(family_id::text, 0))`), then row
+  `FOR UPDATE`, then re-verify `family_id` still matches.
+- **Realtime** requires both `replica identity full` and a DO block adding the
+  table to `supabase_realtime` that swallows `duplicate_object`.
+
+`private` schema holds `nina_maintenance_config` (project URL + 32-byte shared
+secret) and is revoked from every client role. pg_cron runs
+`nina-daily-maintenance` at `15 6 * * *` → pg_net POST to `nina-maintenance`.
+
+---
+
+## 7. Edge Functions
+
+Five Deno functions. `verify_jwt` per `supabase/config.toml`: **true** for
+`nina-chat`, `premium-subscription-sync`, and (by platform default, undeclared)
+`delete-account`; **false** for `nina-maintenance` (shared-secret header) and
+`app-store-server-notifications` (Apple JWS chain is the only trust).
+
+- **`nina-chat`** — the assistant turn. Order is load-bearing and asserted by a
+  test: adult gate → `begin_nina_chat_run` (idempotent on `message_id`, claims
+  rate limits, reserves budget) → moderation → deterministic safety shortcuts →
+  context → token pre-count → model + tool loop → `complete_nina_chat_run`.
+  Model `gpt-5.4-mini` via OpenAI Responses, strict `json_schema`, ≤3 proposals,
+  ≤2 extra tool rounds / ≤4 tool calls, 32k input cap, 35s timeout.
+- **`nina-maintenance`** — daily retention (`run_nina_retention`,
+  `run_waitlist_retention`) *before* any AI work, then ≤25 weekly insights on
+  `gpt-5.5` with a `gpt-5.4-mini` fallback.
+- **`delete-account`** — all logic is in `_shared/delete-account.ts` behind an
+  injectable `DeleteAccountBackend`; `index.ts` is a thin adapter. Body must be
+  exactly `{"confirmation":"delete"}`.
+- **`premium-subscription-sync`** / **`app-store-server-notifications`** —
+  Apple JWS verification via `_shared/app-store.ts`.
+
+**Conventions:**
+
+- Pure logic lives in `_shared/*.ts` with a sibling `*.test.ts`; `index.ts` is a
+  thin `Deno.serve` wrapper.
+- Every error response is `{"error":"<stable_snake_case_code>"}` with
+  `Cache-Control: no-store`. **These codes are API surface** — Swift switches on
+  them. Never reword one without updating `NinaEngineError` /
+  `PremiumBackendRequestError`.
+- Wire JSON is snake_case; TS identifiers are camelCase.
+- Money is always integer micro-USD, rounded with `Math.ceil`. Never floats.
+- Model ids are compile-time constants; only *pricing* is env-overridable, so a
+  deploy env cannot silently swap the model.
+- Bodies are read through bounded stream readers, never `await request.json()`.
+
+`supabase/functions/_shared/nina-chat-policy.ts` holds the entire 22-line system
+prompt. **Edits there are product changes, not code changes.**
+
+---
+
+## 8. Web
+
+Astro 7 static build served by a **Cloudflare Worker** (not Pages). Zero UI
+framework; three hand-written vanilla scripts in `web/public/scripts/` loaded
+`is:inline` so CSP can stay `script-src 'self'`. One global stylesheet.
+
+- `wrangler.toml`'s `run_worker_first = ["/api/*", "/invite/*"]` is load-bearing.
+  Remove it and the assets layer answers first — the API and the invite rewrite
+  break silently in production with no test to catch it.
+- `/invite/<code>` is a **200 rewrite** onto the `/join/` shell so the browser
+  URL stays put and `invite.js` can read the code off `location.pathname`.
+- **Never add an inline `<script>` or `<style>`** — including an Astro component
+  `<style>` block. CSP blocks it at runtime and `astro check` cannot catch it.
+  CSP is specified in two places that must stay in sync: `web/public/_headers`
+  (static assets) and `securityHeaders` in `web/src/worker.ts` (dynamic).
+- Client behavior is bound by `data-*` attribute contracts
+  (`[data-waitlist-dialog]`, `[data-invite-status]`), never CSS classes.
+  Renaming a class is safe; renaming a data attribute breaks a script.
+- Two pinned constants couple web to database: `waitlistConsentVersion` and
+  `waitlistHealthSchemaVersion` in `web/src/waitlist.ts`. A waitlist migration
+  that bumps the RPC's `schema_version` turns `/api/health` red and blocks the
+  production preflight until the constant is updated.
+- `legal.ts` reads `import.meta.env` at module scope — legal identity is frozen
+  at **build** time. Changing a Cloudflare variable requires a rebuild.
+- The invite page must never appear to validate a code. An unreachable API
+  renders an explicit "Verificação pendente" state (this was a resolved P1).
+
+`npm run dev` serves static only — `/api/*` and the invite rewrite do **not**
+work there. Use `npm run build && npm run preview` (wrangler dev) to exercise
+Worker routes.
+
+---
+
+## 9. Code conventions (repo-wide)
+
+**Comments: eight in ~20,000 lines of Swift, and that is deliberate.** Zero
+`MARK:`, zero `TODO`/`FIXME`/`HACK`/`WIP` anywhere in the repo. The surviving
+comments are all one kind: a single line stating a non-obvious **invariant or
+security property**, never a description of mechanics —
+`// A filled honeypot receives the same generic success as a real submission.`
+**Writing explanatory comments here is off-convention.** Put the explanation in
+a name, a test name, or a README.
+
+**Language split:** English identifiers, English SQL exception codes, English
+commits and `docs/`. pt-BR for every user-facing string. `web/README.md` is the
+one Portuguese doc (it is an operator runbook).
+
+**Error handling:** zero `fatalError`, zero `try!`, zero force-unwraps in
+production Swift. Plain `enum X: Error`; the *view/store* layer owns the pt-BR
+copy, not the error type (only `PremiumPurchaseError` and `ProfilePhotoError`
+conform to `LocalizedError`). Mutating `AppStore` operations return `Bool`
+rather than throwing. Protocol extensions supply fail-closed defaults that
+throw `.operationUnavailable`.
+
+**Logging:** Swift `OSLog` with `event=`-keyed `key=value` shapes and an explicit
+`privacy:` tag on every interpolation (identifiers `.public`, error text
+`.private`). Deno: single-line `console.error(JSON.stringify({ event, … }))`,
+event names `<subject>_<verb-past>`.
+
+**Formatting:** no SwiftLint / swift-format / EditorConfig / Prettier config.
+Swift is 4-space, hand-enforced, ~100-col soft target. TS and Markdown use
+`deno fmt` defaults (2-space, double quotes, 80 col) — but **only for the exact
+paths listed in `deno.json`**. Numeric literals use `_` grouping.
+
+**Docs** carry `Last updated: YYYY-MM-DD` directly under the H1 and it is
+genuinely maintained. Runbooks are executable prose: a fenced `sh` block with
+the exact command, then what it proves and what a failure means. Rationale lives
+in READMEs, not code. Design work is recorded as a QA verdict (`design-qa.md`:
+compared sources → P0/P1/P2 findings → final checks → `Result: passed`).
+
+---
+
+## 10. Testing
+
+| Layer | Framework | Location |
+|---|---|---|
+| iOS | **XCTest only** (no Swift Testing, no `@Test`, no UI tests) | `NinaTests/` |
+| Database | pgTAP with literal `plan(N)` | `supabase/tests/database/` |
+| Edge/worker/tools | `Deno.test` | `_shared/*.test.ts`, `web/tests/`, `Tools/` |
+| Web front-end | none — `astro check && astro build` + `npm audit` | — |
+
+**Naming is the documentation.** iOS test names are full behavioral sentences
+(`testFailedMembershipVerificationBlocksCachedHomeAccess`), Deno names are
+lowercase guarantees (`"account deletion stops before database mutation when
+photo cleanup fails"`).
+
+There is **no shared helper module in any layer** — each file declares its own
+`private` doubles at the bottom. Duplication is accepted over a shared helper.
+iOS fakes are `actor` when they record ordered state, `struct` when they only
+throw; recorded interactions are `Equatable` enums so assertions compare whole
+sequences. Every persistence test creates a UUID-suffixed `UserDefaults` suite
+and temp dir with `defer` teardown (the scheme is `parallelizable = "YES"`).
+
+**Source-text assertions are a real convention here.** Several Deno tests
+`Deno.readTextFile` a production file and assert on substrings to pin things no
+function signature can express (moderation before the model call, `store: false`,
+no `request.json()`, no content fields in log statements, apikey-not-Bearer).
+`Tools/production_preflight.ts` generalizes this over the whole working tree.
+**These are refactor-fragile by design** — update the assertion deliberately,
+never delete it.
+
+**What a contributor writes:**
+
+- AppStore/Auth/Profile/config/model change → a `@MainActor func test…()` in the
+  matching existing `NinaTests/` file; reuse or extend the fakes already there.
+- Migration/RPC/policy/grant → assertions in the topical pgTAP file **and bump
+  its `plan(N)`**. A new public table must be added to the explicit 21-name list
+  in `rls_policies.test.sql` or the RLS canary silently passes.
+- Edge Function logic → put it in `_shared/<name>.ts` behind an injectable
+  interface, test in `_shared/<name>.test.ts`, add `index.ts` to `deno.json`'s
+  `check` task.
+- Worker/Astro logic → extract to `web/src/*.ts`, test in `web/tests/`, add the
+  file to `format:web`/`lint:web`.
+- New release invariant → a `check(...)` in `Tools/production_preflight.ts` plus
+  a `Deno.test` in its test file.
+
+RLS does **not** raise on UPDATE/DELETE — it filters rows. `throws_ok` passes
+vacuously; use `pg_temp.affected_rows($$…$$)` and assert 0.
+
+---
+
+## 11. Commands
+
+```bash
+deno task check && deno task lint:web && deno task lint:deletion && deno task test
+```
+
+```bash
+deno task preflight:repo
+```
+
+```bash
+npx supabase start && npx supabase db lint --local --fail-on error && npx supabase test db
+```
+
+```bash
+xcodebuild test -project Nina.xcodeproj -scheme Nina -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
+```
+
+```bash
+cd web && npm ci && npm run build
+```
+
+```bash
+cd web && npm run build && npm run preview
+```
+
+Release gates (see `docs/production-launch-runbook.md` for the full six stages):
+
+```bash
+npx deno task preflight:production --env-file config/production.env --online --ios-artifact /absolute/path/to/Nina.xcarchive
+```
+
+Local secret files (all gitignored, each with a tracked `.example` sibling):
+`Nina/Config/SupabaseSecrets.xcconfig`, `config/production.env`,
+`supabase/.env.local`, `web/.dev.vars`.
+
+---
+
+## 12. Traps
+
+Things that will silently go wrong.
+
+**Xcode project.** `project.pbxproj` uses **hand-authored sequential
+pseudo-UUIDs** (`F…` file refs, `B…` app build files, `D…` test build files,
+`E…` test file refs, `C…` package products), not Xcode's random 24-hex. Adding a
+file through the Xcode UI injects a random ID and breaks the scheme. **Edit the
+pbxproj by hand, continuing the sequence.**
+
+**xcconfig comments.** `//` starts a comment, so a URL truncates to `https:`.
+The tracked example uses `https:/$()/your-project-ref.supabase.co`. Separately,
+`BackendConfiguration` rejects any value containing `$(`, so a half-escape fails
+closed at runtime. `Nina.xcconfig` ends with `#include? "SupabaseSecrets.xcconfig"` —
+the `?` makes it optional, so a missing file yields empty config with **no build
+error** (Debug falls back to mock, Release goes `.unavailable`).
+
+**`reminders` is dead.** The table was migrated into `tasks` and dropped;
+`ReminderItem` no longer exists. Recurrence and snooze are `tasks` columns. The
+only remnant is `LegacyReminderItem` for decoding old local snapshots — removing
+it breaks caches written by older builds.
+
+**Demo data is the empty state.** `AppStore.init` seeds every collection from
+`PreviewData` ("Casa Castello", 7 demo tasks), and `resetActivityState()` is
+`apply(.preview)`. Any "is the home empty?" check based on `tasks.isEmpty` is
+wrong. `apply(_:)` also substitutes `PreviewData.taskSections` when the snapshot's
+sections are empty.
+
+**`toggleTask` on a recurring task does not complete it** — it rolls `dueAt`
+forward. Only `.none`-recurrence tasks flip `isDone`.
+
+**`enqueueRemoteMutation` silently no-ops** when there is no active user, no
+backend, a DEBUG account, or no active home. The mutation persists locally and
+never syncs, with no error surfaced.
+
+**`restoreSession()` returns `.signedOut` on any thrown error** and runs on every
+foreground transition — so a network blip while returning from background bounces
+the user to `LoginView` even though the Keychain session is intact.
+
+**Nothing wipes protected local data on plain sign-out.** Only account deletion
+does. Household, profile, photo, and consent files persist on disk after
+`signOut()`.
+
+**Notification scheduling is capped at 60 requests globally**, sorted by soonest
+delivery, with recurring tasks expanded 12 occurrences deep. A busy home silently
+loses the tail. Quiet hours **shift** rather than suppress, and
+`UNCalendarNotificationTrigger` carries no timezone — travel silently reschedules
+everything to the same wall-clock time. Notifications carry no `userInfo`,
+category, or actions, and there is no `UNUserNotificationCenterDelegate`.
+
+**`dueLabel` and `dueAt` can drift.** `inferredDueAt(from:)` parses only a narrow
+set of pt-BR forms; anything else yields `nil` and the task shows a due label but
+never fires a notification.
+
+**`deno.json` enumerates individual files, not directories.** A new
+`web/src/*.ts` or `_shared/*.ts` module is neither formatted, linted, nor
+type-checked until you add it. Likewise `deno task test` globs only
+`_shared/*.test.ts`, `web/tests/*.test.ts`, and `Tools/production_preflight.test.ts` —
+a test placed elsewhere never runs and CI stays green.
+
+**`deno.lock` is `frozen: true`** with `nodeModulesDir: "none"`; adding any
+import without regenerating the lockfile fails the edge-functions job before any
+test runs.
+
+**Preflight exits 0 with warnings.** Omitting `--online` or `--ios-artifact`
+produces warnings, not failures. "0 failure(s)" does not mean the gate passed —
+check the warning count. Passing a `.app` instead of an `.xcarchive` downgrades
+`artifact.archive-signing` to a warning, so an unsigned build can produce a
+zero-failure run.
+
+**`Deno.env.toObject()` is spread after the parsed `--env-file`** in the
+preflight — a stale exported shell variable silently overrides the file.
+
+**The placeholder regex includes the literal word `example`**, so a genuine
+production value containing "example" is rejected as a placeholder.
+
+**`supabase/.temp/` is tracked in git** and not gitignored. It publishes the
+live project ref (`apemftmlsjocvifbptum`), the org id, and the pooler DSN. Not
+credentials, but it contradicts the "no server identity in tracked files"
+posture and the preflight does not flag it.
+
+**`app-store-server-notifications` is publicly reachable** with no shared secret
+or IP allowlist — Apple's JWS chain is its only authentication. Sound, but every
+unverifiable POST costs a certificate-chain verification. Apple root certs are
+downloaded from apple.com at cold start unless `APPLE_ROOT_CA_PEMS` is set.
+
+**`nina_ai_budget_months` is one global row per (month, purpose), not per
+family.** One heavy household can exhaust the US$20 cap and every other user
+starts getting 429 `monthly_budget_reached`.
+
+**Moderation runs *after* `begin_nina_chat_run`**, so a flagged message still
+consumes quota. This ordering is deliberate and asserted by a test — do not
+"optimize" it. Note that document attachments are never moderated; only text and
+images are.
+
+**`Tools/run_nina_ai_eval.mjs` mutates real project auth settings**, creates real
+Auth users, and deletes a real family. It defaults to the production project
+ref. **Never run it against production.**
+
+---
+
+## 13. Known gaps and launch blockers
+
+Honest state as of 2026-08-08. These are facts about the project, not bugs to
+fix unprompted.
+
+- **The flagship AI feature ships off.** `NINA_AI_V2_ENABLED = NO` is the default
+  in `Nina.xcconfig`, the secrets example, and the production inventory, and
+  `supabase/README.md` makes it policy pending a test-account rollout. The flag
+  is consumed in exactly two places, both `proposals: isV2Enabled ? … : []` — so
+  Nina still calls OpenAI and still costs money, but every proposal is discarded
+  before it reaches the UI. She can talk; she cannot organize. This contradicts
+  the landing page's entire three-step promise.
+- **Premium gates nothing.** `entitlement` is read only in `Sheets.swift`,
+  `TodayView.swift`, and `Components.swift` — for copy and badges. All five
+  marketed benefits (`R$ 24,90/mês`) are either free for everyone or
+  unimplemented. The weekly digest runs for every family with no entitlement
+  predicate. All quotas are universal, not free-tier. Shipping as-is is an App
+  Store review risk. The yearly product id exists with no price string anywhere.
+- **Legal identity is deliberately blank.** `PUBLIC_NINA_LEGAL_ENTITY_NAME`,
+  `…DOCUMENT`, `PUBLIC_NINA_DPO_NAME` are all `replace_with_…`. The privacy page
+  self-declares `data-legal-status="incomplete"` and the online preflight fails
+  until they are real. **Nina cannot legally launch until a Brazilian legal
+  entity with a CNPJ and a named DPO exists** — that is a company-formation task,
+  not an engineering one. Brazilian counsel must also approve the child/sensitive-data
+  wording.
+- **`NINA_APP_APPLE_ID` is still a placeholder** — the app has never been created
+  in App Store Connect. Version 1.0 build 1, never tagged, never released.
+- **The last AI eval is stale.** `evals/latest-report.json` is dated 2026-06-15,
+  ~7 weeks behind the working tree. It passed (schema 1.0, 0 unconfirmed
+  mutations, 0 private-data leaks, median turn US$0.0015) but with 92.3%
+  classification accuracy against a 90% bar — two failing cases.
+- **`supabase/templates/` auth emails are orphaned** — three bare unstyled pt-BR
+  HTML files with no brand, and `config.toml` has no `[auth.email.template.*]`
+  block wiring them up. They are copy-paste source for the dashboard only.
+- **TOTP MFA is enabled server-side with zero client support**
+  (`[auth.mfa.totp]` in `config.toml`; nothing in `Nina/` references it).
+- **`TARGETED_DEVICE_FAMILY = "1,2"`** declares iPad support, but there is no
+  iPad layout anywhere and the landing FAQ says iPhone-first.
+- **Zero snapshot or UI tests** for a design-system-heavy app; SwiftUI views,
+  Astro pages, and all network-touching code are deliberately uncovered and
+  pushed to the manual TestFlight matrix.
+- **The sensitive path nobody has named.** Photographed boletos, prescriptions,
+  and school notices go from the phone, through `nina-chat`, to a US model
+  provider as `data:` URIs. This is why the App Store labels carry a
+  `Sensitive Info` row. Treat any change to the attachment pipeline as a privacy
+  change.

@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.12.0"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+          package-manager-cache: true
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check and build
+        run: npm run build
+
+      - name: Audit production dependencies
+        run: npm audit --audit-level=high
+
+  edge-functions:
+    name: Edge functions and worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+          cache: true
+
+      - name: Install locked dependencies
+        run: deno ci
+
+      - name: Check web runtime formatting
+        run: deno task format:web
+
+      - name: Check account deletion formatting
+        run: deno task format:deletion
+
+      - name: Lint web runtime
+        run: deno task lint:web
+
+      - name: Lint account deletion runtime
+        run: deno task lint:deletion
+
+      - name: Type-check runtime entry points
+        run: deno task check
+
+      - name: Run contract tests
+        run: deno task test
+
+      - name: Run repository production preflight
+        run: deno task preflight:repo
+
+  database:
+    name: Database migrations and pgTAP
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.110.0
+          github-token: ${{ github.token }}
+
+      - name: Start a fresh local stack and apply migrations
+        run: supabase start
+
+      - name: Lint database functions and schema
+        run: supabase db lint --local --fail-on error
+
+      - name: Run database tests
+        run: supabase test db
+
+      - name: Stop local database
+        if: always()
+        run: supabase stop --no-backup
+
+  ios:
+    name: iOS
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Select stable Xcode 26
+        shell: bash
+        run: |
+          XCODE_PATH="$(
+            find /Applications \
+              -maxdepth 1 \
+              -type d \
+              -name 'Xcode_26*.app' \
+              ! -name '*beta*' \
+              -print |
+              sort |
+              tail -n 1
+          )"
+          if [[ -z "$XCODE_PATH" ]]; then
+            echo "No stable Xcode 26 installation was found."
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$XCODE_PATH/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$XCODE_PATH/Contents/Developer" xcodebuild -version
+
+      - name: Select an available iPhone simulator
+        shell: bash
+        run: |
+          IOS_SIMULATOR_ID="$(
+            xcrun simctl list devices available --json |
+              jq -r '[.devices[][] | select(.isAvailable == true and (.name | startswith("iPhone")))][0].udid'
+          )"
+          if [[ -z "$IOS_SIMULATOR_ID" || "$IOS_SIMULATOR_ID" == "null" ]]; then
+            echo "No available iPhone simulator was found."
+            exit 1
+          fi
+          echo "IOS_SIMULATOR_ID=$IOS_SIMULATOR_ID" >> "$GITHUB_ENV"
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild \
+            -project Nina.xcodeproj \
+            -scheme Nina \
+            -resolvePackageDependencies
+
+      - name: Build and test
+        run: |
+          xcodebuild test \
+            -project Nina.xcodeproj \
+            -scheme Nina \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" \
+            -derivedDataPath "$RUNNER_TEMP/NinaDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/NinaTests.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build release configuration
+        run: |
+          xcodebuild build \
+            -project Nina.xcodeproj \
+            -scheme Nina \
+            -configuration Release \
+            -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_ID" \
+            -derivedDataPath "$RUNNER_TEMP/NinaDerivedData" \
+            CODE_SIGNING_ALLOWED=NO

@@ -2,8 +2,13 @@
 import { Icon } from "astro-icon/components";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Brand from "../components/Brand.astro";
+import { legalIdentity } from "../legal";
 
-const updatedAt = "16 de junho de 2026";
+const updatedAt = "2 de agosto de 2026";
+const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
+const dpoMailto = legalIdentity.dpoContactEmail
+  ? `mailto:${legalIdentity.dpoContactEmail}`
+  : privacyMailto;
 ---
 
 <BaseLayout
@@ -16,7 +21,7 @@ const updatedAt = "16 de junho de 2026";
       <Brand />
       <nav class="desktop-nav" aria-label="Navegação principal">
         <a href="/">Início</a>
-        <a href="mailto:oi@ninai.app">Contato</a>
+        <a href={privacyMailto}>Contato</a>
       </nav>
     </div>
   </header>
@@ -51,15 +56,30 @@ const updatedAt = "16 de junho de 2026";
       </article>
     </section>
 
-    <article class="policy-content">
+    <article
+      class="policy-content"
+      data-legal-status={legalIdentity.isProductionComplete ? "complete" : "incomplete"}
+    >
       <h2>1. Quem controla os dados</h2>
-      <p>
-        A controladora dos dados é a operação responsável pela Nina. Para dúvidas, solicitações de
-        privacidade ou exercício de direitos previstos na LGPD, entre em contato pelo email
-        <a href="mailto:oi@ninai.app">oi@ninai.app</a>. Antes da publicação comercial, os dados
-        formais da pessoa jurídica e do encarregado devem ser preenchidos nos metadados legais da
-        loja e nesta página.
-      </p>
+      {
+        legalIdentity.isProductionComplete ? (
+          <p>
+            A controladora dos dados é <strong>{legalIdentity.legalEntityName}</strong>, registrada
+            sob o documento <strong>{legalIdentity.legalEntityDocument}</strong>. O encarregado pelo
+            tratamento de dados é <strong>{legalIdentity.dpoName}</strong>, contatável pelo email
+            <a href={dpoMailto}>{legalIdentity.dpoContactEmail}</a>. Para outras solicitações de
+            privacidade, escreva para
+            <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>.
+          </p>
+        ) : (
+          <p>
+            A Nina está em preparação para lançamento comercial. Para dúvidas, solicitações de
+            privacidade ou exercício de direitos previstos na LGPD, entre em contato pelo email
+            <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>. A publicação comercial
+            fica condicionada à identificação formal da controladora e do encarregado nesta página.
+          </p>
+        )
+      }
 
       <h2>2. Dados que a Nina trata</h2>
       <p>
@@ -67,8 +87,10 @@ const updatedAt = "16 de junho de 2026";
         perfil; dados da casa, como nome da casa, participantes, papéis, convites e permissões;
         conteúdo criado pelos usuários, como tarefas, lembretes, listas de compras, mensagens,
         anexos, documentos, fotos, memórias confirmadas e insights; preferências de uso e
-        consentimento; dados técnicos necessários para autenticação, segurança, sincronização,
-        prevenção de abuso, custo e diagnóstico.
+        consentimento; email, nome opcional, idioma e origem do formulário quando você entra
+        voluntariamente na lista de lançamento; e dados técnicos necessários para autenticação,
+        segurança, sincronização, prevenção de abuso, custo e diagnóstico. A proteção contra abuso
+        da lista usa um identificador criptográfico temporário e não armazena o endereço IP bruto.
       </p>
 
       <h2>3. Dados sobre crianças, saúde e documentos</h2>
@@ -85,7 +107,8 @@ const updatedAt = "16 de junho de 2026";
         Usamos dados para criar e manter sua conta, sincronizar a casa entre aparelhos, permitir
         convites, organizar tarefas e lembretes, processar mensagens e anexos enviados à Nina,
         gerar propostas de organização, manter memórias confirmadas, proteger o serviço, controlar
-        limites de uso, responder suporte, cumprir obrigações legais e melhorar a confiabilidade do
+        limites de uso, enviar novidades de lançamento apenas para quem entrou na lista com
+        consentimento, responder suporte, cumprir obrigações legais e melhorar a confiabilidade do
         produto sem vender ou compartilhar dados para anúncios.
       </p>
 
@@ -112,8 +135,9 @@ const updatedAt = "16 de junho de 2026";
         As bases legais podem incluir execução de contrato e procedimentos preliminares para operar
         a conta e a casa; consentimento para recursos de IA e memória; legítimo interesse para
         segurança, prevenção de abuso, diagnóstico e melhoria operacional proporcional; cumprimento
-        de obrigação legal ou regulatória quando aplicável; e proteção da vida ou da saúde apenas
-        quando estritamente necessário em situações compatíveis com a lei.
+        de obrigação legal ou regulatória quando aplicável; consentimento para emails da lista de
+        lançamento; e proteção da vida ou da saúde apenas quando estritamente necessário em
+        situações compatíveis com a lei.
       </p>
 
       <h2>8. Retenção</h2>
@@ -122,22 +146,28 @@ const updatedAt = "16 de junho de 2026";
         no backend. Logs operacionais de IA sem conteúdo doméstico e insights expiram após 90 dias.
         Memórias confirmadas, tarefas, lembretes e dados da casa permanecem enquanto forem úteis
         para a conta ou a casa, até exclusão pelo usuário, exclusão da conta ou outra base legal de
-        retenção.
+        retenção. Inscrições na lista de lançamento são removidas após 24 meses sem nova
+        confirmação ou antes disso quando o consentimento é retirado. Identificadores temporários
+        de prevenção de abuso da lista expiram em até 24 horas.
       </p>
 
       <h2>9. Seus controles</h2>
       <p>
         No app, você pode revogar consentimento de IA, apagar histórico privado da Nina, editar ou
         apagar memórias que pertencem a você, exportar dados em JSON, sair da conta e iniciar a
-        exclusão da conta. Quando uma casa é compartilhada, alguns registros da casa podem continuar
-        visíveis aos demais participantes sem vínculo com a conta apagada.
+        exclusão da conta com confirmação explícita. A exclusão remove fotos de perfil, conteúdo da
+        Nina vinculado à conta e a participação nas casas. Convites ativos criados pela conta são
+        revogados. Quando uma casa é compartilhada, alguns registros operacionais da casa podem
+        continuar visíveis aos demais participantes sem vínculo com a conta apagada. Para retirar o
+        consentimento da lista de lançamento, use o link de preferências incluído em cada email. Você
+        também pode escrever para <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>.
       </p>
 
       <h2>10. Direitos LGPD</h2>
       <p>
         Você pode solicitar confirmação de tratamento, acesso, correção, anonimização, bloqueio,
         eliminação, portabilidade, informação sobre compartilhamento, revisão de consentimento e
-        oposição quando cabível. Envie a solicitação para <a href="mailto:oi@ninai.app">oi@ninai.app</a>.
+        oposição quando cabível. Envie a solicitação para <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>.
         Podemos pedir informações adicionais para confirmar identidade e proteger a casa.
       </p>
 

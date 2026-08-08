@@ -3,6 +3,7 @@ import { Icon } from "astro-icon/components";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Brand from "../components/Brand.astro";
 import PhoneShot from "../components/PhoneShot.astro";
+import { waitlistConsentVersion } from "../waitlist";
 
 const steps = [
   {
@@ -77,7 +78,12 @@ const faq = [
         <a href="#privacidade">Privacidade</a>
         <a href="#duvidas">Dúvidas</a>
       </nav>
-      <button class="button button-primary header-cta" type="button" data-open-waitlist>
+      <button
+        class="button button-primary header-cta"
+        type="button"
+        data-open-waitlist
+        data-waitlist-source="header"
+      >
         Quero conhecer
       </button>
       <button
@@ -96,7 +102,14 @@ const faq = [
       <a href="#recursos">O que a Nina faz</a>
       <a href="#privacidade">Privacidade</a>
       <a href="#duvidas">Dúvidas</a>
-      <button class="button button-primary" type="button" data-open-waitlist>Quero conhecer</button>
+      <button
+        class="button button-primary"
+        type="button"
+        data-open-waitlist
+        data-waitlist-source="mobile_menu"
+      >
+        Quero conhecer
+      </button>
     </nav>
   </header>
 
@@ -113,7 +126,12 @@ const faq = [
           Você fala. A Nina transforma bagunça mental em tarefas, lembretes e clareza para todo
           mundo da casa. Menos cobrança, mais vida junto.
         </p>
-        <button class="button button-primary button-large" type="button" data-open-waitlist>
+        <button
+          class="button button-primary button-large"
+          type="button"
+          data-open-waitlist
+          data-waitlist-source="hero"
+        >
           Quero conhecer a Nina
           <Icon name="ph:arrow-right-bold" size={19} />
         </button>
@@ -212,17 +230,17 @@ const faq = [
         </div>
         <div class="workload-row">
           <span>Mirna</span>
-          <div class="bar"><i style="--progress: 82%; --tone: var(--coral)"></i></div>
+          <div class="bar"><i class="progress-mirna"></i></div>
           <strong>82%</strong>
         </div>
         <div class="workload-row">
           <span>Heitor</span>
-          <div class="bar"><i style="--progress: 48%; --tone: var(--sky)"></i></div>
+          <div class="bar"><i class="progress-heitor"></i></div>
           <strong>48%</strong>
         </div>
         <div class="workload-row">
           <span>Casa</span>
-          <div class="bar"><i style="--progress: 64%; --tone: var(--amber)"></i></div>
+          <div class="bar"><i class="progress-house"></i></div>
           <strong>64%</strong>
         </div>
         <div class="nina-suggestion">
@@ -283,7 +301,12 @@ const faq = [
         <li><Icon name="ph:check-circle-fill" size={18} />Reduz a carga mental do dia a dia</li>
         <li><Icon name="ph:check-circle-fill" size={18} />Mais conexão e tempo juntos</li>
       </ul>
-      <button class="button button-primary button-large" type="button" data-open-waitlist>
+      <button
+        class="button button-primary button-large"
+        type="button"
+        data-open-waitlist
+        data-waitlist-source="footer"
+      >
         Quero conhecer a Nina
       </button>
     </section>
@@ -298,75 +321,89 @@ const faq = [
     </nav>
   </footer>
 
-  <dialog class="waitlist-dialog" data-waitlist-dialog aria-labelledby="waitlist-title">
+  <dialog
+    class="waitlist-dialog"
+    data-waitlist-dialog
+    aria-labelledby="waitlist-title"
+    aria-describedby="waitlist-description"
+  >
     <button class="dialog-close" type="button" aria-label="Fechar" data-close-waitlist>
       <Icon name="ph:x-bold" size={20} />
     </button>
     <img src="/images/nina-app-icon.png" alt="" width="82" height="82" />
-    <p class="eyebrow mint">Chegando com calma</p>
-    <h2 id="waitlist-title">A lista da Nina abre em breve.</h2>
-    <p>
-      Ainda não estamos coletando emails. Quando a primeira versão estiver pronta, este será o
-      lugar para pedir acesso.
-    </p>
-    <button class="button button-secondary" type="button" data-close-waitlist>Entendi</button>
+    <div data-waitlist-entry>
+      <p class="eyebrow mint">Primeiros convites</p>
+      <h2 id="waitlist-title">Entre na lista da Nina.</h2>
+      <p id="waitlist-description">
+        Deixe seu email para receber um aviso quando a primeira versão estiver pronta.
+      </p>
+
+      <form
+        class="waitlist-form"
+        data-waitlist-form
+        data-consent-version={waitlistConsentVersion}
+        novalidate
+      >
+        <label class="waitlist-field" for="waitlist-first-name">
+          <span>Como quer ser chamado? <small>opcional</small></span>
+          <input
+            id="waitlist-first-name"
+            name="firstName"
+            type="text"
+            autocomplete="given-name"
+            maxlength="80"
+            placeholder="Seu nome"
+          />
+        </label>
+
+        <label class="waitlist-field" for="waitlist-email">
+          <span>Email</span>
+          <input
+            id="waitlist-email"
+            name="email"
+            type="email"
+            inputmode="email"
+            autocomplete="email"
+            maxlength="254"
+            placeholder="voce@exemplo.com"
+            required
+          />
+        </label>
+
+        <div class="waitlist-honeypot" aria-hidden="true">
+          <label for="waitlist-website">Seu site</label>
+          <input
+            id="waitlist-website"
+            name="website"
+            type="text"
+            autocomplete="off"
+            tabindex="-1"
+          />
+        </div>
+
+        <label class="waitlist-consent">
+          <input name="consent" type="checkbox" required />
+          <span>
+            Quero receber novidades da Nina por email. Posso cancelar quando quiser e li a
+            <a href="/privacidade">Política de Privacidade</a>.
+          </span>
+        </label>
+
+        <button class="button button-primary button-large waitlist-submit" type="submit">
+          <span data-waitlist-submit-label>Entrar na lista</span>
+          <Icon name="ph:paper-plane-tilt-fill" size={19} />
+        </button>
+        <p class="waitlist-status" data-waitlist-status role="status" aria-live="polite"></p>
+      </form>
+    </div>
+
+    <div class="waitlist-success" data-waitlist-success hidden>
+      <span class="waitlist-success-icon"><Icon name="ph:check-bold" size={28} /></span>
+      <h2>Pronto, você está na lista.</h2>
+      <p>Quando a Nina estiver pronta para chegar à sua casa, avisaremos por email.</p>
+      <button class="button button-secondary" type="button" data-close-waitlist>Fechar</button>
+    </div>
   </dialog>
 
-  <script>
-    const menuButton = document.querySelector("[data-menu-button]");
-    const mobileMenu = document.querySelector("[data-mobile-menu]");
-    const header = document.querySelector("[data-header]");
-    const dialog = document.querySelector("[data-waitlist-dialog]");
-    const openButtons = document.querySelectorAll("[data-open-waitlist]");
-    const closeButtons = document.querySelectorAll("[data-close-waitlist]");
-
-    menuButton?.addEventListener("click", () => {
-      const isOpen = menuButton.getAttribute("aria-expanded") === "true";
-      menuButton.setAttribute("aria-expanded", String(!isOpen));
-      mobileMenu?.classList.toggle("is-open", !isOpen);
-    });
-
-    mobileMenu?.querySelectorAll("a").forEach((link) => {
-      link.addEventListener("click", () => {
-        menuButton?.setAttribute("aria-expanded", "false");
-        mobileMenu.classList.remove("is-open");
-      });
-    });
-
-    openButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        mobileMenu?.classList.remove("is-open");
-        menuButton?.setAttribute("aria-expanded", "false");
-        if (dialog instanceof HTMLDialogElement) dialog.showModal();
-      });
-    });
-
-    closeButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        if (dialog instanceof HTMLDialogElement) dialog.close();
-      });
-    });
-
-    dialog?.addEventListener("click", (event) => {
-      if (event.target === dialog && dialog instanceof HTMLDialogElement) dialog.close();
-    });
-
-    const updateHeader = () => header?.classList.toggle("is-scrolled", window.scrollY > 16);
-    updateHeader();
-    window.addEventListener("scroll", updateHeader, { passive: true });
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-visible");
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.12 },
-    );
-
-    document.querySelectorAll(".reveal").forEach((element) => observer.observe(element));
-  </script>
+  <script src="/scripts/home.js" is:inline></script>
 </BaseLayout>

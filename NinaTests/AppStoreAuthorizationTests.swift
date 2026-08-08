@@ -44,6 +44,12 @@ final class AppStoreAuthorizationTests: XCTestCase {
     func testDebugAccountUsesLocalHomeWhenRemoteBackendExists() async {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-app-store-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
 
         let user = DebugAuthAccount.testOne.user
         let cachedFamily = FamilyGroup(
@@ -58,6 +64,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
 
         let store = AppStore(
             defaults: defaults,
+            privateDataStore: privateDataStore,
             remoteHomeBackend: FailingHomeBackend(),
             ninaEngine: MockNinaEngine()
         )
@@ -66,6 +73,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
 
         XCTAssertEqual(store.homeAccessState, .authorized)
         XCTAssertEqual(store.familyGroup.name, "Debug Home")
+        XCTAssertNil(defaults.data(forKey: "nina.home.familyGroup.\(user.id)"))
     }
     #endif
 
@@ -74,6 +82,12 @@ final class AppStoreAuthorizationTests: XCTestCase {
         let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-app-store-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
 
         let user = makeUser()
         let task = TaskItem(
@@ -93,6 +107,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         let backend = HomeLifecycleBackend(createState: expectedState)
         let store = AppStore(
             defaults: defaults,
+            privateDataStore: privateDataStore,
             remoteHomeBackend: backend,
             ninaEngine: MockNinaEngine()
         )
@@ -112,17 +127,124 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(store.tasks, [task])
 
         let familyData = try XCTUnwrap(
-            defaults.data(forKey: "nina.home.familyGroup.\(user.id)")
+            privateDataStore.data(
+                forKey: "nina.home.familyGroup.\(user.id)",
+                ownerScope: PrivateLocalDataScope.household(for: user.id)
+            )
         )
         XCTAssertEqual(try JSONDecoder().decode(FamilyGroup.self, from: familyData), expectedState.familyGroup)
+        XCTAssertNil(defaults.data(forKey: "nina.home.familyGroup.\(user.id)"))
 
         let snapshotData = try XCTUnwrap(
-            defaults.data(
-                forKey: "nina.home.appData.\(user.id).\(expectedState.familyGroup.id.uuidString)"
+            privateDataStore.data(
+                forKey: "nina.home.appData.\(user.id).\(expectedState.familyGroup.id.uuidString)",
+                ownerScope: PrivateLocalDataScope.household(for: user.id)
             )
         )
         let cachedSnapshot = try JSONDecoder().decode(AppDataSnapshot.self, from: snapshotData)
         XCTAssertEqual(cachedSnapshot.tasks, [task])
+        XCTAssertNil(
+            defaults.data(
+                forKey: "nina.home.appData.\(user.id).\(expectedState.familyGroup.id.uuidString)"
+            )
+        )
+    }
+
+    @MainActor
+    func testExplicitUserCleanupWorksAfterActiveContextIsGone() async throws {
+        let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-app-store-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
+        let user = makeUser()
+        let familyID = UUID()
+        let homeKey = "nina.home.familyGroup.\(user.id)"
+        let snapshotKey = "nina.home.appData.\(user.id).\(familyID.uuidString)"
+        let consentKey = "nina.privacy.aiMemoryConsent.\(user.id)"
+        let householdScope = PrivateLocalDataScope.household(for: user.id)
+        let consentScope = PrivateLocalDataScope.aiConsent(for: user.id)
+        try privateDataStore.set(Data("home".utf8), forKey: homeKey, ownerScope: householdScope)
+        try privateDataStore.set(Data("snapshot".utf8), forKey: snapshotKey, ownerScope: householdScope)
+        try privateDataStore.set(Data("consent".utf8), forKey: consentKey, ownerScope: consentScope)
+        try privateDataStore.set(
+            Data("profile".utf8),
+            forKey: "profile",
+            ownerScope: PrivateLocalDataScope.profile(for: user.id)
+        )
+        defaults.set(Data("legacy".utf8), forKey: homeKey)
+        defaults.set(Data("legacy".utf8), forKey: snapshotKey)
+        let store = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: nil,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: NoopHomeNotificationScheduler()
+        )
+        await store.activateHomeContext(for: nil)
+
+        store.clearLocalData(for: user.id)
+
+        XCTAssertNil(try privateDataStore.data(forKey: homeKey, ownerScope: householdScope))
+        XCTAssertNil(try privateDataStore.data(forKey: snapshotKey, ownerScope: householdScope))
+        XCTAssertNil(try privateDataStore.data(forKey: consentKey, ownerScope: consentScope))
+        XCTAssertNotNil(
+            try privateDataStore.data(
+                forKey: "profile",
+                ownerScope: PrivateLocalDataScope.profile(for: user.id)
+            )
+        )
+        XCTAssertNil(defaults.data(forKey: homeKey))
+        XCTAssertNil(defaults.data(forKey: snapshotKey))
+    }
+
+    @MainActor
+    func testAccountCleanupInvalidatesInFlightHomeActivation() async throws {
+        let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-app-store-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
+        let user = makeUser()
+        let staleState = makeRemoteState(familyName: "Stale Home")
+        let backend = ControlledRefreshHomeBackend(
+            initialState: staleState,
+            controlsInitialLoad: true
+        )
+        let store = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: NoopHomeNotificationScheduler()
+        )
+
+        let activationTask = Task {
+            await store.activateHomeContext(for: user)
+        }
+        await backend.waitUntilRefreshStarted()
+
+        store.clearLocalData(for: user.id)
+        await backend.completeRefresh(with: staleState)
+        await activationTask.value
+
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertFalse(store.hasActiveHome)
+        XCTAssertNotEqual(store.familyGroup.name, staleState.familyGroup.name)
+        XCTAssertNil(
+            try privateDataStore.data(
+                forKey: "nina.home.familyGroup.\(user.id)",
+                ownerScope: PrivateLocalDataScope.household(for: user.id)
+            )
+        )
     }
 
     @MainActor
@@ -155,6 +277,90 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testJoinRequestMovesHomeAccessIntoPendingApproval() async {
+        let user = makeUser()
+        let request = FamilyJoinRequest(
+            id: UUID(),
+            familyID: UUID(),
+            familyName: "Casa compartilhada",
+            requesterUserID: UUID(uuidString: user.id)!,
+            requesterName: user.displayName,
+            status: .pending,
+            createdAt: .now,
+            reviewedAt: nil
+        )
+        let backend = HomeLifecycleBackend(pendingRequest: request)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let requested = await store.joinHome(with: "casa-valid-invite", member: user)
+
+        XCTAssertTrue(requested)
+        XCTAssertEqual(store.homeAccessState, .pendingApproval)
+        XCTAssertEqual(store.pendingJoinRequest, request)
+        XCTAssertFalse(store.hasActiveHome)
+    }
+
+    @MainActor
+    func testFullHomeRejectsJoinApprovalBeforeCallingBackend() async {
+        let user = makeUser()
+        let members = (0..<AppStore.maxFamilyPeople).map { index in
+            HouseholdMember(
+                name: "Pessoa \(index + 1)",
+                relationship: "Família",
+                role: index == 0 ? .adult : .child,
+                tone: .mint,
+                taskCount: 0,
+                memoryNote: ""
+            )
+        }
+        let state = makeRemoteState(permissionRole: .owner, members: members)
+        let store = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: state),
+            ninaEngine: MockNinaEngine()
+        )
+        await store.activateHomeContext(for: user)
+
+        let request = FamilyJoinRequest(
+            id: UUID(),
+            familyID: state.familyGroup.id,
+            familyName: state.familyGroup.name,
+            requesterUserID: UUID(),
+            requesterName: "Nova pessoa",
+            status: .pending,
+            createdAt: .now,
+            reviewedAt: nil
+        )
+
+        let approved = await store.approveJoinRequest(request)
+
+        XCTAssertFalse(approved)
+        XCTAssertFalse(store.canInviteMorePeople)
+        XCTAssertEqual(store.syncErrorMessage, "A casa já atingiu o limite de 8 pessoas.")
+    }
+
+    func testPostgresDateOnlyCodecRoundTripsWithoutTimezoneShift() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "America/Argentina/Salta"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let birthDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2018, month: 4, day: 12))
+        )
+
+        let encoded = PostgresDateOnlyCodec.string(from: birthDate, timeZone: timeZone)
+        let decoded = try XCTUnwrap(
+            PostgresDateOnlyCodec.date(from: encoded, timeZone: timeZone)
+        )
+
+        XCTAssertEqual(encoded, "2018-04-12")
+        XCTAssertEqual(
+            calendar.dateComponents([.year, .month, .day], from: decoded),
+            DateComponents(year: 2018, month: 4, day: 12)
+        )
+        XCTAssertNil(PostgresDateOnlyCodec.date(from: "2018-02-30", timeZone: timeZone))
+    }
+
+    @MainActor
     func testCreateAndJoinFailuresKeepHomeUnauthorized() async {
         let user = makeUser()
         let backend = HomeLifecycleBackend(failCreate: true, failJoin: true)
@@ -169,7 +375,10 @@ final class AppStoreAuthorizationTests: XCTestCase {
         let joined = await store.joinHome(with: "casa-valid-invite", member: user)
         XCTAssertFalse(joined)
         XCTAssertEqual(store.homeAccessState, .noHome)
-        XCTAssertEqual(store.syncErrorMessage, "Não encontrei esse convite no Supabase.")
+        XCTAssertEqual(
+            store.syncErrorMessage,
+            "Este convite é inválido, expirou ou a casa está sem vagas."
+        )
     }
 
     func testAppDataSnapshotRoundTripsEveryCollection() throws {
@@ -183,7 +392,6 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(decoded.customTaskCategories, snapshot.customTaskCategories)
         XCTAssertEqual(decoded.tasks, snapshot.tasks)
         XCTAssertEqual(decoded.shoppingItems, snapshot.shoppingItems)
-        XCTAssertEqual(decoded.reminders, snapshot.reminders)
         XCTAssertEqual(decoded.insights, snapshot.insights)
     }
 
@@ -195,8 +403,37 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertTrue(snapshot.customTaskCategories.isEmpty)
         XCTAssertTrue(snapshot.tasks.isEmpty)
         XCTAssertTrue(snapshot.shoppingItems.isEmpty)
-        XCTAssertTrue(snapshot.reminders.isEmpty)
         XCTAssertTrue(snapshot.insights.isEmpty)
+    }
+
+    func testLegacyReminderCacheDecodesIntoUnifiedTasks() throws {
+        let data = Data(
+            """
+            {
+              "tasks": [],
+              "reminders": [
+                {
+                  "id": "73000000-0000-0000-0000-000000000001",
+                  "title": "Levar documento",
+                  "detail": "Colocar na mochila",
+                  "dateLabel": "Hoje, 18:00",
+                  "recurrence": "weekly",
+                  "symbolName": "backpack.fill",
+                  "tone": "amber"
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let snapshot = try JSONDecoder().decode(AppDataSnapshot.self, from: data)
+        let task = try XCTUnwrap(snapshot.tasks.first)
+
+        XCTAssertEqual(snapshot.tasks.count, 1)
+        XCTAssertEqual(task.title, "Levar documento")
+        XCTAssertEqual(task.subtitle, "Colocar na mochila")
+        XCTAssertEqual(task.recurrence, .weekly)
+        XCTAssertEqual(task.category.title, "Casa")
     }
 
     @MainActor
@@ -251,15 +488,68 @@ final class AppStoreAuthorizationTests: XCTestCase {
         let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
         await store.activateHomeContext(for: user)
 
-        let section = store.addTaskSection(title: "Weekend")
+        let section = store.addTaskSection(title: "Weekend", symbolName: "sun.max.fill")
         let category = store.addTaskCategory(title: "Garden")
         await store.waitForPendingRemoteMutations()
         let mutations = await backend.recordedMutations()
 
+        XCTAssertEqual(section.symbolName, "sun.max.fill")
         XCTAssertEqual(
             mutations,
             [.createTaskSection(section.id), .createTaskCategory(category!.id)]
         )
+    }
+
+    @MainActor
+    func testDeletingCustomSectionMovesTasksAndDeletesSectionRemotely() async throws {
+        let user = makeUser()
+        let customSection = TaskSection(
+            id: "weekend",
+            title: "Weekend",
+            symbolName: "sun.max.fill",
+            tone: .amber
+        )
+        let task = TaskItem(
+            title: "Plan lunch",
+            subtitle: "",
+            owner: "Home",
+            dueLabel: "Saturday",
+            category: .food,
+            isDone: false,
+            createdBy: "Manual",
+            sectionID: customSection.id
+        )
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(
+                taskSections: PreviewData.taskSections + [customSection],
+                tasks: [task]
+            )
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        XCTAssertTrue(store.deleteTaskSection(customSection.id))
+        await store.waitForPendingRemoteMutations()
+        let mutations = await backend.recordedMutations()
+
+        XCTAssertFalse(store.taskSections.contains(where: { $0.id == customSection.id }))
+        XCTAssertEqual(store.tasks.first?.sectionID, AppStore.houseTasksSectionID)
+        XCTAssertEqual(
+            mutations,
+            [RecordedHomeMutation.deleteTaskSection(customSection.id)]
+        )
+    }
+
+    @MainActor
+    func testDefaultTaskSectionCannotBeDeleted() async {
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: makeUser())
+
+        XCTAssertFalse(store.deleteTaskSection(AppStore.houseTasksSectionID))
+        XCTAssertTrue(store.taskSections.contains(where: { $0.id == AppStore.houseTasksSectionID }))
+        let mutations = await backend.recordedMutations()
+        XCTAssertTrue(mutations.isEmpty)
     }
 
     @MainActor
@@ -654,7 +944,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
     }
 
-    func testTaskAndReminderDueDatesRoundTrip() throws {
+    func testTaskSchedulingFieldsRoundTrip() throws {
         let dueAt = Date(timeIntervalSince1970: 1_781_600_400)
         let task = TaskItem(
             title: "Pay bill",
@@ -663,29 +953,235 @@ final class AppStoreAuthorizationTests: XCTestCase {
             dueLabel: "Tomorrow",
             dueAt: dueAt,
             category: .bills,
+            recurrence: .weekly,
+            snoozedUntil: dueAt.addingTimeInterval(900),
             isDone: false,
             createdBy: "Nina"
-        )
-        let reminder = ReminderItem(
-            title: "Appointment",
-            detail: "",
-            dateLabel: "Tomorrow",
-            dueAt: dueAt,
-            symbolName: "calendar",
-            tone: .amber
         )
 
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
+        let decodedTask = try decoder.decode(TaskItem.self, from: encoder.encode(task))
+
+        XCTAssertEqual(decodedTask.dueAt, dueAt)
+        XCTAssertEqual(decodedTask.recurrence, .weekly)
+        XCTAssertEqual(decodedTask.snoozedUntil, dueAt.addingTimeInterval(900))
+    }
+
+    func testRecurringTaskKeepsCurrentOccurrenceUntilCompletionAndCanBecomeOverdue() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Sao_Paulo"))
+        let baseDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 6, day: 18, hour: 9, minute: 30))
+        )
+        let referenceDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 6, day: 18, hour: 10))
+        )
+
+        let recurring = TaskItem(
+            title: "Medicine",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "09:30",
+            dueAt: baseDate,
+            category: .health,
+            recurrence: .daily,
+            isDone: false,
+            createdBy: "Nina"
+        )
+        let oneShot = TaskItem(
+            title: "Document",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "15 Jun",
+            dueAt: baseDate,
+            category: .school,
+            isDone: false,
+            createdBy: "Nina"
+        )
+
+        let nextDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 6, day: 19, hour: 9, minute: 30))
+        )
+        XCTAssertEqual(
+            recurring.displayDate(relativeTo: referenceDate, calendar: calendar),
+            baseDate
+        )
+        XCTAssertTrue(recurring.isDue(on: referenceDate, calendar: calendar))
+        XCTAssertTrue(recurring.isOverdue(relativeTo: referenceDate))
+        XCTAssertTrue(oneShot.isOverdue(relativeTo: referenceDate))
+        XCTAssertEqual(
+            recurring.scheduledOccurrence(after: referenceDate, calendar: calendar),
+            nextDate
+        )
+    }
+
+    func testTaskDueDayUsesTheProvidedCalendarAndSnoozeOverridesOriginalDate() throws {
+        var saoPaulo = Calendar(identifier: .gregorian)
+        saoPaulo.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Sao_Paulo"))
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+
+        let dueAt = try XCTUnwrap(
+            saoPaulo.date(from: DateComponents(year: 2026, month: 6, day: 21, hour: 23, minute: 30))
+        )
+        let sunday = try XCTUnwrap(
+            saoPaulo.date(from: DateComponents(year: 2026, month: 6, day: 21, hour: 12))
+        )
+        let monday = try XCTUnwrap(
+            saoPaulo.date(from: DateComponents(year: 2026, month: 6, day: 22, hour: 12))
+        )
+        var task = TaskItem(
+            title: "Late task",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Hoje",
+            dueAt: dueAt,
+            category: .home,
+            isDone: false,
+            createdBy: "Manual"
+        )
+
+        XCTAssertTrue(task.isDue(on: sunday, calendar: saoPaulo))
+        XCTAssertFalse(task.isDue(on: sunday, calendar: utc))
+        XCTAssertEqual(
+            AppStore.taskDueLabel(
+                for: dueAt,
+                relativeTo: sunday,
+                calendar: saoPaulo
+            ),
+            "Hoje, 23:30"
+        )
+        XCTAssertFalse(
+            AppStore.taskDueLabel(
+                for: dueAt,
+                relativeTo: monday,
+                calendar: saoPaulo
+            ).contains("Hoje")
+        )
+
+        task.snoozedUntil = monday
+        XCTAssertFalse(task.isDue(on: sunday, calendar: saoPaulo))
+        XCTAssertTrue(task.isDue(on: monday, calendar: saoPaulo))
+        XCTAssertEqual(task.displayDate(relativeTo: sunday, calendar: saoPaulo), monday)
+    }
+
+    func testDailyRecurrencePreservesLocalWallClockAcrossDaylightSavingTime() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        let dueAt = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 3, day: 7, hour: 9))
+        )
+        let referenceDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 3, day: 7, hour: 10))
+        )
+        let task = TaskItem(
+            title: "Daily task",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "09:00",
+            dueAt: dueAt,
+            category: .home,
+            recurrence: .daily,
+            isDone: false,
+            createdBy: "Manual"
+        )
+
+        let nextDate = try XCTUnwrap(
+            task.scheduledOccurrence(after: referenceDate, calendar: calendar)
+        )
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: nextDate)
+
+        XCTAssertEqual(components.year, 2026)
+        XCTAssertEqual(components.month, 3)
+        XCTAssertEqual(components.day, 8)
+        XCTAssertEqual(components.hour, 9)
+        XCTAssertEqual(components.minute, 0)
+    }
+
+    @MainActor
+    func testCompletingRecurringTaskAdvancesItInsteadOfClosingIt() async throws {
+        let dueAt = Date(timeIntervalSinceNow: 3_600)
+        let task = TaskItem(
+            title: "Medicine",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Hoje",
+            dueAt: dueAt,
+            category: .health,
+            recurrence: .daily,
+            isDone: false,
+            createdBy: "Manual"
+        )
+        let store = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: makeRemoteState(tasks: [task])),
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: RecordingNotificationScheduler()
+        )
+        await store.activateHomeContext(for: makeUser())
+
+        store.toggleTask(task)
+
+        let updated = try XCTUnwrap(store.tasks.first(where: { $0.id == task.id }))
+        XCTAssertFalse(updated.isDone)
+        XCTAssertEqual(updated.recurrence, .daily)
+        XCTAssertGreaterThan(updated.dueAt ?? .distantPast, dueAt)
+    }
+
+    @MainActor
+    func testUnifiedTaskCreateUpdateSnoozeAndDeletePersistRemotely() async throws {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState(tasks: []))
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: RecordingNotificationScheduler()
+        )
+        await store.activateHomeContext(for: user)
+
+        let dueAt = Date(timeIntervalSinceNow: 3_600)
+        store.addTask(
+            title: "School document",
+            subtitle: "Put it in the backpack",
+            owner: "Casa",
+            dueLabel: "Hoje",
+            dueAt: dueAt,
+            category: .school,
+            recurrence: .weekly
+        )
+        let taskID = try XCTUnwrap(store.tasks.first?.id)
+
+        store.updateTask(
+            id: taskID,
+            title: "Updated document",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Amanhã",
+            dueAt: dueAt.addingTimeInterval(3_600),
+            category: .school,
+            priority: .high,
+            recurrence: .monthly
+        )
+        store.snoozeTask(taskID, until: dueAt.addingTimeInterval(7_200))
+        store.deleteTask(taskID)
+
+        var mutations: [RecordedHomeMutation] = []
+        for _ in 0..<80 {
+            mutations = await backend.recordedMutations()
+            if mutations.count >= 4 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
 
         XCTAssertEqual(
-            try decoder.decode(TaskItem.self, from: encoder.encode(task)).dueAt,
-            dueAt
+            mutations,
+            [
+                .createTask(taskID),
+                .updateTask(taskID),
+                .updateTask(taskID),
+                .deleteTask(taskID)
+            ]
         )
-        XCTAssertEqual(
-            try decoder.decode(ReminderItem.self, from: encoder.encode(reminder)).dueAt,
-            dueAt
-        )
+        XCTAssertFalse(store.tasks.contains(where: { $0.id == taskID }))
     }
 
     @MainActor
@@ -723,6 +1219,44 @@ final class AppStoreAuthorizationTests: XCTestCase {
         }
 
         XCTAssertTrue(didSyncTask)
+    }
+
+    @MainActor
+    func testLatestNotificationSnapshotWinsWhenAnEarlierSyncIsSlower() async throws {
+        let user = makeUser()
+        let scheduler = DelayedNotificationScheduler()
+        let store = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: makeRemoteState(tasks: [])),
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: scheduler
+        )
+        await store.activateHomeContext(for: user)
+
+        store.addTask(
+            title: "Temporary reminder",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Hoje",
+            dueAt: Date(timeIntervalSinceNow: 3_600),
+            category: .home
+        )
+        let taskID = try XCTUnwrap(store.tasks.first?.id)
+        await scheduler.waitForNonemptySyncToStart()
+        store.deleteTask(taskID)
+
+        var records: [NotificationSyncRecord] = []
+        for _ in 0..<80 {
+            records = await scheduler.records()
+            if records.contains(where: { !$0.tasks.isEmpty }),
+               records.last?.tasks.isEmpty == true {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertGreaterThanOrEqual(records.count, 2)
+        XCTAssertTrue(records.contains(where: { !$0.tasks.isEmpty }))
+        XCTAssertTrue(try XCTUnwrap(records.last).tasks.isEmpty)
     }
 
     func testNinaRateLimitAndBudgetErrorsHaveExplicitMessages() {
@@ -777,6 +1311,12 @@ final class AppStoreAuthorizationTests: XCTestCase {
         let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-app-store-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
 
         let user = makeUser()
         let task = TaskItem(
@@ -799,6 +1339,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
         let store = AppStore(
             defaults: defaults,
+            privateDataStore: privateDataStore,
             remoteHomeBackend: RecordingHomeBackend(
                 state: makeRemoteState(tasks: [task], members: [adultMember])
             ),
@@ -807,13 +1348,21 @@ final class AppStoreAuthorizationTests: XCTestCase {
         await store.activateHomeContext(for: user)
         store.grantAIMemoryConsent()
 
-        let data = try store.makePrivacyExportData()
+        var profile = UserProfile.default(for: user)
+        profile.phone = "+55 11 99999-0000"
+        let profilePhotoData = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        let data = try store.makePrivacyExportData(
+            profile: profile,
+            profilePhotoData: profilePhotoData
+        )
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let export = try decoder.decode(PrivacyExportPackage.self, from: data)
 
         XCTAssertEqual(export.policyVersion, PrivacyPolicyVersion.current)
         XCTAssertEqual(export.user?.id, user.id)
+        XCTAssertEqual(export.profile, profile)
+        XCTAssertEqual(export.profilePhotoData, profilePhotoData)
         XCTAssertEqual(export.familyGroup.name, "Test Home")
         XCTAssertEqual(export.aiMemoryConsent?.policyVersion, PrivacyPolicyVersion.current)
         XCTAssertEqual(export.data.tasks, [task])
@@ -1031,6 +1580,92 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertTrue(diagnostics.lastError?.contains("tests.failure") == true)
     }
 
+    func testLegacyTaskDecodingDefaultsToRegularTaskKind() throws {
+        let data = Data(
+            """
+            {
+              "title": "Legacy task",
+              "category": "home",
+              "isDone": false,
+              "createdBy": "Manual"
+            }
+            """.utf8
+        )
+
+        let task = try JSONDecoder().decode(TaskItem.self, from: data)
+
+        XCTAssertEqual(task.kind, .task)
+    }
+
+    @MainActor
+    func testSeedCreationStaysUnscheduledUntilPlanted() async throws {
+        let user = makeUser()
+        let store = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: makeRemoteState(tasks: [])),
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: RecordingNotificationScheduler()
+        )
+        await store.activateHomeContext(for: user)
+
+        store.addTask(
+            title: "Organize family photos",
+            subtitle: "Someday",
+            owner: "Casa",
+            dueLabel: "Tomorrow",
+            dueAt: Date(timeIntervalSinceNow: 3_600),
+            category: .home,
+            recurrence: .weekly,
+            kind: .seed
+        )
+
+        let seed = try XCTUnwrap(store.tasks.first)
+        XCTAssertEqual(seed.kind, .seed)
+        XCTAssertEqual(seed.dueLabel, "Sem data")
+        XCTAssertNil(seed.dueAt)
+        XCTAssertEqual(seed.recurrence, .none)
+        XCTAssertEqual(store.openSeeds, [seed])
+    }
+
+    @MainActor
+    func testPlantingSeedTurnsItIntoScheduledTask() async throws {
+        let user = makeUser()
+        let seed = TaskItem(
+            kind: .seed,
+            title: "Plan family trip",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Sem data",
+            category: .home,
+            isDone: false,
+            createdBy: "Manual"
+        )
+        let store = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: makeRemoteState(tasks: [seed])),
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: RecordingNotificationScheduler()
+        )
+        await store.activateHomeContext(for: user)
+        let dueAt = Date(timeIntervalSinceNow: 7_200)
+
+        store.updateTask(
+            id: seed.id,
+            title: seed.title,
+            subtitle: seed.subtitle,
+            owner: seed.owner,
+            dueLabel: "Hoje",
+            dueAt: dueAt,
+            category: seed.category,
+            priority: seed.priority,
+            recurrence: TaskRecurrence.none,
+            kind: .task
+        )
+
+        let planted = try XCTUnwrap(store.tasks.first(where: { $0.id == seed.id }))
+        XCTAssertEqual(planted.kind, .task)
+        XCTAssertEqual(planted.dueAt, dueAt)
+        XCTAssertTrue(store.openSeeds.isEmpty)
+    }
+
     private func makeUser() -> AuthUser {
         AuthUser(
             id: UUID().uuidString,
@@ -1054,6 +1689,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         familyName: String = "Test Home",
         inviteCode: String = "test-home",
         permissionRole: FamilyPermissionRole = .owner,
+        taskSections: [TaskSection] = PreviewData.taskSections,
         tasks: [TaskItem] = [],
         shoppingItems: [ShoppingItem] = [],
         members: [HouseholdMember] = []
@@ -1063,10 +1699,9 @@ final class AppStoreAuthorizationTests: XCTestCase {
             permissionRole: permissionRole,
             snapshot: AppDataSnapshot(
                 messages: [],
-                taskSections: PreviewData.taskSections,
+                taskSections: taskSections,
                 tasks: tasks,
                 shoppingItems: shoppingItems,
-                reminders: [],
                 insights: []
             )
         )
@@ -1118,17 +1753,21 @@ private actor HomeLifecycleBackend: RemoteHomeBackend {
     private let joinState: RemoteHomeState?
     private let failCreate: Bool
     private let failJoin: Bool
+    private let pendingRequest: FamilyJoinRequest?
     private var recordedCreateRequest: CreateRequest?
     private var recordedJoinRequest: JoinRequest?
+    private var didSubmitJoinRequest = false
 
     init(
         createState: RemoteHomeState? = nil,
         joinState: RemoteHomeState? = nil,
+        pendingRequest: FamilyJoinRequest? = nil,
         failCreate: Bool = false,
         failJoin: Bool = false
     ) {
         self.createState = createState
         self.joinState = joinState
+        self.pendingRequest = pendingRequest
         self.failCreate = failCreate
         self.failJoin = failJoin
     }
@@ -1157,6 +1796,24 @@ private actor HomeLifecycleBackend: RemoteHomeBackend {
         return joinState
     }
 
+    func requestHomeAccess(
+        with inviteCode: String,
+        member: AuthUser?
+    ) async throws -> FamilyJoinOutcome {
+        recordedJoinRequest = JoinRequest(inviteCode: inviteCode, memberID: member?.id)
+        guard !failJoin else { throw LifecycleError.expected }
+        didSubmitJoinRequest = true
+        if let pendingRequest {
+            return .pending(pendingRequest)
+        }
+        guard let joinState else { throw LifecycleError.expected }
+        return .joined(joinState)
+    }
+
+    func loadPendingJoinRequest() async throws -> FamilyJoinRequest? {
+        didSubmitJoinRequest ? pendingRequest : nil
+    }
+
     func updateFamilySettings(
         familyID: UUID,
         name: String
@@ -1181,7 +1838,6 @@ private actor HomeLifecycleBackend: RemoteHomeBackend {
     func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
-    func createReminder(_ reminder: ReminderItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {}
 }
 
@@ -1221,18 +1877,18 @@ private struct FailingHomeBackend: RemoteHomeBackend {
     func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
-    func createReminder(_ reminder: ReminderItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {}
 }
 
 private enum RecordedHomeMutation: Equatable {
     case createTaskSection(String)
+    case deleteTaskSection(String)
     case createTaskCategory(String)
     case createTask(UUID)
     case updateTask(UUID)
+    case deleteTask(UUID)
     case createShoppingItem(UUID)
     case updateShoppingItem(UUID)
-    case createReminder(UUID)
     case createChatMessage(UUID)
     case resolveNinaProposal(UUID, NinaProposalDecision)
     case deleteNinaChatHistory(UUID)
@@ -1240,21 +1896,48 @@ private enum RecordedHomeMutation: Equatable {
 
 private struct NotificationSyncRecord {
     var tasks: [TaskItem]
-    var reminders: [ReminderItem]
     var familyID: UUID
 }
 
 private actor RecordingNotificationScheduler: HomeNotificationScheduling {
     private var syncRecords: [NotificationSyncRecord] = []
 
-    func synchronize(tasks: [TaskItem], reminders: [ReminderItem], familyID: UUID) async {
+    func synchronize(tasks: [TaskItem], familyID: UUID) async {
         syncRecords.append(
             NotificationSyncRecord(
                 tasks: tasks,
-                reminders: reminders,
                 familyID: familyID
             )
         )
+    }
+
+    func records() -> [NotificationSyncRecord] {
+        syncRecords
+    }
+}
+
+private actor DelayedNotificationScheduler: HomeNotificationScheduling {
+    private var syncRecords: [NotificationSyncRecord] = []
+    private var didStartNonemptySync = false
+    private var nonemptySyncWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func synchronize(tasks: [TaskItem], familyID: UUID) async {
+        if tasks.isEmpty {
+            try? await Task.sleep(for: .milliseconds(5))
+        } else {
+            didStartNonemptySync = true
+            nonemptySyncWaiters.forEach { $0.resume() }
+            nonemptySyncWaiters.removeAll()
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        syncRecords.append(NotificationSyncRecord(tasks: tasks, familyID: familyID))
+    }
+
+    func waitForNonemptySyncToStart() async {
+        guard !didStartNonemptySync else { return }
+        await withCheckedContinuation { continuation in
+            nonemptySyncWaiters.append(continuation)
+        }
     }
 
     func records() -> [NotificationSyncRecord] {
@@ -1322,6 +2005,10 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         mutations.append(.createTaskSection(section.id))
     }
 
+    func deleteTaskSection(_ sectionID: String, familyID: UUID) async throws {
+        mutations.append(.deleteTaskSection(sectionID))
+    }
+
     func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws {
         mutations.append(.createTaskCategory(category.id))
     }
@@ -1346,16 +2033,16 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         return .updated(task)
     }
 
+    func deleteTask(_ taskID: UUID, familyID: UUID) async throws {
+        mutations.append(.deleteTask(taskID))
+    }
+
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {
         mutations.append(.createShoppingItem(item.id))
     }
 
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {
         mutations.append(.updateShoppingItem(item.id))
-    }
-
-    func createReminder(_ reminder: ReminderItem, familyID: UUID, currentUser: AuthUser) async throws {
-        mutations.append(.createReminder(reminder.id))
     }
 
     func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {
@@ -1393,13 +2080,15 @@ private actor ControlledRefreshHomeBackend: RemoteHomeBackend {
     struct RefreshFailure: Error {}
 
     private let initialState: RemoteHomeState
+    private let controlsInitialLoad: Bool
     private var loadCount = 0
     private var refreshStarted = false
     private var refreshStartedContinuation: CheckedContinuation<Void, Never>?
     private var refreshContinuation: CheckedContinuation<RemoteHomeState?, Error>?
 
-    init(initialState: RemoteHomeState) {
+    init(initialState: RemoteHomeState, controlsInitialLoad: Bool = false) {
         self.initialState = initialState
+        self.controlsInitialLoad = controlsInitialLoad
     }
 
     func waitUntilRefreshStarted() async {
@@ -1421,7 +2110,9 @@ private actor ControlledRefreshHomeBackend: RemoteHomeBackend {
 
     func loadHome(for user: AuthUser) async throws -> RemoteHomeState? {
         loadCount += 1
-        guard loadCount > 1 else { return initialState }
+        if !controlsInitialLoad, loadCount == 1 {
+            return initialState
+        }
 
         refreshStarted = true
         refreshStartedContinuation?.resume()
@@ -1461,6 +2152,5 @@ private actor ControlledRefreshHomeBackend: RemoteHomeBackend {
     func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
-    func createReminder(_ reminder: ReminderItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {}
 }

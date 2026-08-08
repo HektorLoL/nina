@@ -200,7 +200,10 @@ struct HomeSetupView: View {
 
     private var joinHomeContent: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(title: "Entrar em uma casa", subtitle: "Use o código ou o link que alguém compartilhou com você.")
+            SectionTitle(
+                title: "Pedir entrada",
+                subtitle: "Use o código ou link; uma pessoa responsável aprova seu acesso."
+            )
 
             SoftCard(padding: 16) {
                 HomeSetupField(
@@ -241,7 +244,7 @@ struct HomeSetupView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            PrimaryCapsuleButton(title: "Entrar na casa", systemName: "person.2.fill") {
+            PrimaryCapsuleButton(title: "Pedir para entrar", systemName: "paperplane.fill") {
                 joinHome()
             }
             .disabled(!canJoinHome || store.isSyncingHome)

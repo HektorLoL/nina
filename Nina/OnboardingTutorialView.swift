@@ -204,7 +204,7 @@ private struct TutorialStep: Identifiable, Hashable {
             id: .today,
             eyebrow: "Hoje",
             title: "Veja o que importa agora",
-            message: "A tela Hoje destaca lembretes, sobrecarga e poucas tarefas para resolver sem ruído.",
+            message: "A tela Hoje reúne tudo que está para resolver, com horários e prioridades sem ruído.",
             systemImage: "sun.max.fill",
             tone: .amber
         ),
@@ -338,7 +338,7 @@ private struct OnboardingIllustration: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
                 MiniStat(title: "Abertas", value: "6", tone: .mint)
-                MiniStat(title: "Lembretes", value: "3", tone: .amber)
+                MiniStat(title: "Com horário", value: "3", tone: .amber)
                 MiniStat(title: "Compras", value: "8", tone: .sky)
             }
 

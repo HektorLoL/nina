@@ -11,6 +11,9 @@ struct NinaApp: App {
     @State private var inviteLinkStore = InviteLinkStore()
 
     init() {
+        try? PrivacyExportFileStore.removeAll()
+        OperationalDiagnostics.shared.start()
+
         let diagnostics = BackendDiagnosticsStore(environment: BackendServices.environment)
         _backendDiagnostics = State(initialValue: diagnostics)
         _store = State(

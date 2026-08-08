@@ -52,9 +52,11 @@ enum SheetDestination: Identifiable, Hashable {
     case addTask
     case addTaskInSection(String)
     case editTask(UUID)
+    case plantSeed(UUID)
     case addShoppingItem
     case editShoppingItem(UUID)
     case inviteFamily
+    case addMemberProfile
     case member(UUID)
     case suggestion(NinaSuggestion)
 
@@ -70,12 +72,16 @@ enum SheetDestination: Identifiable, Hashable {
             "add-task-\(sectionID)"
         case .editTask(let id):
             "edit-task-\(id.uuidString)"
+        case .plantSeed(let id):
+            "plant-seed-\(id.uuidString)"
         case .addShoppingItem:
             "add-shopping"
         case .editShoppingItem(let id):
             "edit-shopping-\(id.uuidString)"
         case .inviteFamily:
             "invite-family"
+        case .addMemberProfile:
+            "add-member-profile"
         case .member(let id):
             "member-\(id.uuidString)"
         case .suggestion(let suggestion):
@@ -130,6 +136,7 @@ private enum AppEntryPhase: Hashable {
     case tutorial
     case homeLoading
     case invite
+    case pendingApproval
     case homeSetup
     case homeUnavailable
     case app
@@ -219,6 +226,8 @@ struct AppRootView: View {
                 await profileStore.refreshProfile(for: authSession.currentUser)
                 await store.refreshHomeFromRemote(for: authSession.currentUser)
                 await premiumSubscriptionStore.configure(for: authSession.currentUser)
+                await store.refreshNotificationAuthorizationStatus()
+                store.synchronizeLocalNotifications()
             }
         }
         .task {
@@ -226,6 +235,7 @@ struct AppRootView: View {
             await profileStore.refreshProfile(for: authSession.currentUser)
             await premiumSubscriptionStore.configure(for: authSession.currentUser)
             await store.activateHomeContext(for: authSession.currentUser)
+            await store.refreshNotificationAuthorizationStatus()
             didFinishInitialLoad = true
             await Task.yield()
             guard !Task.isCancelled else { return }
@@ -288,6 +298,8 @@ struct AppRootView: View {
             return .homeLoading
         case .noHome:
             return .homeSetup
+        case .pendingApproval:
+            return .pendingApproval
         case .unavailable:
             return .homeUnavailable
         case .authorized:
@@ -309,6 +321,9 @@ struct AppRootView: View {
                 .transition(.opacity)
         case .invite:
             InviteAcceptanceView()
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+        case .pendingApproval:
+            PendingHomeApprovalView()
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
         case .homeSetup:
             HomeSetupView()
@@ -1119,14 +1134,18 @@ private struct SheetDestinationsModifier: ViewModifier {
                     TaskEditorSheet(mode: .add(sectionID: sectionID))
                 case .editTask(let id):
                     TaskEditorSheet(mode: .edit(id))
+                case .plantSeed(let id):
+                    TaskEditorSheet(mode: .plant(id))
                 case .addShoppingItem:
                     ShoppingEditorSheet(mode: .add)
                 case .editShoppingItem(let id):
                     ShoppingEditorSheet(mode: .edit(id))
                 case .inviteFamily:
                     InviteFamilySheet()
+                case .addMemberProfile:
+                    MemberEditorSheet(mode: .addProfile)
                 case .member(let id):
-                    MemberDetailSheet(memberID: id)
+                    MemberEditorSheet(mode: .edit(id))
                 case .suggestion(let suggestion):
                     SuggestionDetailSheet(suggestion: suggestion)
                 }

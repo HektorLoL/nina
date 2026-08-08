@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(39);
 
 insert into auth.users (
   id,
@@ -235,9 +235,33 @@ set local role authenticated;
 set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000002';
 
 select lives_ok(
-  $$select public.join_family_by_invite(current_setting('test.invite_code'))$$,
-  'another authenticated user can join by invite'
+  $$select public.request_family_join(current_setting('test.invite_code'))$$,
+  'another authenticated user can request access by invite'
 );
+
+select set_config(
+  'test.join_request_id',
+  public.get_pending_family_join_request() ->> 'id',
+  true
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
+
+select lives_ok(
+  $$
+    select public.approve_family_join_request(
+      current_setting('test.join_request_id')::uuid,
+      'member'
+    )
+  $$,
+  'a family manager can approve the pending request'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000002';
 
 select is(
   (

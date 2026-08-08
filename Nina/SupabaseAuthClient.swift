@@ -220,7 +220,9 @@ private struct EnsureProfileParams: Encodable {
     }
 }
 
-private struct DeleteAccountRequest: Encodable {}
+struct DeleteAccountRequest: Encodable {
+    let confirmation = "delete"
+}
 
 private struct DeleteAccountResponse: Decodable {
     var deleted: Bool

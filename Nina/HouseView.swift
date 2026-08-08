@@ -2,7 +2,9 @@ import SwiftUI
 
 struct HouseView: View {
     @Environment(AppStore.self) private var store
+    @Environment(AuthSessionStore.self) private var authSession
     @Environment(RouterPath.self) private var router
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isEditingHouse = false
     @State private var draftHouseName = ""
     @State private var isHouseDraftValid = true
@@ -14,11 +16,17 @@ struct HouseView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 houseHeader
+                if let error = store.syncErrorMessage {
+                    syncErrorBanner(error)
+                }
                 if isEditingHouse {
                     houseEditSection
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                inviteSecuritySection
+                if store.canManageFamily {
+                    inviteSecuritySection
+                    pendingRequestsSection
+                }
                 membersSection
                 memorySection
                 insightsSection
@@ -27,10 +35,16 @@ struct HouseView: View {
             .padding(.bottom, 104)
         }
         .scrollDismissesKeyboard(.interactively)
+        .refreshable {
+            await store.refreshHomeFromRemote(for: authSession.currentUser)
+        }
         .ninaScreenBackground()
         .navigationTitle("Casa")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: syncHouseDrafts)
+        .task {
+            await store.refreshHomeFromRemote(for: authSession.currentUser)
+        }
         .onChange(of: draftHouseName) { _, _ in
             validateDrafts()
         }
@@ -79,16 +93,55 @@ struct HouseView: View {
             }
 
             HStack(spacing: 10) {
-                PrimaryCapsuleButton(title: "Convidar família", systemName: "link") {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .inviteFamily
-                }
-
                 if store.canManageFamily {
+                    PrimaryCapsuleButton(title: "Convidar família", systemName: "link") {
+                        Haptics.lightImpact()
+                        router.presentedSheet = .inviteFamily
+                    }
+
                     CircleEditButton(isActive: isEditingHouse) {
                         toggleHouseEditor()
                     }
+                } else {
+                    Label(store.currentPermissionRole.summary, systemImage: store.currentPermissionRole.symbolName)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+        }
+    }
+
+    private func syncErrorBanner(_ message: String) -> some View {
+        SoftCard(padding: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                IconBubble(systemName: "exclamationmark.triangle.fill", tone: .coral, size: 40)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Não foi possível concluir")
+                        .font(.subheadline.weight(.black))
+                        .foregroundStyle(NinaTheme.ink)
+
+                    Text(message)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button {
+                    Task {
+                        await store.refreshHomeFromRemote(for: authSession.currentUser)
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.subheadline.weight(.black))
+                        .foregroundStyle(NinaTheme.coral)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Atualizar casa")
+                .disabled(store.isSyncingHome)
             }
         }
     }
@@ -145,14 +198,14 @@ struct HouseView: View {
                 IconBubble(systemName: "link", tone: .sky, size: 42)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.familyGroup.inviteCode)
+                    Text(store.inviteStatus?.code ?? store.familyGroup.inviteCode)
                         .font(.subheadline.weight(.black))
                         .foregroundStyle(NinaTheme.ink)
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                         .textSelection(.enabled)
 
-                    Text("Só quem recebe este link consegue pedir entrada.")
+                    Text(inviteStatusSummary)
                         .font(.caption.weight(.bold))
                         .foregroundStyle(NinaTheme.muted)
                 }
@@ -180,9 +233,28 @@ struct HouseView: View {
 
     private var membersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionTitle(title: "Participantes", subtitle: "Limite: 8 pessoas na casa. A Nina não ocupa vaga.")
+            HStack(alignment: .top, spacing: 12) {
+                SectionTitle(title: "Participantes", subtitle: "Limite: 8 pessoas na casa. A Nina não ocupa vaga.")
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                Spacer()
+
+                if store.canManageFamily, store.canInviteMorePeople {
+                    Button {
+                        Haptics.lightImpact()
+                        router.presentedSheet = .addMemberProfile
+                    } label: {
+                        Image(systemName: "person.crop.circle.badge.plus")
+                            .font(.title3.weight(.black))
+                            .foregroundStyle(NinaTheme.mint)
+                            .frame(width: 42, height: 42)
+                            .background(NinaTheme.mint.opacity(0.12), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Adicionar perfil de criança ou pet")
+                }
+            }
+
+            LazyVGrid(columns: memberColumns, spacing: 12) {
                 ForEach(store.familyGroup.members) { member in
                     Button {
                         Haptics.lightImpact()
@@ -209,12 +281,47 @@ struct HouseView: View {
                             Text("\(member.taskCount) tarefas")
                                 .font(.caption.weight(.heavy))
                                 .foregroundStyle(NinaTheme.muted)
+
+                            MemberPermissionBadge(member: member)
                         }
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    private var memberColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible())]
+        }
+
+        return [GridItem(.adaptive(minimum: 150), spacing: 12)]
+    }
+
+    @ViewBuilder
+    private var pendingRequestsSection: some View {
+        if !store.joinRequests.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionTitle(
+                    title: "Pedidos de entrada",
+                    subtitle: "\(store.joinRequests.count) aguardando sua decisão."
+                )
+
+                ForEach(store.joinRequests) { request in
+                    PendingJoinRequestCard(request: request)
+                }
+            }
+        }
+    }
+
+    private var inviteStatusSummary: String {
+        guard let invite = store.inviteStatus else {
+            return "Só quem recebe este link consegue pedir entrada."
+        }
+
+        let expiration = invite.expiresAt.formatted(date: .abbreviated, time: .omitted)
+        return "\(invite.status.title) · \(invite.usesRemaining) usos restantes · expira em \(expiration)"
     }
 
     private var memorySection: some View {

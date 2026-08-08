@@ -6,7 +6,8 @@ export default defineConfig({
   site: "https://ninai.app",
   integrations: [
     sitemap({
-      filter: (page) => !page.includes("/join/"),
+      filter: (page) =>
+        !page.includes("/join/") && !page.includes("/unsubscribe/"),
     }),
     icon(),
   ],

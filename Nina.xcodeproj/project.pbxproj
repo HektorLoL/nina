@@ -35,10 +35,15 @@
 		B00000000000000000000026 /* PremiumSubscriptionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000024 /* PremiumSubscriptionStore.swift */; };
 		B00000000000000000000027 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000025 /* PrivacyInfo.xcprivacy */; };
 		B00000000000000000000028 /* LocalNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000026 /* LocalNotifications.swift */; };
+		B00000000000000000000029 /* MemberManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000027 /* MemberManagementView.swift */; };
 		B00000000000000000000030 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = C00000000000000000000002 /* Supabase */; };
+		B00000000000000000000031 /* OperationalDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000028 /* OperationalDiagnostics.swift */; };
+		B00000000000000000000032 /* PrivateLocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000029 /* PrivateLocalDataStore.swift */; };
 		D00000000000000000000001 /* AuthSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000001 /* AuthSessionTests.swift */; };
 		D00000000000000000000002 /* AppStoreAuthorizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000002 /* AppStoreAuthorizationTests.swift */; };
 		D00000000000000000000003 /* InviteLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000003 /* InviteLinkTests.swift */; };
+		D00000000000000000000005 /* BackendConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000004 /* BackendConfigurationTests.swift */; };
+		D00000000000000000000006 /* PrivateLocalDataStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000005 /* PrivateLocalDataStoreTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -84,10 +89,15 @@
 		F00000000000000000000024 /* PremiumSubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumSubscriptionStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000025 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F00000000000000000000026 /* LocalNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotifications.swift; sourceTree = "<group>"; };
+		F00000000000000000000027 /* MemberManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberManagementView.swift; sourceTree = "<group>"; };
+		F00000000000000000000028 /* OperationalDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationalDiagnostics.swift; sourceTree = "<group>"; };
+		F00000000000000000000029 /* PrivateLocalDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateLocalDataStore.swift; sourceTree = "<group>"; };
 		F00000000000000000000030 /* Nina.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Nina.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E00000000000000000000001 /* AuthSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionTests.swift; sourceTree = "<group>"; };
 		E00000000000000000000002 /* AppStoreAuthorizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreAuthorizationTests.swift; sourceTree = "<group>"; };
 		E00000000000000000000003 /* InviteLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteLinkTests.swift; sourceTree = "<group>"; };
+		E00000000000000000000004 /* BackendConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendConfigurationTests.swift; sourceTree = "<group>"; };
+		E00000000000000000000005 /* PrivateLocalDataStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateLocalDataStoreTests.swift; sourceTree = "<group>"; };
 		E00000000000000000000030 /* NinaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NinaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -148,6 +158,9 @@
 				F00000000000000000000023 /* InviteLinks.swift */,
 				F00000000000000000000024 /* PremiumSubscriptionStore.swift */,
 				F00000000000000000000026 /* LocalNotifications.swift */,
+				F00000000000000000000027 /* MemberManagementView.swift */,
+				F00000000000000000000028 /* OperationalDiagnostics.swift */,
+				F00000000000000000000029 /* PrivateLocalDataStore.swift */,
 				F00000000000000000000018 /* Nina.xcconfig */,
 				F00000000000000000000019 /* SupabaseSecrets.xcconfig.example */,
 				F00000000000000000000021 /* Info.plist */,
@@ -173,6 +186,8 @@
 				E00000000000000000000001 /* AuthSessionTests.swift */,
 				E00000000000000000000002 /* AppStoreAuthorizationTests.swift */,
 				E00000000000000000000003 /* InviteLinkTests.swift */,
+				E00000000000000000000004 /* BackendConfigurationTests.swift */,
+				E00000000000000000000005 /* PrivateLocalDataStoreTests.swift */,
 			);
 			path = NinaTests;
 			sourceTree = "<group>";
@@ -317,6 +332,9 @@
 				B00000000000000000000025 /* InviteLinks.swift in Sources */,
 				B00000000000000000000026 /* PremiumSubscriptionStore.swift in Sources */,
 				B00000000000000000000028 /* LocalNotifications.swift in Sources */,
+				B00000000000000000000029 /* MemberManagementView.swift in Sources */,
+				B00000000000000000000031 /* OperationalDiagnostics.swift in Sources */,
+				B00000000000000000000032 /* PrivateLocalDataStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -327,6 +345,8 @@
 				D00000000000000000000001 /* AuthSessionTests.swift in Sources */,
 				D00000000000000000000002 /* AppStoreAuthorizationTests.swift in Sources */,
 				D00000000000000000000003 /* InviteLinkTests.swift in Sources */,
+				D00000000000000000000005 /* BackendConfigurationTests.swift in Sources */,
+				D00000000000000000000006 /* PrivateLocalDataStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

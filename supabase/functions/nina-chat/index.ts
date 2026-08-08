@@ -47,7 +47,7 @@ const readOnlyTools = [
     type: "function",
     name: "search_tasks",
     description:
-      "Search household tasks. Read-only. Use when the current context does not contain enough task detail.",
+      "Search household tasks, schedules, reminders, appointments, and recurring obligations. Read-only.",
     strict: true,
     parameters: {
       type: "object",
@@ -56,21 +56,6 @@ const readOnlyTools = [
         include_completed: { type: "boolean" },
       },
       required: ["query", "include_completed"],
-      additionalProperties: false,
-    },
-  },
-  {
-    type: "function",
-    name: "search_reminders",
-    description:
-      "Search household reminders. Read-only. Use for dates, appointments, and recurring obligations.",
-    strict: true,
-    parameters: {
-      type: "object",
-      properties: {
-        query: { type: "string" },
-      },
-      required: ["query"],
       additionalProperties: false,
     },
   },
@@ -277,7 +262,9 @@ async function runReadOnlyTool(
     case "search_tasks": {
       let request = client
         .from("tasks")
-        .select("id,title,subtitle,owner_label,due_label,due_at,category_id,priority,is_done")
+        .select(
+          "id,title,subtitle,owner_label,due_label,due_at,category_id,priority,recurrence_rule,snoozed_until,is_done",
+        )
         .eq("family_id", familyID)
         .limit(50);
       if (args.include_completed !== true) request = request.eq("is_done", false);
@@ -286,17 +273,6 @@ async function runReadOnlyTool(
         .filter((row) => matchesSearch(row, query, ["title", "subtitle"]))
         .slice(0, 12);
       return error ? { error: "tool_unavailable" } : { tasks };
-    }
-    case "search_reminders": {
-      const { data, error } = await client
-        .from("reminders")
-        .select("id,title,detail,date_label,due_at,symbol_name")
-        .eq("family_id", familyID)
-        .limit(50);
-      const reminders = (data ?? [])
-        .filter((row) => matchesSearch(row, query, ["title", "detail"]))
-        .slice(0, 12);
-      return error ? { error: "tool_unavailable" } : { reminders };
     }
     case "search_shopping": {
       let request = client

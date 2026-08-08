@@ -273,18 +273,18 @@ struct MockNinaEngine: NinaEngine {
         }
 
         return NinaEngineResponse(
-            reply: "Anotei. Posso transformar isso em tarefa, lembrete ou só guardar como memória da casa quando fizer sentido.",
+            reply: "Anotei. Como ainda não há uma data clara, posso guardar isso como semente e vocês decidem quando plantar.",
             suggestion: NinaSuggestion(
-                title: "Guardar como tarefa",
-                detail: "Transformar sua mensagem em uma tarefa simples para a casa.",
-                actionTitle: "Criar tarefa",
-                kind: .task,
+                title: "Guardar como semente",
+                detail: "Manter essa intenção visível sem escolher uma data agora.",
+                actionTitle: "Guardar semente",
+                kind: .seed,
                 payloadTitle: text,
-                payloadDetail: "Criado a partir da conversa com a Nina.",
+                payloadDetail: "Intenção guardada a partir da conversa com a Nina.",
                 payloadOwner: "Casa",
                 payloadDueLabel: "Sem data",
                 category: .home,
-                symbolName: "checklist"
+                symbolName: "leaf.fill"
             )
         )
     }

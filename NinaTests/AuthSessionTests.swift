@@ -1,4 +1,5 @@
 import AuthenticationServices
+import Foundation
 import XCTest
 @testable import Nina
 
@@ -144,6 +145,37 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertNil(store.currentUser)
         XCTAssertNil(store.pendingLoginEmail)
         XCTAssertNil(store.pendingEmailChange)
+    }
+
+    func testDeleteAccountRequestCarriesExplicitDestructiveConfirmation() throws {
+        let data = try JSONEncoder().encode(DeleteAccountRequest())
+        let payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: String]
+        )
+
+        XCTAssertEqual(payload, ["confirmation": "delete"])
+    }
+
+    @MainActor
+    func testClearingDeletedAccountAlsoRemovesOnboardingMarker() throws {
+        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let user = AuthUser(
+            id: UUID().uuidString,
+            displayName: "Deleted",
+            email: "deleted@example.com",
+            provider: .apple
+        )
+        let store = OnboardingStore(defaults: defaults)
+        store.completeTutorial(for: user)
+        XCTAssertTrue(store.hasCompletedTutorial(for: user))
+
+        store.clearLocalData(for: user.id)
+
+        XCTAssertFalse(store.hasCompletedTutorial(for: user))
+        XCTAssertNil(defaults.object(forKey: "nina.onboarding.completed.\(user.id)"))
+        XCTAssertFalse(store.isReplayingTutorial)
     }
 
     func testProviderResolverPrefersAppleForRestoredLinkedIdentity() {

@@ -305,3 +305,21 @@ Deno.test("production function keeps moderation, timeouts, and content-free logs
     assertFalse(logBody.includes("structured.reply"));
   }
 });
+
+Deno.test("maintenance always runs retention and surfaces cleanup failures", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-maintenance/index.ts", import.meta.url),
+  );
+  assertStringIncludes(
+    source,
+    "retentionError || waitlistRetentionError ? 503 : 200",
+  );
+  assert(
+    source.indexOf('"run_nina_retention"') <
+      source.indexOf("if (!openAIKey)"),
+  );
+  assert(
+    source.indexOf('"run_waitlist_retention"') <
+      source.indexOf("if (!openAIKey)"),
+  );
+});

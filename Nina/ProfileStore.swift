@@ -407,13 +407,17 @@ final class ProfileStore {
     var photoVersions: [String: Int] = [:]
 
     @ObservationIgnored private var defaults: UserDefaults
+    @ObservationIgnored private let privateDataStore: any PrivateLocalDataStoring
     @ObservationIgnored private let remoteProfileBackend: (any RemoteProfileBackend)?
+    @ObservationIgnored private var localDataGenerations: [String: UInt64] = [:]
 
     init(
         defaults: UserDefaults = .standard,
+        privateDataStore: any PrivateLocalDataStoring = ProtectedLocalDataStore.shared,
         remoteProfileBackend: (any RemoteProfileBackend)? = BackendServices.makeRemoteProfileBackend()
     ) {
         self.defaults = defaults
+        self.privateDataStore = privateDataStore
         self.remoteProfileBackend = remoteProfileBackend
     }
 
@@ -429,6 +433,7 @@ final class ProfileStore {
 
     func refreshProfile(for user: AuthUser?) async {
         guard let user else { return }
+        let generation = localDataGeneration(for: user.id)
 
         #if DEBUG
         if user.isDebugAccount {
@@ -441,39 +446,47 @@ final class ProfileStore {
 
         do {
             if let remoteProfile = try await remoteProfileBackend.loadProfile(for: user) {
+                guard isCurrentLocalDataGeneration(generation, for: user.id) else { return }
                 profiles[user.id] = remoteProfile
                 persistProfileLocally(remoteProfile)
 
                 if remoteProfile.avatar.kind == .photo {
                     do {
                         let downloadedData = try await remoteProfileBackend.loadPhotoData(for: user.id)
+                        guard isCurrentLocalDataGeneration(generation, for: user.id) else { return }
                         let photoData = try ProfilePhotoPolicy.prepareForStorage(downloadedData)
-                        defaults.set(photoData, forKey: Self.photoKey(for: user.id))
+                        try persistPhotoLocally(photoData, for: user.id)
                         photoVersions[user.id, default: 0] += 1
 
                         if photoData != downloadedData {
                             try? await remoteProfileBackend.savePhotoData(photoData, for: user.id)
+                            guard isCurrentLocalDataGeneration(generation, for: user.id) else { return }
                         }
                     } catch {
-                        if let cachedPhoto = defaults.data(forKey: Self.photoKey(for: user.id)),
+                        guard isCurrentLocalDataGeneration(generation, for: user.id) else { return }
+                        if let cachedPhoto = cachedPhotoData(for: user.id),
                            let preparedPhoto = try? ProfilePhotoPolicy.prepareForStorage(cachedPhoto) {
-                            defaults.set(preparedPhoto, forKey: Self.photoKey(for: user.id))
+                            try? persistPhotoLocally(preparedPhoto, for: user.id)
                             try? await remoteProfileBackend.savePhotoData(preparedPhoto, for: user.id)
+                            guard isCurrentLocalDataGeneration(generation, for: user.id) else { return }
                         }
                     }
                 } else {
-                    defaults.removeObject(forKey: Self.photoKey(for: user.id))
+                    removeLocalPhotoData(for: user.id)
                     photoVersions[user.id, default: 0] += 1
                 }
             } else {
+                guard isCurrentLocalDataGeneration(generation, for: user.id) else { return }
                 let localProfile = profile(for: user)
                 try await remoteProfileBackend.saveProfile(localProfile, user: user)
+                guard isCurrentLocalDataGeneration(generation, for: user.id) else { return }
 
                 if localProfile.avatar.kind == .photo,
-                   let cachedPhoto = defaults.data(forKey: Self.photoKey(for: user.id)),
+                   let cachedPhoto = cachedPhotoData(for: user.id),
                    let preparedPhoto = try? ProfilePhotoPolicy.prepareForStorage(cachedPhoto) {
-                    defaults.set(preparedPhoto, forKey: Self.photoKey(for: user.id))
+                    try? persistPhotoLocally(preparedPhoto, for: user.id)
                     try? await remoteProfileBackend.savePhotoData(preparedPhoto, for: user.id)
+                    guard isCurrentLocalDataGeneration(generation, for: user.id) else { return }
                 }
             }
         } catch {
@@ -496,7 +509,7 @@ final class ProfileStore {
 
     func savePhotoData(_ data: Data, for userID: String) throws {
         let preparedData = try ProfilePhotoPolicy.prepareForStorage(data)
-        defaults.set(preparedData, forKey: Self.photoKey(for: userID))
+        try persistPhotoLocally(preparedData, for: userID)
         photoVersions[userID, default: 0] += 1
 
         guard !AuthUser.isDebugAccountID(userID) else { return }
@@ -511,11 +524,11 @@ final class ProfileStore {
     func photoData(for profile: UserProfile) -> Data? {
         guard profile.avatar.kind == .photo else { return nil }
         _ = photoVersions[profile.userID, default: 0]
-        return defaults.data(forKey: Self.photoKey(for: profile.userID))
+        return cachedPhotoData(for: profile.userID)
     }
 
     func deleteLocalPhoto(for userID: String) {
-        defaults.removeObject(forKey: Self.photoKey(for: userID))
+        removeLocalPhotoData(for: userID)
         photoVersions[userID, default: 0] += 1
 
         guard !AuthUser.isDebugAccountID(userID) else { return }
@@ -527,14 +540,73 @@ final class ProfileStore {
         }
     }
 
+    func clearLocalData(for userID: String) {
+        localDataGenerations[userID, default: 0] &+= 1
+        profiles.removeValue(forKey: userID)
+        photoVersions.removeValue(forKey: userID)
+        PrivateLocalDataAccess.removeAllData(
+            forOwnerScope: PrivateLocalDataScope.profile(for: userID),
+            store: privateDataStore
+        )
+        defaults.removeObject(forKey: Self.profileKey(for: userID))
+        defaults.removeObject(forKey: Self.photoKey(for: userID))
+    }
+
+    private func localDataGeneration(for userID: String) -> UInt64 {
+        localDataGenerations[userID, default: 0]
+    }
+
+    private func isCurrentLocalDataGeneration(_ generation: UInt64, for userID: String) -> Bool {
+        localDataGeneration(for: userID) == generation
+    }
+
     private func loadProfile(for userID: String) -> UserProfile? {
-        guard let data = defaults.data(forKey: Self.profileKey(for: userID)) else { return nil }
+        guard let data = PrivateLocalDataAccess.loadData(
+            forKey: Self.profileKey(for: userID),
+            ownerScope: PrivateLocalDataScope.profile(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        ) else { return nil }
         return try? JSONDecoder().decode(UserProfile.self, from: data)
     }
 
     private func persistProfileLocally(_ profile: UserProfile) {
         guard let data = try? JSONEncoder().encode(profile) else { return }
-        defaults.set(data, forKey: Self.profileKey(for: profile.userID))
+        PrivateLocalDataAccess.writeDataBestEffort(
+            data,
+            forKey: Self.profileKey(for: profile.userID),
+            ownerScope: PrivateLocalDataScope.profile(for: profile.userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
+    }
+
+    private func cachedPhotoData(for userID: String) -> Data? {
+        PrivateLocalDataAccess.loadData(
+            forKey: Self.photoKey(for: userID),
+            ownerScope: PrivateLocalDataScope.profile(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
+    }
+
+    private func persistPhotoLocally(_ data: Data, for userID: String) throws {
+        try PrivateLocalDataAccess.writeData(
+            data,
+            forKey: Self.photoKey(for: userID),
+            ownerScope: PrivateLocalDataScope.profile(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
+    }
+
+    private func removeLocalPhotoData(for userID: String) {
+        PrivateLocalDataAccess.removeData(
+            forKey: Self.photoKey(for: userID),
+            ownerScope: PrivateLocalDataScope.profile(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
     }
 
     private static func profileKey(for userID: String) -> String {

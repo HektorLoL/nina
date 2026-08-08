@@ -596,6 +596,12 @@ final class OnboardingStore {
         isReplayingTutorial = false
     }
 
+    func clearLocalData(for userID: String) {
+        completedTutorialUserIDs.remove(userID)
+        defaults.removeObject(forKey: Self.completedKey(for: userID))
+        isReplayingTutorial = false
+    }
+
     private static func completedKey(for userID: String) -> String {
         "nina.onboarding.completed.\(userID)"
     }

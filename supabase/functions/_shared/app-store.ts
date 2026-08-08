@@ -37,6 +37,11 @@ const appleRootCertificateURLs = [
   "https://www.apple.com/certificateauthority/AppleRootCA-G2.cer",
   "https://www.apple.com/certificateauthority/AppleRootCA-G3.cer",
 ];
+export const maxAppStoreRequestBytes = 300 * 1_024;
+const maxSignedPayloadCharacters = 256 * 1_024;
+const maxRootCertificateBytes = 64 * 1_024;
+const rootCertificateTimeoutMilliseconds = 5_000;
+const appStoreVerificationTimeoutMilliseconds = 12_000;
 
 let rootCertificatesPromise: Promise<Buffer[]> | undefined;
 
@@ -54,11 +59,75 @@ export function appBundleID(): string {
   return Deno.env.get("NINA_APP_BUNDLE_ID")?.trim() || defaultBundleID;
 }
 
-export function jsonResponse(body: unknown, status = 200): Response {
+export function jsonResponse(
+  body: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+): Response {
   return Response.json(body, {
     status,
-    headers: { "Cache-Control": "no-store" },
+    headers: {
+      "Cache-Control": "no-store",
+      ...headers,
+    },
   });
+}
+
+export type AppStoreJSONRequestResult =
+  | { ok: true; value: unknown }
+  | { ok: false; response: Response };
+
+export async function readAppStoreJSONRequest(
+  request: Request,
+): Promise<AppStoreJSONRequestResult> {
+  const contentType = request.headers.get("Content-Type")?.split(";", 1)[0]
+    ?.trim().toLowerCase();
+  if (contentType !== "application/json") {
+    return {
+      ok: false,
+      response: jsonResponse({ error: "content_type_required" }, 415),
+    };
+  }
+
+  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
+  if (
+    Number.isFinite(declaredLength) &&
+    declaredLength > maxAppStoreRequestBytes
+  ) {
+    return {
+      ok: false,
+      response: jsonResponse({ error: "request_too_large" }, 413),
+    };
+  }
+
+  let rawBody: string | null;
+  try {
+    rawBody = await readBoundedRequestBody(
+      request,
+      maxAppStoreRequestBytes,
+    );
+  } catch {
+    return {
+      ok: false,
+      response: jsonResponse({ error: "invalid_json" }, 400),
+    };
+  }
+
+  if (rawBody === null) {
+    return {
+      ok: false,
+      response: jsonResponse({ error: "request_too_large" }, 413),
+    };
+  }
+
+  try {
+    return { ok: true, value: JSON.parse(rawBody) };
+  } catch {
+    return {
+      ok: false,
+      response: jsonResponse({ error: "invalid_json" }, 400),
+    };
+  }
 }
 
 export function parseConfiguredKey(variable: string, fallback: string): string {
@@ -88,9 +157,14 @@ export function isPremiumSyncRequest(value: unknown): value is {
 } {
   if (!value || typeof value !== "object") return false;
   const body = value as Record<string, unknown>;
-  return typeof body.signed_transaction_info === "string" &&
-    body.signed_transaction_info.split(".").length === 3 &&
-    (body.source === undefined || typeof body.source === "string");
+  return isCompactJWS(body.signed_transaction_info) &&
+    (
+      body.source === undefined ||
+      (
+        typeof body.source === "string" &&
+        /^[a-z0-9_-]{1,80}$/.test(body.source)
+      )
+    );
 }
 
 export function isAppStoreNotificationRequest(value: unknown): value is {
@@ -98,13 +172,18 @@ export function isAppStoreNotificationRequest(value: unknown): value is {
 } {
   if (!value || typeof value !== "object") return false;
   const body = value as Record<string, unknown>;
-  return typeof body.signedPayload === "string" &&
-    body.signedPayload.split(".").length === 3;
+  return isCompactJWS(body.signedPayload);
 }
 
 export function mapAppleSubscriptionStatus(
-  transaction: Pick<JWSTransactionDecodedPayload, "expiresDate" | "revocationDate">,
-  renewal?: Pick<JWSRenewalInfoDecodedPayload, "gracePeriodExpiresDate" | "isInBillingRetryPeriod">,
+  transaction: Pick<
+    JWSTransactionDecodedPayload,
+    "expiresDate" | "revocationDate"
+  >,
+  renewal?: Pick<
+    JWSRenewalInfoDecodedPayload,
+    "gracePeriodExpiresDate" | "isInBillingRetryPeriod"
+  >,
   appleStatus?: number,
   now = Date.now(),
 ): PremiumSubscriptionStatus {
@@ -207,7 +286,10 @@ export function assertTransactionMatchesNina(
     throw new Error("invalid_bundle_id");
   }
 
-  if (!transaction.productId || !allowedPremiumProductIDs().includes(transaction.productId)) {
+  if (
+    !transaction.productId ||
+    !allowedPremiumProductIDs().includes(transaction.productId)
+  ) {
     throw new Error("invalid_product_id");
   }
 
@@ -243,13 +325,19 @@ export function buildSubscriptionUpsert(
     app_account_token: isUUID(params.transaction.appAccountToken)
       ? params.transaction.appAccountToken
       : null,
-    product_id: requiredString(params.transaction.productId, "missing_product_id"),
-    environment: stringOrNull(params.transaction.environment)
-      ?? stringOrNull(params.notification?.data?.environment)
-      ?? "Unknown",
+    product_id: requiredString(
+      params.transaction.productId,
+      "missing_product_id",
+    ),
+    environment: stringOrNull(params.transaction.environment) ??
+      stringOrNull(params.notification?.data?.environment) ??
+      "Unknown",
     status,
     is_active: status === "active" || status === "grace_period",
-    transaction_id: requiredString(params.transaction.transactionId, "missing_transaction_id"),
+    transaction_id: requiredString(
+      params.transaction.transactionId,
+      "missing_transaction_id",
+    ),
     web_order_line_item_id: stringOrNull(params.transaction.webOrderLineItemId),
     purchased_at: isoDate(params.transaction.purchaseDate),
     original_purchase_at: isoDate(params.transaction.originalPurchaseDate),
@@ -275,9 +363,13 @@ export function buildSubscriptionUpsert(
     signed_renewal_info: params.signedRenewalInfo ?? null,
     raw_transaction: params.transaction,
     raw_renewal_info: params.renewal ?? {},
-    latest_notification_type: stringOrNull(params.notification?.notificationType),
+    latest_notification_type: stringOrNull(
+      params.notification?.notificationType,
+    ),
     latest_notification_subtype: stringOrNull(params.notification?.subtype),
-    latest_notification_uuid: stringOrNull(params.notification?.notificationUUID),
+    latest_notification_uuid: stringOrNull(
+      params.notification?.notificationUUID,
+    ),
     last_verified_at: now,
   };
 }
@@ -291,7 +383,10 @@ export function buildTransactionLedgerUpsert(
   },
 ): Record<string, unknown> {
   return {
-    transaction_id: requiredString(params.transaction.transactionId, "missing_transaction_id"),
+    transaction_id: requiredString(
+      params.transaction.transactionId,
+      "missing_transaction_id",
+    ),
     original_transaction_id: requiredString(
       params.transaction.originalTransactionId,
       "missing_original_transaction_id",
@@ -300,7 +395,10 @@ export function buildTransactionLedgerUpsert(
     app_account_token: isUUID(params.transaction.appAccountToken)
       ? params.transaction.appAccountToken
       : null,
-    product_id: requiredString(params.transaction.productId, "missing_product_id"),
+    product_id: requiredString(
+      params.transaction.productId,
+      "missing_product_id",
+    ),
     environment: stringOrNull(params.transaction.environment) ?? "Unknown",
     product_type: stringOrNull(params.transaction.type),
     ownership_type: stringOrNull(params.transaction.inAppOwnershipType),
@@ -313,9 +411,9 @@ export function buildTransactionLedgerUpsert(
   };
 }
 
-function configuredEnvironment(): Environment | null {
-  const value = Deno.env.get("NINA_APP_STORE_ENVIRONMENT")?.trim().toLowerCase();
-  switch (value) {
+function configuredEnvironment(value: string): Environment | null {
+  const normalized = value.trim().toLowerCase();
+  switch (normalized) {
     case "production":
       return Environment.PRODUCTION;
     case "sandbox":
@@ -350,41 +448,67 @@ async function verifyWithCandidates<T>(
   operation: (verifier: SignedDataVerifier) => Promise<T>,
 ): Promise<T> {
   let lastError: unknown;
-  for (const environment of candidateEnvironments(preferredEnvironment)) {
+  for (
+    const environment of appStoreVerificationEnvironments(
+      Deno.env.get("NINA_APP_STORE_ENVIRONMENT"),
+      preferredEnvironment,
+    )
+  ) {
     try {
-      return await operation(await verifierFor(environment));
+      return await withTimeout(
+        (async () => await operation(await verifierFor(environment)))(),
+        appStoreVerificationTimeoutMilliseconds,
+        "app_store_verification_timeout",
+      );
     } catch (error) {
       lastError = error;
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error("app_store_verification_failed");
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("app_store_verification_failed");
 }
 
-function candidateEnvironments(preferredEnvironment?: string): Environment[] {
-  const configured = configuredEnvironment();
-  if (configured) return [configured];
+export function appStoreVerificationEnvironments(
+  configuredValue?: string,
+  preferredEnvironment?: string,
+): Environment[] {
+  const configuredText = configuredValue?.trim() ?? "";
+  if (configuredText) {
+    const configured = configuredEnvironment(configuredText);
+    if (!configured) throw new Error("invalid_app_store_environment");
+    return [configured];
+  }
 
   const preferred = environmentFromString(preferredEnvironment);
+  const publicPreferred = preferred === Environment.PRODUCTION ||
+      preferred === Environment.SANDBOX
+    ? preferred
+    : null;
   const candidates = [
-    preferred,
-    Environment.XCODE,
-    Environment.SANDBOX,
+    publicPreferred,
     Environment.PRODUCTION,
-    Environment.LOCAL_TESTING,
+    Environment.SANDBOX,
   ].filter((environment): environment is Environment => environment != null);
 
   return Array.from(new Set(candidates));
 }
 
-async function verifierFor(environment: Environment): Promise<SignedDataVerifier> {
+async function verifierFor(
+  environment: Environment,
+): Promise<SignedDataVerifier> {
   const appAppleId = Number(Deno.env.get("NINA_APP_APPLE_ID") ?? "");
-  if (environment === Environment.PRODUCTION && (!Number.isFinite(appAppleId) || appAppleId <= 0)) {
+  if (
+    environment === Environment.PRODUCTION &&
+    (!Number.isFinite(appAppleId) || appAppleId <= 0)
+  ) {
     throw new Error("app_apple_id_required");
   }
 
   const enableOnlineChecks =
-    (Deno.env.get("NINA_APP_STORE_ONLINE_CHECKS") ?? "true").toLowerCase() !== "false";
+    (Deno.env.get("NINA_APP_STORE_ONLINE_CHECKS") ?? "true").toLowerCase() !==
+      "false";
 
   return new SignedDataVerifier(
     await loadAppleRootCertificates(),
@@ -396,16 +520,20 @@ async function verifierFor(environment: Environment): Promise<SignedDataVerifier
 }
 
 async function loadAppleRootCertificates(): Promise<Buffer[]> {
-  rootCertificatesPromise ??= loadConfiguredRootCertificates() ??
-    Promise.all(
-      appleRootCertificateURLs.map(async (url) => {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("apple_root_certificate_unavailable");
-        return Buffer.from(await response.arrayBuffer());
-      }),
-    );
+  if (rootCertificatesPromise) return await rootCertificatesPromise;
 
-  return await rootCertificatesPromise;
+  const pending = loadConfiguredRootCertificates() ??
+    Promise.all(appleRootCertificateURLs.map(fetchRootCertificate));
+  rootCertificatesPromise = pending;
+
+  try {
+    return await pending;
+  } catch (error) {
+    if (rootCertificatesPromise === pending) {
+      rootCertificatesPromise = undefined;
+    }
+    throw error;
+  }
 }
 
 function loadConfiguredRootCertificates(): Promise<Buffer[]> | undefined {
@@ -419,6 +547,110 @@ function loadConfiguredRootCertificates(): Promise<Buffer[]> | undefined {
 
   if (pemBlocks.length === 0) return undefined;
   return Promise.resolve(pemBlocks.map((pem) => Buffer.from(pem)));
+}
+
+async function fetchRootCertificate(url: string): Promise<Buffer> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      signal: AbortSignal.timeout(rootCertificateTimeoutMilliseconds),
+    });
+  } catch {
+    throw new Error("apple_root_certificate_unavailable");
+  }
+
+  const declaredLength = Number(response.headers.get("Content-Length") ?? "0");
+  if (
+    !response.ok ||
+    (
+      Number.isFinite(declaredLength) &&
+      declaredLength > maxRootCertificateBytes
+    )
+  ) {
+    throw new Error("apple_root_certificate_unavailable");
+  }
+
+  const certificate = await response.arrayBuffer();
+  if (
+    certificate.byteLength === 0 ||
+    certificate.byteLength > maxRootCertificateBytes
+  ) {
+    throw new Error("apple_root_certificate_unavailable");
+  }
+
+  return Buffer.from(certificate);
+}
+
+async function readBoundedRequestBody(
+  request: Request,
+  maximumBytes: number,
+): Promise<string | null> {
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    receivedBytes += value.byteLength;
+    if (receivedBytes > maximumBytes) {
+      try {
+        await reader.cancel();
+      } catch {
+        // The size result is authoritative even if the transport is already closed.
+      }
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(receivedBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new TextDecoder("utf-8", { fatal: true }).decode(body);
+}
+
+function isCompactJWS(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > maxSignedPayloadCharacters
+  ) {
+    return false;
+  }
+
+  const segments = value.split(".");
+  return segments.length === 3 &&
+    segments.every((segment) =>
+      segment.length > 0 && /^[A-Za-z0-9_-]+$/.test(segment)
+    );
+}
+
+async function withTimeout<T>(
+  operation: Promise<T>,
+  milliseconds: number,
+  errorCode: string,
+): Promise<T> {
+  let timeoutID: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutID = setTimeout(
+      () => reject(new Error(errorCode)),
+      milliseconds,
+    );
+  });
+
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timeoutID !== undefined) clearTimeout(timeoutID);
+  }
 }
 
 function statusNumber(value: unknown): number | undefined {

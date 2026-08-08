@@ -2,13 +2,17 @@ import {
   assert,
   assertEquals,
   assertFalse,
+  assertThrows,
 } from "jsr:@std/assert@1";
 import {
+  appStoreVerificationEnvironments,
   entitlementFromSubscription,
   isAppStoreNotificationRequest,
   isPremiumSyncRequest,
   isUUID,
   mapAppleSubscriptionStatus,
+  maxAppStoreRequestBytes,
+  readAppStoreJSONRequest,
 } from "./app-store.ts";
 
 Deno.test("premium sync request requires a transaction JWS", () => {
@@ -17,14 +21,30 @@ Deno.test("premium sync request requires a transaction JWS", () => {
     source: "purchase",
   }));
   assertFalse(isPremiumSyncRequest({ signed_transaction_info: "not-a-jws" }));
-  assertFalse(isPremiumSyncRequest({ signedTransactionInfo: "header.payload.signature" }));
+  assertFalse(
+    isPremiumSyncRequest({ signedTransactionInfo: "header.payload.signature" }),
+  );
+  assertFalse(isPremiumSyncRequest({
+    signed_transaction_info: "header.payload.signature",
+    source: "Purchase Screen",
+  }));
+  assertFalse(isPremiumSyncRequest({
+    signed_transaction_info: `${"a".repeat(maxAppStoreRequestBytes)}.b.c`,
+  }));
 });
 
 Deno.test("notification request requires signedPayload", () => {
   assert(isAppStoreNotificationRequest({
     signedPayload: "header.payload.signature",
   }));
-  assertFalse(isAppStoreNotificationRequest({ signed_payload: "header.payload.signature" }));
+  assertFalse(
+    isAppStoreNotificationRequest({
+      signed_payload: "header.payload.signature",
+    }),
+  );
+  assertFalse(isAppStoreNotificationRequest({
+    signedPayload: "header.pay+load.signature",
+  }));
 });
 
 Deno.test("uuid validation accepts Supabase user IDs", () => {
@@ -64,4 +84,108 @@ Deno.test("entitlement response defaults inactive", () => {
     latest_transaction_id: null,
     last_verified_at: null,
   });
+});
+
+Deno.test("local App Store environments require explicit configuration", () => {
+  const production = appStoreVerificationEnvironments("production")[0];
+  const sandbox = appStoreVerificationEnvironments("sandbox")[0];
+  const xcode = appStoreVerificationEnvironments("xcode")[0];
+  const localTesting = appStoreVerificationEnvironments("local_testing")[0];
+  const defaults = appStoreVerificationEnvironments();
+
+  assertEquals(defaults, [production, sandbox]);
+  assertFalse(defaults.includes(xcode));
+  assertFalse(defaults.includes(localTesting));
+  assertEquals(
+    appStoreVerificationEnvironments(undefined, String(sandbox)),
+    [sandbox, production],
+  );
+  assertEquals(
+    appStoreVerificationEnvironments(undefined, String(xcode)),
+    [production, sandbox],
+  );
+  assertThrows(
+    () => appStoreVerificationEnvironments("preview"),
+    Error,
+    "invalid_app_store_environment",
+  );
+});
+
+Deno.test("App Store JSON requests require bounded application/json bodies", async () => {
+  const valid = await readAppStoreJSONRequest(
+    new Request("https://example.test/premium", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ signedPayload: "header.payload.signature" }),
+    }),
+  );
+  assert(valid.ok);
+  if (valid.ok) {
+    assertEquals(valid.value, {
+      signedPayload: "header.payload.signature",
+    });
+  }
+
+  const missingContentType = await readAppStoreJSONRequest(
+    new Request("https://example.test/premium", {
+      method: "POST",
+      body: "{}",
+    }),
+  );
+  assertFalse(missingContentType.ok);
+  if (!missingContentType.ok) {
+    assertEquals(missingContentType.response.status, 415);
+    assertEquals(
+      missingContentType.response.headers.get("Cache-Control"),
+      "no-store",
+    );
+  }
+
+  const oversized = await readAppStoreJSONRequest(
+    new Request("https://example.test/premium", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "x".repeat(maxAppStoreRequestBytes + 1),
+    }),
+  );
+  assertFalse(oversized.ok);
+  if (!oversized.ok) {
+    assertEquals(oversized.response.status, 413);
+  }
+
+  const malformed = await readAppStoreJSONRequest(
+    new Request("https://example.test/premium", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{",
+    }),
+  );
+  assertFalse(malformed.ok);
+  if (!malformed.ok) {
+    assertEquals(malformed.response.status, 400);
+  }
+});
+
+Deno.test("Premium endpoints use the shared bounded parser", async () => {
+  const endpointURLs = [
+    new URL("../premium-subscription-sync/index.ts", import.meta.url),
+    new URL("../app-store-server-notifications/index.ts", import.meta.url),
+  ];
+
+  for (const endpointURL of endpointURLs) {
+    const source = await Deno.readTextFile(endpointURL);
+    assert(source.includes("readAppStoreJSONRequest(request)"));
+    assert(source.includes('{ Allow: "POST" }'));
+    assertFalse(source.includes("await request.json()"));
+  }
+
+  const verifierSource = await Deno.readTextFile(
+    new URL("./app-store.ts", import.meta.url),
+  );
+  assert(
+    verifierSource.includes(
+      "AbortSignal.timeout(rootCertificateTimeoutMilliseconds)",
+    ),
+  );
+  assert(verifierSource.includes("rootCertificatesPromise = undefined"));
 });

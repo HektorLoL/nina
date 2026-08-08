@@ -55,13 +55,46 @@ struct FamilyGroup: Identifiable, Codable, Hashable {
     var members: [HouseholdMember]
 }
 
-enum FamilyPermissionRole: String, Codable, Hashable {
+enum FamilyPermissionRole: String, CaseIterable, Identifiable, Codable, Hashable {
     case owner
     case admin
     case member
 
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .owner: "Responsável"
+        case .admin: "Administrador"
+        case .member: "Participante"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .owner:
+            "Controla convites, participantes, permissões e ajustes da casa."
+        case .admin:
+            "Aprova entradas e gerencia participantes, exceto responsáveis e outros administradores."
+        case .member:
+            "Participa das tarefas, compras e conversas da casa."
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .owner: "crown.fill"
+        case .admin: "person.badge.key.fill"
+        case .member: "person.fill"
+        }
+    }
+
     var canManageFamily: Bool {
         self == .owner || self == .admin
+    }
+
+    var canChangePermissions: Bool {
+        self == .owner
     }
 }
 
@@ -81,6 +114,9 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
     var tone: MemberTone
     var taskCount: Int
     var memoryNote: String
+    var birthDate: Date?
+    var petSpecies: String
+    var petBreed: String
 
     init(
         id: UUID = UUID(),
@@ -92,7 +128,10 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
         identityState: MemberIdentityState? = nil,
         tone: MemberTone,
         taskCount: Int,
-        memoryNote: String
+        memoryNote: String,
+        birthDate: Date? = nil,
+        petSpecies: String = "",
+        petBreed: String = ""
     ) {
         self.id = id
         self.userID = userID
@@ -104,6 +143,9 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
         self.tone = tone
         self.taskCount = taskCount
         self.memoryNote = memoryNote
+        self.birthDate = birthDate
+        self.petSpecies = petSpecies
+        self.petBreed = petBreed
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -117,6 +159,9 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
         case tone
         case taskCount
         case memoryNote
+        case birthDate
+        case petSpecies
+        case petBreed
     }
 
     init(from decoder: Decoder) throws {
@@ -132,7 +177,74 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
         tone = try container.decodeIfPresent(MemberTone.self, forKey: .tone) ?? .mint
         taskCount = try container.decodeIfPresent(Int.self, forKey: .taskCount) ?? 0
         memoryNote = try container.decodeIfPresent(String.self, forKey: .memoryNote) ?? ""
+        birthDate = try container.decodeIfPresent(Date.self, forKey: .birthDate)
+        petSpecies = try container.decodeIfPresent(String.self, forKey: .petSpecies) ?? ""
+        petBreed = try container.decodeIfPresent(String.self, forKey: .petBreed) ?? ""
     }
+}
+
+enum FamilyInviteLifecycleStatus: String, Codable, Hashable {
+    case active
+    case expired
+    case exhausted
+    case revoked
+
+    var title: String {
+        switch self {
+        case .active: "Ativo"
+        case .expired: "Expirado"
+        case .exhausted: "Limite atingido"
+        case .revoked: "Revogado"
+        }
+    }
+
+    var tone: MemberTone {
+        switch self {
+        case .active: .mint
+        case .expired, .exhausted: .amber
+        case .revoked: .coral
+        }
+    }
+}
+
+struct FamilyInviteStatus: Codable, Hashable {
+    var code: String
+    var status: FamilyInviteLifecycleStatus
+    var expiresAt: Date
+    var maxUses: Int
+    var uses: Int
+    var usesRemaining: Int
+
+    var isActive: Bool {
+        status == .active && usesRemaining > 0 && expiresAt > .now
+    }
+}
+
+enum FamilyJoinRequestStatus: String, Codable, Hashable {
+    case pending
+    case approved
+    case declined
+    case cancelled
+
+    var title: String {
+        switch self {
+        case .pending: "Aguardando aprovação"
+        case .approved: "Aprovado"
+        case .declined: "Recusado"
+        case .cancelled: "Cancelado"
+        }
+    }
+}
+
+struct FamilyJoinRequest: Identifiable, Codable, Hashable {
+    var id: UUID
+    var familyID: UUID
+    var familyName: String
+    var requesterUserID: UUID
+    var requesterName: String
+    var status: FamilyJoinRequestStatus
+    var createdAt: Date
+    var reviewedAt: Date?
 }
 
 struct TaskCategory: Identifiable, Codable, Hashable, CaseIterable {
@@ -240,8 +352,79 @@ enum TaskPriority: String, CaseIterable, Identifiable, Codable, Hashable {
     }
 }
 
+enum TaskRecurrence: String, CaseIterable, Identifiable, Codable, Hashable {
+    case none
+    case daily
+    case weekly
+    case monthly
+    case yearly
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none: "Não repetir"
+        case .daily: "Todos os dias"
+        case .weekly: "Toda semana"
+        case .monthly: "Todo mês"
+        case .yearly: "Todo ano"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .none: "Uma vez"
+        case .daily: "Diário"
+        case .weekly: "Semanal"
+        case .monthly: "Mensal"
+        case .yearly: "Anual"
+        }
+    }
+
+    var explicitTitle: String {
+        switch self {
+        case .none: "Não se repete"
+        case .daily: "Repete diariamente"
+        case .weekly: "Repete semanalmente"
+        case .monthly: "Repete mensalmente"
+        case .yearly: "Repete anualmente"
+        }
+    }
+}
+
+enum TaskKind: String, CaseIterable, Identifiable, Codable, Hashable {
+    case task
+    case seed
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .task: "Tarefa"
+        case .seed: "Semente"
+        }
+    }
+
+    var editorDescription: String {
+        switch self {
+        case .task:
+            "Algo que já tem um momento para acontecer."
+        case .seed:
+            "Uma intenção sem data definida. Guarde agora e plante quando estiver pronta."
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .task: "checkmark.circle.fill"
+        case .seed: "leaf.fill"
+        }
+    }
+}
+
 struct TaskItem: Identifiable, Codable, Hashable {
     var id: UUID
+    var kind: TaskKind
     var title: String
     var subtitle: String
     var owner: String
@@ -249,6 +432,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var dueAt: Date?
     var category: TaskCategory
     var priority: TaskPriority
+    var recurrence: TaskRecurrence
+    var snoozedUntil: Date?
     var isDone: Bool
     var createdBy: String
     var sectionID: String
@@ -256,6 +441,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
 
     init(
         id: UUID = UUID(),
+        kind: TaskKind = .task,
         title: String,
         subtitle: String,
         owner: String,
@@ -263,12 +449,15 @@ struct TaskItem: Identifiable, Codable, Hashable {
         dueAt: Date? = nil,
         category: TaskCategory,
         priority: TaskPriority = .normal,
+        recurrence: TaskRecurrence = .none,
+        snoozedUntil: Date? = nil,
         isDone: Bool,
         createdBy: String,
         sectionID: String = TaskSectionDefaults.houseTasksID,
         version: Int = 1
     ) {
         self.id = id
+        self.kind = kind
         self.title = title
         self.subtitle = subtitle
         self.owner = owner
@@ -276,6 +465,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.dueAt = dueAt
         self.category = category
         self.priority = priority
+        self.recurrence = recurrence
+        self.snoozedUntil = snoozedUntil
         self.isDone = isDone
         self.createdBy = createdBy
         self.sectionID = sectionID
@@ -284,6 +475,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id
+        case kind
         case title
         case subtitle
         case owner
@@ -291,6 +483,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case dueAt
         case category
         case priority
+        case recurrence
+        case snoozedUntil
         case isDone
         case createdBy
         case sectionID
@@ -300,6 +494,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        kind = try container.decodeIfPresent(TaskKind.self, forKey: .kind) ?? .task
         title = try container.decode(String.self, forKey: .title)
         subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle) ?? ""
         owner = try container.decodeIfPresent(String.self, forKey: .owner) ?? "Casa"
@@ -307,10 +502,98 @@ struct TaskItem: Identifiable, Codable, Hashable {
         dueAt = try container.decodeIfPresent(Date.self, forKey: .dueAt)
         category = try container.decodeIfPresent(TaskCategory.self, forKey: .category) ?? .home
         priority = try container.decodeIfPresent(TaskPriority.self, forKey: .priority) ?? .normal
+        recurrence = try container.decodeIfPresent(TaskRecurrence.self, forKey: .recurrence) ?? .none
+        snoozedUntil = try container.decodeIfPresent(Date.self, forKey: .snoozedUntil)
         isDone = try container.decodeIfPresent(Bool.self, forKey: .isDone) ?? false
         createdBy = try container.decodeIfPresent(String.self, forKey: .createdBy) ?? "Manual"
         sectionID = try container.decodeIfPresent(String.self, forKey: .sectionID) ?? TaskSectionDefaults.houseTasksID
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+    }
+
+    func displayDate(
+        relativeTo referenceDate: Date = .now,
+        calendar: Calendar = .current
+    ) -> Date? {
+        _ = referenceDate
+        _ = calendar
+        return effectiveDueDate
+    }
+
+    var effectiveDueDate: Date? {
+        snoozedUntil ?? dueAt
+    }
+
+    func isDue(
+        on date: Date,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard !isDone, let effectiveDueDate else { return false }
+        return calendar.isDate(effectiveDueDate, inSameDayAs: date)
+    }
+
+    func isOverdue(
+        relativeTo referenceDate: Date = .now
+    ) -> Bool {
+        guard !isDone,
+              let deliveryDate = effectiveDueDate else {
+            return false
+        }
+        return deliveryDate < referenceDate
+    }
+
+    func scheduledOccurrence(
+        after referenceDate: Date,
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard let dueAt else { return nil }
+        guard recurrence != .none else { return dueAt }
+        guard dueAt <= referenceDate else { return dueAt }
+
+        let components: DateComponents
+        switch recurrence {
+        case .none:
+            return dueAt
+        case .daily:
+            components = calendar.dateComponents([.hour, .minute], from: dueAt)
+        case .weekly:
+            components = calendar.dateComponents([.weekday, .hour, .minute], from: dueAt)
+        case .monthly:
+            components = calendar.dateComponents([.day, .hour, .minute], from: dueAt)
+        case .yearly:
+            components = calendar.dateComponents([.month, .day, .hour, .minute], from: dueAt)
+        }
+
+        return calendar.nextDate(
+            after: referenceDate,
+            matching: components,
+            matchingPolicy: .nextTimePreservingSmallerComponents,
+            repeatedTimePolicy: .first,
+            direction: .forward
+        )
+    }
+
+    func scheduledOccurrences(
+        after referenceDate: Date,
+        limit: Int,
+        calendar: Calendar = .current
+    ) -> [Date] {
+        guard limit > 0 else { return [] }
+        guard recurrence != .none else {
+            guard let dueAt, dueAt > referenceDate else { return [] }
+            return [dueAt]
+        }
+
+        var dates: [Date] = []
+        var cursor = referenceDate
+
+        while dates.count < limit,
+              let nextDate = scheduledOccurrence(after: cursor, calendar: calendar) {
+            guard nextDate > cursor else { break }
+            dates.append(nextDate)
+            cursor = nextDate.addingTimeInterval(1)
+        }
+
+        return dates
     }
 }
 
@@ -320,55 +603,6 @@ struct ShoppingItem: Identifiable, Codable, Hashable {
     var amount: String
     var owner: String
     var isChecked: Bool
-}
-
-struct ReminderItem: Identifiable, Codable, Hashable {
-    var id: UUID
-    var title: String
-    var detail: String
-    var dateLabel: String
-    var dueAt: Date?
-    var symbolName: String
-    var tone: MemberTone
-
-    init(
-        id: UUID = UUID(),
-        title: String,
-        detail: String,
-        dateLabel: String,
-        dueAt: Date? = nil,
-        symbolName: String,
-        tone: MemberTone
-    ) {
-        self.id = id
-        self.title = title
-        self.detail = detail
-        self.dateLabel = dateLabel
-        self.dueAt = dueAt
-        self.symbolName = symbolName
-        self.tone = tone
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id
-        case title
-        case detail
-        case dateLabel
-        case dueAt
-        case symbolName
-        case tone
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        title = try container.decode(String.self, forKey: .title)
-        detail = try container.decodeIfPresent(String.self, forKey: .detail) ?? ""
-        dateLabel = try container.decodeIfPresent(String.self, forKey: .dateLabel) ?? "Sem data"
-        dueAt = try container.decodeIfPresent(Date.self, forKey: .dueAt)
-        symbolName = try container.decodeIfPresent(String.self, forKey: .symbolName) ?? "bell.fill"
-        tone = try container.decodeIfPresent(MemberTone.self, forKey: .tone) ?? .amber
-    }
 }
 
 enum MessageSender: String, Codable, Hashable {
@@ -408,6 +642,7 @@ struct ChatAttachment: Identifiable, Codable, Hashable {
 
 enum NinaSuggestionKind: String, Codable, Hashable {
     case task
+    case seed
     case reminder
     case gift
     case document

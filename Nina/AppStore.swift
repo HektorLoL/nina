@@ -14,9 +14,69 @@ struct PrivacyExportPackage: Codable {
     var exportedAt: Date
     var policyVersion: String
     var user: AuthUser?
+    var profile: UserProfile?
+    var profilePhotoData: Data?
     var familyGroup: FamilyGroup
     var aiMemoryConsent: AIMemoryConsentRecord?
     var data: AppDataSnapshot
+}
+
+private struct LegacyReminderItem: Decodable {
+    var id: UUID
+    var title: String
+    var detail: String
+    var dateLabel: String
+    var dueAt: Date?
+    var recurrence: TaskRecurrence
+    var snoozedUntil: Date?
+    var symbolName: String
+    var tone: MemberTone
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case detail
+        case dateLabel
+        case dueAt
+        case recurrence
+        case snoozedUntil
+        case symbolName
+        case tone
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try container.decode(String.self, forKey: .title)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail) ?? ""
+        dateLabel = try container.decodeIfPresent(String.self, forKey: .dateLabel) ?? "Sem data"
+        dueAt = try container.decodeIfPresent(Date.self, forKey: .dueAt)
+        recurrence = try container.decodeIfPresent(TaskRecurrence.self, forKey: .recurrence) ?? .none
+        snoozedUntil = try container.decodeIfPresent(Date.self, forKey: .snoozedUntil)
+        symbolName = try container.decodeIfPresent(String.self, forKey: .symbolName) ?? "bell.fill"
+        tone = try container.decodeIfPresent(MemberTone.self, forKey: .tone) ?? .amber
+    }
+
+    var task: TaskItem {
+        TaskItem(
+            id: id,
+            title: title,
+            subtitle: detail,
+            owner: "Casa",
+            dueLabel: dateLabel,
+            dueAt: dueAt,
+            category: TaskCategory(
+                id: TaskCategory.home.id,
+                title: TaskCategory.home.title,
+                symbolName: symbolName,
+                tone: tone
+            ),
+            recurrence: recurrence,
+            snoozedUntil: snoozedUntil,
+            isDone: false,
+            createdBy: "Nina"
+        )
+    }
 }
 
 struct AppDataSnapshot: Codable {
@@ -25,7 +85,6 @@ struct AppDataSnapshot: Codable {
     var customTaskCategories: [TaskCategory]
     var tasks: [TaskItem]
     var shoppingItems: [ShoppingItem]
-    var reminders: [ReminderItem]
     var insights: [HouseholdInsight]
     var ninaThread: NinaThread?
     var ninaMemories: [NinaMemory]
@@ -36,7 +95,6 @@ struct AppDataSnapshot: Codable {
         customTaskCategories: [TaskCategory] = [],
         tasks: [TaskItem],
         shoppingItems: [ShoppingItem],
-        reminders: [ReminderItem],
         insights: [HouseholdInsight],
         ninaThread: NinaThread? = nil,
         ninaMemories: [NinaMemory] = []
@@ -46,7 +104,6 @@ struct AppDataSnapshot: Codable {
         self.customTaskCategories = customTaskCategories
         self.tasks = tasks
         self.shoppingItems = shoppingItems
-        self.reminders = reminders
         self.insights = insights
         self.ninaThread = ninaThread
         self.ninaMemories = ninaMemories
@@ -69,12 +126,26 @@ struct AppDataSnapshot: Codable {
         messages = try container.decodeIfPresent([ChatMessage].self, forKey: .messages) ?? []
         taskSections = try container.decodeIfPresent([TaskSection].self, forKey: .taskSections) ?? []
         customTaskCategories = try container.decodeIfPresent([TaskCategory].self, forKey: .customTaskCategories) ?? []
-        tasks = try container.decodeIfPresent([TaskItem].self, forKey: .tasks) ?? []
+        let decodedTasks = try container.decodeIfPresent([TaskItem].self, forKey: .tasks) ?? []
+        let legacyReminders = try container.decodeIfPresent([LegacyReminderItem].self, forKey: .reminders) ?? []
+        let taskIDs = Set(decodedTasks.map(\.id))
+        tasks = decodedTasks + legacyReminders.map(\.task).filter { !taskIDs.contains($0.id) }
         shoppingItems = try container.decodeIfPresent([ShoppingItem].self, forKey: .shoppingItems) ?? []
-        reminders = try container.decodeIfPresent([ReminderItem].self, forKey: .reminders) ?? []
         insights = try container.decodeIfPresent([HouseholdInsight].self, forKey: .insights) ?? []
         ninaThread = try container.decodeIfPresent(NinaThread.self, forKey: .ninaThread)
         ninaMemories = try container.decodeIfPresent([NinaMemory].self, forKey: .ninaMemories) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(messages, forKey: .messages)
+        try container.encode(taskSections, forKey: .taskSections)
+        try container.encode(customTaskCategories, forKey: .customTaskCategories)
+        try container.encode(tasks, forKey: .tasks)
+        try container.encode(shoppingItems, forKey: .shoppingItems)
+        try container.encode(insights, forKey: .insights)
+        try container.encodeIfPresent(ninaThread, forKey: .ninaThread)
+        try container.encode(ninaMemories, forKey: .ninaMemories)
     }
 
     static let preview = AppDataSnapshot(
@@ -83,7 +154,6 @@ struct AppDataSnapshot: Codable {
         customTaskCategories: PreviewData.customTaskCategories,
         tasks: PreviewData.tasks,
         shoppingItems: PreviewData.shoppingItems,
-        reminders: PreviewData.reminders,
         insights: PreviewData.insights
     )
 }
@@ -91,6 +161,7 @@ struct AppDataSnapshot: Codable {
 enum HomeAccessState: Hashable {
     case loading
     case authorized
+    case pendingApproval
     case noHome
     case unavailable
 }
@@ -99,6 +170,11 @@ struct TaskEditConflict: Identifiable {
     var id: TaskItem.ID { remoteTask.id }
     var localTask: TaskItem
     var remoteTask: TaskItem
+}
+
+private struct HomeContextToken {
+    var userID: String?
+    var generation: UInt64
 }
 
 @MainActor
@@ -110,12 +186,14 @@ final class AppStore {
     var familyGroup: FamilyGroup
     var homeAccessState: HomeAccessState = .loading
     var currentPermissionRole: FamilyPermissionRole = .member
+    var inviteStatus: FamilyInviteStatus?
+    var pendingJoinRequest: FamilyJoinRequest?
+    var joinRequests: [FamilyJoinRequest] = []
     var messages: [ChatMessage]
     var taskSections: [TaskSection]
     var customTaskCategories: [TaskCategory]
     var tasks: [TaskItem]
     var shoppingItems: [ShoppingItem]
-    var reminders: [ReminderItem]
     var insights: [HouseholdInsight]
     var ninaThread: NinaThread?
     var ninaMemories: [NinaMemory]
@@ -124,19 +202,23 @@ final class AppStore {
     var ninaConnectionNotice: String?
     var taskEditConflict: TaskEditConflict?
     var aiMemoryConsent: AIMemoryConsentRecord?
+    var notificationAuthorizationStatus: HomeNotificationAuthorizationStatus = .notDetermined
 
     @ObservationIgnored private let ninaEngine: any NinaEngine
     @ObservationIgnored private let fallbackNinaEngine = MockNinaEngine()
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let privateDataStore: any PrivateLocalDataStoring
     @ObservationIgnored private let remoteHomeBackend: (any RemoteHomeBackend)?
     @ObservationIgnored private let notificationScheduler: any HomeNotificationScheduling
     @ObservationIgnored private var activeHomeUserID: String?
     @ObservationIgnored private var activeUser: AuthUser?
+    @ObservationIgnored private var homeContextGeneration: UInt64 = 0
     @ObservationIgnored private var localStateRevision: UInt64 = 0
     @ObservationIgnored private var remoteMutationGeneration: UInt64 = 0
     @ObservationIgnored private var remoteMutationTask: Task<Void, Never>?
     @ObservationIgnored private var realtimeListenerTask: Task<Void, Never>?
     @ObservationIgnored private var realtimeRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var notificationSyncTask: Task<Void, Never>?
 
     var isSyncingHome = false
     var syncErrorMessage: String?
@@ -147,6 +229,15 @@ final class AppStore {
 
     var canManageFamily: Bool {
         currentPermissionRole.canManageFamily
+    }
+
+    var canChangeFamilyPermissions: Bool {
+        currentPermissionRole.canChangePermissions
+    }
+
+    var currentFamilyMember: HouseholdMember? {
+        guard let activeHomeUserID else { return nil }
+        return familyGroup.members.first { $0.userID == activeHomeUserID }
     }
 
     var isUsingLocalNina: Bool {
@@ -183,11 +274,13 @@ final class AppStore {
 
     init(
         defaults: UserDefaults = .standard,
+        privateDataStore: any PrivateLocalDataStoring = ProtectedLocalDataStore.shared,
         remoteHomeBackend: (any RemoteHomeBackend)? = BackendServices.makeRemoteHomeBackend(),
         ninaEngine: any NinaEngine = BackendServices.makeNinaEngine(),
         notificationScheduler: (any HomeNotificationScheduling)? = nil
     ) {
         self.defaults = defaults
+        self.privateDataStore = privateDataStore
         self.remoteHomeBackend = remoteHomeBackend
         self.ninaEngine = ninaEngine
         self.notificationScheduler = notificationScheduler ?? LocalHomeNotificationScheduler(defaults: defaults)
@@ -197,15 +290,20 @@ final class AppStore {
         customTaskCategories = PreviewData.customTaskCategories
         tasks = PreviewData.tasks
         shoppingItems = PreviewData.shoppingItems
-        reminders = PreviewData.reminders
         insights = PreviewData.insights
         ninaThread = nil
         ninaMemories = []
         aiMemoryConsent = nil
+        inviteStatus = nil
+        pendingJoinRequest = nil
     }
 
     var openTasks: [TaskItem] {
         tasks.filter { !$0.isDone }
+    }
+
+    var openSeeds: [TaskItem] {
+        openTasks.filter { $0.kind == .seed }
     }
 
     var completedTasks: [TaskItem] {
@@ -264,17 +362,57 @@ final class AppStore {
         "\(familyPeopleCount) pessoas + Nina"
     }
 
+    func canEditFamilyMember(_ member: HouseholdMember) -> Bool {
+        guard member.role != .assistant else { return false }
+        if member.userID == activeHomeUserID {
+            return true
+        }
+        guard canManageFamily else { return false }
+        if currentPermissionRole == .admin,
+           member.userID != activeHomeUserID,
+           (member.permissionRole == .owner || member.permissionRole == .admin) {
+            return false
+        }
+        return true
+    }
+
+    func canRemoveFamilyMember(_ member: HouseholdMember) -> Bool {
+        guard canManageFamily,
+              member.role != .assistant,
+              member.permissionRole != .owner,
+              member.userID != activeHomeUserID else {
+            return false
+        }
+        if currentPermissionRole == .admin, member.permissionRole == .admin {
+            return false
+        }
+        return true
+    }
+
+    func canChangePermissionRole(for member: HouseholdMember) -> Bool {
+        canChangeFamilyPermissions
+            && member.role == .adult
+            && member.identityState == .claimed
+            && member.userID != activeHomeUserID
+            && member.permissionRole != .owner
+    }
+
     func activateHomeContext(for user: AuthUser?) async {
+        homeContextGeneration &+= 1
         remoteMutationTask?.cancel()
         remoteMutationTask = nil
         remoteMutationGeneration = 0
         stopRealtimeSync()
         activeHomeUserID = user?.id
         activeUser = user
+        let contextToken = currentHomeContextToken
         loadAIMemoryConsent(for: user?.id)
         pendingPriorityTaskIDs = []
         taskEditConflict = nil
         syncErrorMessage = nil
+        inviteStatus = nil
+        pendingJoinRequest = nil
+        joinRequests = []
 
         guard let user else {
             homeAccessState = .noHome
@@ -295,10 +433,13 @@ final class AppStore {
 
         if let remoteHomeBackend {
             isSyncingHome = true
-            defer { isSyncingHome = false }
+            defer { finishSyncingHome(ifCurrent: contextToken) }
 
             do {
-                if let state = try await remoteHomeBackend.loadHome(for: user) {
+                let state = try await remoteHomeBackend.loadHome(for: user)
+                guard isCurrentHomeContext(contextToken) else { return }
+
+                if let state {
                     apply(state)
                     homeAccessState = .authorized
                     cacheActiveHomeLocally()
@@ -306,12 +447,28 @@ final class AppStore {
                     startRealtimeSync()
                     return
                 }
+
+                let request = try await remoteHomeBackend.loadPendingJoinRequest()
+                guard isCurrentHomeContext(contextToken) else { return }
+
+                if let request {
+                    pendingJoinRequest = request
+                    homeAccessState = .pendingApproval
+                    currentPermissionRole = .member
+                    familyGroup = PreviewData.familyGroup
+                    resetActivityState()
+                    return
+                }
+
                 homeAccessState = .noHome
                 currentPermissionRole = .member
                 familyGroup = PreviewData.familyGroup
                 resetActivityState()
                 return
+            } catch is CancellationError {
+                return
             } catch {
+                guard isCurrentHomeContext(contextToken) else { return }
                 homeAccessState = .unavailable
                 currentPermissionRole = .member
                 familyGroup = PreviewData.familyGroup
@@ -341,21 +498,38 @@ final class AppStore {
         await waitForPendingRemoteMutations()
         guard user.id == activeHomeUserID else { return }
 
+        let contextToken = currentHomeContextToken
         let requestedUserID = user.id
         let requestedRevision = localStateRevision
         isSyncingHome = true
         syncErrorMessage = nil
-        defer { isSyncingHome = false }
+        defer { finishSyncingHome(ifCurrent: contextToken) }
 
         do {
             let state = try await remoteHomeBackend.loadHome(for: user)
 
-            guard activeHomeUserID == requestedUserID,
+            guard isCurrentHomeContext(contextToken),
+                  activeHomeUserID == requestedUserID,
                   localStateRevision == requestedRevision else {
                 return
             }
 
             guard let state else {
+                let request = try await remoteHomeBackend.loadPendingJoinRequest()
+                guard isCurrentHomeContext(contextToken),
+                      localStateRevision == requestedRevision else {
+                    return
+                }
+
+                if let request {
+                    pendingJoinRequest = request
+                    homeAccessState = .pendingApproval
+                    currentPermissionRole = .member
+                    familyGroup = PreviewData.familyGroup
+                    resetActivityState()
+                    return
+                }
+
                 clearCachedHome(for: requestedUserID)
                 homeAccessState = .noHome
                 currentPermissionRole = .member
@@ -371,7 +545,8 @@ final class AppStore {
         } catch is CancellationError {
             return
         } catch {
-            guard activeHomeUserID == requestedUserID else { return }
+            guard isCurrentHomeContext(contextToken),
+                  activeHomeUserID == requestedUserID else { return }
             guard localStateRevision == requestedRevision else {
                 syncErrorMessage = "Não foi possível atualizar a casa. Suas alterações locais foram mantidas."
                 return
@@ -388,15 +563,17 @@ final class AppStore {
     func createHome(named rawName: String, owner: AuthUser?) async -> Bool {
         let name = Self.normalizedHomeName(rawName)
         guard !name.isEmpty else { return false }
+        let contextToken = currentHomeContextToken
         syncErrorMessage = nil
 
         if !usesLocalDebugBackend(for: owner ?? activeUser),
            let remoteHomeBackend {
             isSyncingHome = true
-            defer { isSyncingHome = false }
+            defer { finishSyncingHome(ifCurrent: contextToken) }
 
             do {
                 let state = try await remoteHomeBackend.createHome(named: name, owner: owner)
+                guard isCurrentHomeContext(contextToken) else { return false }
                 apply(state)
                 homeAccessState = .authorized
                 persistActiveHome()
@@ -404,6 +581,7 @@ final class AppStore {
                 startRealtimeSync()
                 return true
             } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
                 syncErrorMessage = "Não consegui criar a casa no Supabase agora."
                 Haptics.error()
                 return false
@@ -415,7 +593,7 @@ final class AppStore {
             name: name,
             inviteCode: Self.secureLocalInviteCode(),
             members: [
-                Self.householdMember(for: owner, relationship: "Criador"),
+                Self.householdMember(for: owner, relationship: "Criador", permissionRole: .owner),
                 Self.ninaAssistantMember
             ]
         )
@@ -435,23 +613,39 @@ final class AppStore {
     @discardableResult
     func joinHome(with rawInvite: String, member: AuthUser?) async -> Bool {
         guard let inviteCode = Self.normalizedInviteCode(from: rawInvite) else { return false }
+        let contextToken = currentHomeContextToken
         syncErrorMessage = nil
 
         if !usesLocalDebugBackend(for: member ?? activeUser),
            let remoteHomeBackend {
             isSyncingHome = true
-            defer { isSyncingHome = false }
+            defer { finishSyncingHome(ifCurrent: contextToken) }
 
             do {
-                let state = try await remoteHomeBackend.joinHome(with: inviteCode, member: member)
-                apply(state)
-                homeAccessState = .authorized
-                persistActiveHome()
-                persistActivityLocally()
-                startRealtimeSync()
+                let outcome = try await remoteHomeBackend.requestHomeAccess(
+                    with: inviteCode,
+                    member: member
+                )
+                guard isCurrentHomeContext(contextToken) else { return false }
+                switch outcome {
+                case .joined(let state):
+                    apply(state)
+                    pendingJoinRequest = nil
+                    homeAccessState = .authorized
+                    persistActiveHome()
+                    persistActivityLocally()
+                    startRealtimeSync()
+                case .pending(let request):
+                    pendingJoinRequest = request
+                    homeAccessState = .pendingApproval
+                    currentPermissionRole = .member
+                    familyGroup = PreviewData.familyGroup
+                    resetActivityState()
+                }
                 return true
             } catch {
-                syncErrorMessage = "Não encontrei esse convite no Supabase."
+                guard isCurrentHomeContext(contextToken) else { return false }
+                syncErrorMessage = "Este convite é inválido, expirou ou a casa está sem vagas."
                 Haptics.error()
                 return false
             }
@@ -479,13 +673,50 @@ final class AppStore {
         #endif
     }
 
+    @discardableResult
+    func cancelPendingJoinRequest() async -> Bool {
+        guard let request = pendingJoinRequest else { return false }
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+
+        if !usesLocalDebugBackend(for: activeUser),
+           let remoteHomeBackend {
+            isSyncingHome = true
+            defer { finishSyncingHome(ifCurrent: contextToken) }
+
+            do {
+                try await remoteHomeBackend.cancelJoinRequest(request.id)
+                guard isCurrentHomeContext(contextToken) else { return false }
+                pendingJoinRequest = nil
+                homeAccessState = .noHome
+                return true
+            } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
+                syncErrorMessage = "Não foi possível cancelar o pedido agora."
+                Haptics.error()
+                return false
+            }
+        }
+
+        #if DEBUG
+        pendingJoinRequest = nil
+        homeAccessState = .noHome
+        return true
+        #else
+        return false
+        #endif
+    }
+
     func previewHomeInvite(_ rawInvite: String) async -> FamilyInvitePreview? {
         guard let inviteCode = Self.normalizedInviteCode(from: rawInvite) else { return nil }
+        let contextToken = currentHomeContextToken
 
         if !usesLocalDebugBackend(for: activeUser),
            let remoteHomeBackend {
             do {
-                return try await remoteHomeBackend.previewInvite(code: inviteCode)
+                let preview = try await remoteHomeBackend.previewInvite(code: inviteCode)
+                guard isCurrentHomeContext(contextToken) else { return nil }
+                return preview
             } catch {
                 return nil
             }
@@ -506,24 +737,28 @@ final class AppStore {
     func updateFamilyGroup(name: String) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty, canManageFamily else { return false }
+        let contextToken = currentHomeContextToken
         syncErrorMessage = nil
 
         if !usesLocalDebugBackend(for: activeUser),
            let remoteHomeBackend {
             await waitForPendingRemoteMutations()
+            guard isCurrentHomeContext(contextToken) else { return false }
             isSyncingHome = true
-            defer { isSyncingHome = false }
+            defer { finishSyncingHome(ifCurrent: contextToken) }
 
             do {
                 let state = try await remoteHomeBackend.updateFamilySettings(
                     familyID: familyGroup.id,
                     name: trimmedName
                 )
+                guard isCurrentHomeContext(contextToken) else { return false }
                 apply(state)
                 homeAccessState = .authorized
                 persistActiveHome()
                 return true
             } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
                 syncErrorMessage = "Não foi possível salvar os ajustes da casa."
                 Haptics.error()
                 return false
@@ -544,21 +779,25 @@ final class AppStore {
     @discardableResult
     func rotateFamilyInvite() async -> Bool {
         guard canManageFamily else { return false }
+        let contextToken = currentHomeContextToken
         syncErrorMessage = nil
 
         if !usesLocalDebugBackend(for: activeUser),
            let remoteHomeBackend {
             await waitForPendingRemoteMutations()
+            guard isCurrentHomeContext(contextToken) else { return false }
             isSyncingHome = true
-            defer { isSyncingHome = false }
+            defer { finishSyncingHome(ifCurrent: contextToken) }
 
             do {
                 let state = try await remoteHomeBackend.rotateFamilyInvite(familyID: familyGroup.id)
+                guard isCurrentHomeContext(contextToken) else { return false }
                 apply(state)
                 homeAccessState = .authorized
                 persistActiveHome()
                 return true
             } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
                 syncErrorMessage = "Não foi possível gerar um novo convite."
                 Haptics.error()
                 return false
@@ -578,24 +817,33 @@ final class AppStore {
 
     @discardableResult
     func addFamilyMember(_ member: HouseholdMember) async -> Bool {
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+
         if member.role != .assistant {
-            guard canInviteMorePeople else { return false }
+            guard canInviteMorePeople else {
+                syncErrorMessage = "A casa já atingiu o limite de 8 pessoas."
+                return false
+            }
         }
         guard canManageFamily, member.identityState == .unclaimed else { return false }
 
         if !usesLocalDebugBackend(for: activeUser),
            let remoteHomeBackend {
             await waitForPendingRemoteMutations()
+            guard isCurrentHomeContext(contextToken) else { return false }
             isSyncingHome = true
-            defer { isSyncingHome = false }
+            defer { finishSyncingHome(ifCurrent: contextToken) }
 
             do {
                 let state = try await remoteHomeBackend.addUnclaimedMember(member, familyID: familyGroup.id)
+                guard isCurrentHomeContext(contextToken) else { return false }
                 apply(state)
                 homeAccessState = .authorized
                 persistActiveHome()
                 return true
             } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
                 syncErrorMessage = "Não foi possível adicionar essa pessoa à casa."
                 Haptics.error()
                 return false
@@ -613,6 +861,165 @@ final class AppStore {
         #endif
     }
 
+    @discardableResult
+    func updateFamilyMember(_ member: HouseholdMember) async -> Bool {
+        guard canEditFamilyMember(member) else { return false }
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+
+        if !usesLocalDebugBackend(for: activeUser),
+           let remoteHomeBackend {
+            await waitForPendingRemoteMutations()
+            guard isCurrentHomeContext(contextToken) else { return false }
+            isSyncingHome = true
+            defer { finishSyncingHome(ifCurrent: contextToken) }
+
+            do {
+                let state = try await remoteHomeBackend.updateFamilyMember(member)
+                guard isCurrentHomeContext(contextToken) else { return false }
+                apply(state)
+                homeAccessState = .authorized
+                persistActiveHome()
+                return true
+            } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
+                syncErrorMessage = "Não foi possível salvar este perfil."
+                Haptics.error()
+                return false
+            }
+        }
+
+        #if DEBUG
+        guard let index = familyGroup.members.firstIndex(where: { $0.id == member.id }) else {
+            return false
+        }
+        familyGroup.members[index] = member
+        persistActiveHome()
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    @discardableResult
+    func removeFamilyMember(_ member: HouseholdMember) async -> Bool {
+        guard canRemoveFamilyMember(member) else { return false }
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+
+        if !usesLocalDebugBackend(for: activeUser),
+           let remoteHomeBackend {
+            await waitForPendingRemoteMutations()
+            guard isCurrentHomeContext(contextToken) else { return false }
+            isSyncingHome = true
+            defer { finishSyncingHome(ifCurrent: contextToken) }
+
+            do {
+                let state = try await remoteHomeBackend.removeFamilyMember(member.id)
+                guard isCurrentHomeContext(contextToken) else { return false }
+                apply(state)
+                homeAccessState = .authorized
+                persistActiveHome()
+                return true
+            } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
+                syncErrorMessage = "Não foi possível remover esta pessoa da casa."
+                Haptics.error()
+                return false
+            }
+        }
+
+        #if DEBUG
+        familyGroup.members.removeAll { $0.id == member.id }
+        persistActiveHome()
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    @discardableResult
+    func approveJoinRequest(
+        _ request: FamilyJoinRequest,
+        permissionRole: FamilyPermissionRole = .member
+    ) async -> Bool {
+        guard canManageFamily else { return false }
+        guard canInviteMorePeople else {
+            syncErrorMessage = "A casa já atingiu o limite de 8 pessoas."
+            return false
+        }
+        guard permissionRole != .owner,
+              permissionRole != .admin || canChangeFamilyPermissions else {
+            return false
+        }
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+
+        if !usesLocalDebugBackend(for: activeUser),
+           let remoteHomeBackend {
+            isSyncingHome = true
+            defer { finishSyncingHome(ifCurrent: contextToken) }
+
+            do {
+                let state = try await remoteHomeBackend.approveJoinRequest(
+                    request.id,
+                    permissionRole: permissionRole
+                )
+                guard isCurrentHomeContext(contextToken) else { return false }
+                apply(state)
+                homeAccessState = .authorized
+                persistActiveHome()
+                return true
+            } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
+                syncErrorMessage = "Não foi possível aprovar este pedido."
+                Haptics.error()
+                return false
+            }
+        }
+
+        #if DEBUG
+        joinRequests.removeAll { $0.id == request.id }
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    @discardableResult
+    func declineJoinRequest(_ request: FamilyJoinRequest) async -> Bool {
+        guard canManageFamily else { return false }
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+
+        if !usesLocalDebugBackend(for: activeUser),
+           let remoteHomeBackend {
+            isSyncingHome = true
+            defer { finishSyncingHome(ifCurrent: contextToken) }
+
+            do {
+                let state = try await remoteHomeBackend.declineJoinRequest(request.id)
+                guard isCurrentHomeContext(contextToken) else { return false }
+                apply(state)
+                homeAccessState = .authorized
+                persistActiveHome()
+                return true
+            } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
+                syncErrorMessage = "Não foi possível recusar este pedido."
+                Haptics.error()
+                return false
+            }
+        }
+
+        #if DEBUG
+        joinRequests.removeAll { $0.id == request.id }
+        return true
+        #else
+        return false
+        #endif
+    }
+
     func sendMessage(
         _ rawText: String,
         attachments: [NinaAttachmentInput] = []
@@ -623,6 +1030,8 @@ final class AppStore {
               !isNinaResponding else {
             return
         }
+        let contextToken = currentHomeContextToken
+        let familyID = familyGroup.id
 
         let userMessage = ChatMessage(
             sender: .user,
@@ -634,7 +1043,11 @@ final class AppStore {
         persistActivityLocally()
 
         isNinaResponding = true
-        defer { isNinaResponding = false }
+        defer {
+            if isCurrentHomeContext(contextToken) {
+                isNinaResponding = false
+            }
+        }
 
         let response: NinaEngineResponse
         var shouldPersistLegacyTurn = false
@@ -647,12 +1060,14 @@ final class AppStore {
             response = try await engine.respond(
                 to: text,
                 attachments: attachments,
-                familyID: familyGroup.id,
+                familyID: familyID,
                 messageID: userMessage.id
             )
+            guard isCurrentHomeContext(contextToken) else { return }
             shouldPersistLegacyTurn = !response.serverPersisted
             ninaConnectionNotice = nil
         } catch let engineError as NinaEngineError where engineError != .unavailable {
+            guard isCurrentHomeContext(contextToken) else { return }
             response = NinaEngineResponse(
                 reply: engineError.userMessage,
                 suggestion: nil
@@ -660,19 +1075,22 @@ final class AppStore {
             ninaConnectionNotice = nil
             shouldPersistLegacyTurn = false
         } catch {
-            response = (try? await fallbackNinaEngine.respond(
+            guard isCurrentHomeContext(contextToken) else { return }
+            let fallbackResponse = try? await fallbackNinaEngine.respond(
                 to: text,
                 attachments: attachments,
-                familyID: familyGroup.id,
+                familyID: familyID,
                 messageID: userMessage.id
-            ))
-                ?? NinaEngineResponse(
+            )
+            guard isCurrentHomeContext(contextToken) else { return }
+            response = fallbackResponse ?? NinaEngineResponse(
                     reply: "Anotei. Tente novamente em instantes para eu organizar isso com você.",
                     suggestion: nil
                 )
             ninaConnectionNotice = "A Nina online está indisponível. A resposta abaixo usou o modo local."
             shouldPersistLegacyTurn = false
         }
+        guard isCurrentHomeContext(contextToken) else { return }
 
         let ninaMessage = ChatMessage(
             id: response.assistantMessageID ?? UUID(),
@@ -693,7 +1111,7 @@ final class AppStore {
                 }
                 return NinaThread(
                     id: $0,
-                    familyID: familyGroup.id,
+                    familyID: familyID,
                     ownerUserID: ownerID
                 )
             }
@@ -720,24 +1138,27 @@ final class AppStore {
                 category: suggestion.category,
                 createdBy: "Nina"
             )
-        case .reminder:
-            let reminder = ReminderItem(
+        case .seed:
+            addTask(
                 title: suggestion.payloadTitle,
-                detail: suggestion.payloadDetail,
-                dateLabel: suggestion.payloadDueLabel,
-                dueAt: Self.inferredDueAt(from: suggestion.payloadDueLabel),
-                symbolName: suggestion.symbolName,
-                tone: .amber
+                subtitle: suggestion.payloadDetail,
+                owner: suggestion.payloadOwner,
+                dueLabel: "Sem data",
+                category: suggestion.category,
+                kind: .seed,
+                createdBy: "Nina"
             )
-            reminders.insert(reminder, at: 0)
-            persistActivityLocally()
-            synchronizeLocalNotifications()
-            enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar o lembrete.") {
-                backend,
-                familyID,
-                user in
-                try await backend.createReminder(reminder, familyID: familyID, currentUser: user)
-            }
+        case .reminder:
+            addTask(
+                title: suggestion.payloadTitle,
+                subtitle: suggestion.payloadDetail,
+                owner: suggestion.payloadOwner,
+                dueLabel: suggestion.payloadDueLabel,
+                dueAt: Self.inferredDueAt(from: suggestion.payloadDueLabel),
+                category: suggestion.category,
+                recurrence: .none,
+                createdBy: "Nina"
+            )
         }
 
         let confirmation = ChatMessage(
@@ -769,8 +1190,10 @@ final class AppStore {
               hasActiveHome else {
             return false
         }
+        let contextToken = currentHomeContextToken
 
         isSyncingHome = true
+        defer { finishSyncingHome(ifCurrent: contextToken) }
         do {
             let resolution = try await remoteHomeBackend.resolveNinaProposal(
                 proposal.id,
@@ -778,14 +1201,16 @@ final class AppStore {
                 editedPayload: editedPayload,
                 memoryVisibility: memoryVisibility
             )
+            guard isCurrentHomeContext(contextToken) else { return false }
             updateProposalState(proposal.id, state: resolution.state)
             persistActivityLocally()
             isSyncingHome = false
             await refreshHomeFromRemote(for: activeUser)
+            guard isCurrentHomeContext(contextToken) else { return false }
             Haptics.success()
             return true
         } catch {
-            isSyncingHome = false
+            guard isCurrentHomeContext(contextToken) else { return false }
             ninaConnectionNotice = "Não foi possível confirmar essa ação agora."
             Haptics.error()
             return false
@@ -808,15 +1233,18 @@ final class AppStore {
               let remoteHomeBackend else {
             return false
         }
+        let contextToken = currentHomeContextToken
 
         do {
             let updated = try await remoteHomeBackend.updateNinaMemory(memory)
+            guard isCurrentHomeContext(contextToken) else { return false }
             if let index = ninaMemories.firstIndex(where: { $0.id == updated.id }) {
                 ninaMemories[index] = updated
             }
             persistActivityLocally()
             return true
         } catch {
+            guard isCurrentHomeContext(contextToken) else { return false }
             syncErrorMessage = "Não foi possível atualizar essa memória."
             return false
         }
@@ -830,13 +1258,16 @@ final class AppStore {
               let remoteHomeBackend else {
             return false
         }
+        let contextToken = currentHomeContextToken
 
         do {
             try await remoteHomeBackend.deleteNinaMemory(memory.id)
+            guard isCurrentHomeContext(contextToken) else { return false }
             ninaMemories.removeAll { $0.id == memory.id }
             persistActivityLocally()
             return true
         } catch {
+            guard isCurrentHomeContext(contextToken) else { return false }
             syncErrorMessage = "Não foi possível apagar essa memória."
             return false
         }
@@ -852,14 +1283,18 @@ final class AppStore {
             persistActivityLocally()
             return true
         }
+        let contextToken = currentHomeContextToken
+        let familyID = familyGroup.id
 
         do {
-            try await remoteHomeBackend.deleteNinaChatHistory(familyID: familyGroup.id)
+            try await remoteHomeBackend.deleteNinaChatHistory(familyID: familyID)
+            guard isCurrentHomeContext(contextToken) else { return false }
             messages.removeAll()
             ninaThread = nil
             persistActivityLocally()
             return true
         } catch {
+            guard isCurrentHomeContext(contextToken) else { return false }
             syncErrorMessage = "Não foi possível apagar o histórico da Nina."
             return false
         }
@@ -873,7 +1308,13 @@ final class AppStore {
         )
         aiMemoryConsent = record
         if let data = try? JSONEncoder().encode(record) {
-            defaults.set(data, forKey: Self.aiMemoryConsentKey(for: userID))
+            PrivateLocalDataAccess.writeDataBestEffort(
+                data,
+                forKey: Self.aiMemoryConsentKey(for: userID),
+                ownerScope: PrivateLocalDataScope.aiConsent(for: userID),
+                store: privateDataStore,
+                legacyDefaults: defaults
+            )
         }
     }
 
@@ -883,14 +1324,24 @@ final class AppStore {
             return
         }
         aiMemoryConsent = nil
-        defaults.removeObject(forKey: Self.aiMemoryConsentKey(for: userID))
+        PrivateLocalDataAccess.removeData(
+            forKey: Self.aiMemoryConsentKey(for: userID),
+            ownerScope: PrivateLocalDataScope.aiConsent(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
     }
 
-    func makePrivacyExportData() throws -> Data {
+    func makePrivacyExportData(
+        profile: UserProfile? = nil,
+        profilePhotoData: Data? = nil
+    ) throws -> Data {
         let package = PrivacyExportPackage(
             exportedAt: .now,
             policyVersion: PrivacyPolicyVersion.current,
             user: activeUser,
+            profile: profile,
+            profilePhotoData: profilePhotoData,
             familyGroup: familyGroup,
             aiMemoryConsent: aiMemoryConsent,
             data: currentSnapshot
@@ -911,13 +1362,46 @@ final class AppStore {
 
     func clearLocalDataForActiveUser() {
         guard let userID = activeHomeUserID else { return }
+        clearLocalData(for: userID)
+    }
+
+    func clearLocalData(for userID: String) {
+        let clearsActiveContext = activeHomeUserID == userID
+        if clearsActiveContext {
+            homeContextGeneration &+= 1
+        }
+
         clearCachedHome(for: userID)
+        PrivateLocalDataAccess.removeAllData(
+            forOwnerScope: PrivateLocalDataScope.aiConsent(for: userID),
+            store: privateDataStore
+        )
         defaults.removeObject(forKey: Self.aiMemoryConsentKey(for: userID))
-        resetActivityState()
-        familyGroup = PreviewData.familyGroup
+
+        guard clearsActiveContext else { return }
+
+        remoteMutationTask?.cancel()
+        remoteMutationTask = nil
+        remoteMutationGeneration &+= 1
+        stopRealtimeSync()
+        notificationSyncTask?.cancel()
+        notificationSyncTask = nil
+        activeHomeUserID = nil
+        activeUser = nil
         homeAccessState = .noHome
         currentPermissionRole = .member
+        inviteStatus = nil
+        pendingJoinRequest = nil
+        joinRequests = []
+        pendingPriorityTaskIDs = []
+        isNinaResponding = false
+        ninaConnectionNotice = nil
+        taskEditConflict = nil
+        isSyncingHome = false
+        syncErrorMessage = nil
         aiMemoryConsent = nil
+        familyGroup = PreviewData.familyGroup
+        resetActivityState()
     }
 
     private func updateProposalState(_ proposalID: UUID, state: NinaProposalState) {
@@ -940,6 +1424,8 @@ final class AppStore {
         dueAt: Date? = nil,
         category: TaskCategory,
         priority: TaskPriority = .normal,
+        recurrence: TaskRecurrence = .none,
+        kind: TaskKind = .task,
         createdBy: String = "Manual",
         sectionID: String = TaskSectionDefaults.houseTasksID
     ) {
@@ -949,13 +1435,15 @@ final class AppStore {
         guard !trimmedTitle.isEmpty else { return }
 
         let task = TaskItem(
+            kind: kind,
             title: trimmedTitle,
             subtitle: subtitle.trimmingCharacters(in: .whitespacesAndNewlines),
             owner: trimmedOwner.isEmpty ? "Casa" : trimmedOwner,
-            dueLabel: trimmedDueLabel.isEmpty ? "Sem data" : trimmedDueLabel,
-            dueAt: dueAt,
+            dueLabel: kind == .seed ? "Sem data" : (trimmedDueLabel.isEmpty ? "Sem data" : trimmedDueLabel),
+            dueAt: kind == .seed ? nil : dueAt,
             category: category,
             priority: priority,
+            recurrence: kind == .seed ? .none : recurrence,
             isDone: false,
             createdBy: createdBy,
             sectionID: sectionID
@@ -972,12 +1460,16 @@ final class AppStore {
     }
 
     @discardableResult
-    func addTaskSection(title: String) -> TaskSection {
+    func addTaskSection(
+        title: String,
+        symbolName: String = "list.bullet.rectangle.fill"
+    ) -> TaskSection {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSymbolName = symbolName.trimmingCharacters(in: .whitespacesAndNewlines)
         let section = TaskSection(
             id: UUID().uuidString,
             title: trimmedTitle.isEmpty ? "Nova seção" : trimmedTitle,
-            symbolName: "list.bullet.rectangle.fill",
+            symbolName: trimmedSymbolName.isEmpty ? "list.bullet.rectangle.fill" : trimmedSymbolName,
             tone: nextTaskSectionTone
         )
 
@@ -993,6 +1485,30 @@ final class AppStore {
         return section
     }
 
+    @discardableResult
+    func deleteTaskSection(_ sectionID: String) -> Bool {
+        guard sectionID != Self.houseTasksSectionID,
+              taskSections.contains(where: { $0.id == sectionID }) else {
+            return false
+        }
+
+        taskSections.removeAll { $0.id == sectionID }
+        for index in tasks.indices where tasks[index].sectionID == sectionID {
+            tasks[index].sectionID = Self.houseTasksSectionID
+            tasks[index].version += 1
+        }
+
+        persistActivityLocally()
+        synchronizeLocalNotifications()
+        enqueueRemoteMutation(errorMessage: "Não foi possível excluir a seção.") {
+            backend,
+            familyID,
+            _ in
+            try await backend.deleteTaskSection(sectionID, familyID: familyID)
+        }
+        return true
+    }
+
     func updateTask(
         id: TaskItem.ID,
         title: String,
@@ -1002,6 +1518,8 @@ final class AppStore {
         dueAt: Date?,
         category: TaskCategory,
         priority: TaskPriority,
+        recurrence: TaskRecurrence? = nil,
+        kind: TaskKind? = nil,
         expectedVersion: Int? = nil
     ) {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1011,13 +1529,24 @@ final class AppStore {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
         let currentTask = tasks[index]
         var proposedTask = currentTask
+        let proposedKind = kind ?? currentTask.kind
+        proposedTask.kind = proposedKind
         proposedTask.title = trimmedTitle
         proposedTask.subtitle = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
         proposedTask.owner = trimmedOwner.isEmpty ? "Casa" : trimmedOwner
-        proposedTask.dueLabel = trimmedDueLabel.isEmpty ? "Sem data" : trimmedDueLabel
-        proposedTask.dueAt = dueAt
+        proposedTask.dueLabel = proposedKind == .seed
+            ? "Sem data"
+            : (trimmedDueLabel.isEmpty ? "Sem data" : trimmedDueLabel)
+        proposedTask.dueAt = proposedKind == .seed ? nil : dueAt
         proposedTask.category = category
         proposedTask.priority = priority
+        if proposedKind == .seed {
+            proposedTask.recurrence = .none
+            proposedTask.snoozedUntil = nil
+        } else if let recurrence {
+            proposedTask.recurrence = recurrence
+            proposedTask.snoozedUntil = nil
+        }
 
         if let expectedVersion, expectedVersion != currentTask.version {
             taskEditConflict = TaskEditConflict(
@@ -1065,21 +1594,68 @@ final class AppStore {
         guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
         let currentTask = tasks[index]
         var proposedTask = currentTask
-        proposedTask.isDone.toggle()
+
+        if !currentTask.isDone, currentTask.recurrence != .none {
+            let anchor = max(currentTask.dueAt ?? .now, .now).addingTimeInterval(1)
+            guard let nextDate = currentTask.scheduledOccurrence(after: anchor) else { return }
+            proposedTask.dueAt = nextDate
+            proposedTask.dueLabel = Self.taskDueLabel(for: nextDate)
+            proposedTask.snoozedUntil = nil
+        } else {
+            proposedTask.isDone.toggle()
+        }
         submitTaskUpdate(proposedTask, basedOn: currentTask)
     }
 
+    func snoozeTask(_ id: TaskItem.ID, until date: Date) {
+        guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
+        let currentTask = tasks[index]
+        var proposedTask = currentTask
+        proposedTask.snoozedUntil = date
+        submitTaskUpdate(proposedTask, basedOn: currentTask)
+    }
+
+    func deleteTask(_ id: TaskItem.ID) {
+        guard tasks.contains(where: { $0.id == id }) else { return }
+        tasks.removeAll { $0.id == id }
+        persistActivityLocally()
+        synchronizeLocalNotifications()
+        enqueueRemoteMutation(errorMessage: "Não foi possível apagar a tarefa.") {
+            backend,
+            familyID,
+            _ in
+            try await backend.deleteTask(id, familyID: familyID)
+        }
+    }
+
+    func refreshNotificationAuthorizationStatus() async {
+        notificationAuthorizationStatus = await notificationScheduler.authorizationStatus()
+    }
+
+    @discardableResult
+    func requestNotificationAuthorization() async -> Bool {
+        notificationAuthorizationStatus = await notificationScheduler.requestAuthorization()
+        if notificationAuthorizationStatus.canSchedule {
+            defaults.set(true, forKey: LocalHomeNotificationScheduler.notificationsEnabledKey)
+            synchronizeLocalNotifications()
+            return true
+        }
+        return false
+    }
+
     func synchronizeLocalNotifications() {
-        let canScheduleForActiveUser = activeHomeUserID != nil
+        let canScheduleForActiveUser = activeHomeUserID != nil && hasActiveHome
         let tasksForNotifications = canScheduleForActiveUser ? tasks : []
-        let remindersForNotifications = canScheduleForActiveUser ? reminders : []
         let familyID = familyGroup.id
         let scheduler = notificationScheduler
+        let previousTask = notificationSyncTask
 
-        Task {
+        previousTask?.cancel()
+        notificationSyncTask = Task {
+            await previousTask?.value
+            guard !Task.isCancelled else { return }
             await scheduler.synchronize(
                 tasks: tasksForNotifications,
-                reminders: remindersForNotifications,
                 familyID: familyID
             )
         }
@@ -1177,7 +1753,13 @@ final class AppStore {
     private func cacheActiveHomeLocally() {
         guard let activeHomeUserID else { return }
         guard let data = try? JSONEncoder().encode(familyGroup) else { return }
-        defaults.set(data, forKey: Self.homeKey(for: activeHomeUserID))
+        PrivateLocalDataAccess.writeDataBestEffort(
+            data,
+            forKey: Self.homeKey(for: activeHomeUserID),
+            ownerScope: PrivateLocalDataScope.household(for: activeHomeUserID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
     }
 
     private func persistActivityLocally() {
@@ -1210,6 +1792,7 @@ final class AppStore {
 
         let familyID = familyGroup.id
         let userID = activeUser.id
+        let contextToken = currentHomeContextToken
         let previousTask = remoteMutationTask
         remoteMutationGeneration &+= 1
 
@@ -1222,7 +1805,9 @@ final class AppStore {
             } catch is CancellationError {
                 return
             } catch {
-                guard let self, self.activeHomeUserID == userID else { return }
+                guard let self,
+                      self.isCurrentHomeContext(contextToken),
+                      self.activeHomeUserID == userID else { return }
                 self.syncErrorMessage = errorMessage
             }
         }
@@ -1230,6 +1815,7 @@ final class AppStore {
 
     private func submitTaskUpdate(_ proposedTask: TaskItem, basedOn baseTask: TaskItem) {
         guard let index = tasks.firstIndex(where: { $0.id == proposedTask.id }) else { return }
+        let contextToken = currentHomeContextToken
 
         var optimisticTask = proposedTask
         optimisticTask.version = baseTask.version + 1
@@ -1246,7 +1832,8 @@ final class AppStore {
                 expectedVersion: baseTask.version,
                 familyID: familyID
             )
-            self?.applyTaskUpdateResult(result, optimisticTask: optimisticTask)
+            guard let self, self.isCurrentHomeContext(contextToken) else { return }
+            self.applyTaskUpdateResult(result, optimisticTask: optimisticTask)
         }
     }
 
@@ -1333,7 +1920,29 @@ final class AppStore {
 
         let snapshot = currentSnapshot
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        defaults.set(data, forKey: Self.appDataKey(for: activeHomeUserID, familyID: familyGroup.id))
+        PrivateLocalDataAccess.writeDataBestEffort(
+            data,
+            forKey: Self.appDataKey(for: activeHomeUserID, familyID: familyGroup.id),
+            ownerScope: PrivateLocalDataScope.household(for: activeHomeUserID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
+    }
+
+    private var currentHomeContextToken: HomeContextToken {
+        HomeContextToken(
+            userID: activeHomeUserID,
+            generation: homeContextGeneration
+        )
+    }
+
+    private func isCurrentHomeContext(_ token: HomeContextToken) -> Bool {
+        token.generation == homeContextGeneration && token.userID == activeHomeUserID
+    }
+
+    private func finishSyncingHome(ifCurrent token: HomeContextToken) {
+        guard isCurrentHomeContext(token) else { return }
+        isSyncingHome = false
     }
 
     private func usesLocalDebugBackend(for user: AuthUser?) -> Bool {
@@ -1367,7 +1976,6 @@ final class AppStore {
             customTaskCategories: customTaskCategories,
             tasks: tasks,
             shoppingItems: shoppingItems,
-            reminders: reminders,
             insights: insights,
             ninaThread: ninaThread,
             ninaMemories: ninaMemories
@@ -1375,13 +1983,25 @@ final class AppStore {
     }
 
     private func clearCachedHome(for userID: String) {
-        let familyID = familyGroup.id
+        PrivateLocalDataAccess.removeAllData(
+            forOwnerScope: PrivateLocalDataScope.household(for: userID),
+            store: privateDataStore
+        )
         defaults.removeObject(forKey: Self.homeKey(for: userID))
-        defaults.removeObject(forKey: Self.appDataKey(for: userID, familyID: familyID))
+        let appDataPrefix = Self.appDataKeyPrefix(for: userID)
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(appDataPrefix) {
+            defaults.removeObject(forKey: key)
+        }
     }
 
     private func loadActivityState(for userID: String) {
-        guard let data = defaults.data(forKey: Self.appDataKey(for: userID, familyID: familyGroup.id)),
+        let key = Self.appDataKey(for: userID, familyID: familyGroup.id)
+        guard let data = PrivateLocalDataAccess.loadData(
+            forKey: key,
+            ownerScope: PrivateLocalDataScope.household(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        ),
               let snapshot = try? JSONDecoder().decode(AppDataSnapshot.self, from: data) else {
             resetActivityState()
             return
@@ -1391,8 +2011,17 @@ final class AppStore {
     }
 
     private func loadAIMemoryConsent(for userID: String?) {
-        guard let userID,
-              let data = defaults.data(forKey: Self.aiMemoryConsentKey(for: userID)),
+        guard let userID else {
+            aiMemoryConsent = nil
+            return
+        }
+        let key = Self.aiMemoryConsentKey(for: userID)
+        guard let data = PrivateLocalDataAccess.loadData(
+            forKey: key,
+            ownerScope: PrivateLocalDataScope.aiConsent(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        ),
               let record = try? JSONDecoder().decode(AIMemoryConsentRecord.self, from: data) else {
             aiMemoryConsent = nil
             return
@@ -1410,7 +2039,6 @@ final class AppStore {
         customTaskCategories = snapshot.customTaskCategories
         tasks = snapshot.tasks
         shoppingItems = snapshot.shoppingItems
-        reminders = snapshot.reminders
         insights = snapshot.insights
         ninaThread = snapshot.ninaThread
         ninaMemories = snapshot.ninaMemories
@@ -1420,6 +2048,9 @@ final class AppStore {
     private func apply(_ state: RemoteHomeState) {
         familyGroup = state.familyGroup
         currentPermissionRole = state.permissionRole
+        inviteStatus = state.inviteStatus
+        joinRequests = state.joinRequests
+        pendingJoinRequest = nil
 
         if let snapshot = state.snapshot {
             apply(snapshot)
@@ -1429,7 +2060,12 @@ final class AppStore {
     }
 
     private func loadFamilyGroup(for userID: String) -> FamilyGroup? {
-        guard let data = defaults.data(forKey: Self.homeKey(for: userID)) else { return nil }
+        guard let data = PrivateLocalDataAccess.loadData(
+            forKey: Self.homeKey(for: userID),
+            ownerScope: PrivateLocalDataScope.household(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        ) else { return nil }
         return try? JSONDecoder().decode(FamilyGroup.self, from: data)
     }
 
@@ -1439,6 +2075,10 @@ final class AppStore {
 
     private static func appDataKey(for userID: String, familyID: FamilyGroup.ID) -> String {
         "nina.home.appData.\(userID).\(familyID.uuidString)"
+    }
+
+    private static func appDataKeyPrefix(for userID: String) -> String {
+        "nina.home.appData.\(userID)."
     }
 
     private static func aiMemoryConsentKey(for userID: String) -> String {
@@ -1563,6 +2203,36 @@ final class AppStore {
         return defaultDate
     }
 
+    nonisolated static func taskDueLabel(
+        for date: Date,
+        relativeTo referenceDate: Date = .now,
+        calendar: Calendar = .current
+    ) -> String {
+        let time = Self.formattedTaskDate(date, format: "HH:mm", calendar: calendar)
+        if calendar.isDate(date, inSameDayAs: referenceDate) {
+            return "Hoje, \(time)"
+        }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: referenceDate),
+           calendar.isDate(date, inSameDayAs: tomorrow) {
+            return "Amanhã, \(time)"
+        }
+        let day = Self.formattedTaskDate(date, format: "dd MMM", calendar: calendar)
+        return "\(day), \(time)"
+    }
+
+    nonisolated private static func formattedTaskDate(
+        _ date: Date,
+        format: String,
+        calendar: Calendar
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.dateFormat = format
+        return formatter.string(from: date)
+    }
+
     nonisolated private static func dayOffset(from label: String) -> Int? {
         guard let range = label.range(of: #"daqui\s+(\d+)\s+dias?"#, options: .regularExpression) else {
             return nil
@@ -1589,7 +2259,11 @@ final class AppStore {
         return formatter
     }()
 
-    private static func householdMember(for user: AuthUser?, relationship: String) -> HouseholdMember {
+    private static func householdMember(
+        for user: AuthUser?,
+        relationship: String,
+        permissionRole: FamilyPermissionRole = .member
+    ) -> HouseholdMember {
         let rawDisplayName = user?.displayName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         return HouseholdMember(
@@ -1597,6 +2271,7 @@ final class AppStore {
             name: rawDisplayName.isEmpty ? "Você" : rawDisplayName,
             relationship: relationship,
             role: .adult,
+            permissionRole: permissionRole,
             tone: .sky,
             taskCount: 0,
             memoryNote: "Participante principal desta casa."
@@ -1723,6 +2398,48 @@ enum PreviewData {
             priority: .normal,
             isDone: true,
             createdBy: "Nina"
+        ),
+        TaskItem(
+            kind: .seed,
+            title: "Organizar as fotos da família",
+            subtitle: "Separar os melhores momentos do último ano.",
+            owner: "Casa",
+            dueLabel: "Sem data",
+            category: .home,
+            isDone: false,
+            createdBy: "Nina"
+        ),
+        TaskItem(
+            title: "Levar comprovante escolar",
+            subtitle: "Documento precisa ir na mochila.",
+            owner: "Casa",
+            dueLabel: "Hoje, 18:00",
+            dueAt: Calendar.current.date(byAdding: .hour, value: 2, to: .now),
+            category: .school,
+            isDone: false,
+            createdBy: "Nina"
+        ),
+        TaskItem(
+            title: "Comprar gás",
+            subtitle: "Estimativa: acaba em 10 dias.",
+            owner: "Casa",
+            dueLabel: "Daqui 8 dias",
+            dueAt: Calendar.current.date(byAdding: .day, value: 8, to: .now),
+            category: .home,
+            priority: .high,
+            isDone: false,
+            createdBy: "Nina"
+        ),
+        TaskItem(
+            title: "Remédio do filho",
+            subtitle: "Rotina médica simulada.",
+            owner: "Casa",
+            dueLabel: "21:00",
+            dueAt: Calendar.current.date(byAdding: .hour, value: 4, to: .now),
+            category: .health,
+            recurrence: .daily,
+            isDone: false,
+            createdBy: "Nina"
         )
     ]
 
@@ -1730,30 +2447,6 @@ enum PreviewData {
         ShoppingItem(title: "Gás", amount: "1 botijão", owner: "Heitor", isChecked: false),
         ShoppingItem(title: "Ração do Thor", amount: "3 kg", owner: "Casa", isChecked: false),
         ShoppingItem(title: "Frutas para lancheira", amount: "5 dias", owner: "Mirna", isChecked: true)
-    ]
-
-    static let reminders: [ReminderItem] = [
-        ReminderItem(
-            title: "Levar comprovante escolar",
-            detail: "Documento precisa ir na mochila.",
-            dateLabel: "Hoje, 18:00",
-            symbolName: "backpack.fill",
-            tone: .amber
-        ),
-        ReminderItem(
-            title: "Comprar gás",
-            detail: "Estimativa: acaba em 10 dias.",
-            dateLabel: "Daqui 8 dias",
-            symbolName: "flame.fill",
-            tone: .coral
-        ),
-        ReminderItem(
-            title: "Remédio do filho",
-            detail: "Rotina médica simulada.",
-            dateLabel: "21:00",
-            symbolName: "pills.fill",
-            tone: .mint
-        )
     ]
 
     static let insights: [HouseholdInsight] = [

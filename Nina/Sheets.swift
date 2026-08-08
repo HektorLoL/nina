@@ -5,6 +5,7 @@ import UIKit
 enum TaskEditorMode: Hashable {
     case add(sectionID: String)
     case edit(UUID)
+    case plant(UUID)
 }
 
 struct SettingsSheet: View {
@@ -19,10 +20,8 @@ struct SettingsSheet: View {
     @Environment(RouterPath.self) private var router
     @Environment(\.dismiss) private var dismiss
 
-    @AppStorage("nina.notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("nina.smartSuggestionsEnabled") private var smartSuggestionsEnabled = true
     @AppStorage("nina.weeklyDigestEnabled") private var weeklyDigestEnabled = false
-    @AppStorage("nina.quietHoursEnabled") private var quietHoursEnabled = true
 
     private var inviteURL: URL {
         store.inviteURL
@@ -61,9 +60,6 @@ struct SettingsSheet: View {
                     dismiss()
                 }
             }
-        }
-        .onChange(of: notificationsEnabled) { _, _ in
-            store.synchronizeLocalNotifications()
         }
     }
 
@@ -193,7 +189,7 @@ struct SettingsSheet: View {
         SettingsGroup(title: "Nina") {
             SettingsToggleRow(
                 title: "Sugestões automáticas",
-                subtitle: "Criar tarefas e lembretes a partir da conversa.",
+                subtitle: "Criar itens para resolver a partir da conversa.",
                 systemName: "sparkles",
                 tone: .mint,
                 isOn: $smartSuggestionsEnabled
@@ -201,13 +197,17 @@ struct SettingsSheet: View {
 
             SettingsDivider()
 
-            SettingsToggleRow(
-                title: "Notificações",
-                subtitle: "Avisos de tarefas, compras e lembretes próximos.",
-                systemName: "bell.badge.fill",
-                tone: .amber,
-                isOn: $notificationsEnabled
-            )
+            NavigationLink {
+                NotificationPreferencesView()
+            } label: {
+                SettingsActionRow(
+                    title: "Lembretes e notificações",
+                    subtitle: notificationStatusSubtitle,
+                    systemName: "bell.badge.fill",
+                    tone: .amber
+                )
+            }
+            .buttonStyle(.plain)
 
             SettingsDivider()
 
@@ -233,7 +233,7 @@ struct SettingsSheet: View {
 
             SettingsDivider()
 
-            if store.canInviteMorePeople {
+            if store.canManageFamily, store.canInviteMorePeople, store.inviteStatus?.isActive ?? true {
                 ShareLink(item: inviteURL) {
                     SettingsActionRow(
                         title: "Compartilhar convite",
@@ -243,13 +243,23 @@ struct SettingsSheet: View {
                     )
                 }
                 .buttonStyle(.plain)
-            } else {
+            } else if store.canManageFamily {
                 SettingsInfoRow(
                     title: "Convites pausados",
-                    subtitle: "A casa já chegou ao limite de pessoas.",
+                    subtitle: store.canInviteMorePeople
+                        ? "Gere um novo link na tela Casa."
+                        : "A casa já chegou ao limite de pessoas.",
                     value: "limite",
                     systemName: "person.crop.circle.badge.exclamationmark",
                     tone: .coral
+                )
+            } else {
+                SettingsInfoRow(
+                    title: store.currentPermissionRole.title,
+                    subtitle: store.currentPermissionRole.summary,
+                    value: "acesso",
+                    systemName: store.currentPermissionRole.symbolName,
+                    tone: .lavender
                 )
             }
         }
@@ -283,15 +293,19 @@ struct SettingsSheet: View {
             }
             .buttonStyle(.plain)
 
-            SettingsDivider()
+        }
+    }
 
-            SettingsToggleRow(
-                title: "Horário silencioso",
-                subtitle: "Reduzir avisos durante a noite.",
-                systemName: "moon.fill",
-                tone: .sky,
-                isOn: $quietHoursEnabled
-            )
+    private var notificationStatusSubtitle: String {
+        switch store.notificationAuthorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            "Avisos ativos e horário silencioso configurável."
+        case .denied:
+            "Bloqueadas pelo sistema. Toque para corrigir."
+        case .notDetermined:
+            "Ative os avisos quando fizer sentido para você."
+        case .unavailable:
+            "Configure os avisos deste aparelho."
         }
     }
 
@@ -640,7 +654,7 @@ private struct PrivacyConsentSettingsView: View {
                     )
                     PrivacyBulletRow(
                         systemName: "checkmark.circle.fill",
-                        text: "Tarefas, lembretes e memórias só entram na casa depois da sua confirmação."
+                        text: "Tarefas e memórias só entram na casa depois da sua confirmação."
                     )
                     PrivacyBulletRow(
                         systemName: "person.fill",
@@ -683,6 +697,8 @@ private struct PrivacyConsentSettingsView: View {
 
 private struct PrivacyExportView: View {
     @Environment(AppStore.self) private var store
+    @Environment(AuthSessionStore.self) private var authSession
+    @Environment(ProfileStore.self) private var profileStore
     @State private var exportURL: URL?
     @State private var exportError: String?
 
@@ -695,7 +711,8 @@ private struct PrivacyExportView: View {
                 )
 
                 SoftCard(padding: 16) {
-                    PrivacyBulletRow(systemName: "house.fill", text: "Inclui casa, participantes, tarefas, compras, lembretes e insights.")
+                    PrivacyBulletRow(systemName: "person.text.rectangle.fill", text: "Inclui seu perfil e a foto salva, quando houver.")
+                    PrivacyBulletRow(systemName: "house.fill", text: "Inclui casa, participantes, tarefas com horários, compras e insights.")
                     PrivacyBulletRow(systemName: "bubble.left.and.bubble.right.fill", text: "Inclui o histórico privado da Nina carregado neste aparelho.")
                     PrivacyBulletRow(systemName: "lock.fill", text: "Inclui o status do consentimento de IA salvo para esta conta.")
                 }
@@ -729,14 +746,24 @@ private struct PrivacyExportView: View {
         .ninaSheetBackground()
         .navigationTitle("Exportar")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            discardExport()
+        }
     }
 
     private func generateExport() {
+        discardExport()
         do {
-            let data = try store.makePrivacyExportData()
-            let url = FileManager.default.temporaryDirectory
-                .appendingPathComponent(store.privacyExportFilename)
-            try data.write(to: url, options: .atomic)
+            let profile = authSession.currentUser.map { profileStore.profile(for: $0) }
+            let profilePhotoData = profile.flatMap { profileStore.photoData(for: $0) }
+            let data = try store.makePrivacyExportData(
+                profile: profile,
+                profilePhotoData: profilePhotoData
+            )
+            let url = try PrivacyExportFileStore.write(
+                data,
+                filename: store.privacyExportFilename
+            )
             exportURL = url
             exportError = nil
             Haptics.success()
@@ -746,12 +773,20 @@ private struct PrivacyExportView: View {
             Haptics.error()
         }
     }
+
+    private func discardExport() {
+        guard let exportURL else { return }
+        PrivacyExportFileStore.remove(exportURL)
+        self.exportURL = nil
+    }
 }
 
 private struct AccountDeletionView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(OnboardingStore.self) private var onboardingStore
+    @Environment(ProfileStore.self) private var profileStore
+    @Environment(InviteLinkStore.self) private var inviteLinkStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var isShowingConfirmation = false
@@ -812,10 +847,14 @@ private struct AccountDeletionView: View {
     }
 
     private func deleteAccount() {
+        guard let userID = authSession.currentUser?.id else { return }
         Task {
             if await authSession.deleteAccount() {
-                store.clearLocalDataForActiveUser()
-                onboardingStore.cancelReplay()
+                store.clearLocalData(for: userID)
+                profileStore.clearLocalData(for: userID)
+                onboardingStore.clearLocalData(for: userID)
+                inviteLinkStore.clear()
+                try? PrivacyExportFileStore.removeAll()
                 dismiss()
             }
         }
@@ -864,6 +903,265 @@ private struct LoginLikeField: View {
                     .autocorrectionDisabled()
                     .textContentType(keyboardType == .emailAddress ? .emailAddress : .oneTimeCode)
             }
+        }
+    }
+}
+
+private struct NotificationPreferencesView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.openURL) private var openURL
+
+    @AppStorage(LocalHomeNotificationScheduler.notificationsEnabledKey)
+    private var notificationsEnabled = true
+    @AppStorage(LocalHomeNotificationScheduler.quietHoursEnabledKey)
+    private var quietHoursEnabled = true
+    @AppStorage(LocalHomeNotificationScheduler.quietHoursStartMinutesKey)
+    private var quietHoursStartMinutes = LocalHomeNotificationScheduler.defaultQuietHoursStartMinutes
+    @AppStorage(LocalHomeNotificationScheduler.quietHoursEndMinutesKey)
+    private var quietHoursEndMinutes = LocalHomeNotificationScheduler.defaultQuietHoursEndMinutes
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SectionTitle(
+                    title: "Lembretes e notificações",
+                    subtitle: "A Nina avisa no horário certo, respeitando o descanso da casa."
+                )
+
+                authorizationCard
+
+                SettingsGroup(title: "Avisos") {
+                    SettingsToggleRow(
+                        title: "Notificações neste aparelho",
+                        subtitle: "Tarefas com horário e avisos próximos.",
+                        systemName: "bell.badge.fill",
+                        tone: .amber,
+                        isOn: notificationToggle
+                    )
+                }
+
+                SettingsGroup(title: "Horário silencioso") {
+                    SettingsToggleRow(
+                        title: "Evitar avisos à noite",
+                        subtitle: quietHoursSummary,
+                        systemName: "moon.fill",
+                        tone: .sky,
+                        isOn: $quietHoursEnabled
+                    )
+
+                    SettingsDivider()
+
+                    timePickerRow(
+                        title: "Começa",
+                        systemName: "moon.stars.fill",
+                        selection: quietHoursStartBinding
+                    )
+
+                    SettingsDivider()
+
+                    timePickerRow(
+                        title: "Termina",
+                        systemName: "sunrise.fill",
+                        selection: quietHoursEndBinding
+                    )
+                }
+            }
+            .padding(18)
+            .padding(.bottom, 24)
+        }
+        .ninaSheetBackground()
+        .navigationTitle("Notificações")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await store.refreshNotificationAuthorizationStatus()
+        }
+        .onChange(of: quietHoursEnabled) { _, _ in
+            store.synchronizeLocalNotifications()
+        }
+        .onChange(of: quietHoursStartMinutes) { _, _ in
+            store.synchronizeLocalNotifications()
+        }
+        .onChange(of: quietHoursEndMinutes) { _, _ in
+            store.synchronizeLocalNotifications()
+        }
+    }
+
+    @ViewBuilder
+    private var authorizationCard: some View {
+        SoftCard {
+            HStack(alignment: .top, spacing: 12) {
+                IconBubble(
+                    systemName: authorizationSystemName,
+                    tone: authorizationTone,
+                    size: 44
+                )
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(authorizationTitle)
+                        .font(.headline.weight(.black))
+                        .foregroundStyle(NinaTheme.ink)
+
+                    Text(authorizationMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            switch store.notificationAuthorizationStatus {
+            case .notDetermined:
+                Button {
+                    Haptics.lightImpact()
+                    Task {
+                        _ = await store.requestNotificationAuthorization()
+                    }
+                } label: {
+                    Label("Permitir notificações", systemImage: "bell.badge.fill")
+                        .font(.subheadline.weight(.black))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(NinaTheme.mint, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            case .denied:
+                Button {
+                    guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+                    openURL(url)
+                } label: {
+                    Label("Abrir Ajustes do iPhone", systemImage: "gearshape.fill")
+                        .font(.subheadline.weight(.black))
+                        .foregroundStyle(NinaTheme.sky)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(NinaTheme.sky.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(.plain)
+            case .authorized, .provisional, .ephemeral, .unavailable:
+                EmptyView()
+            }
+        }
+    }
+
+    private var notificationToggle: Binding<Bool> {
+        Binding(
+            get: { notificationsEnabled },
+            set: { isEnabled in
+                notificationsEnabled = isEnabled
+                if isEnabled, store.notificationAuthorizationStatus == .notDetermined {
+                    Task {
+                        _ = await store.requestNotificationAuthorization()
+                    }
+                } else {
+                    store.synchronizeLocalNotifications()
+                }
+            }
+        )
+    }
+
+    private var quietHoursStartBinding: Binding<Date> {
+        timeBinding(minutes: $quietHoursStartMinutes)
+    }
+
+    private var quietHoursEndBinding: Binding<Date> {
+        timeBinding(minutes: $quietHoursEndMinutes)
+    }
+
+    private func timeBinding(minutes: Binding<Int>) -> Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(
+                    byAdding: .minute,
+                    value: minutes.wrappedValue,
+                    to: Calendar.current.startOfDay(for: .now)
+                ) ?? .now
+            },
+            set: { date in
+                let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+                minutes.wrappedValue = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+            }
+        )
+    }
+
+    private func timePickerRow(
+        title: String,
+        systemName: String,
+        selection: Binding<Date>
+    ) -> some View {
+        HStack(spacing: 12) {
+            IconBubble(systemName: systemName, tone: .sky, size: 40)
+
+            Text(title)
+                .font(.headline.weight(.heavy))
+                .foregroundStyle(NinaTheme.ink)
+
+            Spacer()
+
+            DatePicker(title, selection: selection, displayedComponents: .hourAndMinute)
+                .labelsHidden()
+        }
+        .padding(14)
+        .disabled(!quietHoursEnabled)
+        .opacity(quietHoursEnabled ? 1 : 0.55)
+    }
+
+    private var quietHoursSummary: String {
+        "Adia avisos entre \(formattedTime(quietHoursStartMinutes)) e \(formattedTime(quietHoursEndMinutes))."
+    }
+
+    private func formattedTime(_ minutes: Int) -> String {
+        String(format: "%02d:%02d", minutes / 60, minutes % 60)
+    }
+
+    private var authorizationTitle: String {
+        switch store.notificationAuthorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            "Notificações permitidas"
+        case .notDetermined:
+            "Você escolhe quando ativar"
+        case .denied:
+            "Notificações bloqueadas"
+        case .unavailable:
+            "Status indisponível"
+        }
+    }
+
+    private var authorizationMessage: String {
+        switch store.notificationAuthorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            "Os próximos avisos serão agendados neste aparelho."
+        case .notDetermined:
+            "Ative depois de criar tarefas com horário. A Nina só pede permissão neste momento."
+        case .denied:
+            "O iPhone não permite avisos da Nina. Você pode mudar isso nos Ajustes."
+        case .unavailable:
+            "Este aparelho não informou o estado das notificações."
+        }
+    }
+
+    private var authorizationSystemName: String {
+        switch store.notificationAuthorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            "checkmark.circle.fill"
+        case .notDetermined:
+            "bell.fill"
+        case .denied:
+            "bell.slash.fill"
+        case .unavailable:
+            "questionmark.circle.fill"
+        }
+    }
+
+    private var authorizationTone: MemberTone {
+        switch store.notificationAuthorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            .mint
+        case .notDetermined:
+            .amber
+        case .denied:
+            .coral
+        case .unavailable:
+            .lavender
         }
     }
 }
@@ -1386,27 +1684,44 @@ private struct PremiumBenefitRow: View {
 struct TaskEditorSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     var mode: TaskEditorMode
     @State private var title = ""
     @State private var subtitle = ""
     @State private var owner = "Casa"
     @State private var dueDate = Date()
+    @State private var kind: TaskKind = .task
     @State private var category: TaskCategory = .home
     @State private var priority: TaskPriority = .normal
+    @State private var recurrence: TaskRecurrence = .none
     @State private var localTaskCategories: [TaskCategory] = []
     @State private var isCategoryDropdownExpanded = false
     @State private var isCreatingCategory = false
     @State private var newCategoryTitle = ""
     @State private var didLoad = false
     @State private var loadedTaskVersion: Int?
+    @State private var isShowingDeleteConfirmation = false
 
     private var isEditing: Bool {
-        if case .edit = mode { true } else { false }
+        switch mode {
+        case .edit, .plant:
+            true
+        case .add:
+            false
+        }
+    }
+
+    private var isPlantingSeed: Bool {
+        if case .plant = mode { true } else { false }
     }
 
     private var trimmedTitle: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isSeed: Bool {
+        kind == .seed
     }
 
     private var ownerOptions: [String] {
@@ -1433,17 +1748,35 @@ struct TaskEditorSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 SectionTitle(
-                    title: isEditing ? "Editar tarefa" : "Nova tarefa",
-                    subtitle: "Mantenha simples. A casa precisa lembrar, não complicar."
+                    title: editorTitle,
+                    subtitle: isSeed
+                        ? "Guarde a intenção agora. Escolha quando fazer depois."
+                        : "Mantenha simples. A casa precisa lembrar, não complicar."
                 )
 
                 editorFields
+                permissionCard
 
-                PrimaryCapsuleButton(title: isEditing ? "Salvar tarefa" : "Criar tarefa", systemName: "checkmark") {
+                PrimaryCapsuleButton(title: primaryActionTitle, systemName: isSeed ? "leaf.fill" : "checkmark") {
                     save()
                 }
                 .disabled(trimmedTitle.isEmpty)
                 .opacity(trimmedTitle.isEmpty ? 0.5 : 1)
+
+                if isEditing {
+                    Button(role: .destructive) {
+                        Haptics.warning()
+                        isShowingDeleteConfirmation = true
+                    } label: {
+                        Label("Apagar tarefa", systemImage: "trash.fill")
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(NinaTheme.coral)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(NinaTheme.coral.opacity(0.1), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(18)
         }
@@ -1460,10 +1793,42 @@ struct TaskEditorSheet: View {
             }
         }
         .onAppear(perform: loadIfNeeded)
+        .task {
+            await store.refreshNotificationAuthorizationStatus()
+        }
+        .alert("Apagar esta tarefa?", isPresented: $isShowingDeleteConfirmation) {
+            Button("Cancelar", role: .cancel) {}
+            Button("Apagar", role: .destructive) {
+                deleteTask()
+            }
+        } message: {
+            Text("A tarefa e o aviso agendado serão removidos.")
+        }
     }
 
     private var editorFields: some View {
         VStack(alignment: .leading, spacing: 14) {
+            SoftCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Tipo", systemImage: kind.symbolName)
+                        .font(.subheadline.weight(.heavy))
+                        .foregroundStyle(NinaTheme.muted)
+
+                    Picker("Tipo", selection: $kind) {
+                        ForEach(TaskKind.allCases) { item in
+                            Text(item.title).tag(item)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(isPlantingSeed)
+
+                    Text(kind.editorDescription)
+                        .font(.caption)
+                        .foregroundStyle(NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             SoftCard {
                 TextField("O que precisa ser feito?", text: $title, axis: .vertical)
                     .lineLimit(1...3)
@@ -1480,13 +1845,50 @@ struct TaskEditorSheet: View {
             SoftCard {
                 ownerMenu
 
-                Divider()
+                if !isSeed {
+                    Divider()
 
-                DatePicker(selection: $dueDate, displayedComponents: .date) {
-                    Label("Quando", systemImage: "calendar")
-                        .foregroundStyle(NinaTheme.muted)
+                    DatePicker(
+                        "Data e hora",
+                        selection: $dueDate,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .datePickerStyle(.compact)
+
+                    Divider()
+
+                    HStack(spacing: 12) {
+                        Label("Repetição", systemImage: "repeat")
+                            .font(.subheadline.weight(.heavy))
+                            .foregroundStyle(NinaTheme.muted)
+
+                        Spacer()
+
+                        Picker("Repetição", selection: $recurrence) {
+                            ForEach(TaskRecurrence.allCases) { option in
+                                Text(option.title).tag(option)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .tint(NinaTheme.ink)
+                    }
+
+                    if recurrence != .none {
+                        Label(recurrence.explicitTitle, systemImage: "repeat.circle.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(NinaTheme.mint)
+                    }
+                } else {
+                    Divider()
+
+                    Label(
+                        "Sem data por enquanto. Transforme em tarefa quando quiser reservar um horário.",
+                        systemImage: "sparkles"
+                    )
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(NinaTheme.mint)
                 }
-                .datePickerStyle(.compact)
             }
 
             SoftCard {
@@ -1506,6 +1908,48 @@ struct TaskEditorSheet: View {
                     }
                     .pickerStyle(.segmented)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var permissionCard: some View {
+        if isSeed {
+            EmptyView()
+        } else {
+            switch store.notificationAuthorizationStatus {
+            case .notDetermined:
+            SoftCard(padding: 14) {
+                Label(
+                    "Ative notificações para receber os avisos no horário escolhido.",
+                    systemImage: "bell.badge.fill"
+                )
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(NinaTheme.muted)
+
+                Button("Ativar notificações") {
+                    Task {
+                        _ = await store.requestNotificationAuthorization()
+                    }
+                }
+                .font(.subheadline.weight(.black))
+                .foregroundStyle(NinaTheme.mint)
+            }
+            case .denied:
+            SoftCard(padding: 14) {
+                Label("Notificações estão bloqueadas nos Ajustes do iPhone.", systemImage: "bell.slash.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(NinaTheme.coral)
+
+                Button("Abrir Ajustes") {
+                    guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+                    openURL(url)
+                }
+                .font(.subheadline.weight(.black))
+                .foregroundStyle(NinaTheme.sky)
+            }
+            case .authorized, .provisional, .ephemeral, .unavailable:
+                EmptyView()
             }
         }
     }
@@ -1634,17 +2078,30 @@ struct TaskEditorSheet: View {
         guard !didLoad else { return }
         didLoad = true
 
-        guard case .edit(let id) = mode,
-              let task = store.tasks.first(where: { $0.id == id }) else {
+        let taskID: UUID
+        switch mode {
+        case .edit(let id), .plant(let id):
+            taskID = id
+        case .add:
+            dueDate = Self.defaultDueDate()
+            return
+        }
+
+        guard let task = store.tasks.first(where: { $0.id == taskID }) else {
+            dueDate = Self.defaultDueDate()
             return
         }
 
         title = task.title
         subtitle = task.subtitle
         owner = task.owner
-        dueDate = task.dueAt ?? Self.date(fromDueLabel: task.dueLabel)
+        kind = isPlantingSeed ? .task : task.kind
+        dueDate = isPlantingSeed
+            ? Self.defaultDueDate()
+            : (task.dueAt ?? Self.date(fromDueLabel: task.dueLabel))
         category = task.category
         priority = task.priority
+        recurrence = task.recurrence
         loadedTaskVersion = task.version
     }
 
@@ -1654,8 +2111,9 @@ struct TaskEditorSheet: View {
             return
         }
 
-        let dueLabel = Self.dueLabel(for: dueDate)
-        let dueAt = AppStore.reminderDate(onSameDayAs: dueDate)
+        let dueLabel = isSeed ? "Sem data" : Self.dateLabel(for: dueDate)
+        let dueAt = isSeed ? nil : dueDate
+        let recurrenceForSave: TaskRecurrence = isSeed ? .none : recurrence
         let categoryForSave = persistedCategoryIfNeeded(category)
         Haptics.success()
         switch mode {
@@ -1668,6 +2126,8 @@ struct TaskEditorSheet: View {
                 dueAt: dueAt,
                 category: categoryForSave,
                 priority: priority,
+                recurrence: recurrenceForSave,
+                kind: kind,
                 sectionID: sectionID
             )
         case .edit(let id):
@@ -1680,10 +2140,59 @@ struct TaskEditorSheet: View {
                 dueAt: dueAt,
                 category: categoryForSave,
                 priority: priority,
+                recurrence: recurrenceForSave,
+                kind: kind,
+                expectedVersion: loadedTaskVersion
+            )
+        case .plant(let id):
+            store.updateTask(
+                id: id,
+                title: title,
+                subtitle: subtitle,
+                owner: owner,
+                dueLabel: dueLabel,
+                dueAt: dueAt,
+                category: categoryForSave,
+                priority: priority,
+                recurrence: recurrenceForSave,
+                kind: .task,
                 expectedVersion: loadedTaskVersion
             )
         }
 
+        dismiss()
+    }
+
+    private var editorTitle: String {
+        if isPlantingSeed {
+            return "Plantar semente"
+        }
+        if isEditing {
+            return isSeed ? "Editar semente" : "Editar tarefa"
+        }
+        return isSeed ? "Nova semente" : "Nova tarefa"
+    }
+
+    private var primaryActionTitle: String {
+        if isPlantingSeed {
+            return "Plantar como tarefa"
+        }
+        if isEditing {
+            return isSeed ? "Salvar semente" : "Salvar tarefa"
+        }
+        return isSeed ? "Guardar semente" : "Criar tarefa"
+    }
+
+    private func deleteTask() {
+        let id: UUID
+        switch mode {
+        case .edit(let taskID), .plant(let taskID):
+            id = taskID
+        case .add:
+            return
+        }
+        store.deleteTask(id)
+        Haptics.success()
         dismiss()
     }
 
@@ -1734,17 +2243,25 @@ struct TaskEditorSheet: View {
         return store.addTaskCategory(title: selectedCategory.title) ?? selectedCategory
     }
 
-    private static func dueLabel(for date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
-            return "Hoje"
-        }
+    static func dateLabel(
+        for date: Date,
+        relativeTo referenceDate: Date = .now,
+        calendar: Calendar = .current
+    ) -> String {
+        AppStore.taskDueLabel(
+            for: date,
+            relativeTo: referenceDate,
+            calendar: calendar
+        )
+    }
 
-        if calendar.isDateInTomorrow(date) {
-            return "Amanhã"
-        }
-
-        return dueDateFormatter.string(from: date)
+    static func defaultDueDate(
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Date {
+        let nextHour = calendar.date(byAdding: .hour, value: 1, to: now) ?? now
+        let components = calendar.dateComponents([.year, .month, .day, .hour], from: nextHour)
+        return calendar.date(from: components) ?? nextHour
     }
 
     private static func date(fromDueLabel label: String) -> Date {
@@ -1774,6 +2291,7 @@ struct TaskEditorSheet: View {
         formatter.dateFormat = "dd/MM/yyyy"
         return formatter
     }()
+
 }
 
 private struct TaskEditorMenuRow: View {
@@ -1944,9 +2462,16 @@ struct InviteFamilySheet: View {
         store.inviteURL
     }
 
+    private var inviteIsActive: Bool {
+        store.inviteStatus?.isActive ?? true
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            SectionTitle(title: "Convidar família", subtitle: "Link simulado para validar o fluxo de grupo familiar.")
+            SectionTitle(
+                title: "Convidar família",
+                subtitle: "Quem abrir o link envia um pedido para uma pessoa responsável aprovar."
+            )
 
             SoftCard {
                 HStack(spacing: 14) {
@@ -1975,9 +2500,29 @@ struct InviteFamilySheet: View {
                         .font(.caption.weight(.black))
                         .foregroundStyle(store.canInviteMorePeople ? NinaTheme.mint : NinaTheme.coral)
                 }
+
+                if let invite = store.inviteStatus {
+                    Divider()
+
+                    HStack {
+                        Label(invite.status.title, systemImage: "clock.badge.checkmark.fill")
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(invite.status.tone.color)
+
+                        Spacer()
+
+                        Text("\(invite.usesRemaining) de \(invite.maxUses) usos disponíveis")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(NinaTheme.muted)
+                    }
+
+                    Text("Expira em \(invite.expiresAt.formatted(date: .long, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(NinaTheme.muted)
+                }
             }
 
-            if store.canInviteMorePeople {
+            if store.canManageFamily, store.canInviteMorePeople, inviteIsActive {
                 ShareLink(item: inviteURL) {
                     Label("Compartilhar convite", systemImage: "square.and.arrow.up.fill")
                         .font(.headline.weight(.black))
@@ -1987,7 +2532,10 @@ struct InviteFamilySheet: View {
                         .background(NinaTheme.sky, in: Capsule())
                 }
             } else {
-                Label("Limite de família atingido", systemImage: "person.crop.circle.badge.exclamationmark")
+                Label(
+                    store.canInviteMorePeople ? "Gere um novo convite para continuar" : "Limite de família atingido",
+                    systemImage: "person.crop.circle.badge.exclamationmark"
+                )
                     .font(.headline.weight(.black))
                     .foregroundStyle(NinaTheme.muted)
                     .frame(maxWidth: .infinity)

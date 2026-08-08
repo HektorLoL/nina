@@ -115,16 +115,122 @@ struct SupabaseConfiguration: Equatable {
     var url: URL
     var publishableKey: String
 
+    init?(
+        rawURL: String,
+        publishableKey rawPublishableKey: String,
+        allowsInsecureLocalhost: Bool = false
+    ) {
+        guard let url = Self.validatedURL(
+            rawURL,
+            allowsInsecureLocalhost: allowsInsecureLocalhost
+        ),
+        let publishableKey = Self.validatedPublishableKey(rawPublishableKey) else {
+            return nil
+        }
+
+        self.url = url
+        self.publishableKey = publishableKey
+    }
+
     static func fromBundle(_ bundle: Bundle = .main) -> SupabaseConfiguration? {
         guard let rawURL = bundle.nonEmptyString(forInfoKey: "NINASupabaseURL")
                 ?? bundle.nonEmptyString(forInfoKey: "NINA_SUPABASE_URL"),
-              let url = URL(string: rawURL),
               let key = bundle.nonEmptyString(forInfoKey: "NINASupabasePublishableKey")
                 ?? bundle.nonEmptyString(forInfoKey: "NINA_SUPABASE_PUBLISHABLE_KEY") else {
             return nil
         }
 
-        return SupabaseConfiguration(url: url, publishableKey: key)
+        #if DEBUG
+        let allowsInsecureLocalhost = true
+        #else
+        let allowsInsecureLocalhost = false
+        #endif
+
+        return SupabaseConfiguration(
+            rawURL: rawURL,
+            publishableKey: key,
+            allowsInsecureLocalhost: allowsInsecureLocalhost
+        )
+    }
+
+    private static func validatedURL(
+        _ rawValue: String,
+        allowsInsecureLocalhost: Bool
+    ) -> URL? {
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty,
+              !value.contains("$("),
+              let components = URLComponents(string: value),
+              let scheme = components.scheme?.lowercased(),
+              let host = components.host?.lowercased(),
+              !host.isEmpty,
+              components.user == nil,
+              components.password == nil,
+              components.query == nil,
+              components.fragment == nil,
+              components.path.isEmpty || components.path == "/" else {
+            return nil
+        }
+
+        let localHosts = ["localhost", "127.0.0.1", "::1"]
+        let isSecure = scheme == "https"
+        let isAllowedLocalHTTP = allowsInsecureLocalhost
+            && scheme == "http"
+            && localHosts.contains(host)
+
+        guard isSecure || isAllowedLocalHTTP else { return nil }
+        return components.url
+    }
+
+    private static func validatedPublishableKey(_ rawValue: String) -> String? {
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.count >= 24,
+              value.count <= 4_096,
+              !value.contains("$("),
+              !value.unicodeScalars.contains(where: CharacterSet.whitespacesAndNewlines.contains)
+        else {
+            return nil
+        }
+
+        if value.hasPrefix("sb_publishable_") {
+            let suffix = value.dropFirst("sb_publishable_".count)
+            let isValidSuffix = suffix.utf8.count >= 16
+                && suffix.utf8.allSatisfy { (33...126).contains($0) }
+            return isValidSuffix ? value : nil
+        }
+
+        let segments = value.split(separator: ".", omittingEmptySubsequences: false)
+        guard segments.count == 3,
+              segments.allSatisfy({
+                  !$0.isEmpty && $0.utf8.allSatisfy(isBase64URLByte)
+              }),
+              let payload = decodedBase64URL(String(segments[1])),
+              let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              object["role"] as? String == "anon" else {
+            return nil
+        }
+
+        return value
+    }
+
+    private static func decodedBase64URL(_ value: String) -> Data? {
+        var base64 = value
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = base64.count % 4
+        guard remainder != 1 else { return nil }
+        if remainder > 0 {
+            base64.append(String(repeating: "=", count: 4 - remainder))
+        }
+        return Data(base64Encoded: base64)
+    }
+
+    private static func isBase64URLByte(_ byte: UInt8) -> Bool {
+        (48...57).contains(byte)
+            || (65...90).contains(byte)
+            || (97...122).contains(byte)
+            || byte == 45
+            || byte == 95
     }
 }
 

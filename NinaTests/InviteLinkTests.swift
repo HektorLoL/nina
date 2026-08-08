@@ -34,14 +34,61 @@ final class InviteLinkTests: XCTestCase {
         let suiteName = "InviteLinkTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-invite-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
 
-        let firstStore = InviteLinkStore(defaults: defaults)
+        let firstStore = InviteLinkStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore
+        )
         XCTAssertTrue(firstStore.receive(try XCTUnwrap(URL(string: "https://ninai.app/invite/\(code)"))))
+        XCTAssertNil(defaults.string(forKey: "nina.invite.pendingCode"))
 
-        let restoredStore = InviteLinkStore(defaults: defaults)
+        let restoredStore = InviteLinkStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore
+        )
         XCTAssertEqual(restoredStore.pendingCode, code)
 
         restoredStore.clear()
-        XCTAssertNil(InviteLinkStore(defaults: defaults).pendingCode)
+        XCTAssertNil(
+            InviteLinkStore(
+                defaults: defaults,
+                privateDataStore: privateDataStore
+            ).pendingCode
+        )
+    }
+
+    @MainActor
+    func testLegacyPendingInviteMigratesOutOfDefaults() throws {
+        let suiteName = "InviteLinkTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-invite-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
+        defaults.set(code, forKey: "nina.invite.pendingCode")
+
+        let store = InviteLinkStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore
+        )
+
+        XCTAssertEqual(store.pendingCode, code)
+        XCTAssertNil(defaults.string(forKey: "nina.invite.pendingCode"))
+        XCTAssertEqual(
+            try privateDataStore.data(
+                forKey: "nina.invite.pendingCode",
+                ownerScope: PrivateLocalDataScope.pendingInvite
+            ),
+            Data(code.utf8)
+        )
     }
 }

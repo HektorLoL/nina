@@ -8,6 +8,7 @@ import {
   isUUID,
   jsonResponse,
   parseConfiguredKey,
+  readAppStoreJSONRequest,
   verifyNotification,
   verifyRenewalInfo,
   verifyTransaction,
@@ -15,7 +16,11 @@ import {
 
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
-    return jsonResponse({ error: "method_not_allowed" }, 405);
+    return jsonResponse(
+      { error: "method_not_allowed" },
+      405,
+      { Allow: "POST" },
+    );
   }
 
   const supabaseURL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -27,12 +32,9 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ error: "service_not_configured" }, 503);
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: "invalid_json" }, 400);
-  }
+  const parsedBody = await readAppStoreJSONRequest(request);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.value;
 
   if (!isAppStoreNotificationRequest(body)) {
     return jsonResponse({ error: "invalid_request" }, 400);
@@ -48,11 +50,17 @@ Deno.serve(async (request: Request) => {
     const signedRenewalInfo = notification.data?.signedRenewalInfo;
     const notificationUUID = notification.notificationUUID;
 
-    let transaction = signedTransactionInfo
-      ? await verifyTransaction(signedTransactionInfo, notification.data?.environment)
+    const transaction = signedTransactionInfo
+      ? await verifyTransaction(
+        signedTransactionInfo,
+        notification.data?.environment,
+      )
       : null;
-    let renewal = signedRenewalInfo
-      ? await verifyRenewalInfo(signedRenewalInfo, notification.data?.environment)
+    const renewal = signedRenewalInfo
+      ? await verifyRenewalInfo(
+        signedRenewalInfo,
+        notification.data?.environment,
+      )
       : null;
 
     if (transaction) {
@@ -62,7 +70,8 @@ Deno.serve(async (request: Request) => {
     let userID = isUUID(transaction?.appAccountToken)
       ? transaction?.appAccountToken ?? null
       : null;
-    const originalTransactionID = transaction?.originalTransactionId ?? renewal?.originalTransactionId ?? null;
+    const originalTransactionID = transaction?.originalTransactionId ??
+      renewal?.originalTransactionId ?? null;
 
     if (!userID && originalTransactionID) {
       const { data: existingSubscription } = await admin
@@ -70,7 +79,9 @@ Deno.serve(async (request: Request) => {
         .select("user_id")
         .eq("original_transaction_id", originalTransactionID)
         .maybeSingle();
-      userID = isUUID(existingSubscription?.user_id) ? existingSubscription.user_id : null;
+      userID = isUUID(existingSubscription?.user_id)
+        ? existingSubscription.user_id
+        : null;
     }
 
     if (notificationUUID) {
