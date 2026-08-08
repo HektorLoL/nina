@@ -15,9 +15,10 @@ Until 2026-08-08 this repo had 3 commits and ~7 weeks of work living only in the
 working tree, including all of CI, the preflight tool, 10 migrations, and 3 Swift
 sources. That is now committed and merged to `main`.
 
-**This project is trunk-based: everything lands on `main`.** Do not open a side
-branch and leave it there — if one is used at all, fast-forward it into `main`
-in the same session. There is no PR or review flow to wait for.
+**This project is trunk-based: everything lands on `main` and gets pushed.**
+Commit to `main` and `git push origin main` in the same turn — no feature
+branch, no PR, no review flow to wait for. Pushing is what makes CI run, so an
+unpushed commit leaves the release gate unverified.
 
 Practical consequences that persist:
 
@@ -34,8 +35,9 @@ Practical consequences that persist:
 
 **Still be careful with destructive git commands** (`git clean -fd`,
 `git reset --hard`, `git stash` on a dirty tree). This is a solo repo and
-in-flight work has no remote backup. Commit and push only when asked — but when
-committing, commit to `main`.
+uncommitted work has no remote backup. Committing is still done when the work is
+done and asked for, not speculatively — but once committing, it goes to `main`
+and gets pushed. Force-push and history rewrites are a different matter: ask.
 
 ---
 
