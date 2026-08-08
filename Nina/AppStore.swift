@@ -1654,6 +1654,7 @@ final class AppStore {
     func synchronizeLocalNotifications() {
         let canScheduleForActiveUser = activeHomeUserID != nil && hasActiveHome
         let tasksForNotifications = canScheduleForActiveUser ? tasks : []
+        let viewerName = canScheduleForActiveUser ? currentFamilyMember?.name : nil
         let familyID = familyGroup.id
         let scheduler = notificationScheduler
         let previousTask = notificationSyncTask
@@ -1664,7 +1665,8 @@ final class AppStore {
             guard !Task.isCancelled else { return }
             await scheduler.synchronize(
                 tasks: tasksForNotifications,
-                familyID: familyID
+                familyID: familyID,
+                viewerName: viewerName
             )
         }
     }

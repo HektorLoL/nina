@@ -24,7 +24,7 @@ enum HomeNotificationAuthorizationStatus: Hashable {
 protocol HomeNotificationScheduling {
     func authorizationStatus() async -> HomeNotificationAuthorizationStatus
     func requestAuthorization() async -> HomeNotificationAuthorizationStatus
-    func synchronize(tasks: [TaskItem], familyID: UUID) async
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewerName: String?) async
 }
 
 extension HomeNotificationScheduling {
@@ -38,7 +38,7 @@ extension HomeNotificationScheduling {
 }
 
 struct NoopHomeNotificationScheduler: HomeNotificationScheduling {
-    func synchronize(tasks: [TaskItem], familyID: UUID) async {}
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewerName: String?) async {}
 }
 
 #if canImport(UserNotifications)
@@ -76,7 +76,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         return await authorizationStatus()
     }
 
-    func synchronize(tasks: [TaskItem], familyID: UUID) async {
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewerName: String?) async {
         let pending = await center.pendingNotificationRequests()
         let existingNinaIDs = pending.map(\.identifier).filter(Self.isNinaNotificationIdentifier)
 
@@ -88,7 +88,8 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
 
         let requests = notificationRequests(
             tasks: tasks,
-            familyID: familyID
+            familyID: familyID,
+            viewerName: viewerName
         )
 
         center.removePendingNotificationRequests(withIdentifiers: existingNinaIDs)
@@ -97,18 +98,28 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         }
     }
 
+    // Another adult's chore must never buzz this phone, and must never evict this phone's own
+    // reminders from the 60-request tail.
+    static func isForViewer(_ task: TaskItem, viewerName: String?) -> Bool {
+        guard let viewerName, !viewerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return true
+        }
+        return HouseholdWorkload.isSharedOwner(task.owner)
+            || HouseholdWorkload.isSameOwner(task.owner, viewerName)
+    }
+
     private func notificationRequests(
         tasks: [TaskItem],
-        familyID: UUID
+        familyID: UUID,
+        viewerName: String?
     ) -> [UNNotificationRequest] {
         let now = Date()
         let quietHours = QuietHoursConfiguration(defaults: defaults, calendar: calendar)
         var scheduled: [ScheduledNotification] = []
 
-        for task in tasks where !task.isDone {
+        for task in tasks where !task.isDone && Self.isForViewer(task, viewerName: viewerName) {
             let dates = taskDeliveryDates(task, after: now)
-            for date in dates {
-                let deliveryDate = quietHours.deliveryDate(for: date)
+            for deliveryDate in dates {
                 scheduled.append(
                     ScheduledNotification(
                         identifier: Self.taskIdentifier(
@@ -118,7 +129,8 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
                         ),
                         title: task.title,
                         body: taskNotificationBody(task),
-                        deliveryDate: deliveryDate
+                        deliveryDate: deliveryDate,
+                        isSilent: quietHours.contains(deliveryDate)
                     )
                 )
             }
@@ -152,7 +164,10 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         let content = UNMutableNotificationContent()
         content.title = scheduled.title
         content.body = scheduled.body
-        content.sound = .default
+        // Quiet hours silences the alert instead of moving it: the app must never show one time
+        // and deliver another.
+        content.sound = scheduled.isSilent ? nil : .default
+        content.interruptionLevel = scheduled.isSilent ? .passive : .active
 
         let components = calendar.dateComponents(
             [.year, .month, .day, .hour, .minute],
@@ -216,6 +231,7 @@ private struct ScheduledNotification {
     var title: String
     var body: String
     var deliveryDate: Date
+    var isSilent: Bool
 }
 
 private struct QuietHoursConfiguration {
@@ -233,37 +249,17 @@ private struct QuietHoursConfiguration {
         self.calendar = calendar
     }
 
-    func deliveryDate(for scheduledDate: Date) -> Date {
-        guard isEnabled, startMinutes != endMinutes else { return scheduledDate }
+    func contains(_ scheduledDate: Date) -> Bool {
+        guard isEnabled, startMinutes != endMinutes else { return false }
 
         let components = calendar.dateComponents([.hour, .minute], from: scheduledDate)
         let scheduledMinutes = (components.hour ?? 0) * 60 + (components.minute ?? 0)
 
         if startMinutes < endMinutes {
-            guard scheduledMinutes >= startMinutes, scheduledMinutes < endMinutes else {
-                return scheduledDate
-            }
-            return date(at: endMinutes, on: scheduledDate)
+            return scheduledMinutes >= startMinutes && scheduledMinutes < endMinutes
         }
 
-        if scheduledMinutes < endMinutes {
-            return date(at: endMinutes, on: scheduledDate)
-        }
-
-        guard scheduledMinutes >= startMinutes,
-              let nextDay = calendar.date(byAdding: .day, value: 1, to: scheduledDate) else {
-            return scheduledDate
-        }
-        return date(at: endMinutes, on: nextDay)
-    }
-
-    private func date(at minutes: Int, on date: Date) -> Date {
-        calendar.date(
-            bySettingHour: minutes / 60,
-            minute: minutes % 60,
-            second: 0,
-            of: date
-        ) ?? date
+        return scheduledMinutes >= startMinutes || scheduledMinutes < endMinutes
     }
 }
 #else

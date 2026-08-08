@@ -1902,7 +1902,7 @@ private struct NotificationSyncRecord {
 private actor RecordingNotificationScheduler: HomeNotificationScheduling {
     private var syncRecords: [NotificationSyncRecord] = []
 
-    func synchronize(tasks: [TaskItem], familyID: UUID) async {
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewerName: String?) async {
         syncRecords.append(
             NotificationSyncRecord(
                 tasks: tasks,
@@ -1921,7 +1921,7 @@ private actor DelayedNotificationScheduler: HomeNotificationScheduling {
     private var didStartNonemptySync = false
     private var nonemptySyncWaiters: [CheckedContinuation<Void, Never>] = []
 
-    func synchronize(tasks: [TaskItem], familyID: UUID) async {
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewerName: String?) async {
         if tasks.isEmpty {
             try? await Task.sleep(for: .milliseconds(5))
         } else {

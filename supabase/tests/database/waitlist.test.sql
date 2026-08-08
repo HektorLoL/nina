@@ -500,13 +500,18 @@ select lives_ok(
   'a separate signup can exercise withdrawal retention'
 );
 
+reset role;
+
+insert into waitlist_test_tokens (label, token)
+select 'withdrawal', unsubscribe_token
+from public.waitlist_signups
+where email = 'withdrawal@example.com';
+
+set local role service_role;
+
 select is(
   public.unsubscribe_waitlist_signup(
-    (
-      select unsubscribe_token
-      from public.waitlist_signups
-      where email = 'withdrawal@example.com'
-    )
+    (select token from waitlist_test_tokens where label = 'withdrawal')
   ) ->> 'accepted',
   'true',
   'the separate signup can withdraw consent'

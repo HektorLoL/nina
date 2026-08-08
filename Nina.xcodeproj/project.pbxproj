@@ -48,6 +48,7 @@
 		D00000000000000000000007 /* HouseholdWorkloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000006 /* HouseholdWorkloadTests.swift */; };
 		D00000000000000000000008 /* RemoteDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000007 /* RemoteDecodingTests.swift */; };
 		D00000000000000000000009 /* TaskAgendaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000008 /* TaskAgendaTests.swift */; };
+		D0000000000000000000000A /* NotificationTargetingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000009 /* NotificationTargetingTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -106,6 +107,7 @@
 		E00000000000000000000006 /* HouseholdWorkloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdWorkloadTests.swift; sourceTree = "<group>"; };
 		E00000000000000000000007 /* RemoteDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteDecodingTests.swift; sourceTree = "<group>"; };
 		E00000000000000000000008 /* TaskAgendaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskAgendaTests.swift; sourceTree = "<group>"; };
+		E00000000000000000000009 /* NotificationTargetingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationTargetingTests.swift; sourceTree = "<group>"; };
 		E00000000000000000000030 /* NinaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NinaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -200,6 +202,7 @@
 				E00000000000000000000006 /* HouseholdWorkloadTests.swift */,
 				E00000000000000000000007 /* RemoteDecodingTests.swift */,
 				E00000000000000000000008 /* TaskAgendaTests.swift */,
+				E00000000000000000000009 /* NotificationTargetingTests.swift */,
 			);
 			path = NinaTests;
 			sourceTree = "<group>";
@@ -363,6 +366,7 @@
 				D00000000000000000000007 /* HouseholdWorkloadTests.swift in Sources */,
 				D00000000000000000000008 /* RemoteDecodingTests.swift in Sources */,
 				D00000000000000000000009 /* TaskAgendaTests.swift in Sources */,
+				D0000000000000000000000A /* NotificationTargetingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

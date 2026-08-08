@@ -985,6 +985,14 @@ struct HouseholdInsight: Identifiable, Codable, Hashable {
     var tone: MemberTone
 }
 
+enum NinaLegalLinks {
+    static let privacyPolicy = URL(string: "https://ninai.app/privacidade/")!
+    // Apple's standard EULA is the terms of use until a Brazilian legal entity exists to sign one.
+    static let termsOfUse = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+    static let manageSubscription = URL(string: "https://apps.apple.com/account/subscriptions")!
+    static let support = URL(string: "mailto:oi@ninai.app")!
+}
+
 struct PremiumBenefit: Identifiable, Hashable {
     var title: String
     var detail: String

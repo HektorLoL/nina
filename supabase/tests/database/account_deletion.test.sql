@@ -301,10 +301,13 @@ select ok(
 select ok(
   not (
     '71000000-0000-0000-0000-000000000001'::uuid = any(
-      (
-        select accepted_by
-        from public.invites
-        where token = 'casa-dddddddddddddddddddddddddddddddd'
+      coalesce(
+        (
+          select accepted_by
+          from public.invites
+          where token = 'casa-dddddddddddddddddddddddddddddddd'
+        ),
+        '{}'::uuid[]
       )
     )
   ),

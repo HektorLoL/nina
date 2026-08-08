@@ -218,6 +218,7 @@ struct NinaChatView: View {
 
 private struct AIMemoryConsentCard: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         SoftCard(padding: 18) {
@@ -240,6 +241,7 @@ private struct AIMemoryConsentCard: View {
                 ConsentLine(systemName: "person.fill", text: "Memórias pessoais começam privadas.")
                 ConsentLine(systemName: "person.2.fill", text: "Compartilhar uma memória com a casa é sempre uma escolha explícita.")
                 ConsentLine(systemName: "trash.fill", text: "Você pode apagar seu histórico privado e revogar este consentimento em Ajustes.")
+                ConsentLine(systemName: "globe.americas.fill", text: "Suas mensagens e anexos são processados por um provedor de modelo fora do Brasil, que não os guarda.")
             }
 
             PrimaryCapsuleButton(title: "Aceitar e conversar", systemName: "checkmark.shield.fill") {
@@ -251,6 +253,14 @@ private struct AIMemoryConsentCard: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Button("Ler a política de privacidade") {
+                Haptics.selection()
+                openURL(NinaLegalLinks.privacyPolicy)
+            }
+            .font(.caption.weight(.black))
+            .foregroundStyle(NinaTheme.sky)
+            .buttonStyle(.plain)
         }
     }
 }

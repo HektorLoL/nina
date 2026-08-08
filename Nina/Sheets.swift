@@ -19,6 +19,7 @@ struct SettingsSheet: View {
     #endif
     @Environment(RouterPath.self) private var router
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     @AppStorage("nina.smartSuggestionsEnabled") private var smartSuggestionsEnabled = true
     @AppStorage("nina.weeklyDigestEnabled") private var weeklyDigestEnabled = false
@@ -293,6 +294,20 @@ struct SettingsSheet: View {
             }
             .buttonStyle(.plain)
 
+            SettingsDivider()
+
+            Button {
+                Haptics.selection()
+                openURL(NinaLegalLinks.privacyPolicy)
+            } label: {
+                SettingsActionRow(
+                    title: "Política de privacidade",
+                    subtitle: "Como a Nina trata os dados da sua casa.",
+                    systemName: "doc.text.fill",
+                    tone: .lavender
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -318,6 +333,36 @@ struct SettingsSheet: View {
                 systemName: "info.circle.fill",
                 tone: .mint
             )
+
+            SettingsDivider()
+
+            Button {
+                Haptics.selection()
+                openURL(NinaLegalLinks.termsOfUse)
+            } label: {
+                SettingsActionRow(
+                    title: "Termos de uso",
+                    subtitle: "Condições da assinatura e do serviço.",
+                    systemName: "text.book.closed.fill",
+                    tone: .sky
+                )
+            }
+            .buttonStyle(.plain)
+
+            SettingsDivider()
+
+            Button {
+                Haptics.selection()
+                openURL(NinaLegalLinks.support)
+            } label: {
+                SettingsActionRow(
+                    title: "Falar com o suporte",
+                    subtitle: "oi@ninai.app",
+                    systemName: "envelope.fill",
+                    tone: .amber
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -942,7 +987,7 @@ private struct NotificationPreferencesView: View {
 
                 SettingsGroup(title: "Horário silencioso") {
                     SettingsToggleRow(
-                        title: "Evitar avisos à noite",
+                        title: "Silenciar avisos à noite",
                         subtitle: quietHoursSummary,
                         systemName: "moon.fill",
                         tone: .sky,
@@ -1106,7 +1151,7 @@ private struct NotificationPreferencesView: View {
     }
 
     private var quietHoursSummary: String {
-        "Adia avisos entre \(formattedTime(quietHoursStartMinutes)) e \(formattedTime(quietHoursEndMinutes))."
+        "Entre \(formattedTime(quietHoursStartMinutes)) e \(formattedTime(quietHoursEndMinutes)) os avisos chegam sem som, no horário que você escolheu."
     }
 
     private func formattedTime(_ minutes: Int) -> String {
@@ -1340,6 +1385,7 @@ struct PremiumBenefitsSheet: View {
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(PremiumSubscriptionStore.self) private var premiumStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     private let plan = PremiumPlan.mock
 
@@ -1563,7 +1609,36 @@ struct PremiumBenefitsSheet: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
+
+            subscriptionTermsArea
         }
+    }
+
+    private var subscriptionTermsArea: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("A assinatura renova automaticamente até você cancelar. A cobrança é feita pelo App Store e a renovação pode ser cancelada a qualquer momento nos ajustes da sua conta Apple.")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 14) {
+                legalLink("Termos de uso", url: NinaLegalLinks.termsOfUse)
+                legalLink("Privacidade", url: NinaLegalLinks.privacyPolicy)
+                legalLink("Gerenciar assinatura", url: NinaLegalLinks.manageSubscription)
+            }
+            .padding(.top, 2)
+        }
+        .padding(.top, 6)
+    }
+
+    private func legalLink(_ title: String, url: URL) -> some View {
+        Button(title) {
+            Haptics.selection()
+            openURL(url)
+        }
+        .font(.caption.weight(.black))
+        .foregroundStyle(NinaTheme.sky)
+        .buttonStyle(.plain)
     }
 }
 

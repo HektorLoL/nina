@@ -151,6 +151,16 @@ enum HouseholdWorkload {
         return tasks.count { !$0.isDone && $0.kind == .task && normalized($0.owner) == key }
     }
 
+    static func isSameOwner(_ lhs: String, _ rhs: String) -> Bool {
+        let left = normalized(lhs)
+        return !left.isEmpty && left == normalized(rhs)
+    }
+
+    static func isSharedOwner(_ value: String) -> Bool {
+        let owner = normalized(value)
+        return owner.isEmpty || owner == normalized(sharedOwnerLabel)
+    }
+
     private static func normalized(_ value: String) -> String {
         value
             .trimmingCharacters(in: .whitespacesAndNewlines)
