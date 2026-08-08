@@ -13,9 +13,11 @@ before touching anything.
 
 Until 2026-08-08 this repo had 3 commits and ~7 weeks of work living only in the
 working tree, including all of CI, the preflight tool, 10 migrations, and 3 Swift
-sources. That is now committed on the `launch-hardening` branch. Before relying
-on any of the below, check where `main` actually points — if that branch has not
-been merged yet, `main` is still the 2026-06-19 state.
+sources. That is now committed and merged to `main`.
+
+**This project is trunk-based: everything lands on `main`.** Do not open a side
+branch and leave it there — if one is used at all, fast-forward it into `main`
+in the same session. There is no PR or review flow to wait for.
 
 Practical consequences that persist:
 
@@ -31,8 +33,9 @@ Practical consequences that persist:
   Losing them costs a Supabase dashboard round-trip, not the project.
 
 **Still be careful with destructive git commands** (`git clean -fd`,
-`git reset --hard`, `git stash` on a dirty tree). This is a solo repo with no
-remote backup of in-flight work. Do not commit, push, or branch unless asked.
+`git reset --hard`, `git stash` on a dirty tree). This is a solo repo and
+in-flight work has no remote backup. Commit and push only when asked — but when
+committing, commit to `main`.
 
 ---
 
