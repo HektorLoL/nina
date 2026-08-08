@@ -62,7 +62,7 @@ struct TodayView: View {
             SoftCard(padding: 18) {
                 HStack(alignment: .center, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Bom dia, \(store.familyGroup.name)")
+                        Text("\(greeting(at: context.date)), \(store.familyGroup.name)")
                             .font(.title2.weight(.black))
                             .foregroundStyle(NinaTheme.ink)
 
@@ -95,6 +95,14 @@ struct TodayView: View {
                     )
                 }
             }
+        }
+    }
+
+    private func greeting(at referenceDate: Date) -> String {
+        switch Calendar.current.component(.hour, from: referenceDate) {
+        case ..<12: "Bom dia"
+        case ..<18: "Boa tarde"
+        default: "Boa noite"
         }
     }
 

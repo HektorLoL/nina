@@ -5,6 +5,7 @@ Nina.xcodeproj/project.xcworkspace/xcuserdata/
 Nina/Config/SupabaseSecrets.xcconfig
 config/production.env
 supabase/.env.local
+supabase/.temp/
 web/.astro/
 web/.dev.vars
 web/.npm-cache/

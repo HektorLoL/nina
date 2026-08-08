@@ -86,7 +86,7 @@ final class BackendConfigurationTests: XCTestCase {
         XCTAssertNil(
             SupabaseConfiguration(
                 rawURL: "https://project.supabase.co",
-                publishableKey: "sb_secret_1234567890abcdefghijklmnop"
+                publishableKey: "sb_secret_example_not_a_real_credential"
             )
         )
         XCTAssertNil(

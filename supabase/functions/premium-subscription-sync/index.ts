@@ -22,7 +22,10 @@ Deno.serve(async (request: Request) => {
   }
 
   const supabaseURL = Deno.env.get("SUPABASE_URL") ?? "";
-  const publishableKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const publishableKey = parseConfiguredKey(
+    "SUPABASE_PUBLISHABLE_KEYS",
+    "SUPABASE_ANON_KEY",
+  );
   const secretKey = parseConfiguredKey(
     "SUPABASE_SECRET_KEYS",
     "SUPABASE_SERVICE_ROLE_KEY",

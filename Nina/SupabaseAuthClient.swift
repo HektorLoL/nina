@@ -146,15 +146,16 @@ struct SupabaseAuthClient: AuthClient {
                 try await client.auth.user()
             }
             let profile = try await ensureProfile(displayNameHint: nil)
-            return AuthUser(supabaseUser: user, profile: profile, preferredProvider: .apple)
+            return AuthUser(supabaseUser: user, profile: profile)
         } catch {
             throw mapCodeError(error)
         }
     }
 
     func deleteCurrentAccount() async throws {
+        let response: DeleteAccountResponse
         do {
-            let _: DeleteAccountResponse = try await BackendRequestLogger.perform(
+            response = try await BackendRequestLogger.perform(
                 component: "auth",
                 operation: "delete_account",
                 diagnostics: diagnostics
@@ -165,6 +166,11 @@ struct SupabaseAuthClient: AuthClient {
                 )
             }
         } catch {
+            throw AuthFlowError.unavailable
+        }
+
+        // A non-deleting response must not let the caller erase local data.
+        guard response.deleted else {
             throw AuthFlowError.unavailable
         }
     }

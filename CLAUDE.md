@@ -9,36 +9,30 @@ before touching anything.
 
 ---
 
-## 1. Read this first — the repo state is not what `git log` says
+## 1. Read this first — git history starts at 2026-08-08
 
-```
-3 commits total, all 2026-06-18/19, all by Heitor Castello
-141 tracked files | 52 modified (+8,027 / −4,815) | 37 untracked
-```
+Until 2026-08-08 this repo had 3 commits and ~7 weeks of work living only in the
+working tree, including all of CI, the preflight tool, 10 migrations, and 3 Swift
+sources. That is now committed on the `launch-hardening` branch. Before relying
+on any of the below, check where `main` actually points — if that branch has not
+been merged yet, `main` is still the 2026-06-19 state.
 
-Roughly seven weeks of continuous work exists **only in the working tree**.
-Untracked-but-critical includes: `.github/workflows/ci.yml`, `.github/dependabot.yml`,
-`docs/production-launch-runbook.md`, `Tools/production_preflight.ts` (+ test),
-`deno.json`, `deno.lock`, `config/`, 10 of the 24 SQL migrations,
-`Nina/PrivateLocalDataStore.swift`, `Nina/MemberManagementView.swift`,
-`Nina/OperationalDiagnostics.swift`, 2 of 5 iOS test files, 3 of 6 pgTAP suites,
-`web/src/waitlist.ts`, `web/src/legal.ts`, `web/tests/`, and all three
-`web/public/scripts/*.js`.
+Practical consequences that persist:
 
-**Never run `git checkout .`, `git stash`, `git clean -fd`, or `git reset --hard`.**
-There is no recovery path. Do not commit, push, or branch unless explicitly asked.
+- **`git blame` is near-useless before 2026-08-08.** One commit covers seven
+  weeks across five workstreams. The commit message enumerates them.
+- **CI has still never executed.** `.github/workflows/ci.yml` is committed now,
+  but GitHub Actions only runs it once the branch is pushed. Until you see a
+  green run, `docs/production-launch-runbook.md`'s claim that CI gates every PR
+  is aspirational. **Run the gates locally** (§11).
+- **Local secret files are intentionally untracked and have no backup**:
+  `Nina/Config/SupabaseSecrets.xcconfig`, `config/production.env`,
+  `supabase/.env.local`, `web/.dev.vars`. Each has a tracked `.example` sibling.
+  Losing them costs a Supabase dashboard round-trip, not the project.
 
-Two consequences that mislead:
-
-- **CI has never run.** `ci.yml` is untracked, so no GitHub Actions run has ever
-  executed, even though `docs/production-launch-runbook.md` and
-  `supabase/README.md` both state that it gates every PR. Run the gates locally.
-- **`git log` / `git blame` / `git diff HEAD~1` are useless.** Unstaged
-  `git diff` *is* the changelog.
-
-A clean clone of `main` builds a landing page with a dead waitlist dialog, a
-permanently-spinning invite page, and no preflight, CI, or account-deletion
-module at all.
+**Still be careful with destructive git commands** (`git clean -fd`,
+`git reset --hard`, `git stash` on a dirty tree). This is a solo repo with no
+remote backup of in-flight work. Do not commit, push, or branch unless asked.
 
 ---
 
@@ -630,10 +624,13 @@ preflight — a stale exported shell variable silently overrides the file.
 **The placeholder regex includes the literal word `example`**, so a genuine
 production value containing "example" is rejected as a placeholder.
 
-**`supabase/.temp/` is tracked in git** and not gitignored. It publishes the
-live project ref (`apemftmlsjocvifbptum`), the org id, and the pooler DSN. Not
-credentials, but it contradicts the "no server identity in tracked files"
-posture and the preflight does not flag it.
+**The credential scanner reads tracked files only.** `repository.secret-content`
+walks `git ls-files`, so a secret-shaped literal in an untracked file is
+invisible until you commit it. When adding a deliberately secret-shaped test
+fixture, give it a body containing `example` / `replace` so the scanner's
+placeholder heuristic classifies it correctly — that is the existing convention
+(`sb_secret_replace_with_a_dedicated_worker_key` in `config/production.env.example`).
+Never obfuscate a fixture to dodge the scan.
 
 **`app-store-server-notifications` is publicly reachable** with no shared secret
 or IP allowlist — Apple's JWS chain is its only authentication. Sound, but every
