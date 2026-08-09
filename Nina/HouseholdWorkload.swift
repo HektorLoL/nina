@@ -1,11 +1,12 @@
 import Foundation
 
 struct HouseholdWorkloadEntry: Identifiable, Hashable {
+    var memberID: UUID?
     var name: String
     var tone: MemberTone
     var openCount: Int
 
-    var id: String { name }
+    var id: String { memberID?.uuidString ?? "label:\(name)" }
 }
 
 struct HouseholdWorkloadSnapshot: Hashable {
@@ -53,54 +54,49 @@ enum HouseholdWorkload {
         tasks: [TaskItem],
         members: [HouseholdMember]
     ) -> HouseholdWorkloadSnapshot {
+        let people = members.filter { $0.role != .assistant }
+        let resolver = TaskOwnerResolver(people: people)
         let committedOpenTasks = tasks.filter { !$0.isDone && $0.kind == .task }
 
-        var countsByKey: [String: Int] = [:]
-        var displayNameByKey: [String: String] = [:]
+        var countsByOwner: [TaskOwnerBucket: Int] = [:]
+        var labelDisplayNames: [String: String] = [:]
         var sharedCount = 0
 
         for task in committedOpenTasks {
-            let owner = task.owner.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !owner.isEmpty else {
+            switch resolver.bucket(of: task) {
+            case .shared:
                 sharedCount += 1
-                continue
-            }
-
-            let key = normalized(owner)
-            guard key != normalized(sharedOwnerLabel) else {
-                sharedCount += 1
-                continue
-            }
-
-            countsByKey[key, default: 0] += 1
-            if displayNameByKey[key] == nil {
-                displayNameByKey[key] = owner
+            case .member(let memberID):
+                countsByOwner[.member(memberID), default: 0] += 1
+            case .label(let key):
+                countsByOwner[.label(key), default: 0] += 1
+                if labelDisplayNames[key] == nil {
+                    labelDisplayNames[key] = task.owner.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
             }
         }
 
-        let people = members.filter { $0.role != .assistant }
-        var toneByKey: [String: MemberTone] = [:]
-        var orderedKeys: [String] = []
-
-        for person in people {
-            let key = normalized(person.name)
-            guard !key.isEmpty, toneByKey[key] == nil else { continue }
-            toneByKey[key] = person.tone
-            displayNameByKey[key] = person.name
-            orderedKeys.append(key)
+        var entries = people.map { person in
+            HouseholdWorkloadEntry(
+                memberID: person.id,
+                name: resolver.displayName(for: person),
+                tone: person.tone,
+                openCount: countsByOwner[.member(person.id)] ?? 0
+            )
         }
 
-        for key in countsByKey.keys.sorted() where toneByKey[key] == nil {
-            toneByKey[key] = fallbackTone(for: key)
-            orderedKeys.append(key)
+        for key in labelDisplayNames.keys.sorted() {
+            entries.append(
+                HouseholdWorkloadEntry(
+                    memberID: nil,
+                    name: labelDisplayNames[key] ?? key,
+                    tone: fallbackTone(for: key),
+                    openCount: countsByOwner[.label(key)] ?? 0
+                )
+            )
         }
 
-        let entries = orderedKeys.compactMap { key -> HouseholdWorkloadEntry? in
-            let openCount = countsByKey[key] ?? 0
-            guard let name = displayNameByKey[key], let tone = toneByKey[key] else { return nil }
-            return HouseholdWorkloadEntry(name: name, tone: tone, openCount: openCount)
-        }
-        .sorted { left, right in
+        entries.sort { left, right in
             left.openCount == right.openCount
                 ? left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
                 : left.openCount > right.openCount
@@ -144,11 +140,17 @@ enum HouseholdWorkload {
         )
     }
 
-    static func openTaskCount(for member: HouseholdMember, in tasks: [TaskItem]) -> Int {
+    static func openTaskCount(
+        for member: HouseholdMember,
+        in tasks: [TaskItem],
+        members: [HouseholdMember]
+    ) -> Int {
         guard member.role != .assistant else { return 0 }
-        let key = normalized(member.name)
-        guard !key.isEmpty else { return 0 }
-        return tasks.count { !$0.isDone && $0.kind == .task && normalized($0.owner) == key }
+        let resolver = TaskOwnerResolver(people: members.filter { $0.role != .assistant })
+        return tasks.count { task in
+            guard !task.isDone, task.kind == .task else { return false }
+            return resolver.bucket(of: task) == .member(member.id)
+        }
     }
 
     static func isSameOwner(_ lhs: String, _ rhs: String) -> Bool {
@@ -161,7 +163,7 @@ enum HouseholdWorkload {
         return owner.isEmpty || owner == normalized(sharedOwnerLabel)
     }
 
-    private static func normalized(_ value: String) -> String {
+    fileprivate static func normalized(_ value: String) -> String {
         value
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pt_BR"))
@@ -171,5 +173,45 @@ enum HouseholdWorkload {
         let tones = MemberTone.allCases
         let bucket = abs(key.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) % 100_003 })
         return tones[bucket % tones.count]
+    }
+}
+
+private enum TaskOwnerBucket: Hashable {
+    case shared
+    case member(UUID)
+    case label(String)
+}
+
+private struct TaskOwnerResolver {
+    private let peopleByID: [UUID: HouseholdMember]
+    private let memberIDsByName: [String: [UUID]]
+
+    init(people: [HouseholdMember]) {
+        peopleByID = Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        memberIDsByName = Dictionary(grouping: people, by: { HouseholdWorkload.normalized($0.name) })
+            .mapValues { $0.map(\.id) }
+    }
+
+    // Two people answering to the same name resolve to nobody: naming the wrong person is worse
+    // than leaving the work unattributed.
+    func bucket(of task: TaskItem) -> TaskOwnerBucket {
+        guard !HouseholdWorkload.isSharedOwner(task.owner) else { return .shared }
+
+        if let memberID = task.ownerMemberID, peopleByID[memberID] != nil {
+            return .member(memberID)
+        }
+
+        let key = HouseholdWorkload.normalized(task.owner)
+        if let memberIDs = memberIDsByName[key], memberIDs.count == 1, let memberID = memberIDs.first {
+            return .member(memberID)
+        }
+        return .label(key)
+    }
+
+    func displayName(for member: HouseholdMember) -> String {
+        let relationship = member.relationship.trimmingCharacters(in: .whitespacesAndNewlines)
+        let namesakes = memberIDsByName[HouseholdWorkload.normalized(member.name)]?.count ?? 1
+        guard namesakes > 1, !relationship.isEmpty else { return member.name }
+        return "\(member.name) · \(relationship)"
     }
 }

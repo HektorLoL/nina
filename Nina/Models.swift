@@ -460,6 +460,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var title: String
     var subtitle: String
     var owner: String
+    var ownerMemberID: UUID?
     var dueLabel: String
     var dueAt: Date?
     var category: TaskCategory
@@ -477,6 +478,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         title: String,
         subtitle: String,
         owner: String,
+        ownerMemberID: UUID? = nil,
         dueLabel: String,
         dueAt: Date? = nil,
         category: TaskCategory,
@@ -493,6 +495,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.title = title
         self.subtitle = subtitle
         self.owner = owner
+        self.ownerMemberID = ownerMemberID
         self.dueLabel = dueLabel
         self.dueAt = dueAt
         self.category = category
@@ -511,6 +514,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case title
         case subtitle
         case owner
+        case ownerMemberID
         case dueLabel
         case dueAt
         case category
@@ -530,6 +534,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         title = try container.decode(String.self, forKey: .title)
         subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle) ?? ""
         owner = try container.decodeIfPresent(String.self, forKey: .owner) ?? "Casa"
+        ownerMemberID = try container.decodeIfPresent(UUID.self, forKey: .ownerMemberID) ?? nil
         dueLabel = try container.decodeIfPresent(String.self, forKey: .dueLabel) ?? "Sem data"
         dueAt = try container.decodeIfPresent(Date.self, forKey: .dueAt)
         category = try container.decodeIfPresent(TaskCategory.self, forKey: .category) ?? .home
@@ -662,11 +667,47 @@ struct TaskItem: Identifiable, Codable, Hashable {
 }
 
 struct ShoppingItem: Identifiable, Codable, Hashable {
-    var id = UUID()
+    var id: UUID
     var title: String
     var amount: String
     var owner: String
+    var ownerMemberID: UUID?
     var isChecked: Bool
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        amount: String,
+        owner: String,
+        ownerMemberID: UUID? = nil,
+        isChecked: Bool
+    ) {
+        self.id = id
+        self.title = title
+        self.amount = amount
+        self.owner = owner
+        self.ownerMemberID = ownerMemberID
+        self.isChecked = isChecked
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case amount
+        case owner
+        case ownerMemberID
+        case isChecked
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try container.decode(String.self, forKey: .title)
+        amount = try container.decodeIfPresent(String.self, forKey: .amount) ?? ""
+        owner = try container.decodeIfPresent(String.self, forKey: .owner) ?? "Casa"
+        ownerMemberID = try container.decodeIfPresent(UUID.self, forKey: .ownerMemberID) ?? nil
+        isChecked = try container.decodeIfPresent(Bool.self, forKey: .isChecked) ?? false
+    }
 }
 
 enum MessageSender: String, Codable, Hashable {

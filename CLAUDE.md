@@ -96,7 +96,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 17+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (28 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (30 files) |
 | Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app` | `web/src/worker.ts` |
 
@@ -318,7 +318,7 @@ its grid when `dynamicTypeSize.isAccessibilitySize`.
 
 ## 6. Database
 
-28 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+30 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order.
 
 **House style for every new object:**

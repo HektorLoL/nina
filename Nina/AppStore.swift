@@ -321,7 +321,7 @@ final class AppStore {
     }
 
     func openTaskCount(for member: HouseholdMember) -> Int {
-        HouseholdWorkload.openTaskCount(for: member, in: tasks)
+        HouseholdWorkload.openTaskCount(for: member, in: tasks, members: familyGroup.members)
     }
 
     func tasks(in sectionID: String) -> [TaskItem] {
@@ -1515,6 +1515,7 @@ final class AppStore {
         title: String,
         subtitle: String,
         owner: String,
+        ownerMemberID: UUID? = nil,
         dueLabel: String,
         dueAt: Date? = nil,
         category: TaskCategory,
@@ -1534,6 +1535,7 @@ final class AppStore {
             title: trimmedTitle,
             subtitle: subtitle.trimmingCharacters(in: .whitespacesAndNewlines),
             owner: trimmedOwner.isEmpty ? "Casa" : trimmedOwner,
+            ownerMemberID: Self.assignableMemberID(ownerMemberID, forOwner: trimmedOwner),
             dueLabel: kind == .seed ? "Sem data" : (trimmedDueLabel.isEmpty ? "Sem data" : trimmedDueLabel),
             dueAt: kind == .seed ? nil : dueAt,
             category: category,
@@ -1609,6 +1611,7 @@ final class AppStore {
         title: String,
         subtitle: String,
         owner: String,
+        ownerMemberID: UUID? = nil,
         dueLabel: String,
         dueAt: Date?,
         category: TaskCategory,
@@ -1629,6 +1632,7 @@ final class AppStore {
         proposedTask.title = trimmedTitle
         proposedTask.subtitle = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
         proposedTask.owner = trimmedOwner.isEmpty ? "Casa" : trimmedOwner
+        proposedTask.ownerMemberID = Self.assignableMemberID(ownerMemberID, forOwner: trimmedOwner)
         proposedTask.dueLabel = proposedKind == .seed
             ? "Sem data"
             : (trimmedDueLabel.isEmpty ? "Sem data" : trimmedDueLabel)
@@ -1741,7 +1745,9 @@ final class AppStore {
     func synchronizeLocalNotifications() {
         let canScheduleForActiveUser = activeHomeUserID != nil && hasActiveHome
         let tasksForNotifications = canScheduleForActiveUser ? tasks : []
-        let viewerName = canScheduleForActiveUser ? currentFamilyMember?.name : nil
+        let viewer = canScheduleForActiveUser
+            ? HomeNotificationViewer(member: currentFamilyMember)
+            : HomeNotificationViewer()
         let familyID = familyGroup.id
         let scheduler = notificationScheduler
         let previousTask = notificationSyncTask
@@ -1753,7 +1759,7 @@ final class AppStore {
             await scheduler.synchronize(
                 tasks: tasksForNotifications,
                 familyID: familyID,
-                viewerName: viewerName
+                viewer: viewer
             )
         }
     }
@@ -1780,7 +1786,7 @@ final class AppStore {
         pendingPriorityTaskIDs = pendingIDs
     }
 
-    func addShoppingItem(title: String, amount: String, owner: String) {
+    func addShoppingItem(title: String, amount: String, owner: String, ownerMemberID: UUID? = nil) {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedOwner = owner.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
@@ -1789,6 +1795,7 @@ final class AppStore {
             title: trimmedTitle,
             amount: amount.trimmingCharacters(in: .whitespacesAndNewlines),
             owner: trimmedOwner.isEmpty ? "Casa" : trimmedOwner,
+            ownerMemberID: Self.assignableMemberID(ownerMemberID, forOwner: trimmedOwner),
             isChecked: false
         )
         shoppingItems.insert(item, at: 0)
@@ -1801,7 +1808,13 @@ final class AppStore {
         }
     }
 
-    func updateShoppingItem(id: ShoppingItem.ID, title: String, amount: String, owner: String) {
+    func updateShoppingItem(
+        id: ShoppingItem.ID,
+        title: String,
+        amount: String,
+        owner: String,
+        ownerMemberID: UUID? = nil
+    ) {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedOwner = owner.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
@@ -1809,6 +1822,7 @@ final class AppStore {
         shoppingItems[index].title = trimmedTitle
         shoppingItems[index].amount = amount.trimmingCharacters(in: .whitespacesAndNewlines)
         shoppingItems[index].owner = trimmedOwner.isEmpty ? "Casa" : trimmedOwner
+        shoppingItems[index].ownerMemberID = Self.assignableMemberID(ownerMemberID, forOwner: trimmedOwner)
         let item = shoppingItems[index]
         persistActivityLocally()
         enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar as alterações da compra.") {
@@ -2272,6 +2286,11 @@ final class AppStore {
         }
 
         return "Casa \(words.joined(separator: " "))"
+    }
+
+    // Casa is the unassigned bucket, so it can never carry a member pointer.
+    nonisolated private static func assignableMemberID(_ memberID: UUID?, forOwner owner: String) -> UUID? {
+        HouseholdWorkload.isSharedOwner(owner) ? nil : memberID
     }
 
     nonisolated private static func slugified(_ text: String) -> String {

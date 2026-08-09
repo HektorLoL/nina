@@ -960,7 +960,7 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         try await perform(operation: "shopping_items.select") {
             try await client
                 .from("shopping_items")
-                .select("id,title,amount,owner_label,is_checked")
+                .select("id,title,amount,owner_label,owner_member_id,is_checked")
                 .eq("family_id", value: familyID)
                 .order("created_at", ascending: false)
                 .execute()
@@ -1005,7 +1005,7 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
     }
 
     private static let taskColumns =
-        "id,task_kind,section_id,title,subtitle,owner_label,due_label,due_at,category_id,category_snapshot,priority,recurrence_rule,snoozed_until,is_done,created_by_label,version"
+        "id,task_kind,section_id,title,subtitle,owner_label,owner_member_id,due_label,due_at,category_id,category_snapshot,priority,recurrence_rule,snoozed_until,is_done,created_by_label,version"
 }
 
 private struct HomeContextRow: Decodable {
@@ -1437,6 +1437,7 @@ private struct TaskInsertRow: Encodable {
     var title: String
     var subtitle: String
     var ownerLabel: String
+    var ownerMemberID: UUID?
     var dueLabel: String
     var dueAt: Date?
     var categoryID: String
@@ -1456,6 +1457,7 @@ private struct TaskInsertRow: Encodable {
         case title
         case subtitle
         case ownerLabel = "owner_label"
+        case ownerMemberID = "owner_member_id"
         case dueLabel = "due_label"
         case dueAt = "due_at"
         case categoryID = "category_id"
@@ -1476,6 +1478,7 @@ private struct TaskInsertRow: Encodable {
         title = task.title
         subtitle = task.subtitle
         ownerLabel = task.owner
+        ownerMemberID = task.ownerMemberID
         dueLabel = task.dueLabel
         dueAt = task.dueAt
         categoryID = task.category.id
@@ -1495,6 +1498,7 @@ private struct TaskUpdateRow: Encodable {
     var title: String
     var subtitle: String
     var ownerLabel: String
+    var ownerMemberID: UUID?
     var dueLabel: String
     var dueAt: Date?
     var categoryID: String
@@ -1511,6 +1515,7 @@ private struct TaskUpdateRow: Encodable {
         case title
         case subtitle
         case ownerLabel = "owner_label"
+        case ownerMemberID = "owner_member_id"
         case dueLabel = "due_label"
         case dueAt = "due_at"
         case categoryID = "category_id"
@@ -1528,6 +1533,7 @@ private struct TaskUpdateRow: Encodable {
         title = task.title
         subtitle = task.subtitle
         ownerLabel = task.owner
+        ownerMemberID = task.ownerMemberID
         dueLabel = task.dueLabel
         dueAt = task.dueAt
         categoryID = task.category.id
@@ -1538,6 +1544,27 @@ private struct TaskUpdateRow: Encodable {
         isDone = task.isDone
         createdByLabel = task.createdBy
     }
+
+    // An omitted owner_member_id would leave the previous person assigned, so unassigning travels
+    // as an explicit null rather than the synthesized encodeIfPresent.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(taskKind, forKey: .taskKind)
+        try container.encode(sectionID, forKey: .sectionID)
+        try container.encode(title, forKey: .title)
+        try container.encode(subtitle, forKey: .subtitle)
+        try container.encode(ownerLabel, forKey: .ownerLabel)
+        try container.encode(ownerMemberID, forKey: .ownerMemberID)
+        try container.encodeIfPresent(dueAt, forKey: .dueAt)
+        try container.encode(dueLabel, forKey: .dueLabel)
+        try container.encode(categoryID, forKey: .categoryID)
+        try container.encode(categorySnapshot, forKey: .categorySnapshot)
+        try container.encode(priority, forKey: .priority)
+        try container.encode(recurrenceRule, forKey: .recurrenceRule)
+        try container.encodeIfPresent(snoozedUntil, forKey: .snoozedUntil)
+        try container.encode(isDone, forKey: .isDone)
+        try container.encode(createdByLabel, forKey: .createdByLabel)
+    }
 }
 
 private struct ShoppingItemInsertRow: Encodable {
@@ -1546,6 +1573,7 @@ private struct ShoppingItemInsertRow: Encodable {
     var title: String
     var amount: String
     var ownerLabel: String
+    var ownerMemberID: UUID?
     var isChecked: Bool
     var createdBy: UUID?
 
@@ -1555,6 +1583,7 @@ private struct ShoppingItemInsertRow: Encodable {
         case title
         case amount
         case ownerLabel = "owner_label"
+        case ownerMemberID = "owner_member_id"
         case isChecked = "is_checked"
         case createdBy = "created_by"
     }
@@ -1565,6 +1594,7 @@ private struct ShoppingItemInsertRow: Encodable {
         title = item.title
         amount = item.amount
         ownerLabel = item.owner
+        ownerMemberID = item.ownerMemberID
         isChecked = item.isChecked
         createdBy = currentUserID
     }
@@ -1574,12 +1604,14 @@ private struct ShoppingItemUpdateRow: Encodable {
     var title: String
     var amount: String
     var ownerLabel: String
+    var ownerMemberID: UUID?
     var isChecked: Bool
 
     private enum CodingKeys: String, CodingKey {
         case title
         case amount
         case ownerLabel = "owner_label"
+        case ownerMemberID = "owner_member_id"
         case isChecked = "is_checked"
     }
 
@@ -1587,7 +1619,19 @@ private struct ShoppingItemUpdateRow: Encodable {
         title = item.title
         amount = item.amount
         ownerLabel = item.owner
+        ownerMemberID = item.ownerMemberID
         isChecked = item.isChecked
+    }
+
+    // An omitted owner_member_id would leave the previous person assigned, so unassigning travels
+    // as an explicit null rather than the synthesized encodeIfPresent.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(title, forKey: .title)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(ownerLabel, forKey: .ownerLabel)
+        try container.encode(ownerMemberID, forKey: .ownerMemberID)
+        try container.encode(isChecked, forKey: .isChecked)
     }
 }
 
@@ -1677,6 +1721,7 @@ private struct TaskRow: Decodable {
     var title: String
     var subtitle: String
     var ownerLabel: String
+    var ownerMemberID: UUID?
     var dueLabel: String
     var dueAt: Date?
     var categoryID: String
@@ -1695,6 +1740,7 @@ private struct TaskRow: Decodable {
         case title
         case subtitle
         case ownerLabel = "owner_label"
+        case ownerMemberID = "owner_member_id"
         case dueLabel = "due_label"
         case dueAt = "due_at"
         case categoryID = "category_id"
@@ -1716,6 +1762,7 @@ private struct TaskRow: Decodable {
         title = try container.decode(String.self, forKey: .title)
         subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle) ?? ""
         ownerLabel = try container.decodeIfPresent(String.self, forKey: .ownerLabel) ?? "Casa"
+        ownerMemberID = try container.decodeIfPresent(UUID.self, forKey: .ownerMemberID) ?? nil
         dueLabel = try container.decodeIfPresent(String.self, forKey: .dueLabel) ?? "Sem data"
         dueAt = try container.decodeIfPresent(Date.self, forKey: .dueAt)
         let decodedCategoryID = try container.decodeIfPresent(String.self, forKey: .categoryID)
@@ -1739,6 +1786,7 @@ private struct TaskRow: Decodable {
             title: title,
             subtitle: subtitle,
             owner: ownerLabel,
+            ownerMemberID: ownerMemberID,
             dueLabel: dueLabel,
             dueAt: dueAt,
             category: categorySnapshot,
@@ -1758,6 +1806,7 @@ private struct ShoppingItemRow: Decodable {
     var title: String
     var amount: String
     var ownerLabel: String
+    var ownerMemberID: UUID?
     var isChecked: Bool
 
     private enum CodingKeys: String, CodingKey {
@@ -1765,6 +1814,7 @@ private struct ShoppingItemRow: Decodable {
         case title
         case amount
         case ownerLabel = "owner_label"
+        case ownerMemberID = "owner_member_id"
         case isChecked = "is_checked"
     }
 
@@ -1774,6 +1824,7 @@ private struct ShoppingItemRow: Decodable {
             title: title,
             amount: amount,
             owner: ownerLabel,
+            ownerMemberID: ownerMemberID,
             isChecked: isChecked
         )
     }

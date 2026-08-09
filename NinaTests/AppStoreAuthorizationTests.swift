@@ -482,6 +482,65 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testAssigningWorkToAMemberStoresTheMemberIDBesideTheDisplayName() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let memberID = UUID()
+
+        store.addTask(
+            title: "Buy milk",
+            subtitle: "",
+            owner: "Mirna",
+            ownerMemberID: memberID,
+            dueLabel: "Today",
+            category: .food
+        )
+        store.addShoppingItem(title: "Coffee", amount: "1", owner: "Mirna", ownerMemberID: memberID)
+
+        XCTAssertEqual(store.tasks[0].owner, "Mirna")
+        XCTAssertEqual(store.tasks[0].ownerMemberID, memberID)
+        XCTAssertEqual(store.shoppingItems[0].ownerMemberID, memberID)
+    }
+
+    @MainActor
+    func testHandingWorkBackToCasaClearsTheMemberPointer() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let memberID = UUID()
+
+        store.addTask(
+            title: "Buy milk",
+            subtitle: "",
+            owner: "Mirna",
+            ownerMemberID: memberID,
+            dueLabel: "Today",
+            category: .food
+        )
+        let task = store.tasks[0]
+        store.updateTask(
+            id: task.id,
+            title: task.title,
+            subtitle: task.subtitle,
+            owner: "Casa",
+            ownerMemberID: memberID,
+            dueLabel: task.dueLabel,
+            dueAt: task.dueAt,
+            category: task.category,
+            priority: task.priority
+        )
+
+        store.addShoppingItem(title: "Coffee", amount: "1", owner: "Casa", ownerMemberID: memberID)
+
+        XCTAssertEqual(store.tasks[0].owner, "Casa")
+        XCTAssertNil(store.tasks[0].ownerMemberID)
+        XCTAssertNil(store.shoppingItems[0].ownerMemberID)
+    }
+
+    @MainActor
     func testSectionAndCategoryMutationsAreIndependentRows() async {
         let user = makeUser()
         let backend = RecordingHomeBackend(state: makeRemoteState())
@@ -2058,7 +2117,7 @@ private struct NotificationSyncRecord {
 private actor RecordingNotificationScheduler: HomeNotificationScheduling {
     private var syncRecords: [NotificationSyncRecord] = []
 
-    func synchronize(tasks: [TaskItem], familyID: UUID, viewerName: String?) async {
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewer: HomeNotificationViewer) async {
         syncRecords.append(
             NotificationSyncRecord(
                 tasks: tasks,
@@ -2077,7 +2136,7 @@ private actor DelayedNotificationScheduler: HomeNotificationScheduling {
     private var didStartNonemptySync = false
     private var nonemptySyncWaiters: [CheckedContinuation<Void, Never>] = []
 
-    func synchronize(tasks: [TaskItem], familyID: UUID, viewerName: String?) async {
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewer: HomeNotificationViewer) async {
         if tasks.isEmpty {
             try? await Task.sleep(for: .milliseconds(5))
         } else {

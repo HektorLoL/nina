@@ -77,6 +77,50 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(decoded, original)
     }
 
+    func testATaskCachedByAnOlderBuildWithoutAnOwnerMemberIDStillDecodes() throws {
+        let legacy = """
+        {"id":"3F1A0000-0000-4000-8000-00000000AAAA","title":"Pagar a conta de luz",
+         "owner":"Mirna","dueLabel":"amanhã, 09:00","isDone":false,"version":3}
+        """
+
+        let task = try JSONDecoder().decode(TaskItem.self, from: Data(legacy.utf8))
+
+        XCTAssertEqual(task.owner, "Mirna")
+        XCTAssertNil(task.ownerMemberID)
+        XCTAssertEqual(task.version, 3)
+    }
+
+    func testAShoppingItemCachedByAnOlderBuildWithoutAnOwnerMemberIDStillDecodes() throws {
+        let legacy = #"{"id":"3F1A0000-0000-4000-8000-00000000BBBB","title":"Gás","amount":"1 botijão","owner":"Casa","isChecked":false}"#
+
+        let item = try JSONDecoder().decode(ShoppingItem.self, from: Data(legacy.utf8))
+
+        XCTAssertEqual(item.title, "Gás")
+        XCTAssertEqual(item.owner, "Casa")
+        XCTAssertNil(item.ownerMemberID)
+    }
+
+    func testTheAssignedMemberSurvivesALocalCacheRoundTrip() throws {
+        let memberID = UUID()
+        let task = TaskItem(
+            title: "Levar o Thor ao veterinário",
+            subtitle: "",
+            owner: "Heitor",
+            ownerMemberID: memberID,
+            dueLabel: "sexta, 09:00",
+            category: .pet,
+            isDone: false,
+            createdBy: "Manual"
+        )
+        let item = ShoppingItem(title: "Ração", amount: "3 kg", owner: "Heitor", ownerMemberID: memberID, isChecked: false)
+
+        let decodedTask = try JSONDecoder().decode(TaskItem.self, from: JSONEncoder().encode(task))
+        let decodedItem = try JSONDecoder().decode(ShoppingItem.self, from: JSONEncoder().encode(item))
+
+        XCTAssertEqual(decodedTask.ownerMemberID, memberID)
+        XCTAssertEqual(decodedItem.ownerMemberID, memberID)
+    }
+
     func testProposalPayloadDecodesWhenTheModelOmitsOptionalFields() throws {
         let payload = try JSONDecoder().decode(
             NinaProposalPayload.self,

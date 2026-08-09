@@ -135,7 +135,7 @@ final class HouseholdWorkloadTests: XCTestCase {
         )
 
         XCTAssertFalse(snapshot.entries.contains { $0.name == "Nina" })
-        XCTAssertEqual(HouseholdWorkload.openTaskCount(for: assistant, in: []), 0)
+        XCTAssertEqual(HouseholdWorkload.openTaskCount(for: assistant, in: [], members: [assistant]), 0)
     }
 
     func testMemberOpenTaskCountReflectsLiveTasksRatherThanAStoredColumn() {
@@ -146,15 +146,89 @@ final class HouseholdWorkloadTests: XCTestCase {
         let tasks = [openTask(owner: "Mirna"), openTask(owner: "Mirna"), completed, openTask(owner: "Casa")]
 
         XCTAssertEqual(mirna.taskCount, 0)
-        XCTAssertEqual(HouseholdWorkload.openTaskCount(for: mirna, in: tasks), 2)
+        XCTAssertEqual(HouseholdWorkload.openTaskCount(for: mirna, in: tasks, members: [mirna]), 2)
     }
 
-    private func openTask(owner: String, kind: TaskKind = .task) -> TaskItem {
+    func testARenamedMemberKeepsEveryTaskInASingleBucket() {
+        let mirna = member(named: "Mirna Castello", tone: .coral)
+        let heitor = member(named: "Heitor", tone: .sky)
+        let tasks = (0..<5).map { _ in openTask(owner: "Mirna", ownerMemberID: mirna.id) }
+            + (0..<3).map { _ in openTask(owner: "Heitor", ownerMemberID: heitor.id) }
+
+        let snapshot = HouseholdWorkload.snapshot(tasks: tasks, members: [mirna, heitor])
+
+        XCTAssertEqual(snapshot.entries.count, 2)
+        XCTAssertEqual(snapshot.entries.first { $0.memberID == mirna.id }?.openCount, 5)
+        XCTAssertEqual(snapshot.entries.first { $0.memberID == mirna.id }?.name, "Mirna Castello")
+        XCTAssertFalse(snapshot.entries.contains { $0.name == "Mirna" })
+        XCTAssertEqual(HouseholdWorkload.openTaskCount(for: mirna, in: tasks, members: [mirna, heitor]), 5)
+    }
+
+    func testTwoMembersSharingANameKeepSeparateRowsToldApartByRelationship() {
+        let mae = member(named: "Marina", relationship: "Mãe", tone: .coral)
+        let prima = member(named: "Marina", relationship: "Prima", tone: .lavender)
+        let tasks = (0..<6).map { _ in openTask(owner: "Marina", ownerMemberID: mae.id) }
+            + (0..<2).map { _ in openTask(owner: "Marina", ownerMemberID: prima.id) }
+
+        let snapshot = HouseholdWorkload.snapshot(tasks: tasks, members: [mae, prima])
+
+        XCTAssertEqual(snapshot.entries.count, 2)
+        XCTAssertEqual(Set(snapshot.entries.map(\.id)).count, 2)
+        XCTAssertEqual(snapshot.entries.first { $0.memberID == mae.id }?.openCount, 6)
+        XCTAssertEqual(snapshot.entries.first { $0.memberID == mae.id }?.name, "Marina · Mãe")
+        XCTAssertEqual(snapshot.entries.first { $0.memberID == prima.id }?.openCount, 2)
+        XCTAssertEqual(snapshot.entries.first { $0.memberID == prima.id }?.name, "Marina · Prima")
+        XCTAssertEqual(HouseholdWorkload.openTaskCount(for: prima, in: tasks, members: [mae, prima]), 2)
+    }
+
+    func testWorkLabelledWithANameTwoMembersShareIsLeftUnattributed() {
+        let mae = member(named: "Marina", relationship: "Mãe", tone: .coral)
+        let prima = member(named: "Marina", relationship: "Prima", tone: .lavender)
+        let tasks = (0..<4).map { _ in openTask(owner: "Marina") }
+
+        let snapshot = HouseholdWorkload.snapshot(tasks: tasks, members: [mae, prima])
+
+        XCTAssertEqual(snapshot.entries.first { $0.memberID == mae.id }?.openCount, 0)
+        XCTAssertEqual(snapshot.entries.first { $0.memberID == prima.id }?.openCount, 0)
+        XCTAssertEqual(snapshot.entries.first { $0.memberID == nil }?.openCount, 4)
+        XCTAssertEqual(HouseholdWorkload.openTaskCount(for: mae, in: tasks, members: [mae, prima]), 0)
+    }
+
+    func testHouseWorkIsNeverAttributedToAPersonEvenWhenItCarriesAMemberID() {
+        let mirna = member(named: "Mirna", tone: .coral)
+        let heitor = member(named: "Heitor", tone: .sky)
+        let tasks = (0..<4).map { _ in openTask(owner: "Casa", ownerMemberID: mirna.id) }
+            + (0..<4).map { _ in openTask(owner: "Mirna", ownerMemberID: mirna.id) }
+            + (0..<4).map { _ in openTask(owner: "Heitor", ownerMemberID: heitor.id) }
+
+        let snapshot = HouseholdWorkload.snapshot(tasks: tasks, members: [mirna, heitor])
+
+        XCTAssertEqual(snapshot.sharedCount, 4)
+        XCTAssertEqual(snapshot.assignedCount, 8)
+        XCTAssertEqual(snapshot.entries.first { $0.memberID == mirna.id }?.openCount, 4)
+        XCTAssertEqual(HouseholdWorkload.openTaskCount(for: mirna, in: tasks, members: [mirna, heitor]), 4)
+    }
+
+    func testARemovedMembersTasksReturnToTheHouseRatherThanNamingSomeoneElse() {
+        let heitor = member(named: "Heitor", tone: .sky)
+        let departed = UUID()
+        let tasks = (0..<5).map { _ in openTask(owner: "Casa", ownerMemberID: departed) }
+            + (0..<3).map { _ in openTask(owner: "Heitor", ownerMemberID: heitor.id) }
+
+        let snapshot = HouseholdWorkload.snapshot(tasks: tasks, members: [heitor])
+
+        XCTAssertEqual(snapshot.sharedCount, 5)
+        XCTAssertEqual(snapshot.entries.count, 1)
+        XCTAssertEqual(snapshot.entries.first?.memberID, heitor.id)
+    }
+
+    private func openTask(owner: String, ownerMemberID: UUID? = nil, kind: TaskKind = .task) -> TaskItem {
         TaskItem(
             kind: kind,
             title: "Tarefa",
             subtitle: "",
             owner: owner,
+            ownerMemberID: ownerMemberID,
             dueLabel: "Sem data",
             category: .home,
             isDone: false,
@@ -162,10 +236,14 @@ final class HouseholdWorkloadTests: XCTestCase {
         )
     }
 
-    private func member(named name: String, tone: MemberTone) -> HouseholdMember {
+    private func member(
+        named name: String,
+        relationship: String = "",
+        tone: MemberTone
+    ) -> HouseholdMember {
         HouseholdMember(
             name: name,
-            relationship: "",
+            relationship: relationship,
             role: .adult,
             tone: tone,
             taskCount: 0,

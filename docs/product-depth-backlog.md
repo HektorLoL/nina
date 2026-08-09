@@ -14,6 +14,22 @@ been closed; everything else in this document is still open.
 
 ## Closed since the audit
 
+- **Assignment was a free-text display name.** `tasks.owner_member_id` and
+  `shopping_items.owner_member_id` had been FKs to `family_members` since the initial schema and
+  were always NULL, so a member who renamed themselves became two people in the workload split
+  and their old items could never be re-attributed; two members sharing a first name merged into
+  one bucket; and a removed member's name stayed stamped on every item they ever owned. The
+  pointer is now the truth and `owner_label` a display cache kept in step by triggers — one
+  syncing the label when the pointer moves, one propagating a rename, and a reassign-by-name
+  branch so a label-only write (Nina's proposals, older clients) still works. Ambiguity resolves
+  to NULL rather than guessing: attributing work to the wrong person is worse than leaving it
+  unattributed. "Casa" stays unattributable, and a member literally named Casa cannot absorb the
+  house bucket. `private.nina_weekly_metrics` and `get_workload_summary` both group by member id,
+  so the Sunday insight and Nina's own answer finally agree with the card. Backfill runs with the
+  `updated_at`/version triggers suspended — otherwise touching every historical row would have
+  made the next insight report every finished task as completed that week.
+  `member_management.test.sql` 29 → 47, plus 12 Deno tests and 13 new iOS tests.
+
 - **AI consent was device-local, so revoking it did nothing.** An adult who tapped "Revogar
   consentimento" flipped a row on that iPhone only: their partner kept chatting, and the next
   Sunday `get_nina_weekly_candidates()` still selected the household and shipped

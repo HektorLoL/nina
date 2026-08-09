@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(29);
+select plan(47);
 
 insert into auth.users (
   id,
@@ -324,6 +324,324 @@ select is(
   ),
   null::uuid,
   'removing a member clears the matching active family'
+);
+
+select public.add_unclaimed_family_member(
+  current_setting('test.member_management_family_id')::uuid,
+  'Marina',
+  'Mãe',
+  'adult',
+  'sky',
+  '',
+  null,
+  '',
+  ''
+);
+
+select public.add_unclaimed_family_member(
+  current_setting('test.member_management_family_id')::uuid,
+  'Marina',
+  'Prima',
+  'adult',
+  'lavender',
+  '',
+  null,
+  '',
+  ''
+);
+
+select set_config(
+  'test.member_management_first_marina',
+  (
+    select id::text
+    from public.family_members
+    where family_id = current_setting('test.member_management_family_id')::uuid
+      and name = 'Marina'
+      and relationship = 'Mãe'
+  ),
+  true
+);
+
+select set_config(
+  'test.member_management_second_marina',
+  (
+    select id::text
+    from public.family_members
+    where family_id = current_setting('test.member_management_family_id')::uuid
+      and name = 'Marina'
+      and relationship = 'Prima'
+  ),
+  true
+);
+
+insert into public.tasks (id, family_id, title, owner_member_id)
+values
+  (
+    '69000000-0000-0000-0000-000000000001',
+    current_setting('test.member_management_family_id')::uuid,
+    'Levar a Lia na escola',
+    current_setting('test.member_management_first_marina')::uuid
+  ),
+  (
+    '69000000-0000-0000-0000-000000000002',
+    current_setting('test.member_management_family_id')::uuid,
+    'Marcar o pediatra',
+    current_setting('test.member_management_first_marina')::uuid
+  ),
+  (
+    '69000000-0000-0000-0000-000000000003',
+    current_setting('test.member_management_family_id')::uuid,
+    'Comprar ração do Pingo',
+    current_setting('test.member_management_second_marina')::uuid
+  ),
+  (
+    '69000000-0000-0000-0000-000000000004',
+    current_setting('test.member_management_family_id')::uuid,
+    'Pagar o condomínio',
+    null
+  );
+
+insert into public.shopping_items (id, family_id, title, owner_member_id)
+values (
+  '69000000-0000-0000-0000-000000000005',
+  current_setting('test.member_management_family_id')::uuid,
+  'Arroz',
+  current_setting('test.member_management_first_marina')::uuid
+);
+
+select is(
+  (
+    select owner_label
+    from public.tasks
+    where id = '69000000-0000-0000-0000-000000000001'
+  ),
+  'Marina',
+  'assigning a member stamps the display label from the member row'
+);
+
+update public.tasks
+set owner_label = 'Lia'
+where id = '69000000-0000-0000-0000-000000000004';
+
+select is(
+  (
+    select owner_member_id
+    from public.tasks
+    where id = '69000000-0000-0000-0000-000000000004'
+  ),
+  (
+    select id
+    from public.family_members
+    where family_id = current_setting('test.member_management_family_id')::uuid
+      and name = 'Lia'
+  ),
+  'naming an unambiguous member in the label binds the task to that member'
+);
+
+update public.tasks
+set owner_label = 'Casa'
+where id = '69000000-0000-0000-0000-000000000004';
+
+select is(
+  (
+    select owner_member_id
+    from public.tasks
+    where id = '69000000-0000-0000-0000-000000000004'
+  ),
+  null::uuid,
+  'returning a task to Casa releases the member it pointed at'
+);
+
+select throws_ok(
+  $$
+    update public.tasks
+    set owner_member_id = (
+      select id
+      from public.family_members
+      where family_id = current_setting('test.member_management_family_id')::uuid
+        and household_role = 'assistant'
+    )
+    where id = '69000000-0000-0000-0000-000000000003'
+  $$,
+  '42501',
+  'owner_member_not_assignable',
+  'household work cannot be assigned to the assistant'
+);
+
+reset role;
+
+select is(
+  (
+    private.nina_weekly_metrics(
+      current_setting('test.member_management_family_id')::uuid
+    ) -> 'open_tasks_by_owner' ->> 'Marina · Mãe'
+  )::integer,
+  2,
+  'two members sharing a name keep separate workload buckets'
+);
+
+select is(
+  (
+    private.nina_weekly_metrics(
+      current_setting('test.member_management_family_id')::uuid
+    ) -> 'open_tasks_by_owner' ->> 'Marina · Prima'
+  )::integer,
+  1,
+  'the second member sharing the name keeps her own workload bucket'
+);
+
+select is(
+  (
+    private.nina_weekly_metrics(
+      current_setting('test.member_management_family_id')::uuid
+    ) -> 'open_tasks_by_owner' ->> 'Marina'
+  ),
+  null::text,
+  'a shared first name never collapses two people into one bucket'
+);
+
+select is(
+  (
+    private.nina_weekly_metrics(
+      current_setting('test.member_management_family_id')::uuid
+    ) -> 'open_tasks_by_owner' ->> 'Casa'
+  )::integer,
+  1,
+  'unowned household work keeps its own Casa bucket'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select public.update_family_member(
+  current_setting('test.member_management_first_marina')::uuid,
+  'Marina Castello',
+  'Mãe',
+  'adult',
+  'member',
+  'sky',
+  '',
+  null,
+  '',
+  ''
+);
+
+select is(
+  (
+    select owner_member_id
+    from public.tasks
+    where id = '69000000-0000-0000-0000-000000000001'
+  ),
+  current_setting('test.member_management_first_marina')::uuid,
+  'a rename does not orphan the attribution of an owned task'
+);
+
+select is(
+  (
+    select owner_label
+    from public.tasks
+    where id = '69000000-0000-0000-0000-000000000001'
+  ),
+  'Marina Castello',
+  'a rename refreshes the task display label'
+);
+
+select is(
+  (
+    select owner_label
+    from public.shopping_items
+    where id = '69000000-0000-0000-0000-000000000005'
+  ),
+  'Marina Castello',
+  'a rename refreshes the shopping display label'
+);
+
+reset role;
+
+select is(
+  (
+    private.nina_weekly_metrics(
+      current_setting('test.member_management_family_id')::uuid
+    ) -> 'open_tasks_by_owner' ->> 'Marina Castello'
+  )::integer,
+  2,
+  'a rename keeps one member in one workload bucket instead of splitting her in two'
+);
+
+select is(
+  (
+    private.nina_weekly_metrics(
+      current_setting('test.member_management_family_id')::uuid
+    ) -> 'open_tasks_by_owner' ->> 'Marina'
+  )::integer,
+  1,
+  'the former name only carries the work of the member who still answers to it'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select public.remove_family_member(
+  current_setting('test.member_management_first_marina')::uuid
+);
+
+select is(
+  (
+    select owner_member_id
+    from public.tasks
+    where id = '69000000-0000-0000-0000-000000000001'
+  ),
+  null::uuid,
+  'removing a member clears the attribution on their old tasks'
+);
+
+select is(
+  (
+    select owner_label
+    from public.tasks
+    where id = '69000000-0000-0000-0000-000000000001'
+  ),
+  'Casa',
+  'a removed member name is not left stamped on their old tasks'
+);
+
+select is(
+  (
+    select owner_label
+    from public.shopping_items
+    where id = '69000000-0000-0000-0000-000000000005'
+  ),
+  'Casa',
+  'a removed member name is not left stamped on their old shopping items'
+);
+
+reset role;
+
+select is(
+  (
+    private.nina_weekly_metrics(
+      current_setting('test.member_management_family_id')::uuid
+    ) -> 'open_tasks_by_owner' ->> 'Marina Castello'
+  ),
+  null::text,
+  'a removed member no longer holds a workload bucket'
+);
+
+select is(
+  (
+    private.nina_weekly_metrics(
+      current_setting('test.member_management_family_id')::uuid
+    ) -> 'open_tasks_by_owner' ->> 'Casa'
+  )::integer,
+  3,
+  'work left by a removed member returns to the house instead of naming a person'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select public.remove_family_member(
+  current_setting('test.member_management_second_marina')::uuid
 );
 
 reset role;

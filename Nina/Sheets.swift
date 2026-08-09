@@ -1843,6 +1843,7 @@ struct TaskEditorSheet: View {
     @State private var title = ""
     @State private var subtitle = ""
     @State private var owner = "Casa"
+    @State private var ownerMemberID: UUID?
     @State private var dueDate = Date()
     @State private var kind: TaskKind = .task
     @State private var category: TaskCategory = .home
@@ -1877,19 +1878,20 @@ struct TaskEditorSheet: View {
         kind == .seed
     }
 
-    private var ownerOptions: [String] {
-        var options = ["Casa"]
-        for member in store.familyGroup.members where member.role != .assistant {
-            if !options.contains(member.name) {
-                options.append(member.name)
-            }
-        }
+    private var ownerOptions: [TaskOwnerChoice] {
+        TaskOwnerChoice.options(
+            members: store.familyGroup.members,
+            selectedName: owner,
+            selectedMemberID: ownerMemberID
+        )
+    }
 
-        if !owner.isEmpty, !options.contains(owner) {
-            options.append(owner)
-        }
+    private var selectedOwnerLabel: String {
+        ownerOptions.first(where: isSelectedOwner)?.label ?? owner
+    }
 
-        return options
+    private func isSelectedOwner(_ option: TaskOwnerChoice) -> Bool {
+        option.memberID == ownerMemberID && option.name == owner
     }
 
     private var categoryOptions: [TaskCategory] {
@@ -2109,17 +2111,21 @@ struct TaskEditorSheet: View {
 
     private var ownerMenu: some View {
         Menu {
-            ForEach(ownerOptions, id: \.self) { option in
+            ForEach(ownerOptions) { option in
                 Button {
-                    owner = option
+                    owner = option.name
+                    ownerMemberID = option.memberID
                 } label: {
-                    Label(option, systemImage: owner == option ? "checkmark" : "person.fill")
+                    Label(
+                        option.label,
+                        systemImage: isSelectedOwner(option) ? "checkmark" : "person.fill"
+                    )
                 }
             }
         } label: {
             TaskEditorMenuRow(
                 title: "Responsável",
-                value: owner,
+                value: selectedOwnerLabel,
                 systemName: "person.fill",
                 tone: .sky
             )
@@ -2248,6 +2254,7 @@ struct TaskEditorSheet: View {
         title = task.title
         subtitle = task.subtitle
         owner = task.owner
+        ownerMemberID = task.ownerMemberID
         kind = isPlantingSeed ? .task : task.kind
         dueDate = isPlantingSeed
             ? Self.defaultDueDate()
@@ -2275,6 +2282,7 @@ struct TaskEditorSheet: View {
                 title: title,
                 subtitle: subtitle,
                 owner: owner,
+                ownerMemberID: ownerMemberID,
                 dueLabel: dueLabel,
                 dueAt: dueAt,
                 category: categoryForSave,
@@ -2289,6 +2297,7 @@ struct TaskEditorSheet: View {
                 title: title,
                 subtitle: subtitle,
                 owner: owner,
+                ownerMemberID: ownerMemberID,
                 dueLabel: dueLabel,
                 dueAt: dueAt,
                 category: categoryForSave,
@@ -2303,6 +2312,7 @@ struct TaskEditorSheet: View {
                 title: title,
                 subtitle: subtitle,
                 owner: owner,
+                ownerMemberID: ownerMemberID,
                 dueLabel: dueLabel,
                 dueAt: dueAt,
                 category: categoryForSave,
@@ -2447,6 +2457,51 @@ struct TaskEditorSheet: View {
 
 }
 
+struct TaskOwnerChoice: Identifiable, Hashable {
+    var memberID: UUID?
+    var name: String
+    var label: String
+
+    var id: String { memberID?.uuidString ?? "label:\(name)" }
+
+    static func options(
+        members: [HouseholdMember],
+        selectedName: String,
+        selectedMemberID: UUID?
+    ) -> [TaskOwnerChoice] {
+        let people = members.filter { $0.role != .assistant }
+        var options = [
+            TaskOwnerChoice(
+                memberID: nil,
+                name: HouseholdWorkload.sharedOwnerLabel,
+                label: HouseholdWorkload.sharedOwnerLabel
+            )
+        ]
+
+        for person in people {
+            let namesakes = people.count { HouseholdWorkload.isSameOwner($0.name, person.name) }
+            let relationship = person.relationship.trimmingCharacters(in: .whitespacesAndNewlines)
+            options.append(
+                TaskOwnerChoice(
+                    memberID: person.id,
+                    name: person.name,
+                    label: namesakes > 1 && !relationship.isEmpty
+                        ? "\(person.name) · \(relationship)"
+                        : person.name
+                )
+            )
+        }
+
+        guard selectedMemberID == nil,
+              !HouseholdWorkload.isSharedOwner(selectedName),
+              !options.contains(where: { HouseholdWorkload.isSameOwner($0.name, selectedName) }) else {
+            return options
+        }
+
+        return options + [TaskOwnerChoice(memberID: nil, name: selectedName, label: selectedName)]
+    }
+}
+
 private struct TaskEditorMenuRow: View {
     var title: String
     var value: String
@@ -2517,6 +2572,7 @@ struct ShoppingEditorSheet: View {
     @State private var title = ""
     @State private var amount = ""
     @State private var owner = "Casa"
+    @State private var ownerMemberID: UUID?
     @State private var didLoad = false
     @State private var addedCount = 0
     @State private var isShowingDeleteConfirmation = false
@@ -2530,28 +2586,29 @@ struct ShoppingEditorSheet: View {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var ownerOptions: [String] {
-        var options = ["Casa"]
-        for member in store.familyGroup.members where member.role != .assistant {
-            if !options.contains(member.name) {
-                options.append(member.name)
-            }
-        }
+    private var ownerOptions: [TaskOwnerChoice] {
+        TaskOwnerChoice.options(
+            members: store.familyGroup.members,
+            selectedName: owner,
+            selectedMemberID: ownerMemberID
+        )
+    }
 
-        if !owner.isEmpty, !options.contains(owner) {
-            options.append(owner)
-        }
-
-        return options
+    private func isSelectedOwner(_ option: TaskOwnerChoice) -> Bool {
+        option.memberID == ownerMemberID && option.name == owner
     }
 
     private var ownerMenu: some View {
         Menu {
-            ForEach(ownerOptions, id: \.self) { option in
+            ForEach(ownerOptions) { option in
                 Button {
-                    owner = option
+                    owner = option.name
+                    ownerMemberID = option.memberID
                 } label: {
-                    Label(option, systemImage: owner == option ? "checkmark" : "person.fill")
+                    Label(
+                        option.label,
+                        systemImage: isSelectedOwner(option) ? "checkmark" : "person.fill"
+                    )
                 }
             }
         } label: {
@@ -2562,7 +2619,7 @@ struct ShoppingEditorSheet: View {
                 Spacer(minLength: 12)
 
                 HStack(spacing: 8) {
-                    Text(owner)
+                    Text(ownerOptions.first(where: isSelectedOwner)?.label ?? owner)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(NinaTheme.ink)
                         .lineLimit(1)
@@ -2686,6 +2743,7 @@ struct ShoppingEditorSheet: View {
         title = item.title
         amount = item.amount
         owner = item.owner
+        ownerMemberID = item.ownerMemberID
     }
 
     private func save(keepingSheetOpen: Bool) {
@@ -2697,9 +2755,20 @@ struct ShoppingEditorSheet: View {
         Haptics.success()
         switch mode {
         case .add:
-            store.addShoppingItem(title: title, amount: amount, owner: owner)
+            store.addShoppingItem(
+                title: title,
+                amount: amount,
+                owner: owner,
+                ownerMemberID: ownerMemberID
+            )
         case .edit(let id):
-            store.updateShoppingItem(id: id, title: title, amount: amount, owner: owner)
+            store.updateShoppingItem(
+                id: id,
+                title: title,
+                amount: amount,
+                owner: owner,
+                ownerMemberID: ownerMemberID
+            )
         }
 
         guard keepingSheetOpen else {

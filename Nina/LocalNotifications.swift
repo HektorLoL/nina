@@ -21,10 +21,25 @@ enum HomeNotificationAuthorizationStatus: Hashable {
     }
 }
 
+struct HomeNotificationViewer: Hashable {
+    var memberID: UUID?
+    var name: String?
+
+    init(memberID: UUID? = nil, name: String? = nil) {
+        self.memberID = memberID
+        self.name = name
+    }
+
+    init(member: HouseholdMember?) {
+        memberID = member?.id
+        name = member?.name
+    }
+}
+
 protocol HomeNotificationScheduling {
     func authorizationStatus() async -> HomeNotificationAuthorizationStatus
     func requestAuthorization() async -> HomeNotificationAuthorizationStatus
-    func synchronize(tasks: [TaskItem], familyID: UUID, viewerName: String?) async
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewer: HomeNotificationViewer) async
 }
 
 extension HomeNotificationScheduling {
@@ -38,7 +53,7 @@ extension HomeNotificationScheduling {
 }
 
 struct NoopHomeNotificationScheduler: HomeNotificationScheduling {
-    func synchronize(tasks: [TaskItem], familyID: UUID, viewerName: String?) async {}
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewer: HomeNotificationViewer) async {}
 }
 
 #if canImport(UserNotifications)
@@ -76,7 +91,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         return await authorizationStatus()
     }
 
-    func synchronize(tasks: [TaskItem], familyID: UUID, viewerName: String?) async {
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewer: HomeNotificationViewer) async {
         let pending = await center.pendingNotificationRequests()
         let existingNinaIDs = pending.map(\.identifier).filter(Self.isNinaNotificationIdentifier)
 
@@ -89,7 +104,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         let requests = notificationRequests(
             tasks: tasks,
             familyID: familyID,
-            viewerName: viewerName
+            viewer: viewer
         )
 
         center.removePendingNotificationRequests(withIdentifiers: existingNinaIDs)
@@ -100,24 +115,30 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
 
     // Another adult's chore must never buzz this phone, and must never evict this phone's own
     // reminders from the 60-request tail.
-    static func isForViewer(_ task: TaskItem, viewerName: String?) -> Bool {
-        guard let viewerName, !viewerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    static func isForViewer(_ task: TaskItem, viewer: HomeNotificationViewer) -> Bool {
+        guard !HouseholdWorkload.isSharedOwner(task.owner) else { return true }
+
+        if let ownerMemberID = task.ownerMemberID, let viewerMemberID = viewer.memberID {
+            return ownerMemberID == viewerMemberID
+        }
+
+        guard let viewerName = viewer.name,
+              !viewerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return true
         }
-        return HouseholdWorkload.isSharedOwner(task.owner)
-            || HouseholdWorkload.isSameOwner(task.owner, viewerName)
+        return HouseholdWorkload.isSameOwner(task.owner, viewerName)
     }
 
     private func notificationRequests(
         tasks: [TaskItem],
         familyID: UUID,
-        viewerName: String?
+        viewer: HomeNotificationViewer
     ) -> [UNNotificationRequest] {
         let now = Date()
         let quietHours = QuietHoursConfiguration(defaults: defaults, calendar: calendar)
         var scheduled: [ScheduledNotification] = []
 
-        for task in tasks where !task.isDone && Self.isForViewer(task, viewerName: viewerName) {
+        for task in tasks where !task.isDone && Self.isForViewer(task, viewer: viewer) {
             let dates = taskDeliveryDates(task, after: now)
             for deliveryDate in dates {
                 scheduled.append(

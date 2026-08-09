@@ -29,6 +29,7 @@ import {
   NinaChatRequest,
 } from "../_shared/nina-chat-request.ts";
 import { ninaSystemPrompt } from "../_shared/nina-chat-policy.ts";
+import { houseWorkloadKey, summarizeWorkload } from "../_shared/nina-workload.ts";
 
 type NinaChatStart = {
   idempotent: boolean;
@@ -94,7 +95,7 @@ const readOnlyTools = [
     type: "function",
     name: "get_workload_summary",
     description:
-      "Return deterministic task counts by owner. Read-only. Use for workload and redistribution questions.",
+      "Return deterministic task counts per household member. Read-only. Use for workload and redistribution questions. The key Casa is work the house carries and is never a person.",
     strict: true,
     parameters: {
       type: "object",
@@ -301,27 +302,29 @@ async function runReadOnlyTool(
       return error ? { error: "tool_unavailable" } : { memories };
     }
     case "get_workload_summary": {
-      const { data, error } = await client
-        .from("tasks")
-        .select("owner_label,is_done,priority")
-        .eq("family_id", familyID);
-      if (error) return { error: "tool_unavailable" };
+      const [taskResult, memberResult] = await Promise.all([
+        client
+          .from("tasks")
+          .select("owner_member_id,owner_label,is_done,priority")
+          .eq("family_id", familyID),
+        client
+          .from("family_members")
+          .select("id,name,relationship,household_role")
+          .eq("family_id", familyID)
+          .order("created_at")
+          .order("id"),
+      ]);
+      if (taskResult.error || memberResult.error) {
+        return { error: "tool_unavailable" };
+      }
 
-      const summary = (data ?? []).reduce<Record<string, {
-        open: number;
-        completed: number;
-        urgent: number;
-      }>>((result, task) => {
-        const owner = task.owner_label || "Casa";
-        result[owner] ??= { open: 0, completed: 0, urgent: 0 };
-        if (task.is_done) result[owner].completed += 1;
-        else result[owner].open += 1;
-        if (!task.is_done && task.priority === "urgent") {
-          result[owner].urgent += 1;
-        }
-        return result;
-      }, {});
-      return { workload: summary };
+      return {
+        house_owner_label: houseWorkloadKey,
+        workload: summarizeWorkload(
+          taskResult.data ?? [],
+          memberResult.data ?? [],
+        ),
+      };
     }
     default:
       return { error: "unknown_tool" };

@@ -282,8 +282,17 @@ struct TasksView: View {
 
     private func visibleOpenTasks(in sectionID: String, relativeTo referenceDate: Date) -> [TaskItem] {
         let calendar = Calendar.current
+        let viewer = store.currentFamilyMember
         return store.openTasks(in: sectionID)
-            .filter { selectedFilter.matches($0, referenceDate: referenceDate, calendar: calendar, currentUserName: store.currentFamilyMember?.name) }
+            .filter {
+                selectedFilter.matches(
+                    $0,
+                    referenceDate: referenceDate,
+                    calendar: calendar,
+                    currentMemberID: viewer?.id,
+                    currentUserName: viewer?.name
+                )
+            }
             .filter { matchesSearch($0) }
             .sorted { left, right in
                 let leftOverdue = left.isOverdue(relativeTo: referenceDate, calendar: calendar)
@@ -312,11 +321,17 @@ struct TasksView: View {
     private func filterCounts(in sectionID: String, relativeTo referenceDate: Date) -> [TaskListFilter: Int] {
         let calendar = Calendar.current
         let open = store.openTasks(in: sectionID).filter(matchesSearch)
-        let currentUserName = store.currentFamilyMember?.name
+        let viewer = store.currentFamilyMember
 
         return TaskListFilter.allCases.reduce(into: [:]) { counts, filter in
             counts[filter] = open.count {
-                filter.matches($0, referenceDate: referenceDate, calendar: calendar, currentUserName: currentUserName)
+                filter.matches(
+                    $0,
+                    referenceDate: referenceDate,
+                    calendar: calendar,
+                    currentMemberID: viewer?.id,
+                    currentUserName: viewer?.name
+                )
             }
         }
     }
@@ -394,8 +409,12 @@ struct TasksView: View {
     }
 
     private func shoppingTone(for item: ShoppingItem) -> MemberTone {
-        store.familyGroup.members
-            .first { $0.role != .assistant && $0.name.localizedCaseInsensitiveCompare(item.owner) == .orderedSame }?
+        let people = store.familyGroup.members.filter { $0.role != .assistant }
+        if let memberID = item.ownerMemberID {
+            return people.first { $0.id == memberID }?.tone ?? .amber
+        }
+        return people
+            .first { $0.name.localizedCaseInsensitiveCompare(item.owner) == .orderedSame }?
             .tone ?? .amber
     }
 
@@ -518,13 +537,18 @@ enum TaskListFilter: String, CaseIterable, Identifiable, Hashable {
         _ task: TaskItem,
         referenceDate: Date,
         calendar: Calendar,
+        currentMemberID: UUID?,
         currentUserName: String?
     ) -> Bool {
         switch self {
         case .all:
             true
         case .mine:
-            currentUserName.map { task.owner.localizedCaseInsensitiveCompare($0) == .orderedSame } ?? false
+            if let currentMemberID, let ownerMemberID = task.ownerMemberID {
+                ownerMemberID == currentMemberID
+            } else {
+                currentUserName.map { task.owner.localizedCaseInsensitiveCompare($0) == .orderedSame } ?? false
+            }
         case .overdue:
             task.isOverdue(relativeTo: referenceDate, calendar: calendar)
         case .seeds:
