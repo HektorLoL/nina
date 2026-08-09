@@ -111,6 +111,19 @@ where id in (
   '81000000-0000-0000-0000-000000000003'
 );
 
+insert into public.nina_ai_consents (family_id, user_id, policy_version)
+values
+  (
+    '82000000-0000-0000-0000-000000000001',
+    '81000000-0000-0000-0000-000000000001',
+    '2026-06-16'
+  ),
+  (
+    '82000000-0000-0000-0000-000000000002',
+    '81000000-0000-0000-0000-000000000003',
+    '2026-06-16'
+  );
+
 insert into public.premium_subscriptions (
   original_transaction_id,
   user_id,

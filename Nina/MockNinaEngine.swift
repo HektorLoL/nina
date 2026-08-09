@@ -39,6 +39,7 @@ enum NinaEngineError: Error, Equatable {
     case monthlyBudgetReached
     case inputTooLarge
     case adultAccessRequired
+    case aiConsentRequired
     case attachmentsRequirePremium
     case inputNotSupported
     case requestInProgress
@@ -54,6 +55,8 @@ enum NinaEngineError: Error, Equatable {
             self = .inputTooLarge
         case "adult_access_required":
             self = .adultAccessRequired
+        case "ai_consent_required":
+            self = .aiConsentRequired
         case "attachments_require_premium":
             self = .attachmentsRequirePremium
         case "input_not_supported":
@@ -75,6 +78,8 @@ enum NinaEngineError: Error, Equatable {
             "Essa mensagem ou anexo é grande demais para uma única conversa."
         case .adultAccessRequired:
             "A conversa com a Nina está disponível somente para adultos da casa."
+        case .aiConsentRequired:
+            "A Nina precisa do seu consentimento antes de conversar. Você pode aceitar em Ajustes."
         case .attachmentsRequirePremium:
             "A leitura de documentos e fotos faz parte do Premium da casa."
         case .inputNotSupported:

@@ -730,10 +730,19 @@ private struct PrivacyConsentSettingsView: View {
                     )
                 }
 
+                if let error = store.syncErrorMessage {
+                    Label(error, systemImage: "exclamationmark.circle.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(NinaTheme.coral)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 if store.hasAIMemoryConsent {
                     Button(role: .destructive) {
                         Haptics.warning()
-                        store.revokeAIMemoryConsent()
+                        Task {
+                            await store.revokeAIMemoryConsent()
+                        }
                     } label: {
                         Label("Revogar consentimento", systemImage: "xmark.shield.fill")
                             .font(.headline.weight(.black))
@@ -743,11 +752,17 @@ private struct PrivacyConsentSettingsView: View {
                             .background(NinaTheme.coral.opacity(0.12), in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .disabled(store.isSyncingHome)
+                    .opacity(store.isSyncingHome ? 0.5 : 1)
                 } else {
                     PrimaryCapsuleButton(title: "Aceitar processamento da Nina", systemName: "checkmark.shield.fill") {
                         Haptics.success()
-                        store.grantAIMemoryConsent()
+                        Task {
+                            await store.grantAIMemoryConsent()
+                        }
                     }
+                    .disabled(store.isSyncingHome)
+                    .opacity(store.isSyncingHome ? 0.5 : 1)
                 }
             }
             .padding(18)

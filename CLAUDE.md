@@ -96,7 +96,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 17+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (24 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (28 files) |
 | Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app` | `web/src/worker.ts` |
 
@@ -148,6 +148,12 @@ product regression, not a refactor.
   change is a proposal resolved by `resolve_nina_proposal`.
 - **Adults only**, checked in the Edge Function *and* again inside
   `begin_nina_chat_run` so a direct RPC call cannot bypass it.
+- **AI consent is a server-side record, not a device flag.** `nina_ai_consents`
+  holds one live grant per adult per home and keeps withdrawn rows — LGPD expects
+  demonstrable consent, and a reinstall must not read as "never accepted".
+  `begin_nina_chat_run` and `get_nina_weekly_candidates` both require a live
+  grant, so revoking on one phone actually stops the other adult's chat and stops
+  the Sunday insight from shipping member display names to OpenAI.
 - **Chat threads are per-adult, not per-family.** `nina_threads` is unique on
   (family_id, owner_user_id); one adult's private conversation must never reach
   another adult's context, tools, or weekly insight.
@@ -312,7 +318,7 @@ its grid when `dynamicTypeSize.isAccessibilitySize`.
 
 ## 6. Database
 
-24 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+28 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order.
 
 **House style for every new object:**

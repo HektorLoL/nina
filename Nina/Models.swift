@@ -1045,6 +1045,33 @@ struct HouseholdPremium: Decodable, Hashable {
     }
 }
 
+struct NinaAIConsent: Decodable, Hashable {
+    var isGranted: Bool
+    var policyVersion: String?
+    var acceptedAt: Date?
+
+    static let withheld = NinaAIConsent(isGranted: false, policyVersion: nil, acceptedAt: nil)
+
+    private enum CodingKeys: String, CodingKey {
+        case isGranted = "is_granted"
+        case policyVersion = "policy_version"
+        case acceptedAt = "accepted_at"
+    }
+
+    init(isGranted: Bool, policyVersion: String?, acceptedAt: Date?) {
+        self.isGranted = isGranted
+        self.policyVersion = policyVersion
+        self.acceptedAt = acceptedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isGranted = try container.decodeIfPresent(Bool.self, forKey: .isGranted) ?? false
+        policyVersion = try container.decodeIfPresent(String.self, forKey: .policyVersion)
+        acceptedAt = try container.decodeIfPresent(Date.self, forKey: .acceptedAt)
+    }
+}
+
 enum NinaLegalLinks {
     // App Store Review 3.1.2 rejects a paywall without reachable terms and privacy links.
     static let privacyPolicy = URL(string: "https://ninai.app/privacidade")!

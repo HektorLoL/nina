@@ -1348,31 +1348,78 @@ final class AppStore {
         }
     }
 
-    func grantAIMemoryConsent() {
-        guard let userID = activeHomeUserID else { return }
-        let record = AIMemoryConsentRecord(
-            acceptedAt: .now,
-            policyVersion: PrivacyPolicyVersion.current
-        )
+    @discardableResult
+    func grantAIMemoryConsent() async -> Bool {
+        await recordAIMemoryConsent(granted: true)
+    }
+
+    @discardableResult
+    func revokeAIMemoryConsent() async -> Bool {
+        await recordAIMemoryConsent(granted: false)
+    }
+
+    // The local record is a mirror of the server grant, never the grant itself.
+    private func recordAIMemoryConsent(granted: Bool) async -> Bool {
+        let contextToken = currentHomeContextToken
+        let previousRecord = aiMemoryConsent
+        syncErrorMessage = nil
+
+        let optimisticRecord = granted
+            ? AIMemoryConsentRecord(
+                acceptedAt: .now,
+                policyVersion: PrivacyPolicyVersion.current
+            )
+            : nil
+        applyAIMemoryConsent(optimisticRecord)
+
+        if activeUser != nil,
+           !usesLocalDebugBackend(for: activeUser),
+           let remoteHomeBackend {
+            await waitForPendingRemoteMutations()
+            guard isCurrentHomeContext(contextToken) else { return false }
+            isSyncingHome = true
+            defer { finishSyncingHome(ifCurrent: contextToken) }
+
+            do {
+                let state = try await remoteHomeBackend.recordNinaAIConsent(
+                    granted: granted,
+                    policyVersion: PrivacyPolicyVersion.current
+                )
+                guard isCurrentHomeContext(contextToken) else { return false }
+                apply(state)
+                homeAccessState = .authorized
+                persistActiveHome()
+                return hasAIMemoryConsent == granted
+            } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
+                applyAIMemoryConsent(previousRecord)
+                syncErrorMessage = granted
+                    ? "Não foi possível registrar seu consentimento. Nada mudou por enquanto."
+                    : "Não foi possível revogar seu consentimento. Ele continua ativo nesta casa."
+                Haptics.error()
+                return false
+            }
+        }
+
+        return true
+    }
+
+    private func applyAIMemoryConsent(_ record: AIMemoryConsentRecord?) {
         aiMemoryConsent = record
-        if let data = try? JSONEncoder().encode(record) {
-            PrivateLocalDataAccess.writeDataBestEffort(
-                data,
+        guard let userID = activeHomeUserID else { return }
+
+        guard let record, let data = try? JSONEncoder().encode(record) else {
+            PrivateLocalDataAccess.removeData(
                 forKey: Self.aiMemoryConsentKey(for: userID),
                 ownerScope: PrivateLocalDataScope.aiConsent(for: userID),
                 store: privateDataStore,
                 legacyDefaults: defaults
             )
-        }
-    }
-
-    func revokeAIMemoryConsent() {
-        guard let userID = activeHomeUserID else {
-            aiMemoryConsent = nil
             return
         }
-        aiMemoryConsent = nil
-        PrivateLocalDataAccess.removeData(
+
+        PrivateLocalDataAccess.writeDataBestEffort(
+            data,
             forKey: Self.aiMemoryConsentKey(for: userID),
             ownerScope: PrivateLocalDataScope.aiConsent(for: userID),
             store: privateDataStore,
@@ -2140,6 +2187,15 @@ final class AppStore {
         }
 
         householdPremium = state.householdPremium
+        applyAIMemoryConsent(Self.consentRecord(from: state.aiConsent))
+    }
+
+    private static func consentRecord(from consent: NinaAIConsent) -> AIMemoryConsentRecord? {
+        guard consent.isGranted else { return nil }
+        return AIMemoryConsentRecord(
+            acceptedAt: consent.acceptedAt ?? .now,
+            policyVersion: consent.policyVersion ?? PrivacyPolicyVersion.current
+        )
     }
 
     private func loadFamilyGroup(for userID: String) -> FamilyGroup? {

@@ -246,7 +246,18 @@ private struct AIMemoryConsentCard: View {
 
             PrimaryCapsuleButton(title: "Aceitar e conversar", systemName: "checkmark.shield.fill") {
                 Haptics.success()
-                store.grantAIMemoryConsent()
+                Task {
+                    await store.grantAIMemoryConsent()
+                }
+            }
+            .disabled(store.isSyncingHome)
+            .opacity(store.isSyncingHome ? 0.5 : 1)
+
+            if let error = store.syncErrorMessage {
+                Label(error, systemImage: "exclamationmark.circle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(NinaTheme.coral)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Text("Ao aceitar, você permite esse processamento para recursos de IA e memória da Nina. Você pode continuar usando tarefas e casa sem aceitar.")

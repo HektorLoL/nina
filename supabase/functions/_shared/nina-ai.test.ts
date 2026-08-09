@@ -338,6 +338,30 @@ Deno.test("premium-only attachments are refused with a stable forbidden code", a
   );
 });
 
+Deno.test("a withdrawn AI consent is refused as its own code, not as an outage", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  const mappingStart = source.indexOf("if (startError) {");
+  const mappingEnd = source.indexOf("const run = startData as NinaChatStart;");
+  const startFailureMapping = source.slice(mappingStart, mappingEnd);
+
+  assertStringIncludes(
+    startFailureMapping,
+    "message.includes(\"ai_consent_required\")",
+  );
+  assertStringIncludes(
+    startFailureMapping,
+    "jsonResponse({ error: \"ai_consent_required\" }, 403)",
+  );
+
+  // Consent is checked before the branch that would report the refusal as a 503 outage.
+  assert(
+    startFailureMapping.indexOf("ai_consent_required") <
+      startFailureMapping.indexOf("service_unavailable"),
+  );
+});
+
 Deno.test("the chat function translates the premium refusal instead of deciding entitlement", async () => {
   const source = await Deno.readTextFile(
     new URL("../nina-chat/index.ts", import.meta.url),

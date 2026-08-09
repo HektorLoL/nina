@@ -1298,12 +1298,165 @@ final class AppStoreAuthorizationTests: XCTestCase {
         await store.sendMessage("Antes do consentimento")
         XCTAssertEqual(store.messages.count, initialCount)
 
-        store.grantAIMemoryConsent()
+        await store.grantAIMemoryConsent()
         XCTAssertTrue(store.hasAIMemoryConsent)
         XCTAssertTrue(store.canSendNinaMessages)
 
         await store.sendMessage("Depois do consentimento")
         XCTAssertEqual(store.messages.count, initialCount + 2)
+    }
+
+    func testTheServerCodeForAMissingAIConsentGetsItsOwnEngineError() {
+        XCTAssertEqual(NinaEngineError(code: "ai_consent_required"), .aiConsentRequired)
+        XCTAssertNotEqual(NinaEngineError(code: "ai_consent_required"), .unavailable)
+        XCTAssertTrue(NinaEngineError.aiConsentRequired.userMessage.contains("consentimento"))
+        XCTAssertFalse(NinaEngineError.aiConsentRequired.userMessage.contains("!"))
+    }
+
+    func testTheConsentBlockDecodesTheShapeGetCurrentHomeContextReturns() throws {
+        let json = """
+        {"is_granted":true,"policy_version":"2026-06-16","accepted_at":"2026-08-01T12:00:00Z"}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let consent = try decoder.decode(NinaAIConsent.self, from: Data(json.utf8))
+
+        XCTAssertTrue(consent.isGranted)
+        XCTAssertEqual(consent.policyVersion, "2026-06-16")
+        XCTAssertEqual(consent.acceptedAt?.timeIntervalSince1970, 1_785_585_600)
+    }
+
+    func testAConsentBlockThatTheServerOmitsEntirelyReadsAsWithheld() throws {
+        let consent = try JSONDecoder().decode(NinaAIConsent.self, from: Data("{}".utf8))
+
+        XCTAssertFalse(consent.isGranted)
+        XCTAssertNil(consent.policyVersion)
+        XCTAssertNil(consent.acceptedAt)
+    }
+
+    @MainActor
+    func testGrantingConsentReachesTheServerInsteadOfStayingOnTheDevice() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertFalse(store.hasAIMemoryConsent)
+
+        let didGrant = await store.grantAIMemoryConsent()
+        let mutations = await backend.recordedMutations()
+
+        XCTAssertTrue(didGrant)
+        XCTAssertTrue(mutations.contains(.recordNinaAIConsent(true)))
+        XCTAssertTrue(store.hasAIMemoryConsent)
+        XCTAssertEqual(store.aiMemoryConsent?.policyVersion, PrivacyPolicyVersion.current)
+        XCTAssertNil(store.syncErrorMessage)
+    }
+
+    @MainActor
+    func testRevokingConsentReachesTheServerInsteadOfStayingOnTheDevice() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(
+                aiConsent: NinaAIConsent(
+                    isGranted: true,
+                    policyVersion: PrivacyPolicyVersion.current,
+                    acceptedAt: Date(timeIntervalSince1970: 1_785_585_600)
+                )
+            )
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertTrue(store.hasAIMemoryConsent)
+
+        let didRevoke = await store.revokeAIMemoryConsent()
+        let mutations = await backend.recordedMutations()
+
+        XCTAssertTrue(didRevoke)
+        XCTAssertTrue(mutations.contains(.recordNinaAIConsent(false)))
+        XCTAssertFalse(store.hasAIMemoryConsent)
+        XCTAssertNil(store.syncErrorMessage)
+    }
+
+    @MainActor
+    func testAFailedRevokeLeavesTheConsentThatIsStillLiveOnTheServer() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(
+                aiConsent: NinaAIConsent(
+                    isGranted: true,
+                    policyVersion: PrivacyPolicyVersion.current,
+                    acceptedAt: Date(timeIntervalSince1970: 1_785_585_600)
+                )
+            )
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        await backend.setConsentWriteFails(true)
+
+        let didRevoke = await store.revokeAIMemoryConsent()
+
+        XCTAssertFalse(didRevoke)
+        XCTAssertTrue(store.hasAIMemoryConsent)
+        XCTAssertEqual(
+            store.syncErrorMessage,
+            "Não foi possível revogar seu consentimento. Ele continua ativo nesta casa."
+        )
+    }
+
+    @MainActor
+    func testAFailedGrantNeverUnlocksTheConversationTheServerStillRefuses() async {
+        let user = makeUser()
+        let adultMember = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember])
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        await backend.setConsentWriteFails(true)
+
+        let didGrant = await store.grantAIMemoryConsent()
+
+        XCTAssertFalse(didGrant)
+        XCTAssertFalse(store.hasAIMemoryConsent)
+        XCTAssertFalse(store.canSendNinaMessages)
+        XCTAssertEqual(
+            store.syncErrorMessage,
+            "Não foi possível registrar seu consentimento. Nada mudou por enquanto."
+        )
+    }
+
+    @MainActor
+    func testTheHomeContextIsTheSourceOfTruthForConsentAfterARefresh() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(
+                aiConsent: NinaAIConsent(
+                    isGranted: true,
+                    policyVersion: PrivacyPolicyVersion.current,
+                    acceptedAt: Date(timeIntervalSince1970: 1_785_585_600)
+                )
+            )
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        await store.activateHomeContext(for: user)
+        XCTAssertTrue(store.hasAIMemoryConsent)
+
+        await backend.setAIConsent(.withheld)
+        await store.refreshHomeFromRemote(for: user)
+
+        XCTAssertFalse(store.hasAIMemoryConsent)
+        let mutations = await backend.recordedMutations()
+        XCTAssertFalse(mutations.contains(.recordNinaAIConsent(false)))
     }
 
     @MainActor
@@ -1346,7 +1499,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
             ninaEngine: MockNinaEngine()
         )
         await store.activateHomeContext(for: user)
-        store.grantAIMemoryConsent()
+        await store.grantAIMemoryConsent()
 
         var profile = UserProfile.default(for: user)
         profile.phone = "+55 11 99999-0000"
@@ -1389,7 +1542,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
             ninaEngine: PersistedNinaEngine(assistantMessageID: assistantID)
         )
         await store.activateHomeContext(for: user)
-        store.grantAIMemoryConsent()
+        await store.grantAIMemoryConsent()
 
         await store.sendMessage("Organize a conta")
         await store.waitForPendingRemoteMutations()
@@ -1692,7 +1845,8 @@ final class AppStoreAuthorizationTests: XCTestCase {
         taskSections: [TaskSection] = PreviewData.taskSections,
         tasks: [TaskItem] = [],
         shoppingItems: [ShoppingItem] = [],
-        members: [HouseholdMember] = []
+        members: [HouseholdMember] = [],
+        aiConsent: NinaAIConsent = .withheld
     ) -> RemoteHomeState {
         RemoteHomeState(
             familyGroup: FamilyGroup(name: familyName, inviteCode: inviteCode, members: members),
@@ -1703,7 +1857,8 @@ final class AppStoreAuthorizationTests: XCTestCase {
                 tasks: tasks,
                 shoppingItems: shoppingItems,
                 insights: []
-            )
+            ),
+            aiConsent: aiConsent
         )
     }
 }
@@ -1892,6 +2047,7 @@ private enum RecordedHomeMutation: Equatable {
     case createChatMessage(UUID)
     case resolveNinaProposal(UUID, NinaProposalDecision)
     case deleteNinaChatHistory(UUID)
+    case recordNinaAIConsent(Bool)
 }
 
 private struct NotificationSyncRecord {
@@ -1952,6 +2108,7 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
     private var realtimeContinuation: AsyncStream<HomeRealtimeEvent>.Continuation?
     private var realtimeSubscribed = false
     private var realtimeSubscribedContinuation: CheckedContinuation<Void, Never>?
+    private var consentWriteFails = false
 
     init(state: RemoteHomeState, conflictingTask: TaskItem? = nil) {
         self.state = state
@@ -1960,6 +2117,14 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
 
     func recordedMutations() -> [RecordedHomeMutation] {
         mutations
+    }
+
+    func setConsentWriteFails(_ shouldFail: Bool) {
+        consentWriteFails = shouldFail
+    }
+
+    func setAIConsent(_ consent: NinaAIConsent) {
+        state.aiConsent = consent
     }
 
     func waitUntilRealtimeSubscribed() async {
@@ -2064,6 +2229,19 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
 
     func deleteNinaChatHistory(familyID: UUID) async throws {
         mutations.append(.deleteNinaChatHistory(familyID))
+    }
+
+    func recordNinaAIConsent(granted: Bool, policyVersion: String) async throws -> RemoteHomeState {
+        mutations.append(.recordNinaAIConsent(granted))
+        if consentWriteFails {
+            throw DiagnosticsTestError.expected
+        }
+        state.aiConsent = NinaAIConsent(
+            isGranted: granted,
+            policyVersion: granted ? policyVersion : nil,
+            acceptedAt: granted ? Date(timeIntervalSince1970: 1_785_639_600) : nil
+        )
+        return state
     }
 
     func realtimeEvents(familyID: UUID) async -> AsyncStream<HomeRealtimeEvent> {

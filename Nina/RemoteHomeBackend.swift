@@ -7,6 +7,7 @@ struct RemoteHomeState {
     var inviteStatus: FamilyInviteStatus? = nil
     var joinRequests: [FamilyJoinRequest] = []
     var householdPremium: HouseholdPremium = .inactive
+    var aiConsent: NinaAIConsent = .withheld
 }
 
 struct FamilyInvitePreview: Hashable {
@@ -136,6 +137,7 @@ protocol RemoteHomeBackend {
     func updateNinaMemory(_ memory: NinaMemory) async throws -> NinaMemory
     func deleteNinaMemory(_ memoryID: UUID) async throws
     func deleteNinaChatHistory(familyID: UUID) async throws
+    func recordNinaAIConsent(granted: Bool, policyVersion: String) async throws -> RemoteHomeState
     func realtimeEvents(familyID: UUID) async -> AsyncStream<HomeRealtimeEvent>
 }
 
@@ -230,6 +232,10 @@ extension RemoteHomeBackend {
     }
 
     func deleteNinaChatHistory(familyID: UUID) async throws {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func recordNinaAIConsent(granted: Bool, policyVersion: String) async throws -> RemoteHomeState {
         throw RemoteHomeBackendError.operationUnavailable
     }
 
@@ -779,6 +785,26 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         }
     }
 
+    func recordNinaAIConsent(granted: Bool, policyVersion: String) async throws -> RemoteHomeState {
+        let context: HomeContextRow = try await perform(operation: "record_nina_ai_consent") {
+            try await client
+                .rpc(
+                    "record_nina_ai_consent",
+                    params: RecordNinaAIConsentParams(
+                        policyVersion: policyVersion,
+                        granted: granted
+                    )
+                )
+                .execute()
+                .value
+        }
+
+        guard let state = try await loadRemoteState(from: context) else {
+            throw RemoteHomeBackendError.familyNotFound
+        }
+        return state
+    }
+
     func realtimeEvents(familyID: UUID) async -> AsyncStream<HomeRealtimeEvent> {
         let channel = client.channel("home-\(familyID.uuidString)")
         let filter = RealtimePostgresFilter.eq("family_id", value: familyID)
@@ -990,6 +1016,7 @@ private struct HomeContextRow: Decodable {
     var activeInvite: FamilyInviteStatusRow?
     var pendingJoinRequests: [FamilyJoinRequestRow]
     var premium: HouseholdPremium
+    var aiConsent: NinaAIConsent
 
     private enum CodingKeys: String, CodingKey {
         case family
@@ -999,6 +1026,7 @@ private struct HomeContextRow: Decodable {
         case activeInvite = "active_invite"
         case pendingJoinRequests = "pending_join_requests"
         case premium
+        case aiConsent = "ai_consent"
     }
 
     init(from decoder: Decoder) throws {
@@ -1013,6 +1041,7 @@ private struct HomeContextRow: Decodable {
             forKey: .pendingJoinRequests
         ) ?? []
         premium = try container.decodeIfPresent(HouseholdPremium.self, forKey: .premium) ?? .inactive
+        aiConsent = try container.decodeIfPresent(NinaAIConsent.self, forKey: .aiConsent) ?? .withheld
     }
 
     var remoteState: RemoteHomeState? {
@@ -1028,7 +1057,8 @@ private struct HomeContextRow: Decodable {
             snapshot: nil,
             inviteStatus: activeInvite?.domainStatus,
             joinRequests: pendingJoinRequests.map(\.domainRequest),
-            householdPremium: premium
+            householdPremium: premium,
+            aiConsent: aiConsent
         )
     }
 }
@@ -1246,6 +1276,16 @@ private struct FamilyIDParams: Encodable {
 
     private enum CodingKeys: String, CodingKey {
         case targetFamilyID = "target_family_id"
+    }
+}
+
+private struct RecordNinaAIConsentParams: Encodable {
+    var policyVersion: String
+    var granted: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case policyVersion = "policy_version"
+        case granted
     }
 }
 

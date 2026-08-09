@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(54);
+select plan(76);
 
 insert into auth.users (
   id,
@@ -131,7 +131,35 @@ select throws_ok(
   'children cannot start Nina chat runs'
 );
 
+select throws_ok(
+  $$select public.record_nina_ai_consent('2026-06-16', true)$$,
+  '42501',
+  'nina_adult_access_required',
+  'a child profile cannot consent to Nina on behalf of the household'
+);
+
 set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select is(
+  public.record_nina_ai_consent('2026-06-16', true) -> 'ai_consent' ->> 'is_granted',
+  'true',
+  'an adult records server side consent to Nina'
+);
+
+select is(
+  public.get_current_home_context() -> 'ai_consent' ->> 'policy_version',
+  '2026-06-16',
+  'the household context carries the policy version the adult accepted'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from jsonb_object_keys(public.get_current_home_context() -> 'ai_consent')
+  ),
+  3,
+  'the AI consent block exposes exactly three fields'
+);
 
 select lives_ok(
   $$select set_config(
@@ -162,6 +190,12 @@ select set_config(
 );
 
 set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
+
+select is(
+  public.record_nina_ai_consent('2026-06-16', true) -> 'ai_consent' ->> 'is_granted',
+  'true',
+  'the second adult records their own consent'
+);
 
 select lives_ok(
   $$select set_config(
@@ -923,6 +957,180 @@ select is(
   'every Nina run carries a pinned budget month'
 );
 
+update public.profiles
+set active_family_id = '62000000-0000-0000-0000-000000000001'
+where id in (
+  '61000000-0000-0000-0000-000000000001',
+  '61000000-0000-0000-0000-000000000002'
+);
+
+insert into public.premium_subscriptions (
+  original_transaction_id,
+  user_id,
+  product_id,
+  environment,
+  status,
+  is_active,
+  transaction_id,
+  expires_at,
+  signed_transaction_info
+)
+values (
+  'nina-consent-original-transaction',
+  '61000000-0000-0000-0000-000000000001',
+  'com.heitor.nina.premium.monthly',
+  'Sandbox',
+  'active',
+  true,
+  'nina-consent-transaction',
+  now() + interval '30 days',
+  'signed-transaction-info-example'
+);
+
+insert into public.tasks (family_id, title)
+select
+  '62000000-0000-0000-0000-000000000001'::uuid,
+  'Tarefa da semana ' || slot::text
+from generate_series(1, 5) as slot;
+
+set local role service_role;
+
+select ok(
+  exists (
+    select 1
+    from jsonb_array_elements(
+      public.get_nina_weekly_candidates()
+    ) as candidate(metrics)
+    where candidate.metrics ->> 'family_id' = '62000000-0000-0000-0000-000000000001'
+  ),
+  'a covered household with a consenting adult is a weekly digest candidate'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select is(
+  public.record_nina_ai_consent('2026-06-16', false) -> 'ai_consent' ->> 'is_granted',
+  'false',
+  'withdrawing consent clears the household context signal'
+);
+
+select throws_ok(
+  $$select public.begin_nina_chat_run(
+    '62000000-0000-0000-0000-000000000001',
+    '63000000-0000-0000-0000-000000000017',
+    'Mensagem depois de revogar',
+    '[]'::jsonb,
+    'gpt-5.4-mini',
+    1000,
+    '2026-06-15'
+  )$$,
+  '42501',
+  'nina_ai_consent_required',
+  'an adult who withdrew consent cannot start a Nina run'
+);
+
+reset role;
+set local request.jwt.claim.sub = '';
+
+select is(
+  (
+    select count(*)::integer
+    from public.nina_ai_consents
+    where user_id = '61000000-0000-0000-0000-000000000001'
+      and family_id = '62000000-0000-0000-0000-000000000001'
+  ),
+  1,
+  'a withdrawal keeps the consent it ended as a record'
+);
+
+select ok(
+  (
+    select revoked_at is not null
+    from public.nina_ai_consents
+    where user_id = '61000000-0000-0000-0000-000000000001'
+      and family_id = '62000000-0000-0000-0000-000000000001'
+  ),
+  'a withdrawal is stamped on the consent row rather than deleting it'
+);
+
+set local role service_role;
+
+select ok(
+  exists (
+    select 1
+    from jsonb_array_elements(
+      public.get_nina_weekly_candidates()
+    ) as candidate(metrics)
+    where candidate.metrics ->> 'family_id' = '62000000-0000-0000-0000-000000000001'
+  ),
+  'a household keeps its weekly digest while another adult still consents'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
+
+select is(
+  public.record_nina_ai_consent('2026-06-16', false) -> 'ai_consent' ->> 'is_granted',
+  'false',
+  'the second adult withdraws consent as well'
+);
+
+reset role;
+set local role service_role;
+
+select ok(
+  not exists (
+    select 1
+    from jsonb_array_elements(
+      public.get_nina_weekly_candidates()
+    ) as candidate(metrics)
+    where candidate.metrics ->> 'family_id' = '62000000-0000-0000-0000-000000000001'
+  ),
+  'a household with no consenting adult is never a weekly digest candidate'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
+
+select is(
+  public.record_nina_ai_consent('2026-06-16', true) -> 'ai_consent' ->> 'is_granted',
+  'true',
+  'an adult can consent again after withdrawing'
+);
+
+reset role;
+set local request.jwt.claim.sub = '';
+
+select is(
+  (
+    select count(*)::integer
+    from public.nina_ai_consents
+    where user_id = '61000000-0000-0000-0000-000000000002'
+      and family_id = '62000000-0000-0000-0000-000000000001'
+  ),
+  2,
+  'consenting again records a second grant instead of reviving the first'
+);
+
+set local role service_role;
+
+select ok(
+  exists (
+    select 1
+    from jsonb_array_elements(
+      public.get_nina_weekly_candidates()
+    ) as candidate(metrics)
+    where candidate.metrics ->> 'family_id' = '62000000-0000-0000-0000-000000000001'
+  ),
+  'the household returns as a weekly digest candidate once an adult consents again'
+);
+
+reset role;
+
 select ok(
   not has_function_privilege(
     'anon',
@@ -993,6 +1201,52 @@ select ok(
     'execute'
   ),
   'authenticated owners can call the proposal resolution RPC'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.record_nina_ai_consent(text,boolean)',
+    'execute'
+  ),
+  'an adult records their own AI consent through the client role'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.record_nina_ai_consent(text,boolean)',
+    'execute'
+  ),
+  'anonymous callers cannot record AI consent'
+);
+
+select ok(
+  not has_function_privilege(
+    'service_role',
+    'public.record_nina_ai_consent(text,boolean)',
+    'execute'
+  ),
+  'no server path records AI consent on behalf of a person'
+);
+
+select ok(
+  not has_table_privilege('authenticated', 'public.nina_ai_consents', 'select'),
+  'authenticated clients cannot read AI consent records directly'
+);
+
+select ok(
+  not has_table_privilege(
+    'authenticated',
+    'public.nina_ai_consents',
+    'insert, update, delete'
+  ),
+  'authenticated clients cannot write AI consent state directly'
+);
+
+select ok(
+  not has_table_privilege('anon', 'public.nina_ai_consents', 'select'),
+  'anonymous clients hold no privilege on AI consent records'
 );
 
 select * from finish();

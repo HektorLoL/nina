@@ -14,6 +14,20 @@ been closed; everything else in this document is still open.
 
 ## Closed since the audit
 
+- **AI consent was device-local, so revoking it did nothing.** An adult who tapped "Revogar
+  consentimento" flipped a row on that iPhone only: their partner kept chatting, and the next
+  Sunday `get_nina_weekly_candidates()` still selected the household and shipped
+  `open_tasks_by_owner` — a map of member display names to open-task counts — to `gpt-5.5`.
+  Reinstalling silently reset consent to "never accepted" with no record it had ever been granted
+  or withdrawn. Consent is the LGPD legal basis for that processing, so this was a compliance
+  defect rather than a UX one. `public.nina_ai_consents` now records one live grant per adult per
+  home and *keeps* withdrawn rows, because LGPD expects demonstrable consent; `record_nina_ai_consent`
+  is adults-only; and both `begin_nina_chat_run` and `get_nina_weekly_candidates` require a live
+  grant, so a direct RPC call cannot bypass it — the same double-check as the adult gate. The
+  client now writes through the RPC and treats the home context as the source of truth, and a
+  failed write restores what is actually true on the server instead of silently flipping the
+  switch. `nina_ai_v2.test.sql` 54 → 76, `rls_policies.test.sql` 44 → 45 (25 tables).
+
 - **A single failed sync cost a subscriber their features.** `refreshBackendStatus` adopted the
   server's answer unconditionally, and `get_current_premium_status()` returns an identical payload
   for "no row" and "row says inactive" — so a subscriber whose one sync call 503'd, or who was
