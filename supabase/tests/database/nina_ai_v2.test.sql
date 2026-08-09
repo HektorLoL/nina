@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(46);
+select plan(54);
 
 insert into auth.users (
   id,
@@ -734,6 +734,194 @@ select is(
 
 reset role;
 set local request.jwt.claim.sub = '';
+
+update public.nina_ai_budget_months
+set reserved_microusd = 0, spent_microusd = 0
+where month_start = date_trunc('month', now())::date
+  and purpose = 'interactive';
+
+insert into public.nina_ai_budget_months (
+  month_start,
+  purpose,
+  cap_microusd,
+  reserved_microusd,
+  spent_microusd
+)
+values (
+  (date_trunc('month', now()) - interval '1 month')::date,
+  'interactive',
+  20000000,
+  0,
+  0
+)
+on conflict (month_start, purpose) do nothing;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select set_config(
+  'test.month_boundary_run',
+  public.begin_nina_chat_run(
+    '62000000-0000-0000-0000-000000000001',
+    '63000000-0000-0000-0000-000000000015',
+    'Mensagem enviada no fim do mês',
+    '[]'::jsonb,
+    'gpt-5.4-mini',
+    7000,
+    '2026-06-15'
+  ) ->> 'run_id',
+  true
+);
+
+reset role;
+set local request.jwt.claim.sub = '';
+
+select is(
+  (
+    select budget_month_start
+    from public.nina_ai_runs
+    where id = current_setting('test.month_boundary_run')::uuid
+  ),
+  private.current_month_start(),
+  'a reservation pins the budget month it charged'
+);
+
+update public.nina_ai_runs
+set budget_month_start = (date_trunc('month', now()) - interval '1 month')::date
+where id = current_setting('test.month_boundary_run')::uuid;
+
+update public.nina_ai_budget_months
+set reserved_microusd = 7000
+where month_start = (date_trunc('month', now()) - interval '1 month')::date
+  and purpose = 'interactive';
+
+update public.nina_ai_budget_months
+set reserved_microusd = 0
+where month_start = date_trunc('month', now())::date
+  and purpose = 'interactive';
+
+select lives_ok(
+  format(
+    $$select public.complete_nina_chat_run(
+      %L::uuid,
+      '65000000-0000-0000-0000-000000000002',
+      'Respondi depois da virada do mês.',
+      '[]'::jsonb,
+      400,
+      0,
+      100,
+      0,
+      4500,
+      200
+    )$$,
+    current_setting('test.month_boundary_run')
+  ),
+  'a run completes after the month it reserved in has ended'
+);
+
+select is(
+  (
+    select reserved_microusd::text || ':' || spent_microusd::text
+    from public.nina_ai_budget_months
+    where month_start = (date_trunc('month', now()) - interval '1 month')::date
+      and purpose = 'interactive'
+  ),
+  '0:4500',
+  'a completed run releases its reservation in the month it reserved in'
+);
+
+select is(
+  (
+    select reserved_microusd::text || ':' || spent_microusd::text
+    from public.nina_ai_budget_months
+    where month_start = date_trunc('month', now())::date
+      and purpose = 'interactive'
+  ),
+  '0:0',
+  'completing a previous month run never charges the new month'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select set_config(
+  'test.month_boundary_failed_run',
+  public.begin_nina_chat_run(
+    '62000000-0000-0000-0000-000000000001',
+    '63000000-0000-0000-0000-000000000016',
+    'Mensagem que falha depois da virada',
+    '[]'::jsonb,
+    'gpt-5.4-mini',
+    9000,
+    '2026-06-15'
+  ) ->> 'run_id',
+  true
+);
+
+reset role;
+set local request.jwt.claim.sub = '';
+
+update public.nina_ai_runs
+set budget_month_start = (date_trunc('month', now()) - interval '1 month')::date
+where id = current_setting('test.month_boundary_failed_run')::uuid;
+
+update public.nina_ai_budget_months
+set reserved_microusd = 9000
+where month_start = (date_trunc('month', now()) - interval '1 month')::date
+  and purpose = 'interactive';
+
+update public.nina_ai_budget_months
+set reserved_microusd = 0
+where month_start = date_trunc('month', now())::date
+  and purpose = 'interactive';
+
+select lives_ok(
+  $$select public.record_failed_nina_ai_run(
+    current_setting('test.month_boundary_failed_run')::uuid,
+    'provider_timeout',
+    500,
+    0,
+    0,
+    0,
+    2500,
+    900
+  )$$,
+  'a failed run settles after the month it reserved in has ended'
+);
+
+select is(
+  (
+    select reserved_microusd::text || ':' || spent_microusd::text
+    from public.nina_ai_budget_months
+    where month_start = (date_trunc('month', now()) - interval '1 month')::date
+      and purpose = 'interactive'
+  ),
+  '0:7000',
+  'a failed run releases its reservation in the month it reserved in'
+);
+
+select is(
+  (
+    select reserved_microusd::text || ':' || spent_microusd::text
+    from public.nina_ai_budget_months
+    where month_start = date_trunc('month', now())::date
+      and purpose = 'interactive'
+  ),
+  '0:0',
+  'settling a previous month failure never charges the new month'
+);
+
+select is(
+  (
+    select is_nullable::text
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'nina_ai_runs'
+      and column_name = 'budget_month_start'
+  ),
+  'NO',
+  'every Nina run carries a pinned budget month'
+);
 
 select ok(
   not has_function_privilege(

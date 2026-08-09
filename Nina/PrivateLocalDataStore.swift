@@ -22,6 +22,10 @@ enum PrivateLocalDataScope {
         "ai-consent:\(userID)"
     }
 
+    static func premium(for userID: String) -> String {
+        "premium:\(userID)"
+    }
+
     static let pendingInvite = "pending-invite"
 }
 

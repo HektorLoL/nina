@@ -10,6 +10,7 @@ enum PremiumSubscriptionStatus: String, Codable, Hashable {
     case billingRetry = "billing_retry"
     case expired
     case revoked
+    case reconciling
 
     var title: String {
         switch self {
@@ -27,6 +28,8 @@ enum PremiumSubscriptionStatus: String, Codable, Hashable {
             "Premium expirado"
         case .revoked:
             "Premium revogado"
+        case .reconciling:
+            "Confirmando sua assinatura"
         }
     }
 }
@@ -70,7 +73,25 @@ struct PremiumEntitlement: Codable, Hashable {
         status.title
     }
 
+    var isReconciling: Bool {
+        status == .reconciling
+    }
+
+    var statusSymbolName: String {
+        if isReconciling { return "arrow.triangle.2.circlepath" }
+        return isActive ? "checkmark.seal.fill" : "creditcard.fill"
+    }
+
+    var statusTone: MemberTone {
+        if isReconciling { return .sky }
+        return isActive ? .mint : .amber
+    }
+
     var renewalSummary: String {
+        if isReconciling {
+            return "A compra está confirmada no aparelho. A Nina está registrando no servidor."
+        }
+
         guard isActive else { return "Assine para liberar os recursos Premium." }
 
         if let expiresAt {
@@ -85,9 +106,93 @@ struct PremiumEntitlement: Codable, Hashable {
     }
 }
 
+struct PremiumLocalTransaction: Hashable {
+    var productID: String
+    var transactionID: String
+    var originalTransactionID: String
+    var purchaseDate: Date
+    var expirationDate: Date?
+    var revocationDate: Date?
+    var signedTransactionInfo: String
+
+    func isUsable(at date: Date) -> Bool {
+        guard revocationDate == nil else { return false }
+        guard let expirationDate else { return true }
+        return expirationDate > date
+    }
+}
+
+protocol PremiumLocalTransactionSource {
+    func currentEntitlements() async -> [PremiumLocalTransaction]
+}
+
+struct StoreKitPremiumLocalTransactionSource: PremiumLocalTransactionSource {
+    func currentEntitlements() async -> [PremiumLocalTransaction] {
+        var transactions: [PremiumLocalTransaction] = []
+
+        for await result in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = result else { continue }
+            transactions.append(
+                PremiumLocalTransaction(
+                    transaction: transaction,
+                    signedTransactionInfo: result.jwsRepresentation
+                )
+            )
+        }
+
+        return transactions
+    }
+}
+
+extension PremiumLocalTransaction {
+    init(transaction: Transaction, signedTransactionInfo: String) {
+        self.init(
+            productID: transaction.productID,
+            transactionID: String(transaction.id),
+            originalTransactionID: String(transaction.originalID),
+            purchaseDate: transaction.purchaseDate,
+            expirationDate: transaction.expirationDate,
+            revocationDate: transaction.revocationDate,
+            signedTransactionInfo: signedTransactionInfo
+        )
+    }
+}
+
+struct PremiumTransactionSyncLedger: Codable, Hashable {
+    var syncedTransactionID: String?
+    var lastSyncFailed: Bool
+
+    static let empty = PremiumTransactionSyncLedger(syncedTransactionID: nil, lastSyncFailed: false)
+
+    init(syncedTransactionID: String?, lastSyncFailed: Bool) {
+        self.syncedTransactionID = syncedTransactionID
+        self.lastSyncFailed = lastSyncFailed
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        syncedTransactionID = try container.decodeIfPresent(String.self, forKey: .syncedTransactionID)
+        lastSyncFailed = try container.decodeIfPresent(Bool.self, forKey: .lastSyncFailed) ?? false
+    }
+
+    func needsSync(for transactionID: String) -> Bool {
+        lastSyncFailed || syncedTransactionID != transactionID
+    }
+}
+
 protocol PremiumSubscriptionBackend {
     func loadStatus() async throws -> PremiumEntitlement
     func syncTransaction(signedTransactionInfo: String, source: String) async throws -> PremiumEntitlement
+}
+
+protocol PremiumProductCatalog {
+    func products(for identifiers: [String]) async throws -> [Product]
+}
+
+struct StoreKitPremiumProductCatalog: PremiumProductCatalog {
+    func products(for identifiers: [String]) async throws -> [Product] {
+        try await Product.products(for: identifiers)
+    }
 }
 
 enum PremiumConfiguration {
@@ -124,7 +229,6 @@ enum PremiumPurchaseError: LocalizedError {
     case notSignedIn
     case onlineAccountRequired
     case unverifiedTransaction
-    case backendSyncRequired
 
     var errorDescription: String? {
         switch self {
@@ -134,10 +238,13 @@ enum PremiumPurchaseError: LocalizedError {
             "Use uma conta online da Nina para assinar. Contas de debug local não podem ser associadas ao App Store."
         case .unverifiedTransaction:
             "A compra não pôde ser verificada pelo App Store."
-        case .backendSyncRequired:
-            "A compra foi validada, mas ainda não conseguimos registrar no servidor. Tente restaurar em instantes."
         }
     }
+}
+
+enum PremiumReconciliationCopy {
+    static let purchaseRecorded =
+        "A compra está confirmada no aparelho. A Nina termina o registro no servidor."
 }
 
 @MainActor
@@ -155,15 +262,27 @@ final class PremiumSubscriptionStore {
 
     @ObservationIgnored private let backend: (any PremiumSubscriptionBackend)?
     @ObservationIgnored private let productIDs: [String]
+    @ObservationIgnored private let localTransactions: any PremiumLocalTransactionSource
+    @ObservationIgnored private let catalog: any PremiumProductCatalog
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let privateDataStore: any PrivateLocalDataStoring
     @ObservationIgnored private var currentUser: AuthUser?
     @ObservationIgnored private var transactionUpdatesTask: Task<Void, Never>?
 
     init(
         backend: (any PremiumSubscriptionBackend)? = BackendServices.makePremiumSubscriptionBackend(),
-        productIDs: [String] = PremiumConfiguration.productIDs
+        productIDs: [String] = PremiumConfiguration.productIDs,
+        localTransactions: any PremiumLocalTransactionSource = StoreKitPremiumLocalTransactionSource(),
+        catalog: any PremiumProductCatalog = StoreKitPremiumProductCatalog(),
+        defaults: UserDefaults = .standard,
+        privateDataStore: any PrivateLocalDataStoring = ProtectedLocalDataStore.shared
     ) {
         self.backend = backend
         self.productIDs = productIDs
+        self.localTransactions = localTransactions
+        self.catalog = catalog
+        self.defaults = defaults
+        self.privateDataStore = privateDataStore
         startTransactionListener()
     }
 
@@ -195,7 +314,7 @@ final class PremiumSubscriptionStore {
         defer { isLoadingProducts = false }
 
         do {
-            let fetchedProducts = try await Product.products(for: productIDs)
+            let fetchedProducts = try await catalog.products(for: productIDs)
             products = fetchedProducts.sorted {
                 let lhsRank = PremiumConfiguration.sortRank(for: $0.id)
                 let rhsRank = PremiumConfiguration.sortRank(for: $1.id)
@@ -210,10 +329,9 @@ final class PremiumSubscriptionStore {
         }
     }
 
-    func refreshEntitlement() async {
+    func refreshEntitlement(forcingTransactionSync: Bool = false) async {
         errorMessage = nil
-        await refreshLocalStoreKitEntitlements(syncWithBackend: true)
-        await refreshBackendStatus()
+        await reconcileEntitlement(forcingTransactionSync: forcingTransactionSync)
     }
 
     func purchase(_ product: Product) async {
@@ -238,17 +356,27 @@ final class PremiumSubscriptionStore {
             case .success(let verification):
                 let verifiedTransaction = try verifiedTransaction(from: verification)
                 let transaction = verifiedTransaction.transaction
-                applyLocal(transaction: transaction)
-                let didSync = await sync(
+                let local = PremiumLocalTransaction(
                     transaction: transaction,
-                    signedTransactionInfo: verifiedTransaction.signedTransactionInfo,
-                    source: "purchase"
+                    signedTransactionInfo: verifiedTransaction.signedTransactionInfo
                 )
-                if didSync || backend == nil {
+                applyLocal(local)
+
+                guard backend != nil else {
+                    await transaction.finish()
+                    statusMessage = "Premium ativado."
+                    return
+                }
+
+                isSyncingBackend = true
+                let didRecord = await recordOnServer(local, for: currentUser.id, source: "purchase")
+                isSyncingBackend = false
+
+                if didRecord {
                     await transaction.finish()
                     statusMessage = "Premium ativado."
                 } else {
-                    errorMessage = PremiumPurchaseError.backendSyncRequired.localizedDescription
+                    statusMessage = PremiumReconciliationCopy.purchaseRecorded
                 }
             case .pending:
                 statusMessage = "A compra está pendente de aprovação."
@@ -271,10 +399,14 @@ final class PremiumSubscriptionStore {
 
         do {
             try await StoreKit.AppStore.sync()
-            await refreshEntitlement()
-            statusMessage = entitlement.isActive
-                ? "Premium restaurado."
-                : "Nenhuma assinatura Premium ativa foi encontrada."
+            await refreshEntitlement(forcingTransactionSync: true)
+            if entitlement.isActive {
+                statusMessage = "Premium restaurado."
+            } else if entitlement.isReconciling {
+                statusMessage = PremiumReconciliationCopy.purchaseRecorded
+            } else {
+                statusMessage = "Nenhuma assinatura Premium ativa foi encontrada."
+            }
         } catch {
             errorMessage = userMessage(for: error)
         }
@@ -297,13 +429,27 @@ final class PremiumSubscriptionStore {
                 return
             }
 
-            applyLocal(transaction: transaction)
-            let didSync = await sync(
+            let local = PremiumLocalTransaction(
                 transaction: transaction,
-                signedTransactionInfo: verifiedTransaction.signedTransactionInfo,
+                signedTransactionInfo: verifiedTransaction.signedTransactionInfo
+            )
+            applyLocal(local)
+
+            guard backend != nil else {
+                await transaction.finish()
+                return
+            }
+            guard let currentUser else { return }
+
+            isSyncingBackend = true
+            let didRecord = await recordOnServer(
+                local,
+                for: currentUser.id,
                 source: "transaction_update"
             )
-            if didSync || backend == nil {
+            isSyncingBackend = false
+
+            if didRecord {
                 await transaction.finish()
             }
         } catch {
@@ -311,86 +457,152 @@ final class PremiumSubscriptionStore {
         }
     }
 
-    private func refreshLocalStoreKitEntitlements(syncWithBackend: Bool) async {
-        var latestVerifiedTransaction: (transaction: Transaction, signedTransactionInfo: String)?
-
-        for await result in Transaction.currentEntitlements {
-            guard let verifiedTransaction = try? verifiedTransaction(from: result),
-                  productIDs.contains(verifiedTransaction.transaction.productID),
-                  verifiedTransaction.transaction.revocationDate == nil else {
-                continue
-            }
-
-            if isNewer(verifiedTransaction.transaction, than: latestVerifiedTransaction?.transaction) {
-                latestVerifiedTransaction = verifiedTransaction
-            }
+    // A device-verified transaction proves purchase: repair the server row, never downgrade.
+    private func reconcileEntitlement(forcingTransactionSync: Bool) async {
+        let local = await latestUsableLocalTransaction()
+        if let local {
+            applyLocal(local)
         }
 
-        guard let latestVerifiedTransaction else {
-            if !entitlement.isActive {
+        guard let currentUser else {
+            entitlement = .inactive
+            return
+        }
+
+        guard let backend else {
+            if local == nil {
                 entitlement = .inactive
             }
             return
         }
 
-        applyLocal(transaction: latestVerifiedTransaction.transaction)
-        if syncWithBackend {
-            _ = await sync(
-                transaction: latestVerifiedTransaction.transaction,
-                signedTransactionInfo: latestVerifiedTransaction.signedTransactionInfo,
-                source: "current_entitlement"
-            )
-        }
-    }
-
-    private func refreshBackendStatus() async {
-        guard let backend, currentUser != nil else { return }
         isSyncingBackend = true
         defer { isSyncingBackend = false }
+
+        if let local, forcingTransactionSync {
+            await recordOnServer(local, for: currentUser.id, source: "restore")
+            return
+        }
 
         do {
-            entitlement = try await backend.loadStatus()
+            let remote = try await backend.loadStatus()
+            guard !remote.isActive,
+                  let local,
+                  syncLedger(for: currentUser.id).needsSync(for: local.transactionID) else {
+                entitlement = remote
+                return
+            }
+
+            await recordOnServer(local, for: currentUser.id, source: "entitlement_repair")
         } catch {
-            errorMessage = "Não foi possível atualizar o status Premium no servidor."
+            guard let local else {
+                errorMessage = "Não foi possível atualizar o status Premium no servidor."
+                return
+            }
+            entitlement = reconciling(for: local)
         }
     }
 
-    private func sync(
-        transaction: Transaction,
-        signedTransactionInfo: String,
+    @discardableResult
+    private func recordOnServer(
+        _ local: PremiumLocalTransaction,
+        for userID: String,
         source: String
     ) async -> Bool {
-        guard let backend, currentUser != nil else { return backend == nil }
-        isSyncingBackend = true
-        defer { isSyncingBackend = false }
+        guard let backend else { return false }
 
         do {
             entitlement = try await backend.syncTransaction(
-                signedTransactionInfo: signedTransactionInfo,
+                signedTransactionInfo: local.signedTransactionInfo,
                 source: source
+            )
+            writeSyncLedger(
+                PremiumTransactionSyncLedger(
+                    syncedTransactionID: local.transactionID,
+                    lastSyncFailed: false
+                ),
+                for: userID
             )
             return true
         } catch {
-            errorMessage = "Premium foi validado no aparelho, mas o servidor ainda não confirmou."
+            var ledger = syncLedger(for: userID)
+            ledger.lastSyncFailed = true
+            writeSyncLedger(ledger, for: userID)
+            entitlement = reconciling(for: local)
             return false
         }
     }
 
-    private func applyLocal(transaction: Transaction) {
+    private func latestUsableLocalTransaction() async -> PremiumLocalTransaction? {
         let now = Date()
-        let expirationDate = transaction.expirationDate
-        let isCurrentlyActive = transaction.revocationDate == nil
-            && (expirationDate == nil || expirationDate ?? .distantPast > now)
+        var latest: PremiumLocalTransaction?
+
+        for transaction in await localTransactions.currentEntitlements() {
+            guard productIDs.contains(transaction.productID), transaction.isUsable(at: now) else {
+                continue
+            }
+
+            if isNewer(transaction, than: latest) {
+                latest = transaction
+            }
+        }
+
+        return latest
+    }
+
+    private func syncLedger(for userID: String) -> PremiumTransactionSyncLedger {
+        guard let data = PrivateLocalDataAccess.loadData(
+            forKey: Self.syncLedgerKey(for: userID),
+            ownerScope: PrivateLocalDataScope.premium(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        ) else { return .empty }
+
+        return (try? JSONDecoder().decode(PremiumTransactionSyncLedger.self, from: data)) ?? .empty
+    }
+
+    private func writeSyncLedger(_ ledger: PremiumTransactionSyncLedger, for userID: String) {
+        guard let data = try? JSONEncoder().encode(ledger) else { return }
+        PrivateLocalDataAccess.writeDataBestEffort(
+            data,
+            forKey: Self.syncLedgerKey(for: userID),
+            ownerScope: PrivateLocalDataScope.premium(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
+    }
+
+    private static func syncLedgerKey(for userID: String) -> String {
+        "nina.premium.transactionSync.\(userID)"
+    }
+
+    private func reconciling(for local: PremiumLocalTransaction) -> PremiumEntitlement {
+        PremiumEntitlement(
+            isActive: false,
+            status: .reconciling,
+            productID: local.productID,
+            expiresAt: local.expirationDate,
+            willRenew: nil,
+            environment: nil,
+            originalTransactionID: local.originalTransactionID,
+            latestTransactionID: local.transactionID,
+            lastVerifiedAt: Date()
+        )
+    }
+
+    private func applyLocal(_ local: PremiumLocalTransaction) {
+        let now = Date()
+        let isCurrentlyActive = local.isUsable(at: now)
 
         entitlement = PremiumEntitlement(
             isActive: isCurrentlyActive,
             status: isCurrentlyActive ? .active : .expired,
-            productID: transaction.productID,
-            expiresAt: expirationDate,
+            productID: local.productID,
+            expiresAt: local.expirationDate,
             willRenew: nil,
             environment: nil,
-            originalTransactionID: String(transaction.originalID),
-            latestTransactionID: String(transaction.id),
+            originalTransactionID: local.originalTransactionID,
+            latestTransactionID: local.transactionID,
             lastVerifiedAt: now
         )
     }
@@ -411,7 +623,10 @@ final class PremiumSubscriptionStore {
         return (try verified(result), signedTransactionInfo)
     }
 
-    private func isNewer(_ transaction: Transaction, than other: Transaction?) -> Bool {
+    private func isNewer(
+        _ transaction: PremiumLocalTransaction,
+        than other: PremiumLocalTransaction?
+    ) -> Bool {
         guard let other else { return true }
         return (transaction.expirationDate ?? transaction.purchaseDate) > (other.expirationDate ?? other.purchaseDate)
     }

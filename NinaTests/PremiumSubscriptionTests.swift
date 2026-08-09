@@ -1,3 +1,4 @@
+import StoreKit
 import XCTest
 @testable import Nina
 
@@ -303,6 +304,344 @@ final class PremiumSubscriptionTests: XCTestCase {
         XCTAssertFalse(message.contains("!"))
     }
 
+    @MainActor
+    func testASubscriberWhoseSyncNeverReachedTheServerIsRepairedInsteadOfDowngradedToInactive() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.success(TestEnvironment.activeEntitlement))
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+
+        await store.configure(for: environment.user)
+
+        XCTAssertTrue(store.entitlement.isActive)
+        XCTAssertEqual(store.entitlement.status, .active)
+        XCTAssertNil(store.errorMessage)
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertEqual(
+            calls,
+            [RecordingPremiumBackend.SyncCall(
+                signedTransactionInfo: TestEnvironment.liveTransaction().signedTransactionInfo,
+                source: "entitlement_repair"
+            )]
+        )
+    }
+
+    @MainActor
+    func testAServerThatAlreadySawTheTransactionKeepsItsInactiveAnswerWithoutASecondPost() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.success(.inactive))
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+
+        await store.configure(for: environment.user)
+        await store.refreshEntitlement()
+
+        XCTAssertFalse(store.entitlement.isActive)
+        XCTAssertEqual(store.entitlement.status, .inactive)
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertEqual(calls.count, 1)
+    }
+
+    @MainActor
+    func testAnActiveServerAnswerNeverPostsTheTransactionAgainOnEveryForeground() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: TestEnvironment.activeEntitlement)
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+
+        await store.configure(for: environment.user)
+        await store.refreshEntitlement()
+        await store.refreshEntitlement()
+
+        XCTAssertTrue(store.entitlement.isActive)
+        let calls = await backend.recordedSyncCalls()
+        let loads = await backend.recordedStatusLoads()
+        XCTAssertTrue(calls.isEmpty)
+        XCTAssertEqual(loads, 3)
+    }
+
+    @MainActor
+    func testARepairThatFailedOnceIsRetriedOnTheNextForeground() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.failure)
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+
+        await store.configure(for: environment.user)
+        XCTAssertEqual(store.entitlement.status, .reconciling)
+
+        await backend.setSyncResult(.success(TestEnvironment.activeEntitlement))
+        await store.refreshEntitlement()
+
+        XCTAssertTrue(store.entitlement.isActive)
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertEqual(calls.count, 2)
+    }
+
+    @MainActor
+    func testARenewalWithANewTransactionIdIsSentEvenAfterTheEarlierOneSynced() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.success(.inactive))
+        let source = StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        let store = environment.makePremiumStore(backend: backend, localTransactions: source)
+
+        await store.configure(for: environment.user)
+
+        let renewal = TestEnvironment.liveTransaction(
+            transactionID: "2000000000000002",
+            expiresAt: Date(timeIntervalSinceNow: 60 * 24 * 60 * 60),
+            signedTransactionInfo: "signed-renewal-2000000000000002"
+        )
+        source.transactions = [renewal]
+        await store.refreshEntitlement()
+
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertEqual(calls.count, 2)
+        XCTAssertEqual(calls.last?.signedTransactionInfo, renewal.signedTransactionInfo)
+    }
+
+    @MainActor
+    func testARevokedLocalTransactionNeverTriggersARepair() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([
+                TestEnvironment.liveTransaction(revokedAt: Date(timeIntervalSinceNow: -60))
+            ])
+        )
+
+        await store.configure(for: environment.user)
+
+        XCTAssertFalse(store.entitlement.isActive)
+        XCTAssertEqual(store.entitlement.status, .inactive)
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertTrue(calls.isEmpty)
+    }
+
+    @MainActor
+    func testAnExpiredLocalTransactionNeverTriggersARepair() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([
+                TestEnvironment.liveTransaction(expiresAt: Date(timeIntervalSinceNow: -60))
+            ])
+        )
+
+        await store.configure(for: environment.user)
+
+        XCTAssertEqual(store.entitlement.status, .inactive)
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertTrue(calls.isEmpty)
+    }
+
+    @MainActor
+    func testATransactionForAnUnconfiguredProductNeverTriggersARepair() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([
+                TestEnvironment.liveTransaction(productID: "com.heitor.nina.premium.lifetime")
+            ])
+        )
+
+        await store.configure(for: environment.user)
+
+        XCTAssertEqual(store.entitlement.status, .inactive)
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertTrue(calls.isEmpty)
+    }
+
+    @MainActor
+    func testAnUnreachableServerLeavesASubscriberReconcilingInsteadOfInactive() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setStatusFails(true)
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+
+        await store.configure(for: environment.user)
+
+        XCTAssertEqual(store.entitlement.status, .reconciling)
+        XCTAssertNil(store.errorMessage)
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertTrue(calls.isEmpty)
+    }
+
+    @MainActor
+    func testTheReconcilingSurfaceNeitherClaimsPremiumNorReportsAFailure() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.failure)
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+
+        await store.configure(for: environment.user)
+
+        XCTAssertFalse(store.entitlement.isActive)
+        XCTAssertTrue(store.entitlement.isReconciling)
+        XCTAssertNil(store.errorMessage)
+        XCTAssertNotEqual(store.entitlement.statusTitle, PremiumSubscriptionStatus.inactive.title)
+        XCTAssertEqual(store.entitlement.statusTone, .sky)
+    }
+
+    func testTheReconcilingCopyTellsTheHouseThePurchaseIsBeingRegistered() {
+        let entitlement = PremiumEntitlement(
+            isActive: false,
+            status: .reconciling,
+            productID: "com.heitor.nina.premium.monthly",
+            expiresAt: nil,
+            willRenew: nil,
+            environment: nil,
+            originalTransactionID: nil,
+            latestTransactionID: nil,
+            lastVerifiedAt: nil
+        )
+        let copy = [
+            entitlement.statusTitle,
+            entitlement.renewalSummary,
+            PremiumReconciliationCopy.purchaseRecorded,
+        ].joined(separator: " ")
+
+        XCTAssertTrue(entitlement.statusTitle.contains("Confirmando"))
+        XCTAssertTrue(entitlement.renewalSummary.contains("servidor"))
+        XCTAssertFalse(copy.lowercased().contains("inativo"))
+        XCTAssertFalse(copy.lowercased().contains("erro"))
+        XCTAssertFalse(copy.contains("!"))
+    }
+
+    @MainActor
+    func testAForcedRestoreRepairsTheServerEvenAfterTheLedgerRecordedASync() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.success(.inactive))
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+
+        await store.configure(for: environment.user)
+        await store.refreshEntitlement(forcingTransactionSync: true)
+
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertEqual(calls.count, 2)
+        XCTAssertEqual(calls.last?.source, "restore")
+    }
+
+    @MainActor
+    func testTheSyncLedgerIsWrittenToProtectedStorageAndNeverToUserDefaults() async throws {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.success(TestEnvironment.activeEntitlement))
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+
+        await store.configure(for: environment.user)
+
+        let key = "nina.premium.transactionSync.\(environment.user.id)"
+        let stored = try environment.privateDataStore.data(
+            forKey: key,
+            ownerScope: PrivateLocalDataScope.premium(for: environment.user.id)
+        )
+        XCTAssertNotNil(stored)
+        XCTAssertNil(environment.defaults.data(forKey: key))
+        XCTAssertTrue(
+            environment.defaults.dictionaryRepresentation().keys
+                .filter { $0.hasPrefix("nina.premium") }
+                .isEmpty
+        )
+    }
+
+    @MainActor
+    func testALedgerWrittenBeforeRelaunchStillBoundsTheRepairAfterRelaunch() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.success(.inactive))
+        let firstLaunch = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+        await firstLaunch.configure(for: environment.user)
+
+        let secondLaunch = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+        await secondLaunch.configure(for: environment.user)
+
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertEqual(calls.count, 1)
+    }
+
+    @MainActor
+    func testSigningOutLeavesNoEntitlementAndNoServerTraffic() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: TestEnvironment.activeEntitlement)
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+
+        await store.configure(for: environment.user)
+        XCTAssertTrue(store.entitlement.isActive)
+
+        await store.configure(for: nil)
+
+        XCTAssertFalse(store.entitlement.isActive)
+        XCTAssertEqual(store.entitlement.status, .inactive)
+        let loads = await backend.recordedStatusLoads()
+        XCTAssertEqual(loads, 1)
+    }
+
     private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -336,8 +675,8 @@ private struct TestEnvironment {
     }
 
     @MainActor
-    func makeStore(backend: any RemoteHomeBackend) -> AppStore {
-        AppStore(
+    func makeStore(backend: any RemoteHomeBackend) -> Nina.AppStore {
+        Nina.AppStore(
             defaults: defaults,
             privateDataStore: privateDataStore,
             remoteHomeBackend: backend,
@@ -345,9 +684,135 @@ private struct TestEnvironment {
         )
     }
 
+    @MainActor
+    func makePremiumStore(
+        backend: (any PremiumSubscriptionBackend)?,
+        localTransactions: any PremiumLocalTransactionSource
+    ) -> PremiumSubscriptionStore {
+        PremiumSubscriptionStore(
+            backend: backend,
+            productIDs: Self.configuredProductIDs,
+            localTransactions: localTransactions,
+            catalog: EmptyPremiumProductCatalog(),
+            defaults: defaults,
+            privateDataStore: privateDataStore
+        )
+    }
+
+    static let configuredProductIDs = [
+        "com.heitor.nina.premium.monthly",
+        "com.heitor.nina.premium.yearly",
+    ]
+
+    static let activeEntitlement = PremiumEntitlement(
+        isActive: true,
+        status: .active,
+        productID: "com.heitor.nina.premium.monthly",
+        expiresAt: Date(timeIntervalSince1970: 1_788_231_600),
+        willRenew: true,
+        environment: "Production",
+        originalTransactionID: "2000000000000001",
+        latestTransactionID: "2000000000000001",
+        lastVerifiedAt: Date(timeIntervalSince1970: 1_785_639_600)
+    )
+
+    static func liveTransaction(
+        productID: String = "com.heitor.nina.premium.monthly",
+        transactionID: String = "2000000000000001",
+        expiresAt: Date? = Date(timeIntervalSinceNow: 30 * 24 * 60 * 60),
+        revokedAt: Date? = nil,
+        signedTransactionInfo: String = "signed-transaction-2000000000000001"
+    ) -> PremiumLocalTransaction {
+        PremiumLocalTransaction(
+            productID: productID,
+            transactionID: transactionID,
+            originalTransactionID: "2000000000000001",
+            purchaseDate: Date(timeIntervalSinceNow: -24 * 60 * 60),
+            expirationDate: expiresAt,
+            revocationDate: revokedAt,
+            signedTransactionInfo: signedTransactionInfo
+        )
+    }
+
     func tearDown() {
         defaults.removePersistentDomain(forName: suiteName)
         try? FileManager.default.removeItem(at: directory)
+    }
+}
+
+private final class StubLocalTransactionSource: PremiumLocalTransactionSource {
+    var transactions: [PremiumLocalTransaction]
+
+    init(_ transactions: [PremiumLocalTransaction]) {
+        self.transactions = transactions
+    }
+
+    func currentEntitlements() async -> [PremiumLocalTransaction] {
+        transactions
+    }
+}
+
+private struct EmptyPremiumProductCatalog: PremiumProductCatalog {
+    func products(for identifiers: [String]) async throws -> [Product] {
+        []
+    }
+}
+
+private actor RecordingPremiumBackend: PremiumSubscriptionBackend {
+    struct SyncCall: Equatable {
+        var signedTransactionInfo: String
+        var source: String
+    }
+
+    enum SyncResult {
+        case success(PremiumEntitlement)
+        case failure
+    }
+
+    struct BackendError: Error {}
+
+    private let status: PremiumEntitlement
+    private var statusFails = false
+    private var syncResult: SyncResult = .failure
+    private var statusLoads = 0
+    private var syncCalls: [SyncCall] = []
+
+    init(status: PremiumEntitlement) {
+        self.status = status
+    }
+
+    func setStatusFails(_ shouldFail: Bool) {
+        statusFails = shouldFail
+    }
+
+    func setSyncResult(_ result: SyncResult) {
+        syncResult = result
+    }
+
+    func recordedStatusLoads() -> Int {
+        statusLoads
+    }
+
+    func recordedSyncCalls() -> [SyncCall] {
+        syncCalls
+    }
+
+    func loadStatus() async throws -> PremiumEntitlement {
+        statusLoads += 1
+        if statusFails {
+            throw BackendError()
+        }
+        return status
+    }
+
+    func syncTransaction(signedTransactionInfo: String, source: String) async throws -> PremiumEntitlement {
+        syncCalls.append(SyncCall(signedTransactionInfo: signedTransactionInfo, source: source))
+        switch syncResult {
+        case .success(let entitlement):
+            return entitlement
+        case .failure:
+            throw BackendError()
+        }
     }
 }
 

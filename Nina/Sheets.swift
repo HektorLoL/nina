@@ -1485,8 +1485,8 @@ struct PremiumBenefitsSheet: View {
         SoftCard(padding: 18) {
             HStack(alignment: .center, spacing: 14) {
                 IconBubble(
-                    systemName: premiumStore.entitlement.isActive ? "checkmark.seal.fill" : "creditcard.fill",
-                    tone: premiumStore.entitlement.isActive ? .mint : .amber,
+                    systemName: premiumStore.entitlement.statusSymbolName,
+                    tone: premiumStore.entitlement.statusTone,
                     size: 48
                 )
 
