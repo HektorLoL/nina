@@ -100,6 +100,11 @@ protocol RemoteHomeBackend {
     func loadPendingJoinRequest() async throws -> FamilyJoinRequest?
     func previewInvite(code: String) async throws -> FamilyInvitePreview
     func updateFamilySettings(familyID: UUID, name: String) async throws -> RemoteHomeState
+    func updateFamilySettings(
+        familyID: UUID,
+        name: String,
+        weeklyDigestEnabled: Bool
+    ) async throws -> RemoteHomeState
     func rotateFamilyInvite(familyID: UUID) async throws -> RemoteHomeState
     func addUnclaimedMember(_ member: HouseholdMember, familyID: UUID) async throws -> RemoteHomeState
     func updateFamilyMember(_ member: HouseholdMember) async throws -> RemoteHomeState
@@ -152,6 +157,14 @@ extension RemoteHomeBackend {
     }
 
     func previewInvite(code: String) async throws -> FamilyInvitePreview {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func updateFamilySettings(
+        familyID: UUID,
+        name: String,
+        weeklyDigestEnabled: Bool
+    ) async throws -> RemoteHomeState {
         throw RemoteHomeBackendError.operationUnavailable
     }
 
@@ -361,6 +374,31 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                     params: UpdateFamilySettingsParams(
                         targetFamilyID: familyID,
                         familyName: name
+                    )
+                )
+                .execute()
+                .value
+        }
+
+        guard let state = try await loadRemoteState(from: context) else {
+            throw RemoteHomeBackendError.familyNotFound
+        }
+        return state
+    }
+
+    func updateFamilySettings(
+        familyID: UUID,
+        name: String,
+        weeklyDigestEnabled: Bool
+    ) async throws -> RemoteHomeState {
+        let context: HomeContextRow = try await perform(operation: "update_family_settings") {
+            try await client
+                .rpc(
+                    "update_family_settings",
+                    params: UpdateFamilyDigestSettingsParams(
+                        targetFamilyID: familyID,
+                        familyName: name,
+                        weeklyDigestEnabled: weeklyDigestEnabled
                     )
                 )
                 .execute()
@@ -1071,12 +1109,23 @@ private struct FamilyRow: Codable {
     var name: String
     var inviteCode: String
     var createdBy: UUID
+    var weeklyDigestEnabled: Bool
 
     private enum CodingKeys: String, CodingKey {
         case id
         case name
         case inviteCode = "invite_code"
         case createdBy = "created_by"
+        case weeklyDigestEnabled = "weekly_digest_enabled"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        inviteCode = try container.decodeIfPresent(String.self, forKey: .inviteCode) ?? ""
+        createdBy = try container.decode(UUID.self, forKey: .createdBy)
+        weeklyDigestEnabled = try container.decodeIfPresent(Bool.self, forKey: .weeklyDigestEnabled) ?? true
     }
 
     func domainFamilyGroup(members: [FamilyMemberRow]) -> FamilyGroup {
@@ -1090,7 +1139,8 @@ private struct FamilyRow: Codable {
                     if rhs.householdRole == "assistant" { return true }
                     return lhs.createdAt < rhs.createdAt
                 }
-                .map(\.domainMember)
+                .map(\.domainMember),
+            weeklyDigestEnabled: weeklyDigestEnabled
         )
     }
 }
@@ -1176,6 +1226,18 @@ private struct UpdateFamilySettingsParams: Encodable {
     private enum CodingKeys: String, CodingKey {
         case targetFamilyID = "target_family_id"
         case familyName = "family_name"
+    }
+}
+
+private struct UpdateFamilyDigestSettingsParams: Encodable {
+    var targetFamilyID: UUID
+    var familyName: String
+    var weeklyDigestEnabled: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case targetFamilyID = "target_family_id"
+        case familyName = "family_name"
+        case weeklyDigestEnabled = "weekly_digest_enabled"
     }
 }
 

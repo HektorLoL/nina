@@ -200,6 +200,109 @@ final class PremiumSubscriptionTests: XCTestCase {
         XCTAssertFalse(PremiumTeaserStyle.featured.activeSubtitle.contains("!"))
     }
 
+    func testAHomeCachedBeforeTheWeeklyDigestSettingExistedKeepsTheDigestOn() throws {
+        let json = #"{"name":"Casa Castello","inviteCode":"casa-antiga","members":[]}"#
+
+        let family = try Self.makeDecoder().decode(FamilyGroup.self, from: Data(json.utf8))
+
+        XCTAssertTrue(family.weeklyDigestEnabled)
+    }
+
+    func testAHomeThatTurnedTheWeeklyDigestOffStaysOffAcrossACachedLaunch() throws {
+        let family = FamilyGroup(
+            name: "Casa Castello",
+            inviteCode: "casa-antiga",
+            members: [],
+            weeklyDigestEnabled: false
+        )
+
+        let encoded = try JSONEncoder().encode(family)
+        let restored = try Self.makeDecoder().decode(FamilyGroup.self, from: encoded)
+
+        XCTAssertFalse(restored.weeklyDigestEnabled)
+    }
+
+    @MainActor
+    func testAManagerTurningTheWeeklyDigestOffWritesItToTheHouseholdSetting() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = HouseholdPremiumHomeBackend(
+            familyName: "Casa Premium",
+            permissionRole: .owner,
+            householdPremium: HouseholdPremium(isActive: true, status: .active, expiresAt: nil)
+        )
+        let store = environment.makeStore(backend: backend)
+        await store.activateHomeContext(for: environment.user)
+        XCTAssertTrue(store.isWeeklyDigestEnabled)
+
+        store.setWeeklyDigestEnabled(false)
+        await store.waitForPendingRemoteMutations()
+
+        let writes = await backend.recordedDigestWrites()
+        XCTAssertEqual(writes, [false])
+        XCTAssertFalse(store.isWeeklyDigestEnabled)
+        XCTAssertNil(store.syncErrorMessage)
+    }
+
+    @MainActor
+    func testAParticipantNeverWritesTheWeeklyDigestSettingOfTheHouse() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = HouseholdPremiumHomeBackend(
+            familyName: "Casa Premium",
+            permissionRole: .member,
+            householdPremium: HouseholdPremium(isActive: true, status: .active, expiresAt: nil)
+        )
+        let store = environment.makeStore(backend: backend)
+        await store.activateHomeContext(for: environment.user)
+
+        store.setWeeklyDigestEnabled(false)
+        await store.waitForPendingRemoteMutations()
+
+        let writes = await backend.recordedDigestWrites()
+        XCTAssertTrue(writes.isEmpty)
+        XCTAssertTrue(store.isWeeklyDigestEnabled)
+    }
+
+    @MainActor
+    func testAFailedWeeklyDigestWriteRestoresTheSwitchTheHouseActuallyHas() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = HouseholdPremiumHomeBackend(
+            familyName: "Casa Premium",
+            permissionRole: .owner,
+            householdPremium: HouseholdPremium(isActive: true, status: .active, expiresAt: nil)
+        )
+        await backend.setDigestWriteFails(true)
+        let store = environment.makeStore(backend: backend)
+        await store.activateHomeContext(for: environment.user)
+
+        store.setWeeklyDigestEnabled(false)
+        XCTAssertFalse(store.isWeeklyDigestEnabled)
+        await store.waitForPendingRemoteMutations()
+
+        XCTAssertTrue(store.isWeeklyDigestEnabled)
+        XCTAssertEqual(store.syncErrorMessage, "Não foi possível salvar o resumo semanal.")
+    }
+
+    func testTheServerCodeForPremiumOnlyAttachmentsGetsItsOwnEngineError() {
+        XCTAssertEqual(
+            NinaEngineError(code: "attachments_require_premium"),
+            .attachmentsRequirePremium
+        )
+        XCTAssertNotEqual(NinaEngineError(code: "attachments_require_premium"), .unavailable)
+    }
+
+    func testThePremiumOnlyAttachmentMessageNamesPremiumWithoutBlamingTheUser() {
+        let message = NinaEngineError.attachmentsRequirePremium.userMessage
+
+        XCTAssertTrue(message.contains("Premium"))
+        XCTAssertFalse(message.contains("!"))
+    }
+
     private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -253,9 +356,11 @@ private actor HouseholdPremiumHomeBackend: RemoteHomeBackend {
         case unsupported
     }
 
-    private let familyGroup: FamilyGroup
+    private var familyGroup: FamilyGroup
     private let permissionRole: FamilyPermissionRole
     private var householdPremium: HouseholdPremium
+    private var digestWrites: [Bool] = []
+    private var digestWriteFails = false
 
     init(
         familyName: String,
@@ -269,6 +374,14 @@ private actor HouseholdPremiumHomeBackend: RemoteHomeBackend {
 
     func setHouseholdPremium(_ premium: HouseholdPremium) {
         householdPremium = premium
+    }
+
+    func setDigestWriteFails(_ shouldFail: Bool) {
+        digestWriteFails = shouldFail
+    }
+
+    func recordedDigestWrites() -> [Bool] {
+        digestWrites
     }
 
     func loadHome(for user: AuthUser) async throws -> RemoteHomeState? {
@@ -285,6 +398,19 @@ private actor HouseholdPremiumHomeBackend: RemoteHomeBackend {
 
     func updateFamilySettings(familyID: UUID, name: String) async throws -> RemoteHomeState {
         currentState()
+    }
+
+    func updateFamilySettings(
+        familyID: UUID,
+        name: String,
+        weeklyDigestEnabled: Bool
+    ) async throws -> RemoteHomeState {
+        digestWrites.append(weeklyDigestEnabled)
+        if digestWriteFails {
+            throw BackendError.unsupported
+        }
+        familyGroup.weeklyDigestEnabled = weeklyDigestEnabled
+        return currentState()
     }
 
     func addUnclaimedMember(_ member: HouseholdMember, familyID: UUID) async throws -> RemoteHomeState {

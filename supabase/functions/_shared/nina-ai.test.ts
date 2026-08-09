@@ -306,6 +306,58 @@ Deno.test("production function keeps moderation, timeouts, and content-free logs
   }
 });
 
+Deno.test("premium-only attachments are refused with a stable forbidden code", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  const mappingStart = source.indexOf("if (startError) {");
+  const mappingEnd = source.indexOf("const run = startData as NinaChatStart;");
+  assert(mappingStart > 0);
+  assert(mappingEnd > mappingStart);
+
+  const startFailureMapping = source.slice(mappingStart, mappingEnd);
+  assertStringIncludes(
+    startFailureMapping,
+    "message.includes(\"attachments_require_premium\")",
+  );
+  assertStringIncludes(
+    startFailureMapping,
+    "jsonResponse({ error: \"attachments_require_premium\" }, 403)",
+  );
+  assertStringIncludes(
+    startFailureMapping,
+    "jsonResponse({ error: \"rate_limited\" }, 429)",
+  );
+  assertStringIncludes(
+    startFailureMapping,
+    "jsonResponse({ error: \"monthly_budget_reached\" }, 429)",
+  );
+  assertStringIncludes(
+    startFailureMapping,
+    "jsonResponse({ error: \"adult_access_required\" }, 403)",
+  );
+});
+
+Deno.test("the chat function translates the premium refusal instead of deciding entitlement", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  assertFalse(source.includes("family_has_premium"));
+  assertFalse(source.includes("premium_subscriptions"));
+  assertStringIncludes(
+    source,
+    "attachment_metadata: attachmentMetadata(body.attachments ?? []),",
+  );
+  assert(
+    source.indexOf("\"begin_nina_chat_run\"")
+      < source.indexOf("message.includes(\"attachments_require_premium\")"),
+  );
+  assert(
+    source.indexOf("message.includes(\"attachments_require_premium\")")
+      < source.indexOf("await moderateInput"),
+  );
+});
+
 Deno.test("maintenance always runs retention and surfaces cleanup failures", async () => {
   const source = await Deno.readTextFile(
     new URL("../nina-maintenance/index.ts", import.meta.url),

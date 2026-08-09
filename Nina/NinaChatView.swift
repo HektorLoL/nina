@@ -286,12 +286,14 @@ private struct ConsentLine: View {
 
 private struct ChatInputBar: View {
     @Environment(AppStore.self) private var store
+    @Environment(RouterPath.self) private var router
     @State private var draft = ""
     @State private var isKeyboardVisible = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var pendingAttachments: [PendingChatAttachment] = []
     @State private var isShowingDocumentPicker = false
     @State private var isShowingOrganizerHelp = false
+    @State private var isShowingDocumentReadingNotice = false
     @State private var isLoadingAttachments = false
     @State private var attachmentError: String?
 
@@ -329,42 +331,46 @@ private struct ChatInputBar: View {
                 }
 
             HStack(spacing: 10) {
-                PhotosPicker(
-                    selection: $selectedPhotoItems,
-                    maxSelectionCount: max(remainingAttachmentSlots, 1),
-                    matching: .images
-                ) {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 16, weight: .heavy))
-                        .foregroundStyle(NinaTheme.ink)
-                        .frame(width: 36, height: 36)
-                        .background(NinaTheme.cream.opacity(0.72), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(
-                    store.isNinaResponding
-                        || isLoadingAttachments
-                        || remainingAttachmentSlots == 0
-                )
-                .accessibilityLabel("Adicionar fotos")
+                if canReadDocuments {
+                    PhotosPicker(
+                        selection: $selectedPhotoItems,
+                        maxSelectionCount: max(remainingAttachmentSlots, 1),
+                        matching: .images
+                    ) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 16, weight: .heavy))
+                            .foregroundStyle(NinaTheme.ink)
+                            .frame(width: 36, height: 36)
+                            .background(NinaTheme.cream.opacity(0.72), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(
+                        store.isNinaResponding
+                            || isLoadingAttachments
+                            || remainingAttachmentSlots == 0
+                    )
+                    .accessibilityLabel("Adicionar fotos")
 
-                Button {
-                    Haptics.selection()
-                    isShowingDocumentPicker = true
-                } label: {
-                    Image(systemName: isLoadingAttachments ? "ellipsis" : "paperclip")
-                        .font(.system(size: 16, weight: .heavy))
-                        .foregroundStyle(NinaTheme.ink)
-                        .frame(width: 36, height: 36)
-                        .background(NinaTheme.cream.opacity(0.72), in: Circle())
+                    Button {
+                        Haptics.selection()
+                        isShowingDocumentPicker = true
+                    } label: {
+                        Image(systemName: isLoadingAttachments ? "ellipsis" : "paperclip")
+                            .font(.system(size: 16, weight: .heavy))
+                            .foregroundStyle(NinaTheme.ink)
+                            .frame(width: 36, height: 36)
+                            .background(NinaTheme.cream.opacity(0.72), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(
+                        store.isNinaResponding
+                            || isLoadingAttachments
+                            || remainingAttachmentSlots == 0
+                    )
+                    .accessibilityLabel("Adicionar documento")
+                } else {
+                    documentReadingChip
                 }
-                .buttonStyle(.plain)
-                .disabled(
-                    store.isNinaResponding
-                        || isLoadingAttachments
-                        || remainingAttachmentSlots == 0
-                )
-                .accessibilityLabel("Adicionar documento")
 
                 Button {
                     Haptics.selection()
@@ -440,10 +446,48 @@ private struct ChatInputBar: View {
             guard !items.isEmpty else { return }
             loadPhotos(items)
         }
+        .onChange(of: canReadDocuments) { _, isAllowed in
+            guard !isAllowed, !pendingAttachments.isEmpty else { return }
+            pendingAttachments = []
+            attachmentError = "A leitura de documentos faz parte do Premium da casa."
+        }
+    }
+
+    private var documentReadingChip: some View {
+        Button {
+            Haptics.lightImpact()
+            isShowingDocumentReadingNotice = true
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "doc.text.viewfinder")
+                    .font(.system(size: 12, weight: .black))
+
+                Text("Documentos")
+                    .font(.caption.weight(.black))
+            }
+            .foregroundStyle(NinaTheme.premiumInk)
+            .padding(.horizontal, 11)
+            .frame(height: 36)
+            .background(NinaTheme.gold.opacity(0.22), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Leitura de documentos")
+        .accessibilityHint("Explica por que enviar fotos e documentos faz parte do Premium")
+        .popover(isPresented: $isShowingDocumentReadingNotice, arrowEdge: .bottom) {
+            DocumentReadingPremiumCard {
+                isShowingDocumentReadingNotice = false
+                router.presentedSheet = .premium
+            }
+            .presentationCompactAdaptation(.popover)
+        }
     }
 
     private var trimmedDraft: String {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canReadDocuments: Bool {
+        store.householdPremium.isActive
     }
 
     private var remainingAttachmentSlots: Int {
@@ -795,6 +839,34 @@ private struct OrganizerHelpCard: View {
                 .font(.subheadline)
                 .foregroundStyle(NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(18)
+        .frame(width: 290, alignment: .leading)
+        .background(NinaTheme.sheet)
+    }
+}
+
+private struct DocumentReadingPremiumCard: View {
+    var onOpenPremium: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Leitura de documentos", systemImage: "doc.text.viewfinder")
+                .font(.headline.weight(.black))
+                .foregroundStyle(NinaTheme.ink)
+
+            Text("A Nina lê boletos, receitas e comunicados da escola e transforma em tarefas. Isso faz parte do Premium da casa, então o envio de fotos e documentos está desligado por aqui.")
+                .font(.subheadline)
+                .foregroundStyle(NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button("Ver o Premium") {
+                Haptics.lightImpact()
+                onOpenPremium()
+            }
+            .font(.subheadline.weight(.black))
+            .foregroundStyle(NinaTheme.sky)
+            .buttonStyle(.plain)
         }
         .padding(18)
         .frame(width: 290, alignment: .leading)

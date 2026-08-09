@@ -530,6 +530,9 @@ Deno.serve(async (request: Request) => {
     if (message.includes("adult_access")) {
       return jsonResponse({ error: "adult_access_required" }, 403);
     }
+    if (message.includes("attachments_require_premium")) {
+      return jsonResponse({ error: "attachments_require_premium" }, 403);
+    }
     console.error(JSON.stringify({
       event: "nina_run_start_failed",
       code: startError.code,

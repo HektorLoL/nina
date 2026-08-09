@@ -21,9 +21,6 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    @AppStorage("nina.smartSuggestionsEnabled") private var smartSuggestionsEnabled = true
-    @AppStorage("nina.weeklyDigestEnabled") private var weeklyDigestEnabled = false
-
     private var inviteURL: URL {
         store.inviteURL
     }
@@ -188,16 +185,6 @@ struct SettingsSheet: View {
 
     private var ninaSection: some View {
         SettingsGroup(title: "Nina") {
-            SettingsToggleRow(
-                title: "Sugestões automáticas",
-                subtitle: "Criar itens para resolver a partir da conversa.",
-                systemName: "sparkles",
-                tone: .mint,
-                isOn: $smartSuggestionsEnabled
-            )
-
-            SettingsDivider()
-
             NavigationLink {
                 NotificationPreferencesView()
             } label: {
@@ -212,14 +199,46 @@ struct SettingsSheet: View {
 
             SettingsDivider()
 
+            weeklyDigestRow
+        }
+    }
+
+    @ViewBuilder
+    private var weeklyDigestRow: some View {
+        if store.canManageFamily {
             SettingsToggleRow(
                 title: "Resumo semanal",
-                subtitle: "Uma visão curta da semana da casa.",
+                subtitle: weeklyDigestSubtitle,
                 systemName: "calendar.badge.clock",
                 tone: .sky,
-                isOn: $weeklyDigestEnabled
+                isOn: weeklyDigestBinding
+            )
+        } else {
+            SettingsInfoRow(
+                title: "Resumo semanal",
+                subtitle: weeklyDigestSubtitle,
+                value: store.isWeeklyDigestEnabled ? "ativo" : "desligado",
+                systemName: "calendar.badge.clock",
+                tone: .sky
             )
         }
+    }
+
+    private var weeklyDigestBinding: Binding<Bool> {
+        Binding(
+            get: { store.isWeeklyDigestEnabled },
+            set: { store.setWeeklyDigestEnabled($0) }
+        )
+    }
+
+    private var weeklyDigestSubtitle: String {
+        if !store.householdPremium.isActive {
+            return "Uma visão curta da semana da casa, incluída no Premium."
+        }
+        if !store.canManageFamily {
+            return "Quem cuida da casa escolhe se o resumo é gerado."
+        }
+        return "Uma visão curta da semana da casa, para todo mundo daqui."
     }
 
     private var houseSection: some View {

@@ -237,6 +237,10 @@ final class AppStore {
         currentPermissionRole.canChangePermissions
     }
 
+    var isWeeklyDigestEnabled: Bool {
+        familyGroup.weeklyDigestEnabled
+    }
+
     var currentFamilyMember: HouseholdMember? {
         guard let activeHomeUserID else { return nil }
         return familyGroup.members.first { $0.userID == activeHomeUserID }
@@ -785,6 +789,39 @@ final class AppStore {
         syncErrorMessage = "O backend da Nina não está configurado."
         return false
         #endif
+    }
+
+    func setWeeklyDigestEnabled(_ isEnabled: Bool) {
+        guard canManageFamily, familyGroup.weeklyDigestEnabled != isEnabled else { return }
+        let contextToken = currentHomeContextToken
+        let previousValue = familyGroup.weeklyDigestEnabled
+        let familyName = familyGroup.name
+        syncErrorMessage = nil
+        familyGroup.weeklyDigestEnabled = isEnabled
+        persistActiveHome()
+
+        enqueueRemoteMutation(errorMessage: "Não foi possível salvar o resumo semanal.") {
+            [weak self] backend,
+            familyID,
+            _ in
+            do {
+                let state = try await backend.updateFamilySettings(
+                    familyID: familyID,
+                    name: familyName,
+                    weeklyDigestEnabled: isEnabled
+                )
+                guard let self, self.isCurrentHomeContext(contextToken) else { return }
+                self.apply(state)
+                self.persistActiveHome()
+                Haptics.success()
+            } catch {
+                guard let self, self.isCurrentHomeContext(contextToken) else { throw error }
+                self.familyGroup.weeklyDigestEnabled = previousValue
+                self.persistActiveHome()
+                Haptics.error()
+                throw error
+            }
+        }
     }
 
     @discardableResult

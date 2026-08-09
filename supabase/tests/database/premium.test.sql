@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(55);
+select plan(78);
 
 insert into auth.users (
   id,
@@ -513,6 +513,363 @@ select is(
   (select count(*)::integer from public.premium_subscriptions),
   0,
   'a neighbouring household cannot read the paying household subscription'
+);
+
+reset role;
+
+select has_column(
+  'public',
+  'families',
+  'weekly_digest_enabled',
+  'the household carries its own weekly digest switch'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.get_nina_weekly_candidates()',
+    'execute'
+  ),
+  'the nightly maintenance role still selects weekly digest candidates'
+);
+
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.get_nina_weekly_candidates()',
+    'execute'
+  ),
+  'clients cannot enumerate the households due a weekly digest'
+);
+
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.update_family_settings(uuid,text,boolean)',
+    'execute'
+  ),
+  'the weekly digest switch is set through the family update RPC'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.update_family_settings(uuid,text,boolean)',
+    'execute'
+  ),
+  'anonymous callers cannot move a house level switch'
+);
+
+insert into public.tasks (family_id, title)
+select
+  '82000000-0000-0000-0000-000000000001'::uuid,
+  'Tarefa da casa que paga ' || slot::text
+from generate_series(1, 5) as slot;
+
+insert into public.tasks (family_id, title)
+select
+  '82000000-0000-0000-0000-000000000002'::uuid,
+  'Tarefa da casa vizinha ' || slot::text
+from generate_series(1, 5) as slot;
+
+set local role service_role;
+
+select ok(
+  exists (
+    select 1
+    from jsonb_array_elements(
+      public.get_nina_weekly_candidates()
+    ) as candidate(metrics)
+    where candidate.metrics ->> 'family_id' = '82000000-0000-0000-0000-000000000001'
+  ),
+  'a paying household with the weekly digest on is a candidate'
+);
+
+select ok(
+  not exists (
+    select 1
+    from jsonb_array_elements(
+      public.get_nina_weekly_candidates()
+    ) as candidate(metrics)
+    where candidate.metrics ->> 'family_id' = '82000000-0000-0000-0000-000000000002'
+  ),
+  'a free household never spends the weekly insights budget'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000002';
+
+select throws_ok(
+  $$select public.update_family_settings(
+    '82000000-0000-0000-0000-000000000001',
+    'Paying home',
+    false
+  )$$,
+  '42501',
+  'family_management_denied',
+  'a plain member cannot switch the household weekly digest'
+);
+
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000001';
+
+select is(
+  public.get_current_home_context() -> 'family' ->> 'weekly_digest_enabled',
+  'true',
+  'the household context carries the weekly digest switch'
+);
+
+select is(
+  public.update_family_settings(
+    '82000000-0000-0000-0000-000000000001',
+    'Paying home',
+    false
+  ) -> 'family' ->> 'weekly_digest_enabled',
+  'false',
+  'an owner can turn the weekly digest off'
+);
+
+reset role;
+set local role service_role;
+
+select ok(
+  not exists (
+    select 1
+    from jsonb_array_elements(
+      public.get_nina_weekly_candidates()
+    ) as candidate(metrics)
+    where candidate.metrics ->> 'family_id' = '82000000-0000-0000-0000-000000000001'
+  ),
+  'a household that switched the weekly digest off is skipped by the nightly job'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000001';
+
+select is(
+  public.update_family_settings(
+    '82000000-0000-0000-0000-000000000001',
+    'Paying home',
+    true
+  ) -> 'family' ->> 'weekly_digest_enabled',
+  'true',
+  'an owner can turn the weekly digest back on'
+);
+
+reset role;
+set local role service_role;
+
+select ok(
+  exists (
+    select 1
+    from jsonb_array_elements(
+      public.get_nina_weekly_candidates()
+    ) as candidate(metrics)
+    where candidate.metrics ->> 'family_id' = '82000000-0000-0000-0000-000000000001'
+  ),
+  'turning the weekly digest back on restores the household as a candidate'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000003';
+
+select throws_ok(
+  $$select public.begin_nina_chat_run(
+    '82000000-0000-0000-0000-000000000002',
+    '84000000-0000-0000-0000-000000000001',
+    'Segue o boleto da escola',
+    '[{"kind":"document","filename":"boleto.pdf","mime_type":"application/pdf","byte_count":1024}]'::jsonb,
+    'gpt-5.4-mini',
+    1000,
+    '2026-08-09'
+  )$$,
+  'P0001',
+  'nina_attachments_require_premium',
+  'a free household cannot send Nina a document'
+);
+
+reset role;
+
+select is(
+  (
+    select count(*)::integer
+    from public.nina_ai_runs
+    where family_id = '82000000-0000-0000-0000-000000000002'
+  ),
+  0,
+  'a refused attachment never reserves a Nina run'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000001';
+
+select lives_ok(
+  $$select public.begin_nina_chat_run(
+    '82000000-0000-0000-0000-000000000001',
+    '84000000-0000-0000-0000-000000000002',
+    'Segue o boleto da escola',
+    '[{"kind":"document","filename":"boleto.pdf","mime_type":"application/pdf","byte_count":1024}]'::jsonb,
+    'gpt-5.4-mini',
+    1000,
+    '2026-08-09'
+  )$$,
+  'a paying household can send Nina a document'
+);
+
+reset role;
+
+insert into public.nina_chat_rate_limits (
+  user_id,
+  window_started_at,
+  request_count
+)
+values (
+  '81000000-0000-0000-0000-000000000003',
+  now() - interval '2 hours',
+  10
+)
+on conflict (user_id) do update
+set window_started_at = excluded.window_started_at,
+    request_count = excluded.request_count;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000003';
+
+select throws_ok(
+  $$select public.begin_nina_chat_run(
+    '82000000-0000-0000-0000-000000000002',
+    '84000000-0000-0000-0000-000000000003',
+    'Mais uma mensagem',
+    '[]'::jsonb,
+    'gpt-5.4-mini',
+    1000,
+    '2026-08-09'
+  )$$,
+  'P0001',
+  'nina_rate_limited',
+  'the free household daily window is still closed two hours in'
+);
+
+reset role;
+
+update public.nina_chat_rate_limits
+set window_started_at = now(), request_count = 9
+where user_id = '81000000-0000-0000-0000-000000000003';
+
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000003';
+
+select lives_ok(
+  $$select public.begin_nina_chat_run(
+    '82000000-0000-0000-0000-000000000002',
+    '84000000-0000-0000-0000-000000000004',
+    'Décima mensagem do dia',
+    '[]'::jsonb,
+    'gpt-5.4-mini',
+    1000,
+    '2026-08-09'
+  )$$,
+  'a free household still gets its tenth message of the day'
+);
+
+reset role;
+
+select is(
+  (
+    select request_count
+    from public.nina_chat_rate_limits
+    where user_id = '81000000-0000-0000-0000-000000000003'
+  ),
+  10,
+  'the free household claim counts up to ten inside a daily window'
+);
+
+insert into public.nina_chat_rate_limits (
+  user_id,
+  window_started_at,
+  request_count
+)
+values (
+  '81000000-0000-0000-0000-000000000001',
+  now() - interval '2 hours',
+  30
+)
+on conflict (user_id) do update
+set window_started_at = excluded.window_started_at,
+    request_count = excluded.request_count;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000001';
+
+select lives_ok(
+  $$select public.begin_nina_chat_run(
+    '82000000-0000-0000-0000-000000000001',
+    '84000000-0000-0000-0000-000000000005',
+    'Primeira mensagem da nova hora',
+    '[]'::jsonb,
+    'gpt-5.4-mini',
+    1000,
+    '2026-08-09'
+  )$$,
+  'a paying household window reopens an hour later'
+);
+
+reset role;
+
+select is(
+  (
+    select request_count
+    from public.nina_chat_rate_limits
+    where user_id = '81000000-0000-0000-0000-000000000001'
+  ),
+  1,
+  'the paying household claim starts a fresh hourly window'
+);
+
+update public.nina_chat_rate_limits
+set window_started_at = now(), request_count = 29
+where user_id = '81000000-0000-0000-0000-000000000001';
+
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000001';
+
+select lives_ok(
+  $$select public.begin_nina_chat_run(
+    '82000000-0000-0000-0000-000000000001',
+    '84000000-0000-0000-0000-000000000006',
+    'Trigésima mensagem da hora',
+    '[]'::jsonb,
+    'gpt-5.4-mini',
+    1000,
+    '2026-08-09'
+  )$$,
+  'a paying household gets thirty messages inside the hour'
+);
+
+reset role;
+
+update public.nina_chat_rate_limits
+set window_started_at = now(), request_count = 30
+where user_id = '81000000-0000-0000-0000-000000000001';
+
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000001';
+
+select throws_ok(
+  $$select public.begin_nina_chat_run(
+    '82000000-0000-0000-0000-000000000001',
+    '84000000-0000-0000-0000-000000000007',
+    'Mensagem trinta e um',
+    '[]'::jsonb,
+    'gpt-5.4-mini',
+    1000,
+    '2026-08-09'
+  )$$,
+  'P0001',
+  'nina_rate_limited',
+  'the paying household hourly quota still stops at thirty'
 );
 
 reset role;

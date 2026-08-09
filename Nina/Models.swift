@@ -53,6 +53,38 @@ struct FamilyGroup: Identifiable, Codable, Hashable {
     var name: String
     var inviteCode: String
     var members: [HouseholdMember]
+    var weeklyDigestEnabled: Bool
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        inviteCode: String,
+        members: [HouseholdMember],
+        weeklyDigestEnabled: Bool = true
+    ) {
+        self.id = id
+        self.name = name
+        self.inviteCode = inviteCode
+        self.members = members
+        self.weeklyDigestEnabled = weeklyDigestEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case inviteCode
+        case members
+        case weeklyDigestEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decode(String.self, forKey: .name)
+        inviteCode = try container.decodeIfPresent(String.self, forKey: .inviteCode) ?? ""
+        members = try container.decodeIfPresent([HouseholdMember].self, forKey: .members) ?? []
+        weeklyDigestEnabled = try container.decodeIfPresent(Bool.self, forKey: .weeklyDigestEnabled) ?? true
+    }
 }
 
 enum FamilyPermissionRole: String, CaseIterable, Identifiable, Codable, Hashable {
