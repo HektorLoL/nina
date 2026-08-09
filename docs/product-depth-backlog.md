@@ -14,6 +14,20 @@ been closed; everything else in this document is still open.
 
 ## Closed since the audit
 
+- **Premium gated nothing.** All three agreed gates are now enforced where the resource is
+  spent, not in the client. `get_nina_weekly_candidates()` requires a covered household **and**
+  `families.weekly_digest_enabled` — the digest had been generating for up to 25 families a night
+  against the US$5/month insights cap with no entitlement check and no opt-out. Attachments raise
+  `P0001 nina_attachments_require_premium` inside `begin_nina_chat_run`, before the idempotency
+  lookup (so a retry is refused too) and before moderation (so a refusal costs no OpenAI spend);
+  `nina-chat` only translates it to `403 attachments_require_premium`. The per-user chat claim is
+  tiered 30/hour covered vs 10/day free, with the per-family 100/day claim unchanged. The dead
+  `nina.weeklyDigestEnabled` `@AppStorage` key now writes a real household setting through the
+  serialized mutation queue, owner/admin only; the equally dead `nina.smartSuggestionsEnabled`
+  row was deleted rather than left as a switch that visibly does nothing. `premium.test.sql`
+  55 → 78, pinning each gate from both sides. **Still open in this area:** the local-vs-server
+  entitlement downgrade (a subscriber whose sync failed once is locked out the moment gates
+  exist — now that they do, this is no longer cosmetic and is the next premium item).
 - **Premium was per-payer, and the paywall sold what the app could not deliver.**
   `premium_subscriptions` now carries a `family_id` that only the database decides — a
   `BEFORE INSERT OR UPDATE` trigger derives it from the payer's active family and only while
