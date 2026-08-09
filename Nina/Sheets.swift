@@ -1382,10 +1382,13 @@ private struct SettingsDivider: View {
 }
 
 struct PremiumBenefitsSheet: View {
+    @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(PremiumSubscriptionStore.self) private var premiumStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+
+    @State private var isManagingSubscription = false
 
     private let plan = PremiumPlan.mock
 
@@ -1404,6 +1407,7 @@ struct PremiumBenefitsSheet: View {
         .ninaSheetBackground()
         .navigationTitle("Premium")
         .navigationBarTitleDisplayMode(.inline)
+        .manageSubscriptionsSheet(isPresented: $isManagingSubscription)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("Fechar") {
@@ -1591,6 +1595,10 @@ struct PremiumBenefitsSheet: View {
             .disabled(premiumStore.isRestoring)
             .opacity(premiumStore.isRestoring ? 0.62 : 1)
 
+            if store.householdPremium.isActive {
+                manageSubscriptionRow
+            }
+
             if let statusMessage = premiumStore.statusMessage, !statusMessage.isEmpty {
                 Label(statusMessage, systemImage: "checkmark.circle.fill")
                     .font(.caption.weight(.heavy))
@@ -1614,8 +1622,45 @@ struct PremiumBenefitsSheet: View {
         }
     }
 
+    private var manageSubscriptionRow: some View {
+        Button {
+            Haptics.lightImpact()
+            isManagingSubscription = true
+        } label: {
+            SoftCard(padding: 0) {
+                HStack(alignment: .center, spacing: 12) {
+                    IconBubble(systemName: "creditcard.fill", tone: .mint, size: 40)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Gerenciar assinatura")
+                            .font(.headline.weight(.heavy))
+                            .foregroundStyle(NinaTheme.ink)
+
+                        Text("Trocar de plano ou cancelar a renovação pela sua conta Apple.")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 10)
+
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.black))
+                        .foregroundStyle(NinaTheme.muted)
+                }
+                .padding(14)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     private var subscriptionTermsArea: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Text(plan.subscriptionDisclosure)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
             Text("A assinatura renova automaticamente até você cancelar. A cobrança é feita pelo App Store e a renovação pode ser cancelada a qualquer momento nos ajustes da sua conta Apple.")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(NinaTheme.muted)
@@ -1624,7 +1669,6 @@ struct PremiumBenefitsSheet: View {
             HStack(spacing: 14) {
                 legalLink("Termos de uso", url: NinaLegalLinks.termsOfUse)
                 legalLink("Privacidade", url: NinaLegalLinks.privacyPolicy)
-                legalLink("Gerenciar assinatura", url: NinaLegalLinks.manageSubscription)
             }
             .padding(.top, 2)
         }
@@ -1636,8 +1680,8 @@ struct PremiumBenefitsSheet: View {
             Haptics.selection()
             openURL(url)
         }
-        .font(.caption.weight(.black))
-        .foregroundStyle(NinaTheme.sky)
+        .font(.caption.weight(.bold))
+        .foregroundStyle(NinaTheme.muted)
         .buttonStyle(.plain)
     }
 }

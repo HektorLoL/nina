@@ -195,6 +195,8 @@ final class AppStore {
     var tasks: [TaskItem]
     var shoppingItems: [ShoppingItem]
     var insights: [HouseholdInsight]
+    // Household premium is never cached: only a freshly verified home context can grant it.
+    var householdPremium: HouseholdPremium = .inactive
     var ninaThread: NinaThread?
     var ninaMemories: [NinaMemory]
     var pendingPriorityTaskIDs: Set<TaskItem.ID> = []
@@ -421,6 +423,7 @@ final class AppStore {
         inviteStatus = nil
         pendingJoinRequest = nil
         joinRequests = []
+        householdPremium = .inactive
 
         guard let user else {
             homeAccessState = .noHome
@@ -2070,6 +2073,7 @@ final class AppStore {
     }
 
     private func resetActivityState() {
+        householdPremium = .inactive
         apply(.preview)
     }
 
@@ -2097,6 +2101,8 @@ final class AppStore {
         } else {
             resetActivityState()
         }
+
+        householdPremium = state.householdPremium
     }
 
     private func loadFamilyGroup(for userID: String) -> FamilyGroup? {

@@ -985,11 +985,38 @@ struct HouseholdInsight: Identifiable, Codable, Hashable {
     var tone: MemberTone
 }
 
+struct HouseholdPremium: Decodable, Hashable {
+    var isActive: Bool
+    var status: PremiumSubscriptionStatus
+    var expiresAt: Date?
+
+    static let inactive = HouseholdPremium(isActive: false, status: .inactive, expiresAt: nil)
+
+    private enum CodingKeys: String, CodingKey {
+        case isActive = "is_active"
+        case status
+        case expiresAt = "expires_at"
+    }
+
+    init(isActive: Bool, status: PremiumSubscriptionStatus, expiresAt: Date?) {
+        self.isActive = isActive
+        self.status = status
+        self.expiresAt = expiresAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? false
+        let rawStatus = try container.decodeIfPresent(String.self, forKey: .status) ?? ""
+        status = PremiumSubscriptionStatus(rawValue: rawStatus) ?? .inactive
+        expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
+    }
+}
+
 enum NinaLegalLinks {
-    static let privacyPolicy = URL(string: "https://ninai.app/privacidade/")!
-    // Apple's standard EULA is the terms of use until a Brazilian legal entity exists to sign one.
-    static let termsOfUse = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
-    static let manageSubscription = URL(string: "https://apps.apple.com/account/subscriptions")!
+    // App Store Review 3.1.2 rejects a paywall without reachable terms and privacy links.
+    static let privacyPolicy = URL(string: "https://ninai.app/privacidade")!
+    static let termsOfUse = URL(string: "https://ninai.app/termos")!
     static let support = URL(string: "mailto:oi@ninai.app")!
 }
 
@@ -1006,25 +1033,25 @@ struct PremiumPlan: Hashable {
     var name: String
     var status: String
     var priceLabel: String
+    var periodLabel: String
     var renewalLabel: String
     var heroTitle: String
     var heroSubtitle: String
     var benefits: [PremiumBenefit]
 
+    var subscriptionDisclosure: String {
+        "\(name): assinatura de \(periodLabel) por \(priceLabel). \(renewalLabel)."
+    }
+
     static let mock = PremiumPlan(
         name: "Nina Premium",
         status: "Assinatura",
         priceLabel: "R$ 24,90/mês",
+        periodLabel: "1 mês",
         renewalLabel: "Renovação automática pelo App Store",
-        heroTitle: "Uma Nina mais esperta para a casa toda",
-        heroSubtitle: "Rotinas, documentos, resumos e equilíbrio familiar em uma camada premium para a casa.",
+        heroTitle: "Um Premium que vale para a casa toda",
+        heroSubtitle: "Leitura de documentos, resumo semanal e prioridade da Nina para todo mundo da casa, em uma assinatura só.",
         benefits: [
-            PremiumBenefit(
-                title: "Rotinas inteligentes",
-                detail: "A Nina sugere sequências para escola, saúde, compras e contas sem você montar tudo manualmente.",
-                systemName: "wand.and.stars",
-                tone: .mint
-            ),
             PremiumBenefit(
                 title: "Leitura de documentos",
                 detail: "Leitura de recibos, receitas e boletos para transformar detalhes em lembretes claros.",
@@ -1036,12 +1063,6 @@ struct PremiumPlan: Hashable {
                 detail: "Um digest bonito com pendências, compras, vitórias da semana e sinais de sobrecarga.",
                 systemName: "calendar.badge.clock",
                 tone: .amber
-            ),
-            PremiumBenefit(
-                title: "Divisão mais justa",
-                detail: "Insights premium para enxergar quem está carregando mais tarefas e redistribuir com calma.",
-                systemName: "chart.bar.fill",
-                tone: .coral
             ),
             PremiumBenefit(
                 title: "Prioridade da Nina",

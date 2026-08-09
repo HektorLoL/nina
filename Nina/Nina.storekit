@@ -1,0 +1,89 @@
+{
+  "identifier" : "NINA0001",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "pt_BR",
+    "_storefront" : "BRA",
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21500001",
+      "localizations" : [
+
+      ],
+      "name" : "Nina Premium",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "24.90",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "21500011",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "A Nina Premium para a casa toda, mês a mês.",
+              "displayName" : "Nina Premium mensal",
+              "locale" : "pt_BR"
+            }
+          ],
+          "productID" : "com.heitor.nina.premium.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Nina Premium mensal",
+          "subscriptionGroupID" : "21500001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "249.90",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "21500012",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Um ano de Nina Premium com 16% de economia.",
+              "displayName" : "Nina Premium anual",
+              "locale" : "pt_BR"
+            }
+          ],
+          "productID" : "com.heitor.nina.premium.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Nina Premium anual",
+          "subscriptionGroupID" : "21500001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 5,
+    "minor" : 0
+  }
+}

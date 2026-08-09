@@ -284,9 +284,31 @@ enum PremiumTeaserStyle {
     var subtitle: String {
         switch self {
         case .compact:
-            "Rotinas, documentos e resumos com uma camada mais esperta."
+            "Documentos, resumo semanal e prioridade da Nina para a casa toda."
         case .featured:
             "Resumo semanal, leitura de documentos e sugestões com prioridade para aliviar a casa."
+        case .settings:
+            "Gerencie assinatura, benefícios e restauração pelo App Store."
+        }
+    }
+
+    var activeTitle: String {
+        switch self {
+        case .compact:
+            "Nina Premium"
+        case .featured:
+            "Nina Premium ativo nesta casa"
+        case .settings:
+            "Nina Premium ativo"
+        }
+    }
+
+    var activeSubtitle: String {
+        switch self {
+        case .compact:
+            "A casa já está com o Premium liberado."
+        case .featured:
+            "Leitura de documentos, resumo semanal e prioridade da Nina já valem para todo mundo daqui."
         case .settings:
             "Gerencie assinatura, benefícios e restauração pelo App Store."
         }
@@ -375,12 +397,15 @@ struct PremiumTeaserCard: View {
     }
 
     private var title: String {
-        entitlement?.isActive == true && style == .settings ? "Nina Premium ativo" : style.title
+        entitlement?.isActive == true ? style.activeTitle : style.title
     }
 
     private var subtitle: String {
         if style == .settings, let entitlement {
             return entitlement.renewalSummary
+        }
+        if entitlement?.isActive == true {
+            return style.activeSubtitle
         }
         return style.subtitle
     }

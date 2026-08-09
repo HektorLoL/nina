@@ -127,13 +127,16 @@ struct TodayView: View {
         }
     }
 
+    @ViewBuilder
     private var premiumInsightCard: some View {
-        PremiumTeaserCard(
-            style: .featured,
-            entitlement: premiumStore.entitlement,
-            priceLabel: premiumStore.primaryPriceLabel
-        ) {
-            router.presentedSheet = .premium
+        if !store.householdPremium.isActive {
+            PremiumTeaserCard(
+                style: .featured,
+                entitlement: premiumStore.entitlement,
+                priceLabel: premiumStore.primaryPriceLabel
+            ) {
+                router.presentedSheet = .premium
+            }
         }
     }
 

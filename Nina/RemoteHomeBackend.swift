@@ -6,6 +6,7 @@ struct RemoteHomeState {
     var snapshot: AppDataSnapshot?
     var inviteStatus: FamilyInviteStatus? = nil
     var joinRequests: [FamilyJoinRequest] = []
+    var householdPremium: HouseholdPremium = .inactive
 }
 
 struct FamilyInvitePreview: Hashable {
@@ -950,6 +951,7 @@ private struct HomeContextRow: Decodable {
     var membershipVerified: Bool
     var activeInvite: FamilyInviteStatusRow?
     var pendingJoinRequests: [FamilyJoinRequestRow]
+    var premium: HouseholdPremium
 
     private enum CodingKeys: String, CodingKey {
         case family
@@ -958,6 +960,7 @@ private struct HomeContextRow: Decodable {
         case membershipVerified = "membership_verified"
         case activeInvite = "active_invite"
         case pendingJoinRequests = "pending_join_requests"
+        case premium
     }
 
     init(from decoder: Decoder) throws {
@@ -971,6 +974,7 @@ private struct HomeContextRow: Decodable {
             [FamilyJoinRequestRow].self,
             forKey: .pendingJoinRequests
         ) ?? []
+        premium = try container.decodeIfPresent(HouseholdPremium.self, forKey: .premium) ?? .inactive
     }
 
     var remoteState: RemoteHomeState? {
@@ -985,7 +989,8 @@ private struct HomeContextRow: Decodable {
             permissionRole: permissionRole,
             snapshot: nil,
             inviteStatus: activeInvite?.domainStatus,
-            joinRequests: pendingJoinRequests.map(\.domainRequest)
+            joinRequests: pendingJoinRequests.map(\.domainRequest),
+            householdPremium: premium
         )
     }
 }

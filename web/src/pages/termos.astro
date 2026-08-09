@@ -1,0 +1,238 @@
+---
+import { Icon } from "astro-icon/components";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Brand from "../components/Brand.astro";
+import { legalIdentity } from "../legal";
+
+const updatedAt = "9 de agosto de 2026";
+const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
+---
+
+<BaseLayout
+  title="Termos de Uso — Nina"
+  description="Regras de uso da Nina e condições da assinatura Nina Premium: preço por período, renovação automática, cancelamento pelo App Store e direito de arrependimento."
+  canonical="/termos/"
+>
+  <header class="site-header is-scrolled">
+    <div class="header-inner page-shell">
+      <Brand />
+      <nav class="desktop-nav" aria-label="Navegação principal">
+        <a href="/">Início</a>
+        <a href="/privacidade/">Privacidade</a>
+        <a href={contactMailto}>Contato</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="policy-page page-shell">
+    <section class="policy-hero">
+      <p class="eyebrow mint">Termos</p>
+      <h1>Termos de uso</h1>
+      <p>
+        Estas são as regras de uso da Nina e as condições da assinatura Nina Premium: o que você
+        contrata, quanto custa por período, como a renovação funciona, como cancelar e como desistir
+        dentro do prazo garantido por lei.
+      </p>
+      <span>Atualizados em {updatedAt}</span>
+    </section>
+
+    <section class="policy-grid" aria-label="Resumo dos termos">
+      <article>
+        <Icon name="ph:arrows-clockwise-fill" size={28} />
+        <h2>Renova até você cancelar</h2>
+        <p>A assinatura é mensal ou anual e renova sozinha. O cancelamento é feito na sua conta Apple.</p>
+      </article>
+      <article>
+        <Icon name="ph:house-line-fill" size={28} />
+        <h2>Uma assinatura por casa</h2>
+        <p>Uma assinatura ativa libera o Premium para as até 8 pessoas da casa. A Nina não ocupa vaga.</p>
+      </article>
+      <article>
+        <Icon name="ph:arrow-u-up-left-fill" size={28} />
+        <h2>Sete dias para desistir</h2>
+        <p>O Código de Defesa do Consumidor garante arrependimento em até 7 dias da contratação.</p>
+      </article>
+    </section>
+
+    <article
+      class="policy-content"
+      data-legal-status={legalIdentity.isProductionComplete ? "complete" : "incomplete"}
+    >
+      <h2>1. Quem oferece a Nina</h2>
+      {
+        legalIdentity.isProductionComplete ? (
+          <p>
+            A Nina é oferecida por <strong>{legalIdentity.legalEntityName}</strong>, registrada sob o
+            documento <strong>{legalIdentity.legalEntityDocument}</strong>. Para falar sobre estes
+            termos, sobre a assinatura ou sobre um pedido de arrependimento, escreva para
+            <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
+          </p>
+        ) : (
+          <p>
+            A Nina está em preparação para lançamento comercial e ainda não vende assinaturas. Estes
+            termos descrevem as condições que passarão a valer quando a assinatura for aberta ao
+            público, e a identificação formal da empresa responsável será publicada nesta página
+            antes de qualquer cobrança. Para dúvidas até lá, escreva para
+            <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
+          </p>
+        )
+      }
+
+      <h2>2. O que a Nina faz</h2>
+      <p>
+        A Nina é um aplicativo para iPhone que organiza a rotina de uma casa. Você conversa com ela
+        em português, e ela transforma o que você conta em tarefas, lembretes, listas de compras e
+        sementes, que são intenções ainda sem data. Tudo o que a Nina sugere é uma proposta. Nada
+        entra na sua casa sem a sua confirmação.
+      </p>
+
+      <h2>3. Aceite destes termos</h2>
+      <p>
+        Ao criar uma conta, entrar em uma casa ou assinar a Nina Premium, você concorda com estes
+        termos e com a <a href="/privacidade/">Política de Privacidade</a>, que faz parte deles. Se
+        você não concorda com alguma parte, não use o app.
+      </p>
+
+      <h2>4. Conta, idade e responsabilidade</h2>
+      <p>
+        Para usar a Nina você precisa ter 18 anos ou mais e uma conta Apple válida. A conversa com a
+        Nina é restrita a adultos. Crianças e animais existem na Nina como perfis cuidados por
+        adultos, nunca como usuários. Você é responsável pelo que registra na casa, pela guarda das
+        suas credenciais e por ter legitimidade para registrar informações de outras pessoas da casa.
+      </p>
+
+      <h2>5. A casa, os participantes e os convites</h2>
+      <p>
+        Uma casa comporta até 8 pessoas. A Nina participa da casa como membro e não ocupa vaga. Ter
+        um link de convite não dá acesso a nada: o pedido fica pendente até que alguém com permissão
+        de dono ou administrador aprove. Quem administra a casa pode aprovar, recusar e remover
+        participantes conforme as regras do app, e quem é removido perde o acesso ao conteúdo da
+        casa.
+      </p>
+
+      <h2>6. A assinatura Nina Premium</h2>
+      <p>
+        A Nina Premium é uma assinatura de renovação automática vendida pelo App Store, em dois
+        planos. O plano mensal chama-se Nina Premium mensal, tem duração de 1 mês e custa R$ 24,90
+        por mês. O plano anual chama-se Nina Premium anual, tem duração de 12 meses e custa
+        R$ 249,90 por ano, o equivalente a cerca de R$ 20,83 por mês. O preço e a moeda vigentes
+        aparecem no App Store antes de você confirmar a compra e prevalecem sobre qualquer valor
+        citado aqui. O pagamento é debitado da sua conta Apple na confirmação da compra. Sem
+        assinatura, a Nina continua funcionando nos recursos gratuitos.
+      </p>
+
+      <h2>7. Renovação automática</h2>
+      <p>
+        A assinatura renova automaticamente pelo mesmo período e pelo mesmo valor até você cancelar.
+        A conta Apple é cobrada nas 24 horas anteriores ao fim do período vigente. A renovação não
+        pede nova confirmação: essa é a regra padrão de assinaturas do App Store.
+      </p>
+
+      <h2>8. Como cancelar</h2>
+      <p>
+        O cancelamento é feito na sua conta Apple, não dentro da Nina. No iPhone, abra os Ajustes,
+        toque no seu nome, escolha Assinaturas e selecione a Nina. Cancele com pelo menos 24 horas
+        de antecedência do fim do período vigente para não ser cobrado de novo. Depois de cancelar,
+        o acesso Premium continua até o fim do período já pago. A Nina não consegue cancelar a
+        assinatura por você.
+      </p>
+
+      <h2>9. Uma assinatura cobre a casa</h2>
+      <p>
+        Uma assinatura ativa libera os recursos Premium para a casa inteira, dentro do limite de 8
+        pessoas, sem precisar de uma assinatura por participante. A assinatura fica vinculada à conta
+        Apple de quem assinou: se essa pessoa cancelar ou sair da casa, o acesso Premium sai junto e
+        a casa volta aos recursos gratuitos. Uma mesma assinatura não cobre duas casas ao mesmo
+        tempo.
+      </p>
+
+      <h2>10. Direito de arrependimento e reembolso</h2>
+      <p>
+        O Código de Defesa do Consumidor garante o direito de arrependimento em contratações feitas
+        fora do estabelecimento comercial. Você pode desistir da assinatura em até 7 dias corridos
+        contados da contratação, sem precisar justificar, e receber de volta o valor pago. Como a
+        venda é processada pelo App Store, o pedido é feito à Apple em reportaproblem.apple.com com
+        a mesma conta Apple usada na compra. Se esse caminho falhar, escreva dentro dos 7 dias para
+        <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a> e acompanhamos o pedido com
+        você. Fora do prazo de arrependimento, reembolsos seguem a política da Apple e a legislação
+        aplicável.
+      </p>
+
+      <h2>11. Mudanças de preço e troca de plano</h2>
+      <p>
+        Os preços podem mudar. Uma mudança de preço vale apenas para períodos futuros, e o App Store
+        avisa você antes da renovação, com a opção de recusar cancelando a assinatura. A troca entre
+        o plano mensal e o anual é feita pelo App Store, e a Apple ajusta a cobrança de forma
+        proporcional conforme as regras dela.
+      </p>
+
+      <h2>12. Uso aceitável</h2>
+      <p>
+        Use a Nina para organizar a sua casa. Não use o serviço para atividades ilegais, para enviar
+        conteúdo de terceiros sem autorização, para burlar limites de uso, para tentar acessar dados
+        de outras casas, para atacar a infraestrutura ou para revender o acesso. Podemos limitar ou
+        suspender contas que ameacem a segurança, o custo ou a integridade do serviço, com aviso
+        sempre que for possível.
+      </p>
+
+      <h2>13. Seu conteúdo</h2>
+      <p>
+        O conteúdo que você cria na Nina continua sendo seu. Você nos concede apenas a permissão
+        necessária para armazenar, processar e sincronizar esse conteúdo entre os aparelhos da casa e
+        para operar os recursos que você ativou. O tratamento de dados pessoais, incluindo retenção,
+        exportação e exclusão, está descrito na <a href="/privacidade/">Política de Privacidade</a>.
+      </p>
+
+      <h2>14. A Nina propõe, você confirma</h2>
+      <p>
+        A Nina usa modelos de inteligência artificial e pode errar. Nenhuma sugestão dela vira
+        tarefa, lembrete, compra ou memória sem a sua confirmação. A Nina não substitui orientação
+        médica, jurídica, financeira ou educacional. A leitura de boletos, receitas e comunicados
+        serve para organizar a rotina, e a conferência do documento original continua sendo sua. Os
+        recursos de IA dependem de consentimento no app e podem ter limites de uso para manter o
+        serviço sustentável.
+      </p>
+
+      <h2>15. Disponibilidade, suporte e evolução do serviço</h2>
+      <p>
+        Trabalhamos para manter a Nina disponível, mas não prometemos funcionamento ininterrupto.
+        Recursos podem ser adicionados, alterados ou removidos conforme o produto evolui. Quando uma
+        mudança afetar de forma relevante o que você assinou, avisamos com antecedência razoável e
+        você pode cancelar. O suporte é feito por
+        <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
+      </p>
+
+      <h2>16. Encerramento</h2>
+      <p>
+        Você pode sair da conta e pedir a exclusão da conta a qualquer momento pelo app. Apagar a
+        conta não cancela a assinatura: o cancelamento precisa ser feito na conta Apple, conforme a
+        seção 8. Podemos encerrar o acesso em caso de violação destes termos ou de exigência legal,
+        preservando os direitos relativos a períodos já pagos.
+      </p>
+
+      <h2>17. Responsabilidade</h2>
+      <p>
+        Respondemos pelos danos previstos na legislação brasileira aplicável, incluindo o Código de
+        Defesa do Consumidor, e nada nestes termos afasta esses direitos. Não respondemos por
+        combinações domésticas, decisões ou consequências que você adote com base nas sugestões da
+        Nina, nem por indisponibilidade de serviços de terceiros como App Store, provedores de nuvem
+        e provedores de IA.
+      </p>
+
+      <h2>18. Alterações destes termos</h2>
+      <p>
+        Podemos atualizar estes termos conforme o produto e a legislação mudarem. A data de
+        atualização fica no topo desta página. Mudanças relevantes são comunicadas no app ou aqui, e
+        continuar usando a Nina depois delas significa aceitar a versão nova. Alterações que afetem a
+        assinatura valem apenas a partir do próximo período.
+      </p>
+
+      <h2>19. Lei aplicável e foro</h2>
+      <p>
+        Estes termos são regidos pelas leis brasileiras. Fica eleito o foro do domicílio do
+        consumidor para resolver qualquer questão decorrente deles, conforme o Código de Defesa do
+        Consumidor.
+      </p>
+    </article>
+  </main>
+</BaseLayout>

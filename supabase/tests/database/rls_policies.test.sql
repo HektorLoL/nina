@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(37);
+select plan(44);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -164,6 +164,48 @@ values
   ('30000000-0000-0000-0000-000000000001', '{"owner":true}'::jsonb),
   ('30000000-0000-0000-0000-000000000002', '{"outsider":true}'::jsonb);
 
+insert into public.premium_subscriptions (
+  original_transaction_id,
+  user_id,
+  product_id,
+  environment,
+  status,
+  is_active,
+  transaction_id,
+  expires_at,
+  signed_transaction_info
+)
+values (
+  'rls-original-transaction',
+  '20000000-0000-0000-0000-000000000001',
+  'com.heitor.nina.premium.monthly',
+  'Sandbox',
+  'active',
+  true,
+  'rls-transaction',
+  now() + interval '30 days',
+  'signed-transaction-info-example'
+);
+
+insert into public.premium_subscription_transactions (
+  transaction_id,
+  original_transaction_id,
+  user_id,
+  product_id,
+  environment,
+  source,
+  signed_transaction_info
+)
+values (
+  'rls-transaction',
+  'rls-original-transaction',
+  '20000000-0000-0000-0000-000000000001',
+  'com.heitor.nina.premium.monthly',
+  'Sandbox',
+  'app_sync',
+  'signed-transaction-info-example'
+);
+
 select is(
   (
     select count(*)::integer
@@ -191,11 +233,14 @@ select is(
         'nina_ai_runs',
         'nina_proposals',
         'waitlist_signups',
-        'waitlist_submission_limits'
+        'waitlist_submission_limits',
+        'premium_subscriptions',
+        'premium_subscription_transactions',
+        'app_store_server_notifications'
       )
       and pg_class.relrowsecurity
   ),
-  21,
+  24,
   'all sensitive public tables have row level security enabled'
 );
 
@@ -219,6 +264,8 @@ select is((select count(*)::integer from public.chat_messages), 1, 'chat message
 select is((select count(*)::integer from public.memory_items), 1, 'memory items are family scoped');
 select is((select count(*)::integer from public.household_insights), 1, 'household insights are family scoped');
 select is((select count(*)::integer from public.family_snapshots), 1, 'family snapshots are family scoped');
+select is((select count(*)::integer from public.premium_subscriptions), 1, 'the payer reads only their own premium subscription');
+select is((select count(*)::integer from public.premium_subscription_transactions), 1, 'the payer reads only their own premium transactions');
 
 select lives_ok(
   $$insert into public.tasks (family_id, title) values ('30000000-0000-0000-0000-000000000001', 'New Owner Task')$$,
@@ -292,6 +339,16 @@ select ok(
   'authenticated users cannot directly read invite rows'
 );
 
+select ok(
+  not has_table_privilege('authenticated', 'public.app_store_server_notifications', 'select'),
+  'authenticated users cannot read App Store notification payloads'
+);
+
+select ok(
+  not has_table_privilege('authenticated', 'public.premium_subscriptions', 'insert, update, delete'),
+  'authenticated users cannot write premium subscription state'
+);
+
 select is(
   pg_temp.affected_rows(
     $$update public.profiles
@@ -309,6 +366,18 @@ select is((select count(*)::integer from public.families), 1, 'regular member ca
 select lives_ok(
   $$insert into public.shopping_items (family_id, title) values ('30000000-0000-0000-0000-000000000001', 'Member Item')$$,
   'regular member can add family shopping items'
+);
+
+select is(
+  (select count(*)::integer from public.premium_subscriptions),
+  0,
+  'household members cannot read the payer premium subscription row'
+);
+
+select is(
+  (select count(*)::integer from public.premium_subscription_transactions),
+  0,
+  'household members cannot read the payer premium transactions'
 );
 
 set local request.jwt.claim.sub = '20000000-0000-0000-0000-000000000003';
@@ -348,6 +417,12 @@ select is(
   (select count(*)::integer from public.family_snapshots where family_id = '30000000-0000-0000-0000-000000000001'),
   0,
   'outsider cannot read another family snapshot'
+);
+
+select is(
+  (select count(*)::integer from public.premium_subscriptions),
+  0,
+  'outsider cannot read another household premium subscription'
 );
 
 reset role;
