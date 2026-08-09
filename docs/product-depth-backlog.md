@@ -14,6 +14,26 @@ been closed; everything else in this document is still open.
 
 ## Closed since the audit
 
+- **A single failed sync cost a subscriber their features.** `refreshBackendStatus` adopted the
+  server's answer unconditionally, and `get_current_premium_status()` returns an identical payload
+  for "no row" and "row says inactive" — so a subscriber whose one sync call 503'd, or who was
+  offline at purchase time, was downgraded and shown a red error while StoreKit still held a
+  valid transaction. The repair targets the *server*, not the label: because the gates read the
+  household entitlement out of `premium_subscriptions`, an optimistic client flag would have
+  fixed the copy and changed nothing real. A verified, unrevoked, unexpired transaction for a
+  configured product plus an inactive server answer now re-POSTs the JWS to create the row;
+  `isActive` stays false until the server agrees, and the surface says the purchase is being
+  registered rather than claiming premium or reporting failure. A last-synced-transaction ledger
+  in protected storage bounds the retry — and removes the two upserts the app had been POSTing on
+  *every* foreground for every subscriber.
+- **AI budget reservations stranded across a month boundary.** Reservations were taken against
+  `current_month_start()` at reservation time and released against it again at completion time, so
+  a run begun at 23:59:59 on the last day of a month released against the next month's row —
+  which may not exist — leaving the reservation stranded and permanently shrinking that month's
+  headroom against a hard US$20 cap. `nina_ai_runs.budget_month_start` now records the month the
+  run charged, every settle path uses it, and `current_month_start()` survives only on the two
+  reservation paths. `nina_ai_v2.test.sql` 46 → 54, pinned by moving a run's stored month rather
+  than the clock.
 - **Premium gated nothing.** All three agreed gates are now enforced where the resource is
   spent, not in the client. `get_nina_weekly_candidates()` requires a covered household **and**
   `families.weekly_digest_enabled` — the digest had been generating for up to 25 families a night

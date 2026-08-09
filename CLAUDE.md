@@ -159,6 +159,11 @@ product regression, not a refactor.
   `reserved_microusd + spent_microusd <= cap_microusd`, US$20/mo interactive +
   US$5/mo insights. Reserve-then-settle: failed runs must still book actual
   spend (`record_failed_nina_ai_run`), or induced failures run past the cap.
+- **A run settles against the month it reserved in**, read from
+  `nina_ai_runs.budget_month_start`, never from `current_month_start()` at
+  completion. `current_month_start()` belongs only on the two reservation paths.
+  Recomputing it at settle time strands the reservation of any run that crosses
+  midnight on the last day of a month, permanently shrinking that month's cap.
 - **Logs are content-free.** Only run ids, model, token counts, cost, latency,
   and stable codes. A test greps every `console.info(JSON.stringify({…}))` and
   fails if it references `body.message`, `assistant_reply`, `attachments`, or
