@@ -23,19 +23,27 @@ mobileMenu?.querySelectorAll("a").forEach((link) => {
   });
 });
 
+const openWaitlist = (source) => {
+  mobileMenu?.classList.remove("is-open");
+  menuButton?.setAttribute("aria-expanded", "false");
+  if (dialog instanceof HTMLDialogElement) {
+    dialog.dataset.waitlistSource = source;
+    dialog.showModal();
+    requestAnimationFrame(() => {
+      dialog.querySelector("input[name='firstName']")?.focus();
+    });
+  }
+};
+
 openButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    mobileMenu?.classList.remove("is-open");
-    menuButton?.setAttribute("aria-expanded", "false");
-    if (dialog instanceof HTMLDialogElement) {
-      dialog.dataset.waitlistSource = button.dataset.waitlistSource ?? "landing";
-      dialog.showModal();
-      requestAnimationFrame(() => {
-        dialog.querySelector("input[name='firstName']")?.focus();
-      });
-    }
+    openWaitlist(button.dataset.waitlistSource ?? "landing");
   });
 });
+
+if (window.location.hash === "#lista") {
+  openWaitlist("invite");
+}
 
 closeButtons.forEach((button) => {
   button.addEventListener("click", () => {

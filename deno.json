@@ -9,11 +9,11 @@
   },
   "nodeModulesDir": "none",
   "tasks": {
-    "check": "deno check supabase/functions/nina-chat/index.ts supabase/functions/nina-maintenance/index.ts supabase/functions/delete-account/index.ts supabase/functions/premium-subscription-sync/index.ts supabase/functions/app-store-server-notifications/index.ts web/src/waitlist.ts Tools/production_preflight.ts",
+    "check": "deno check supabase/functions/nina-chat/index.ts supabase/functions/nina-maintenance/index.ts supabase/functions/delete-account/index.ts supabase/functions/premium-subscription-sync/index.ts supabase/functions/app-store-server-notifications/index.ts web/src/waitlist.ts web/src/appStore.ts Tools/production_preflight.ts",
     "format:deletion": "deno fmt --check supabase/functions/_shared/delete-account*.ts supabase/functions/delete-account/index.ts",
-    "format:web": "deno fmt --check web/src/waitlist.ts web/src/worker.ts web/src/legal.ts web/tests/*.ts Tools/production_preflight*.ts",
+    "format:web": "deno fmt --check web/src/waitlist.ts web/src/worker.ts web/src/legal.ts web/src/appStore.ts web/tests/*.ts Tools/production_preflight*.ts",
     "lint:deletion": "deno lint supabase/functions/_shared/delete-account*.ts supabase/functions/delete-account/index.ts",
-    "lint:web": "deno lint web/src/waitlist.ts web/src/worker.ts web/src/legal.ts web/tests/*.ts Tools/production_preflight*.ts",
+    "lint:web": "deno lint web/src/waitlist.ts web/src/worker.ts web/src/legal.ts web/src/appStore.ts web/tests/*.ts Tools/production_preflight*.ts",
     "test": "deno test --allow-read supabase/functions/_shared/*.test.ts web/tests/*.test.ts Tools/production_preflight.test.ts",
     "preflight:repo": "deno run --allow-read --allow-run=git Tools/production_preflight.ts repository",
     "preflight:production": "deno run --allow-read --allow-run=git,plutil --allow-env --allow-net Tools/production_preflight.ts production"

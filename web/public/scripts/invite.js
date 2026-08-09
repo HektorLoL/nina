@@ -1,6 +1,7 @@
 const pathParts = window.location.pathname.split("/").filter(Boolean);
 const rawCode = pathParts.at(-1) === "invite" ? "" : pathParts.at(-1) ?? "";
 const code = rawCode.toLowerCase().replace(/[^a-z0-9-]/g, "");
+const card = document.querySelector("[data-invite-card]");
 const title = document.querySelector("[data-invite-title]");
 const description = document.querySelector("[data-invite-description]");
 const codeBox = document.querySelector("[data-invite-code]");
@@ -8,6 +9,11 @@ const codeValue = codeBox?.querySelector("strong");
 const statusElement = document.querySelector("[data-invite-status]");
 const actions = document.querySelector("[data-invite-actions]");
 const openApp = document.querySelector("[data-open-app]");
+const installKeepCode = document.querySelector("[data-invite-install-keep]");
+
+const setState = (state) => {
+  card?.setAttribute("data-invite-state", state);
+};
 
 const setStatus = (tone, message) => {
   if (!statusElement) return;
@@ -22,12 +28,16 @@ const setOpenAppURL = () => {
   }
 };
 
-const showError = (message) => {
-  if (title) title.textContent = "Este convite não está disponível.";
-  if (description) description.textContent = message;
+const showInvalid = () => {
+  if (title) title.textContent = "Este convite não está mais válido.";
+  if (description) {
+    description.textContent = "Peça um novo link para quem convidou você.";
+  }
   setStatus("error", "Convite inválido");
   codeBox?.setAttribute("hidden", "");
   actions?.setAttribute("hidden", "");
+  installKeepCode?.setAttribute("hidden", "");
+  setState("invalid");
 };
 
 const showInvite = (familyName, verified, usesRemaining, expiresAt) => {
@@ -51,6 +61,7 @@ const showInvite = (familyName, verified, usesRemaining, expiresAt) => {
     : "Código pronto para usar";
   setStatus(verified ? "success" : "neutral", message);
   setOpenAppURL();
+  setState("valid");
 };
 
 const showUnverified = () => {
@@ -64,6 +75,7 @@ const showUnverified = () => {
   actions?.removeAttribute("hidden");
   setStatus("neutral", "Verificação pendente");
   setOpenAppURL();
+  setState("unverified");
 };
 
 const copyCode = async () => {
@@ -88,12 +100,25 @@ document.querySelectorAll("[data-copy-code]").forEach((button) => {
 });
 
 if (code.length < 12) {
-  showError("Peça um novo link para a pessoa que convidou você.");
+  showInvalid();
 } else {
   fetch(`/api/invite/${encodeURIComponent(code)}`)
     .then(async (response) => {
+      if (response.status === 400 || response.status === 404) {
+        showInvalid();
+        return;
+      }
+      if (!response.ok) {
+        showUnverified();
+        return;
+      }
+
       const payload = await response.json();
-      if (!response.ok || !payload.valid) throw new Error(payload.error ?? "invalid");
+      if (!payload.valid) {
+        showUnverified();
+        return;
+      }
+
       showInvite(
         payload.familyName ?? "Uma casa na Nina",
         payload.verified === true,

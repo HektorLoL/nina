@@ -21,6 +21,16 @@ Desktop was checked at 1440 x 900. Mobile was checked at 390 x 844.
   sitemap. Canonical now points to `/invite/`; `/join/` is excluded.
 - P1: An unavailable invite API could appear to validate arbitrary codes. The
   page now shows an explicit unverified state and defers validation to the app.
+- P1: A dead invite was presented as a healthy one. Every non-2xx shared the
+  network-failure handler, so an expired link rendered "Verificação pendente"
+  and sent the person to install the app. The client now branches on status:
+  `404` and `400` render an invalid state, while `502`, `503`, and network
+  failures keep the unverified wording unchanged. The invalid copy names no
+  reason, because the RPC answers `{valid:false}` for every failure mode.
+- P1: The invite page dead-ended for anyone without the app. It now carries a
+  `[data-invite-install]` block, rendered from the build-time App Store ID:
+  the waitlist before launch, a self-hosted App Store badge after it. The
+  invalid state keeps the block, so an expired link still converts.
 - P2: Desktop hero wrapped into too many lines and pushed the primary action
   down. The final composition follows the selected three-line hierarchy.
 - P2: Mobile responsive behavior, menu state, horizontal overflow, anchors,

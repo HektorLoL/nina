@@ -186,6 +186,7 @@ h3 {
 .button:focus-visible,
 .menu-button:focus-visible,
 summary:focus-visible,
+.invite-install-badge:focus-visible,
 .dialog-close:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--sky) 58%, white);
   outline-offset: 3px;
@@ -1290,6 +1291,44 @@ details p {
 .invite-actions {
   display: grid;
   gap: 12px;
+}
+
+.invite-install {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  margin-top: 26px;
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+
+.invite-install-title {
+  margin: 0;
+  color: var(--ink-deep);
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.invite-install-text {
+  max-width: 400px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.invite-install .button {
+  margin-top: 6px;
+}
+
+.invite-install-badge {
+  margin-top: 6px;
+  border-radius: 12px;
+}
+
+.invite-install-badge img {
+  width: 180px;
+  height: 60px;
 }
 
 .invite-footnote {

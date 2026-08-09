@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import {
   deploymentChecks,
   iosArtifactChecks,
@@ -46,6 +46,7 @@ function validEnvironment(): PreflightEnvironment {
     NINA_APP_BUNDLE_ID: facts.bundleID,
     NINA_APPLE_TEAM_ID: facts.teamID,
     NINA_APP_APPLE_ID: "1234567890",
+    PUBLIC_NINA_APP_STORE_ID: "1234567890",
     NINA_PREMIUM_PRODUCT_IDS: facts.productIDs.join(","),
     NINA_APP_STORE_ENVIRONMENT: "production",
     NINA_APP_STORE_ONLINE_CHECKS: "true",
@@ -141,6 +142,18 @@ Deno.test("production environment rejects swapped keys and launch placeholders",
   assert(failedIDs.includes("environment.apple-id"));
   assert(failedIDs.includes("environment.legal-identity"));
   assert(failedIDs.includes("environment.privacy-contacts"));
+});
+
+Deno.test("the website install link must name the same app the server verifies", () => {
+  const environment = validEnvironment();
+  environment.PUBLIC_NINA_APP_STORE_ID = "9876543210";
+
+  const failedIDs = productionEnvironmentChecks(environment, facts)
+    .filter((result) => result.status === "failure")
+    .map((result) => result.id);
+
+  assert(failedIDs.includes("environment.app-store-id-parity"));
+  assertFalse(failedIDs.includes("environment.apple-id"));
 });
 
 Deno.test("iOS artifact accepts a matching signed release archive", () => {

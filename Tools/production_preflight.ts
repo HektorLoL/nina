@@ -248,6 +248,12 @@ export function productionEnvironmentChecks(
       "Set NINA_APP_APPLE_ID to the numeric App Store Connect application ID.",
     ),
     check(
+      "environment.app-store-id-parity",
+      value("PUBLIC_NINA_APP_STORE_ID") === value("NINA_APP_APPLE_ID"),
+      "The website install link points at the same App Store listing the server verifies.",
+      "Set PUBLIC_NINA_APP_STORE_ID to the same numeric ID as NINA_APP_APPLE_ID.",
+    ),
+    check(
       "environment.products",
       products.length > 0 &&
         products.every((product) => reverseDNSPattern.test(product)) &&

@@ -65,6 +65,28 @@ esperado da lista de espera está aplicado. Configuração ausente, timeout,
 resposta malformada ou migração desatualizada retorna `503`. Outros métodos
 recebem `405`.
 
+## Página de convite e caminho de instalação
+
+`/invite/<código>` mostra três estados distintos. Um `404` do Worker significa
+que o convite não vale mais e a página diz isso sem revelar o motivo, porque
+`get_family_invite_preview` responde `{valid:false}` para expirado, esgotado ou
+inexistente. Um `502`, um `503` ou uma falha de rede mantêm o estado
+"Verificação pendente": a página nunca finge validar nem invalidar um código
+quando não conseguiu consultar.
+
+O bloco `[data-invite-install]` é renderizado no servidor a partir de
+`PUBLIC_NINA_APP_STORE_ID`, uma sexta variável pública de build:
+
+- Sem um identificador numérico real, a página informa que a Nina ainda não
+  abriu e oferece a lista de espera.
+- Com o identificador, ela mostra o selo local `/images/app-store-badge.svg`
+  apontando para `https://apps.apple.com/br/app/id<ID>`. O selo é servido pelo
+  próprio domínio porque a CSP usa `img-src 'self' data:`, e o código do convite
+  nunca entra nessa URL.
+
+Como o valor é lido no build, publicar o app na App Store exige um novo build e
+deploy do site para que o caminho de instalação apareça.
+
 ## Metadados legais de produção
 
 A política usa cinco variáveis públicas no momento do build:

@@ -2,6 +2,7 @@
 import { Icon } from "astro-icon/components";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Brand from "../../components/Brand.astro";
+import { appStoreListing } from "../../appStore";
 ---
 
 <BaseLayout
@@ -16,7 +17,7 @@ import Brand from "../../components/Brand.astro";
   </header>
 
   <main class="invite-page">
-    <section class="invite-card" data-invite-card>
+    <section class="invite-card" data-invite-card data-invite-state="checking">
       <div class="invite-avatar-wrap">
         <img src="/images/nina-app-icon.png" alt="Nina" width="104" height="104" />
         <span><Icon name="ph:house-fill" size={25} /></span>
@@ -45,6 +46,40 @@ import Brand from "../../components/Brand.astro";
         <button class="button button-secondary" type="button" data-copy-code>
           Copiar código
         </button>
+      </div>
+      <div class="invite-install" data-invite-install>
+        {
+          appStoreListing.isPublished ? (
+            <Fragment>
+              <p class="invite-install-title">Ainda não tem a Nina no iPhone?</p>
+              <p class="invite-install-text">
+                Baixe o app e volte para este convite quando terminar.
+              </p>
+              <a class="invite-install-badge" href={appStoreListing.appStoreURL}>
+                <img
+                  src="/images/app-store-badge.svg"
+                  alt="Baixar a Nina na App Store"
+                  width="180"
+                  height="60"
+                />
+              </a>
+            </Fragment>
+          ) : (
+            <Fragment>
+              <p class="invite-install-title">A Nina ainda não abriu para todo mundo.</p>
+              <p class="invite-install-text">
+                O app está sendo preparado para o iPhone. Entre na lista e eu aviso assim que
+                ele chegar.
+              </p>
+              <p class="invite-install-text" data-invite-install-keep>
+                Guarde o código acima. Se ele vencer, quem convidou você envia um novo.
+              </p>
+              <a class="button button-secondary" href="/#lista">
+                Entrar na lista da Nina
+              </a>
+            </Fragment>
+          )
+        }
       </div>
       <p class="invite-footnote">
         O link não libera acesso sozinho. Uma pessoa responsável pela casa aprova cada pedido.

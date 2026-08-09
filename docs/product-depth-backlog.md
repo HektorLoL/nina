@@ -1,6 +1,6 @@
 # Product depth backlog
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 
 A file-anchored audit of every product area against the product-depth wishlist, produced by
 twelve independent auditors reading the working tree. Each gap states the user-visible symptom,
@@ -143,6 +143,19 @@ been closed; everything else in this document is still open.
   uso, Privacidade and Gerenciar assinatura; Ajustes carries the privacy policy, terms and support;
   the AI consent card links the policy and states that messages and attachments are processed by a
   model provider outside Brazil.
+- **A dead invite was presented as a healthy one, on a page with no install path.** `invite.js`
+  routed every non-2xx through the network-failure handler, so a three-week-old link rendered
+  "Verificação pendente" and pointed the person at an app they could not get. The client now
+  branches on status — `404`/`400` render an invalid state, `502`/`503`/network keep the
+  unverified wording verbatim, because that state is a deliberate resolved P1 — and the invalid
+  copy names no reason, since `get_family_invite_preview` answers `{valid:false}` for expired,
+  exhausted and nonexistent alike. `web/src/appStore.ts` mirrors `legal.ts`: it reads
+  `PUBLIC_NINA_APP_STORE_ID` at module scope through the same placeholder-rejecting `clean()`, so
+  the page is correct both before and after the App Store ID exists, with no invented ID. Below
+  every state the page now carries `[data-invite-install]` — the waitlist before launch, a
+  self-hosted `/images/app-store-badge.svg` linking to `apps.apple.com/br/app/id<ID>` after it,
+  never carrying the invite code. Apple's badge CDN is blocked by `img-src 'self' data:`, which is
+  why the asset is checked in. Four Deno tests in `web/tests/app-store.test.ts`.
 
 ---
 

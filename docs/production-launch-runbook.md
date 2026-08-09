@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-08-03
+Last updated: 2026-08-09
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -90,9 +90,16 @@ request body, or raw upstream error.
 
 ## 4. Website deployment
 
-Provide the five `PUBLIC_NINA_*` values to the Astro build environment. Build
+Provide the six `PUBLIC_NINA_*` values to the Astro build environment. Build
 before deploying so `/privacidade` contains the final controller and DPO
 identity. Configure the Worker public values and its two secrets separately.
+
+`PUBLIC_NINA_APP_STORE_ID` is read at build time, exactly like the legal
+identity. Until it holds the numeric App Store ID, `/invite/` hides the install
+badge and offers the waitlist instead. Once the app exists in App Store Connect,
+set the variable, then rebuild and redeploy the website — a Cloudflare variable
+change alone leaves the install path hidden forever, and every invited person
+keeps landing on a page that cannot get them the app.
 
 After Cloudflare deploys `https://ninai.app`, run:
 
