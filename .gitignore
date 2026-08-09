@@ -14,3 +14,6 @@ web/dist/
 web/node_modules/
 .playwright-cli/
 output/playwright/
+
+# macOS/iCloud sync duplicates. A stray `git add -A` must never commit these.
+*\ 2.*
