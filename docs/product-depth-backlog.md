@@ -14,6 +14,31 @@ been closed; everything else in this document is still open.
 
 ## Closed since the audit
 
+- **Premium was per-payer, and the paywall sold what the app could not deliver.**
+  `premium_subscriptions` now carries a `family_id` that only the database decides — a
+  `BEFORE INSERT OR UPDATE` trigger derives it from the payer's active family and only while
+  `is_family_member` holds, so no client or Edge Function can assert coverage of a house, and
+  the entitlement releases itself when a payer leaves. `get_current_home_context()` gained a
+  `premium` block carrying exactly `is_active`, `status`, `expires_at`, and `AppStore.householdPremium`
+  is what every future gate reads. The SELECT policy was deliberately *not* broadened to family
+  members: the row holds `signed_transaction_info` and `app_account_token`, and the latter is the
+  payer's `auth.uid()`, so a row-scoped policy cannot say "the house is covered" without also
+  disclosing who paid. On the paywall, "Rotinas inteligentes" and "Divisão mais justa" were
+  deleted — one is discarded for everyone while `NINA_AI_V2_ENABLED = NO`, the other was the
+  fabricated chart — and subscription title/length/price-per-period, Terms and Privacy links, and
+  a native manage-subscription sheet were added. `web/src/pages/termos.astro` and
+  `Nina/Nina.storekit` did not exist; without the latter `Product.products(for:)` returned empty
+  in every build and the purchase path had never been exercisable. Pinned by `premium.test.sql`
+  (plan 55) and `PremiumSubscriptionTests`. **Still open in this area:** the resource gates
+  themselves (digest predicate, attachment caps, chat quota tiering) — the foundation is in, no
+  quota has changed yet — plus the local-vs-server entitlement downgrade and the dead
+  `weeklyDigestEnabled` toggle.
+- **The RLS canary was passing vacuously for all three premium tables.** They were absent from
+  the explicit table list in `rls_policies.test.sql`; added, 21 → 24 tables, plan 37 → 44.
+- **`public.profiles` had no explicit grant.** It was the only policy-bearing table relying on
+  Supabase default privileges, which a freshly provisioned database does not apply — a staging
+  project built from these migrations alone would have denied every profile read. Found by the
+  first CI run of the database job, which had never executed before.
 - **ChatAttachment could not decode the server's attachment metadata.** `ChatAttachment` used
   synthesized `Codable` (camelCase keys, required `id`) while `begin_nina_chat_run` writes
   `{kind, filename, mime_type, byte_count}`. One photographed boleto therefore threw inside
