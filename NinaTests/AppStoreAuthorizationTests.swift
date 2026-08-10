@@ -339,6 +339,139 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(store.syncErrorMessage, "A casa já atingiu o limite de 8 pessoas.")
     }
 
+    @MainActor
+    func testADeclinedRequesterSeesTheDecisionInsteadOfTheCreateAHomeScreen() async {
+        let user = makeUser()
+        let decision = makeAccessDecision(outcome: .declined)
+        let backend = AccessDecisionBackend(decision: decision)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        await store.activateHomeContext(for: user)
+
+        XCTAssertEqual(store.homeAccessState, .accessDecision)
+        XCTAssertEqual(store.familyAccessDecision, decision)
+        XCTAssertFalse(store.hasActiveHome)
+    }
+
+    @MainActor
+    func testAnAcknowledgedDecisionIsNotShownAgainOnTheNextRefresh() async {
+        let user = makeUser()
+        let decision = makeAccessDecision(outcome: .declined)
+        let backend = AccessDecisionBackend(decision: decision)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let acknowledged = await store.acknowledgeFamilyAccessDecision()
+
+        XCTAssertTrue(acknowledged)
+        let acknowledgements = await backend.acknowledgedDecisionIDs()
+        XCTAssertEqual(acknowledgements, [decision.id])
+        XCTAssertNil(store.familyAccessDecision)
+        XCTAssertEqual(store.homeAccessState, .noHome)
+
+        await store.refreshHomeFromRemote(for: user)
+
+        XCTAssertNil(store.familyAccessDecision)
+        XCTAssertEqual(store.homeAccessState, .noHome)
+    }
+
+    @MainActor
+    func testAPersonWhoNeverAskedToJoinStillSeesTheCreateAHomeScreen() async {
+        let user = makeUser()
+        let backend = AccessDecisionBackend()
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        await store.activateHomeContext(for: user)
+
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertNil(store.familyAccessDecision)
+    }
+
+    @MainActor
+    func testARemovedMemberIsNeverToldWhoRemovedThem() async throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let serverPayload = """
+        {"id":"3F1A0000-0000-4000-8000-00000000DEC1","family_name":"Casa Castello",
+         "outcome":"removed","decided_at":"2026-08-09T12:00:00Z",
+         "reviewed_by":"9C2B0000-0000-4000-8000-00000000BEEF","reviewer_name":"Mirna"}
+        """
+        let decoded = try decoder.decode(FamilyAccessDecision.self, from: Data(serverPayload.utf8))
+        let backend = AccessDecisionBackend(decision: decoded)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        await store.activateHomeContext(for: makeUser())
+
+        let shown = try XCTUnwrap(store.familyAccessDecision)
+        XCTAssertEqual(store.homeAccessState, .accessDecision)
+        XCTAssertEqual(shown.outcome, .removed)
+        XCTAssertEqual(shown.familyName, "Casa Castello")
+        XCTAssertEqual(
+            Mirror(reflecting: shown).children.compactMap(\.label).sorted(),
+            ["decidedAt", "familyName", "id", "outcome"]
+        )
+    }
+
+    @MainActor
+    func testAPendingRequestReachesTheCasaTabBadgeWithoutOpeningTheTab() async {
+        let user = makeUser()
+        let initialState = makeRemoteState(permissionRole: .owner)
+        let backend = RecordingHomeBackend(state: initialState)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        await backend.waitUntilRealtimeSubscribed()
+
+        XCTAssertEqual(store.pendingJoinRequestCount, 0)
+
+        var stateWithRequest = initialState
+        stateWithRequest.joinRequests = [
+            FamilyJoinRequest(
+                id: UUID(),
+                familyID: initialState.familyGroup.id,
+                familyName: initialState.familyGroup.name,
+                requesterUserID: UUID(),
+                requesterName: "Nova pessoa",
+                status: .pending,
+                createdAt: .now,
+                reviewedAt: nil
+            )
+        ]
+        await backend.publishRealtimeState(stateWithRequest, event: .family)
+
+        for _ in 0..<40 where store.pendingJoinRequestCount == 0 {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        XCTAssertEqual(store.pendingJoinRequestCount, 1)
+    }
+
+    @MainActor
+    func testAPlainMemberNeverSeesThePendingRequestBadge() async {
+        let user = makeUser()
+        var state = makeRemoteState(permissionRole: .member)
+        state.joinRequests = [
+            FamilyJoinRequest(
+                id: UUID(),
+                familyID: state.familyGroup.id,
+                familyName: state.familyGroup.name,
+                requesterUserID: UUID(),
+                requesterName: "Nova pessoa",
+                status: .pending,
+                createdAt: .now,
+                reviewedAt: nil
+            )
+        ]
+        let store = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: state),
+            ninaEngine: MockNinaEngine()
+        )
+
+        await store.activateHomeContext(for: user)
+
+        XCTAssertEqual(store.joinRequests.count, 1)
+        XCTAssertEqual(store.pendingJoinRequestCount, 0)
+    }
+
     func testPostgresDateOnlyCodecRoundTripsWithoutTimezoneShift() throws {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "America/Argentina/Salta"))
         var calendar = Calendar(identifier: .gregorian)
@@ -2007,6 +2140,15 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
     }
 
+    private func makeAccessDecision(outcome: FamilyAccessOutcome) -> FamilyAccessDecision {
+        FamilyAccessDecision(
+            id: UUID(),
+            familyName: "Casa Castello",
+            outcome: outcome,
+            decidedAt: Date(timeIntervalSince1970: 1_785_639_600)
+        )
+    }
+
     private func makeRemoteState(
         familyName: String = "Test Home",
         inviteCode: String = "test-home",
@@ -2154,6 +2296,69 @@ private actor HomeLifecycleBackend: RemoteHomeBackend {
     func updateFamilyMember(_ member: HouseholdMember) async throws -> RemoteHomeState {
         guard let state = createState ?? joinState else { throw LifecycleError.expected }
         return state
+    }
+
+    func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws {}
+    func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws {}
+    func createTask(_ task: TaskItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
+    func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
+    func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {}
+}
+
+private actor AccessDecisionBackend: RemoteHomeBackend {
+    enum DecisionError: Error {
+        case expected
+    }
+
+    private var decision: FamilyAccessDecision?
+    private var acknowledgements: [UUID] = []
+
+    init(decision: FamilyAccessDecision? = nil) {
+        self.decision = decision
+    }
+
+    func acknowledgedDecisionIDs() -> [UUID] {
+        acknowledgements
+    }
+
+    func loadHome(for user: AuthUser) async throws -> RemoteHomeState? {
+        nil
+    }
+
+    func loadFamilyAccessDecision() async throws -> FamilyAccessDecision? {
+        decision
+    }
+
+    func acknowledgeFamilyAccessDecision(_ decisionID: UUID) async throws {
+        acknowledgements.append(decisionID)
+        if decision?.id == decisionID {
+            decision = nil
+        }
+    }
+
+    func createHome(named name: String, owner: AuthUser?) async throws -> RemoteHomeState {
+        throw DecisionError.expected
+    }
+
+    func joinHome(with inviteCode: String, member: AuthUser?) async throws -> RemoteHomeState {
+        throw DecisionError.expected
+    }
+
+    func updateFamilySettings(
+        familyID: UUID,
+        name: String
+    ) async throws -> RemoteHomeState {
+        throw DecisionError.expected
+    }
+
+    func addUnclaimedMember(_ member: HouseholdMember, familyID: UUID) async throws -> RemoteHomeState {
+        throw DecisionError.expected
+    }
+
+    func updateFamilyMember(_ member: HouseholdMember) async throws -> RemoteHomeState {
+        throw DecisionError.expected
     }
 
     func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws {}

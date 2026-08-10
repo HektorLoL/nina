@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(47);
+select plan(72);
 
 insert into auth.users (
   id,
@@ -40,6 +40,15 @@ values
     '{"full_name":"Manager Outsider"}'::jsonb,
     now(),
     now()
+  ),
+  (
+    '61000000-0000-0000-0000-000000000004',
+    'authenticated',
+    'authenticated',
+    'manager-signal@example.com',
+    '{"full_name":"Manager Signal"}'::jsonb,
+    now(),
+    now()
   );
 
 set local role authenticated;
@@ -58,12 +67,14 @@ select set_config(
 
 select set_config(
   'test.member_management_invite',
-  (
-    select invite_code
-    from public.families
-    where id = current_setting('test.member_management_family_id')::uuid
-  ),
+  public.get_current_home_context() #>> '{family,invite_code}',
   true
+);
+
+select matches(
+  current_setting('test.member_management_invite'),
+  '^casa-[0-9a-f]{32}$',
+  'an owner still receives the invite code through the home context'
 );
 
 select lives_ok(
@@ -223,6 +234,19 @@ set local role authenticated;
 set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
 
 select throws_ok(
+  $$select invite_code from public.families$$,
+  '42501',
+  null,
+  'a plain member cannot read the invite code off the families table'
+);
+
+select is(
+  public.get_current_home_context() #>> '{family,invite_code}',
+  '',
+  'a plain member receives a masked invite code'
+);
+
+select throws_ok(
   $$
     select public.update_family_member(
       current_setting('test.member_management_candidate_member_id')::uuid,
@@ -325,6 +349,101 @@ select is(
   null::uuid,
   'removing a member clears the matching active family'
 );
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
+
+select is(
+  public.get_family_access_decision() ->> 'outcome',
+  'removed',
+  'a removed member learns the door closed instead of landing on an empty app'
+);
+
+select is(
+  public.get_family_access_decision() ->> 'family_name',
+  'Casa Gerenciada',
+  'a decision names the household and nothing else about it'
+);
+
+select lives_ok(
+  $$select public.request_family_join(current_setting('test.member_management_invite'))$$,
+  'a removed member can ask to come back'
+);
+
+select is(
+  public.get_family_access_decision(),
+  null::jsonb,
+  'a fresh pending request retires the decision that came before it'
+);
+
+select set_config(
+  'test.member_management_return_request_id',
+  public.get_pending_family_join_request() ->> 'id',
+  true
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select lives_ok(
+  $$
+    select public.approve_family_join_request(
+      current_setting('test.member_management_return_request_id')::uuid,
+      'member'
+    )
+  $$,
+  'the household can let a removed member back in'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
+
+select is(
+  public.get_family_access_decision(),
+  null::jsonb,
+  'belonging to the household again retires the decision for good'
+);
+
+select set_config(
+  'test.member_management_returned_member_id',
+  (
+    select id::text
+    from public.family_members
+    where family_id = current_setting('test.member_management_family_id')::uuid
+      and user_id = auth.uid()
+  ),
+  true
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select lives_ok(
+  $$
+    select public.remove_family_member(
+      current_setting('test.member_management_returned_member_id')::uuid
+    )
+  $$,
+  'the household can remove the returning member again'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
+
+select is(
+  public.get_family_access_decision() ->> 'outcome',
+  'removed',
+  'a second departure raises its own unread decision'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
 
 select public.add_unclaimed_family_member(
   current_setting('test.member_management_family_id')::uuid,
@@ -755,6 +874,85 @@ select throws_ok(
   'join approval cannot exceed eight people'
 );
 
+select lives_ok(
+  $$
+    select public.decline_family_join_request(
+      current_setting('test.member_management_capacity_request_id')::uuid
+    )
+  $$,
+  'the household can decline a request it has no room for'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000003';
+
+select is(
+  public.get_family_access_decision() ->> 'outcome',
+  'declined',
+  'a declined requester is told the answer instead of being dropped back to the start'
+);
+
+select is(
+  (
+    select string_agg(decision_key, ',' order by decision_key)
+    from jsonb_object_keys(public.get_family_access_decision()) as decision_key
+  ),
+  'decided_at,family_name,id,outcome',
+  'a decision never carries the person who made it'
+);
+
+select set_config(
+  'test.member_management_decision_id',
+  public.get_family_access_decision() ->> 'id',
+  true
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
+
+select throws_ok(
+  $$
+    select public.acknowledge_family_access_decision(
+      current_setting('test.member_management_decision_id')::uuid
+    )
+  $$,
+  '42501',
+  'access_decision_acknowledge_denied',
+  'nobody can acknowledge a decision that was not about them'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000003';
+
+select lives_ok(
+  $$
+    select public.acknowledge_family_access_decision(
+      current_setting('test.member_management_decision_id')::uuid
+    )
+  $$,
+  'the requester acknowledges the decision once'
+);
+
+select is(
+  public.get_family_access_decision(),
+  null::jsonb,
+  'an acknowledged decision never comes back'
+);
+
+select throws_ok(
+  $$
+    select public.acknowledge_family_access_decision(
+      current_setting('test.member_management_decision_id')::uuid
+    )
+  $$,
+  '42501',
+  'access_decision_acknowledge_denied',
+  'a decision cannot be acknowledged twice'
+);
+
 reset role;
 
 select ok(
@@ -785,6 +983,118 @@ select ok(
     )
   ),
   'join approvals use the same family-first lock order'
+);
+
+select ok(
+  position(
+    'pg_advisory_xact_lock' in lower(
+      pg_get_functiondef(
+        'public.decline_family_join_request(uuid)'::regprocedure
+      )
+    )
+  ) < position(
+    'for update' in lower(
+      pg_get_functiondef(
+        'public.decline_family_join_request(uuid)'::regprocedure
+      )
+    )
+  ),
+  'declining a request takes the family advisory lock before row locks'
+);
+
+insert into public.families (id, name, invite_code, created_by, updated_at)
+values (
+  '6a000000-0000-0000-0000-000000000001',
+  'Casa Sinal',
+  'casa-66666666666666666666666666666666',
+  '61000000-0000-0000-0000-000000000001',
+  now() - interval '1 day'
+);
+
+insert into public.family_join_requests (
+  family_id,
+  requester_user_id,
+  requester_name
+)
+values (
+  '6a000000-0000-0000-0000-000000000001',
+  '61000000-0000-0000-0000-000000000004',
+  'Manager Signal'
+);
+
+select is(
+  (
+    select updated_at
+    from public.families
+    where id = '6a000000-0000-0000-0000-000000000001'
+  ),
+  now(),
+  'a new join request writes the household row every member device already watches'
+);
+
+select set_config(
+  'test.member_management_signal_version',
+  (
+    select ctid::text
+    from public.families
+    where id = '6a000000-0000-0000-0000-000000000001'
+  ),
+  true
+);
+
+update public.family_join_requests
+set
+  status = 'declined',
+  reviewed_by = '61000000-0000-0000-0000-000000000001',
+  reviewed_at = now()
+where family_id = '6a000000-0000-0000-0000-000000000001';
+
+select isnt(
+  (
+    select ctid::text
+    from public.families
+    where id = '6a000000-0000-0000-0000-000000000001'
+  ),
+  current_setting('test.member_management_signal_version'),
+  'reviewing the request writes the household row a second time'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'families'
+  ),
+  'the households table is published to realtime so the signal leaves the database'
+);
+
+select is(
+  (
+    select pg_class.relreplident
+    from pg_class
+    join pg_namespace on pg_namespace.oid = pg_class.relnamespace
+    where pg_namespace.nspname = 'public'
+      and pg_class.relname = 'families'
+  ),
+  'f'::"char",
+  'the published household row carries every column, which is why the invite code grant had to go first'
+);
+
+select ok(
+  not has_column_privilege(
+    'authenticated',
+    'public.families',
+    'invite_code',
+    'select'
+  ),
+  'authenticated holds no column grant on the invite code'
+);
+
+select ok(
+  has_column_privilege('authenticated', 'public.families', 'name', 'select'),
+  'authenticated still reads the household name it renders'
 );
 
 select * from finish();

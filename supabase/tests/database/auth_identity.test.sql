@@ -83,11 +83,7 @@ select lives_ok(
 );
 
 select matches(
-  (
-    select invite_code
-    from public.families
-    where id = (select active_family_id from public.profiles where id = auth.uid())
-  ),
+  public.get_current_home_context() #>> '{family,invite_code}',
   '^casa-[0-9a-f]{32}$',
   'family invites use a high-entropy server-generated code'
 );
@@ -107,11 +103,7 @@ select set_config(
 
 select set_config(
   'test.invite_code',
-  (
-    select invite_code
-    from public.families
-    where id = current_setting('test.family_id')::uuid
-  ),
+  public.get_current_home_context() #>> '{family,invite_code}',
   true
 );
 
@@ -360,11 +352,7 @@ select lives_ok(
 );
 
 select isnt(
-  (
-    select invite_code
-    from public.families
-    where id = current_setting('test.family_id')::uuid
-  ),
+  public.get_current_home_context() #>> '{family,invite_code}',
   current_setting('test.invite_code'),
   'rotating an invite invalidates the previous code'
 );

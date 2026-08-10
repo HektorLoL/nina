@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(45);
+select plan(46);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -226,6 +226,7 @@ select is(
         'family_snapshots',
         'invites',
         'family_join_requests',
+        'family_access_decisions',
         'nina_chat_rate_limits',
         'nina_threads',
         'nina_ai_budget_months',
@@ -241,7 +242,7 @@ select is(
       )
       and pg_class.relrowsecurity
   ),
-  25,
+  26,
   'all sensitive public tables have row level security enabled'
 );
 
@@ -343,6 +344,11 @@ select ok(
 select ok(
   not has_table_privilege('authenticated', 'public.nina_ai_consents', 'select'),
   'authenticated users cannot directly read AI consent records'
+);
+
+select ok(
+  not has_table_privilege('authenticated', 'public.family_access_decisions', 'select'),
+  'authenticated users cannot directly read who was declined or removed'
 );
 
 select ok(

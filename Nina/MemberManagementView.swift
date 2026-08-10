@@ -642,6 +642,138 @@ struct PendingHomeApprovalView: View {
     }
 }
 
+struct FamilyAccessDecisionView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(AuthSessionStore.self) private var authSession
+    @Environment(OnboardingStore.self) private var onboardingStore
+
+    @State private var isAcknowledging = false
+
+    var body: some View {
+        VStack(spacing: 18) {
+            IconBubble(systemName: symbolName, tone: .sky, size: 68)
+
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.title2.weight(.black))
+                    .foregroundStyle(NinaTheme.ink)
+                    .multilineTextAlignment(.center)
+
+                Text(message)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(NinaTheme.muted)
+                    .multilineTextAlignment(.center)
+            }
+
+            if let decision = store.familyAccessDecision {
+                SoftCard(padding: 16) {
+                    HStack(spacing: 12) {
+                        IconBubble(systemName: "house.fill", tone: .mint, size: 42)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(decision.familyName)
+                                .font(.headline.weight(.black))
+                                .foregroundStyle(NinaTheme.ink)
+
+                            Text(dateCaption(for: decision))
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(NinaTheme.muted)
+                        }
+                    }
+                }
+            }
+
+            Text(nextStep)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(NinaTheme.muted)
+                .multilineTextAlignment(.center)
+
+            if let syncErrorMessage = store.syncErrorMessage {
+                Label(syncErrorMessage, systemImage: "exclamationmark.circle.fill")
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(NinaTheme.coral)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            PrimaryCapsuleButton(title: "Entendi", systemName: "checkmark.circle.fill") {
+                acknowledge()
+            }
+            .disabled(isAcknowledging || store.isSyncingHome)
+            .opacity(isAcknowledging || store.isSyncingHome ? 0.6 : 1)
+
+            Button("Sair") {
+                Task {
+                    onboardingStore.cancelReplay()
+                    await authSession.signOut()
+                }
+            }
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(NinaTheme.muted)
+        }
+        .padding(28)
+        .frame(maxWidth: 520)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ninaScreenBackground()
+    }
+
+    private var outcome: FamilyAccessOutcome {
+        store.familyAccessDecision?.outcome ?? .declined
+    }
+
+    private var symbolName: String {
+        switch outcome {
+        case .declined: "envelope.open.fill"
+        case .removed: "house.fill"
+        }
+    }
+
+    private var title: String {
+        switch outcome {
+        case .declined: "Seu pedido não foi aprovado"
+        case .removed: "Você não está mais nessa casa"
+        }
+    }
+
+    private var message: String {
+        switch outcome {
+        case .declined:
+            "Essa casa não liberou sua entrada desta vez. A Nina não recebe o motivo, então não sabe te dizer."
+        case .removed:
+            "Seu acesso foi encerrado. As tarefas e as listas continuam com a casa."
+        }
+    }
+
+    private var nextStep: String {
+        switch outcome {
+        case .declined:
+            "Você pode pedir um convite novo para alguém de lá, ou criar a sua própria casa agora."
+        case .removed:
+            "Você pode voltar com um convite novo, ou criar a sua própria casa agora."
+        }
+    }
+
+    private func dateCaption(for decision: FamilyAccessDecision) -> String {
+        let day = decision.decidedAt.formatted(date: .abbreviated, time: .omitted)
+        switch decision.outcome {
+        case .declined: return "Resposta em \(day)"
+        case .removed: return "Acesso encerrado em \(day)"
+        }
+    }
+
+    private func acknowledge() {
+        guard !isAcknowledging else { return }
+        isAcknowledging = true
+        Task {
+            let acknowledged = await store.acknowledgeFamilyAccessDecision()
+            isAcknowledging = false
+            if acknowledged {
+                Haptics.selection()
+            }
+        }
+    }
+}
+
 struct MemberPermissionBadge: View {
     @Environment(AppStore.self) private var store
     let member: HouseholdMember

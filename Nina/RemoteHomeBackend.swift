@@ -24,6 +24,7 @@ enum FamilyJoinOutcome {
 }
 
 enum HomeRealtimeEvent: Sendable {
+    case family
     case familyMembers
     case taskSections
     case tasks
@@ -99,6 +100,8 @@ protocol RemoteHomeBackend {
     func joinHome(with inviteCode: String, member: AuthUser?) async throws -> RemoteHomeState
     func requestHomeAccess(with inviteCode: String, member: AuthUser?) async throws -> FamilyJoinOutcome
     func loadPendingJoinRequest() async throws -> FamilyJoinRequest?
+    func loadFamilyAccessDecision() async throws -> FamilyAccessDecision?
+    func acknowledgeFamilyAccessDecision(_ decisionID: UUID) async throws
     func previewInvite(code: String) async throws -> FamilyInvitePreview
     func updateFamilySettings(familyID: UUID, name: String) async throws -> RemoteHomeState
     func updateFamilySettings(
@@ -156,6 +159,14 @@ extension RemoteHomeBackend {
 
     func loadPendingJoinRequest() async throws -> FamilyJoinRequest? {
         nil
+    }
+
+    func loadFamilyAccessDecision() async throws -> FamilyAccessDecision? {
+        nil
+    }
+
+    func acknowledgeFamilyAccessDecision(_ decisionID: UUID) async throws {
+        throw RemoteHomeBackendError.operationUnavailable
     }
 
     func previewInvite(code: String) async throws -> FamilyInvitePreview {
@@ -343,6 +354,27 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         }
 
         return request?.domainRequest
+    }
+
+    func loadFamilyAccessDecision() async throws -> FamilyAccessDecision? {
+        try await perform(operation: "get_family_access_decision") {
+            try await client
+                .rpc("get_family_access_decision")
+                .execute()
+                .value
+        }
+    }
+
+    func acknowledgeFamilyAccessDecision(_ decisionID: UUID) async throws {
+        try await perform(operation: "acknowledge_family_access_decision") {
+            try await client
+                .rpc(
+                    "acknowledge_family_access_decision",
+                    params: AcknowledgeAccessDecisionParams(targetDecisionID: decisionID)
+                )
+                .execute()
+            return ()
+        }
     }
 
     func previewInvite(code: String) async throws -> FamilyInvitePreview {
@@ -808,6 +840,13 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
     func realtimeEvents(familyID: UUID) async -> AsyncStream<HomeRealtimeEvent> {
         let channel = client.channel("home-\(familyID.uuidString)")
         let filter = RealtimePostgresFilter.eq("family_id", value: familyID)
+        // Clients hold no read on family_join_requests, so a request can only surface as a family bump.
+        let familyChanges = channel.postgresChange(
+            AnyAction.self,
+            schema: "public",
+            table: "families",
+            filter: RealtimePostgresFilter.eq("id", value: familyID)
+        )
         let taskChanges = channel.postgresChange(
             AnyAction.self,
             schema: "public",
@@ -856,6 +895,11 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                 }
 
                 await withTaskGroup(of: Void.self) { group in
+                    group.addTask {
+                        for await _ in familyChanges {
+                            continuation.yield(.family)
+                        }
+                    }
                     group.addTask {
                         for await _ in familyMemberChanges {
                             continuation.yield(.familyMembers)
@@ -1277,6 +1321,14 @@ private struct FamilyIDParams: Encodable {
 
     private enum CodingKeys: String, CodingKey {
         case targetFamilyID = "target_family_id"
+    }
+}
+
+private struct AcknowledgeAccessDecisionParams: Encodable {
+    var targetDecisionID: UUID
+
+    private enum CodingKeys: String, CodingKey {
+        case targetDecisionID = "target_decision_id"
     }
 }
 

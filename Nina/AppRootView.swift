@@ -137,6 +137,7 @@ private enum AppEntryPhase: Hashable {
     case homeLoading
     case invite
     case pendingApproval
+    case accessDecision
     case homeSetup
     case homeUnavailable
     case app
@@ -300,6 +301,8 @@ struct AppRootView: View {
             return .homeSetup
         case .pendingApproval:
             return .pendingApproval
+        case .accessDecision:
+            return .accessDecision
         case .unavailable:
             return .homeUnavailable
         case .authorized:
@@ -324,6 +327,9 @@ struct AppRootView: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
         case .pendingApproval:
             PendingHomeApprovalView()
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+        case .accessDecision:
+            FamilyAccessDecisionView()
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
         case .homeSetup:
             HomeSetupView()
@@ -797,6 +803,7 @@ private struct AppLoadingScreen: View {
 }
 
 private struct BottomTabBar: View {
+    @Environment(AppStore.self) private var store
     var selectedTab: AppTab
     var select: (AppTab) -> Void
     @Namespace private var sliderNamespace
@@ -843,6 +850,12 @@ private struct BottomTabBar: View {
                         VStack(spacing: 4) {
                             Image(systemName: tab.systemImage)
                                 .font(.system(size: 19, weight: .black))
+                                .overlay(alignment: .topTrailing) {
+                                    if waitingCount(for: tab) > 0 {
+                                        TabWaitingBadge(count: waitingCount(for: tab))
+                                            .offset(x: 13, y: -9)
+                                    }
+                                }
 
                             Text(tab.title)
                                 .font(.caption2.weight(.black))
@@ -853,10 +866,23 @@ private struct BottomTabBar: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Aba \(tab.title)")
+                    .accessibilityLabel(accessibilityLabel(for: tab))
                 }
             }
         }
+    }
+
+    private func waitingCount(for tab: AppTab) -> Int {
+        tab == .house ? store.pendingJoinRequestCount : 0
+    }
+
+    private func accessibilityLabel(for tab: AppTab) -> String {
+        let count = waitingCount(for: tab)
+        guard count > 0 else { return "Aba \(tab.title)" }
+        if count == 1 {
+            return "Aba \(tab.title), 1 pedido de entrada esperando"
+        }
+        return "Aba \(tab.title), \(count) pedidos de entrada esperando"
     }
 
     private var tabSelectionPills: some View {
@@ -876,6 +902,20 @@ private struct BottomTabBar: View {
                 .frame(height: 60)
             }
         }
+    }
+}
+
+private struct TabWaitingBadge: View {
+    var count: Int
+
+    var body: some View {
+        Text(count > 9 ? "9+" : "\(count)")
+            .font(.caption2.weight(.black))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(NinaTheme.mint, in: Capsule())
+            .accessibilityHidden(true)
     }
 }
 

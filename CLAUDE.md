@@ -96,7 +96,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 17+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (30 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (32 files) |
 | Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app` | `web/src/worker.ts` |
 
@@ -134,6 +134,14 @@ product regression, not a refactor.
 - **A claimed member (`user_id is not null`) is forced to `household_role='adult'`** —
   otherwise an admin could demote a real person to `child` and silently strip
   their AI access.
+- **`invite_code` is enforced by a column grant, not by masking.** `authenticated`
+  holds `select` on every `families` column *except* `invite_code`; the masking
+  inside `get_current_home_context` is the second layer, not the first. Until
+  2026-08-09 only the masking existed, so any member could read the code straight
+  off the table via PostgREST and hand out household access. This is also what
+  makes `families` safe to publish to realtime — `replica identity full` puts
+  every column in the WAL row, and the per-subscriber filter drops `invite_code`
+  only because the grant is absent. Never widen that grant back to the table.
 - **Possessing an invite link grants nothing.** `request_family_join` creates a
   *pending* request; an owner/admin approves. Both the app and the public web
   invite page state this. Invite tokens are `casa-` + 128 bits of
@@ -318,7 +326,7 @@ its grid when `dynamicTypeSize.isAccessibilitySize`.
 
 ## 6. Database
 
-30 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+32 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order.
 
 **House style for every new object:**

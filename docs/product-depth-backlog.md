@@ -14,6 +14,29 @@ been closed; everything else in this document is still open.
 
 ## Closed since the audit
 
+- **A member could read the household invite code straight off the table.** CLAUDE.md stated the
+  masking in `get_current_home_context` as an invariant, but `grant select on public.families to
+  authenticated` plus the `is_family_member` policy meant any member could bypass it with a direct
+  PostgREST read and hand out household access. Now enforced by a column grant — `authenticated`
+  holds select on every `families` column except `invite_code` — with the RPC masking as a second
+  layer rather than the only one.
+- **A join request reached the owner only if they happened to open the Casa tab.** The pair
+  typically ended up phoning each other, which is precisely the coordination cost Nina exists to
+  remove. `family_join_requests` stays client-inaccessible; instead a trigger bumps
+  `families.updated_at` and `families` is published to realtime, so the signal rides a table
+  members already read. Sealing the invite-code grant was a prerequisite, not a bonus:
+  `replica identity full` puts every column in the WAL row, so publishing first would have
+  broadcast the code to every member's phone on every join-request event.
+- **Being declined or removed was completely silent.** The requester was returned to
+  "Criar casa / Entrar com convite" as though they had never asked, because
+  `get_pending_family_join_request` filters `status='pending'` and the client could not tell
+  declined from removed from never-asked. `family_access_decisions` now records the terminal
+  decision, delivered exactly once and acknowledged on dismiss. It stores **no reviewer at all** —
+  not merely unreturned, never written — because handing one adult a name to argue with is the
+  opposite of what the product is for. The copy names the house, never a person, and says plainly
+  that Nina does not receive the reason. `member_management.test.sql` 47 → 72,
+  `rls_policies.test.sql` 45 → 46 (26 tables).
+
 - **Completed tasks accumulated forever, and every refresh re-downloaded the whole history.**
   `loadTasks` selected every task for the family with no `is_done` filter and no bound, and
   `run_nina_retention` never touched tasks. `public.tasks` now carries `completed_at` and

@@ -162,6 +162,7 @@ enum HomeAccessState: Hashable {
     case loading
     case authorized
     case pendingApproval
+    case accessDecision
     case noHome
     case unavailable
 }
@@ -188,6 +189,7 @@ final class AppStore {
     var currentPermissionRole: FamilyPermissionRole = .member
     var inviteStatus: FamilyInviteStatus?
     var pendingJoinRequest: FamilyJoinRequest?
+    var familyAccessDecision: FamilyAccessDecision?
     var joinRequests: [FamilyJoinRequest] = []
     var messages: [ChatMessage]
     var taskSections: [TaskSection]
@@ -231,6 +233,10 @@ final class AppStore {
 
     var canManageFamily: Bool {
         currentPermissionRole.canManageFamily
+    }
+
+    var pendingJoinRequestCount: Int {
+        canManageFamily ? joinRequests.count : 0
     }
 
     var canChangeFamilyPermissions: Bool {
@@ -435,6 +441,7 @@ final class AppStore {
         syncErrorMessage = nil
         inviteStatus = nil
         pendingJoinRequest = nil
+        familyAccessDecision = nil
         joinRequests = []
         householdPremium = .inactive
 
@@ -484,10 +491,20 @@ final class AppStore {
                     return
                 }
 
-                homeAccessState = .noHome
+                let decision = try await remoteHomeBackend.loadFamilyAccessDecision()
+                guard isCurrentHomeContext(contextToken) else { return }
+
                 currentPermissionRole = .member
                 familyGroup = PreviewData.familyGroup
                 resetActivityState()
+
+                if let decision {
+                    familyAccessDecision = decision
+                    homeAccessState = .accessDecision
+                    return
+                }
+
+                homeAccessState = .noHome
                 return
             } catch is CancellationError {
                 return
@@ -554,11 +571,24 @@ final class AppStore {
                     return
                 }
 
+                let decision = try await remoteHomeBackend.loadFamilyAccessDecision()
+                guard isCurrentHomeContext(contextToken),
+                      localStateRevision == requestedRevision else {
+                    return
+                }
+
                 clearCachedHome(for: requestedUserID)
-                homeAccessState = .noHome
                 currentPermissionRole = .member
                 familyGroup = PreviewData.familyGroup
                 resetActivityState()
+
+                if let decision {
+                    familyAccessDecision = decision
+                    homeAccessState = .accessDecision
+                    return
+                }
+
+                homeAccessState = .noHome
                 return
             }
 
@@ -724,6 +754,40 @@ final class AppStore {
 
         #if DEBUG
         pendingJoinRequest = nil
+        homeAccessState = .noHome
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    @discardableResult
+    func acknowledgeFamilyAccessDecision() async -> Bool {
+        guard let decision = familyAccessDecision else { return false }
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+
+        if !usesLocalDebugBackend(for: activeUser),
+           let remoteHomeBackend {
+            isSyncingHome = true
+            defer { finishSyncingHome(ifCurrent: contextToken) }
+
+            do {
+                try await remoteHomeBackend.acknowledgeFamilyAccessDecision(decision.id)
+                guard isCurrentHomeContext(contextToken) else { return false }
+                familyAccessDecision = nil
+                homeAccessState = .noHome
+                return true
+            } catch {
+                guard isCurrentHomeContext(contextToken) else { return false }
+                syncErrorMessage = "Não consegui guardar esse aviso como lido agora."
+                Haptics.error()
+                return false
+            }
+        }
+
+        #if DEBUG
+        familyAccessDecision = nil
         homeAccessState = .noHome
         return true
         #else
@@ -1496,6 +1560,7 @@ final class AppStore {
         currentPermissionRole = .member
         inviteStatus = nil
         pendingJoinRequest = nil
+        familyAccessDecision = nil
         joinRequests = []
         pendingPriorityTaskIDs = []
         isNinaResponding = false
@@ -2202,6 +2267,7 @@ final class AppStore {
         inviteStatus = state.inviteStatus
         joinRequests = state.joinRequests
         pendingJoinRequest = nil
+        familyAccessDecision = nil
 
         if let snapshot = state.snapshot {
             apply(snapshot)

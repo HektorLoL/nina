@@ -279,6 +279,42 @@ struct FamilyJoinRequest: Identifiable, Codable, Hashable {
     var reviewedAt: Date?
 }
 
+enum FamilyAccessOutcome: String, Hashable {
+    case declined
+    case removed
+}
+
+// get_family_access_decision never returns who decided, so this model has nowhere to put it.
+struct FamilyAccessDecision: Identifiable, Decodable, Hashable {
+    var id: UUID
+    var familyName: String
+    var outcome: FamilyAccessOutcome
+    var decidedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case familyName = "family_name"
+        case outcome
+        case decidedAt = "decided_at"
+    }
+
+    init(id: UUID, familyName: String, outcome: FamilyAccessOutcome, decidedAt: Date) {
+        self.id = id
+        self.familyName = familyName
+        self.outcome = outcome
+        self.decidedAt = decidedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        familyName = try container.decodeIfPresent(String.self, forKey: .familyName) ?? ""
+        let rawOutcome = try container.decodeIfPresent(String.self, forKey: .outcome)
+        outcome = rawOutcome.flatMap(FamilyAccessOutcome.init(rawValue:)) ?? .declined
+        decidedAt = try container.decodeIfPresent(Date.self, forKey: .decidedAt) ?? .now
+    }
+}
+
 struct TaskCategory: Identifiable, Codable, Hashable, CaseIterable {
     var id: String
     var title: String
