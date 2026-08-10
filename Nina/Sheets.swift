@@ -1849,6 +1849,7 @@ struct TaskEditorSheet: View {
     @State private var category: TaskCategory = .home
     @State private var priority: TaskPriority = .normal
     @State private var recurrence: TaskRecurrence = .none
+    @State private var reminderLead: TaskReminderLead = .atTime
     @State private var localTaskCategories: [TaskCategory] = []
     @State private var isCategoryDropdownExpanded = false
     @State private var isCreatingCategory = false
@@ -1898,6 +1899,16 @@ struct TaskEditorSheet: View {
     private var categoryOptions: [TaskCategory] {
         let categories = store.availableTaskCategories + localTaskCategories
         return categories.contains(where: { $0.id == category.id }) ? categories : categories + [category]
+    }
+
+    private var reminderLeadOptions: [TaskReminderLead] {
+        let options = TaskReminderLead.editorOptions
+        guard !options.contains(reminderLead) else { return options }
+        return (options + [reminderLead]).sorted { $0.minutes < $1.minutes }
+    }
+
+    private var isReminderLeadDisabled: Bool {
+        store.notificationAuthorizationStatus == .denied
     }
 
     var body: some View {
@@ -2041,6 +2052,10 @@ struct TaskEditorSheet: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(NinaTheme.mint)
                     }
+
+                    Divider()
+
+                    reminderLeadMenu
                 } else {
                     Divider()
 
@@ -2138,6 +2153,31 @@ struct TaskEditorSheet: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private var reminderLeadMenu: some View {
+        Menu {
+            ForEach(reminderLeadOptions) { option in
+                Button {
+                    reminderLead = option
+                } label: {
+                    Label(
+                        option.title,
+                        systemImage: reminderLead == option ? "checkmark" : "bell.fill"
+                    )
+                }
+            }
+        } label: {
+            TaskEditorMenuRow(
+                title: "Avisar",
+                value: reminderLead.title,
+                systemName: "bell.badge.fill",
+                tone: .amber
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isReminderLeadDisabled)
+        .opacity(isReminderLeadDisabled ? 0.45 : 1)
     }
 
     private var categoryMenu: some View {
@@ -2269,6 +2309,7 @@ struct TaskEditorSheet: View {
         category = task.category
         priority = task.priority
         recurrence = task.recurrence
+        reminderLead = isPlantingSeed ? .atTime : task.reminderLead
         loadedTaskVersion = task.version
     }
 
@@ -2281,6 +2322,7 @@ struct TaskEditorSheet: View {
         let dueLabel = isSeed ? "Sem data" : Self.dateLabel(for: dueDate)
         let dueAt = isSeed ? nil : dueDate
         let recurrenceForSave: TaskRecurrence = isSeed ? .none : recurrence
+        let reminderLeadForSave: TaskReminderLead = isSeed ? .atTime : reminderLead
         let categoryForSave = persistedCategoryIfNeeded(category)
         Haptics.success()
         switch mode {
@@ -2295,6 +2337,7 @@ struct TaskEditorSheet: View {
                 category: categoryForSave,
                 priority: priority,
                 recurrence: recurrenceForSave,
+                reminderLead: reminderLeadForSave,
                 kind: kind,
                 sectionID: sectionID
             )
@@ -2310,6 +2353,7 @@ struct TaskEditorSheet: View {
                 category: categoryForSave,
                 priority: priority,
                 recurrence: recurrenceForSave,
+                reminderLead: reminderLeadForSave,
                 kind: kind,
                 expectedVersion: loadedTaskVersion
             )
@@ -2325,6 +2369,7 @@ struct TaskEditorSheet: View {
                 category: categoryForSave,
                 priority: priority,
                 recurrence: recurrenceForSave,
+                reminderLead: reminderLeadForSave,
                 kind: .task,
                 expectedVersion: loadedTaskVersion
             )

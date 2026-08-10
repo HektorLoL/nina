@@ -460,6 +460,48 @@ enum TaskRecurrence: String, CaseIterable, Identifiable, Codable, Hashable {
     }
 }
 
+// The raw values are the closed set tasks_remind_offset_minutes_check accepts; a value outside it
+// is rejected by the database, so nothing on the client may invent one.
+enum TaskReminderLead: Int, CaseIterable, Identifiable, Codable, Hashable {
+    case atTime = 0
+    case fiveMinutes = 5
+    case tenMinutes = 10
+    case fifteenMinutes = 15
+    case thirtyMinutes = 30
+    case oneHour = 60
+    case twoHours = 120
+    case oneDay = 1440
+
+    static let editorOptions: [TaskReminderLead] = [
+        .atTime,
+        .fiveMinutes,
+        .thirtyMinutes,
+        .oneHour,
+        .oneDay
+    ]
+
+    init(minutes: Int) {
+        self = TaskReminderLead(rawValue: minutes) ?? .atTime
+    }
+
+    var id: Int { rawValue }
+
+    var minutes: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .atTime: "Na hora"
+        case .fiveMinutes: "5 minutos antes"
+        case .tenMinutes: "10 minutos antes"
+        case .fifteenMinutes: "15 minutos antes"
+        case .thirtyMinutes: "30 minutos antes"
+        case .oneHour: "1 hora antes"
+        case .twoHours: "2 horas antes"
+        case .oneDay: "1 dia antes"
+        }
+    }
+}
+
 enum TaskKind: String, CaseIterable, Identifiable, Codable, Hashable {
     case task
     case seed
@@ -510,6 +552,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var category: TaskCategory
     var priority: TaskPriority
     var recurrence: TaskRecurrence
+    var remindOffsetMinutes: Int
     var snoozedUntil: Date?
     var isDone: Bool
     var completedAt: Date?
@@ -529,6 +572,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         category: TaskCategory,
         priority: TaskPriority = .normal,
         recurrence: TaskRecurrence = .none,
+        reminderLead: TaskReminderLead = .atTime,
         snoozedUntil: Date? = nil,
         isDone: Bool,
         completedAt: Date? = nil,
@@ -547,6 +591,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.category = category
         self.priority = priority
         self.recurrence = recurrence
+        remindOffsetMinutes = reminderLead.minutes
         self.snoozedUntil = snoozedUntil
         self.isDone = isDone
         self.completedAt = completedAt
@@ -567,6 +612,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case category
         case priority
         case recurrence
+        case remindOffsetMinutes
         case snoozedUntil
         case isDone
         case completedAt
@@ -588,6 +634,9 @@ struct TaskItem: Identifiable, Codable, Hashable {
         category = try container.decodeIfPresent(TaskCategory.self, forKey: .category) ?? .home
         priority = try container.decodeIfPresent(TaskPriority.self, forKey: .priority) ?? .normal
         recurrence = try container.decodeIfPresent(TaskRecurrence.self, forKey: .recurrence) ?? .none
+        remindOffsetMinutes = TaskReminderLead(
+            minutes: try container.decodeIfPresent(Int.self, forKey: .remindOffsetMinutes) ?? 0
+        ).minutes
         snoozedUntil = try container.decodeIfPresent(Date.self, forKey: .snoozedUntil)
         isDone = try container.decodeIfPresent(Bool.self, forKey: .isDone) ?? false
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
@@ -614,6 +663,11 @@ struct TaskItem: Identifiable, Codable, Hashable {
 
     var effectiveDueDate: Date? {
         snoozedUntil ?? dueAt
+    }
+
+    var reminderLead: TaskReminderLead {
+        get { TaskReminderLead(minutes: remindOffsetMinutes) }
+        set { remindOffsetMinutes = newValue.minutes }
     }
 
     func isDue(

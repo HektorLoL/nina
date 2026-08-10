@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(92);
+select plan(96);
 
 insert into auth.users (
   id,
@@ -433,6 +433,56 @@ select is(
 reset role;
 set local request.jwt.claim.sub = '';
 
+insert into public.nina_proposals (
+  id,
+  family_id,
+  owner_user_id,
+  kind,
+  title,
+  detail,
+  payload
+)
+values (
+  '66000000-0000-0000-0000-000000000002',
+  '62000000-0000-0000-0000-000000000001',
+  '61000000-0000-0000-0000-000000000001',
+  'task',
+  'Buscar o Pedro na escola',
+  'Sair com meia hora de antecedência',
+  jsonb_build_object(
+    'title', 'Buscar o Pedro na escola',
+    'due_label', 'Hoje, 17:30',
+    'due_at', '2026-06-16T17:30:00-03:00',
+    'remind_offset_minutes', 30
+  )
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select lives_ok(
+  $$select public.resolve_nina_proposal(
+    '66000000-0000-0000-0000-000000000002',
+    'accept',
+    '{}'::jsonb,
+    null
+  )$$,
+  'a proposal carrying a reminder lead time is confirmed like any other'
+);
+
+select is(
+  (
+    select remind_offset_minutes
+    from public.tasks
+    where title = 'Buscar o Pedro na escola'
+  ),
+  30,
+  'confirming a proposal carries its reminder lead time into the task'
+);
+
+reset role;
+set local request.jwt.claim.sub = '';
+
 select lives_ok(
   format(
     $$select public.fail_nina_ai_run(%L::uuid, 'test_cleanup', 10)$$,
@@ -715,6 +765,28 @@ select is(
   ),
   null::timestamptz,
   'rolling a recurring task forward is not a completion'
+);
+
+select is(
+  (
+    select remind_offset_minutes
+    from public.tasks
+    where id = '6b000000-0000-0000-0000-000000000004'
+  ),
+  0,
+  'a task written without a lead time still reminds at the due moment'
+);
+
+select throws_ok(
+  $$insert into public.tasks (family_id, title, remind_offset_minutes)
+    values (
+      '62000000-0000-0000-0000-000000000001',
+      'Antecedência fora da lista',
+      7
+    )$$,
+  '23514',
+  null,
+  'a reminder lead time outside the offered set is refused'
 );
 
 select set_config(

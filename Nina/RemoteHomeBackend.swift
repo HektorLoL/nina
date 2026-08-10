@@ -1050,7 +1050,7 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
     }
 
     private static let taskColumns =
-        "id,task_kind,section_id,title,subtitle,owner_label,owner_member_id,due_label,due_at,category_id,category_snapshot,priority,recurrence_rule,snoozed_until,is_done,completed_at,created_by_label,version"
+        "id,task_kind,section_id,title,subtitle,owner_label,owner_member_id,due_label,due_at,category_id,category_snapshot,priority,recurrence_rule,remind_offset_minutes,snoozed_until,is_done,completed_at,created_by_label,version"
 }
 
 private struct HomeContextRow: Decodable {
@@ -1497,6 +1497,7 @@ private struct TaskInsertRow: Encodable {
     var categorySnapshot: TaskCategory
     var priority: String
     var recurrenceRule: String
+    var remindOffsetMinutes: Int
     var snoozedUntil: Date?
     var isDone: Bool
     var createdBy: UUID?
@@ -1517,6 +1518,7 @@ private struct TaskInsertRow: Encodable {
         case categorySnapshot = "category_snapshot"
         case priority
         case recurrenceRule = "recurrence_rule"
+        case remindOffsetMinutes = "remind_offset_minutes"
         case snoozedUntil = "snoozed_until"
         case isDone = "is_done"
         case createdBy = "created_by"
@@ -1538,6 +1540,7 @@ private struct TaskInsertRow: Encodable {
         categorySnapshot = task.category
         priority = task.priority.rawValue
         recurrenceRule = task.recurrence.rawValue
+        remindOffsetMinutes = task.reminderLead.minutes
         snoozedUntil = task.snoozedUntil
         isDone = task.isDone
         createdBy = currentUserID
@@ -1558,6 +1561,7 @@ private struct TaskUpdateRow: Encodable {
     var categorySnapshot: TaskCategory
     var priority: String
     var recurrenceRule: String
+    var remindOffsetMinutes: Int
     var snoozedUntil: Date?
     var isDone: Bool
     var createdByLabel: String
@@ -1575,6 +1579,7 @@ private struct TaskUpdateRow: Encodable {
         case categorySnapshot = "category_snapshot"
         case priority
         case recurrenceRule = "recurrence_rule"
+        case remindOffsetMinutes = "remind_offset_minutes"
         case snoozedUntil = "snoozed_until"
         case isDone = "is_done"
         case createdByLabel = "created_by_label"
@@ -1593,6 +1598,7 @@ private struct TaskUpdateRow: Encodable {
         categorySnapshot = task.category
         priority = task.priority.rawValue
         recurrenceRule = task.recurrence.rawValue
+        remindOffsetMinutes = task.reminderLead.minutes
         snoozedUntil = task.snoozedUntil
         isDone = task.isDone
         createdByLabel = task.createdBy
@@ -1614,6 +1620,7 @@ private struct TaskUpdateRow: Encodable {
         try container.encode(categorySnapshot, forKey: .categorySnapshot)
         try container.encode(priority, forKey: .priority)
         try container.encode(recurrenceRule, forKey: .recurrenceRule)
+        try container.encode(remindOffsetMinutes, forKey: .remindOffsetMinutes)
         try container.encodeIfPresent(snoozedUntil, forKey: .snoozedUntil)
         try container.encode(isDone, forKey: .isDone)
         try container.encode(createdByLabel, forKey: .createdByLabel)
@@ -1781,6 +1788,7 @@ private struct TaskRow: Decodable {
     var categorySnapshot: TaskCategory
     var priority: String
     var recurrenceRule: String
+    var remindOffsetMinutes: Int
     var snoozedUntil: Date?
     var isDone: Bool
     var completedAt: Date?
@@ -1801,6 +1809,7 @@ private struct TaskRow: Decodable {
         case categorySnapshot = "category_snapshot"
         case priority
         case recurrenceRule = "recurrence_rule"
+        case remindOffsetMinutes = "remind_offset_minutes"
         case snoozedUntil = "snoozed_until"
         case isDone = "is_done"
         case completedAt = "completed_at"
@@ -1828,6 +1837,7 @@ private struct TaskRow: Decodable {
             ?? .custom(id: decodedCategoryID, title: decodedCategoryID.capitalized, tone: .lavender)
         priority = try container.decodeIfPresent(String.self, forKey: .priority) ?? TaskPriority.normal.rawValue
         recurrenceRule = try container.decodeIfPresent(String.self, forKey: .recurrenceRule) ?? TaskRecurrence.none.rawValue
+        remindOffsetMinutes = try container.decodeIfPresent(Int.self, forKey: .remindOffsetMinutes) ?? 0
         snoozedUntil = try container.decodeIfPresent(Date.self, forKey: .snoozedUntil)
         isDone = try container.decodeIfPresent(Bool.self, forKey: .isDone) ?? false
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
@@ -1848,6 +1858,7 @@ private struct TaskRow: Decodable {
             category: categorySnapshot,
             priority: TaskPriority(rawValue: priority) ?? .normal,
             recurrence: TaskRecurrence(rawValue: recurrenceRule) ?? .none,
+            reminderLead: TaskReminderLead(minutes: remindOffsetMinutes),
             snoozedUntil: snoozedUntil,
             isDone: isDone,
             completedAt: completedAt,

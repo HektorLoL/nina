@@ -96,7 +96,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 17+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (32 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (34 files) |
 | Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app` | `web/src/worker.ts` |
 
@@ -346,7 +346,7 @@ its grid when `dynamicTypeSize.isAccessibilitySize`.
 
 ## 6. Database
 
-32 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+34 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order.
 
 **House style for every new object:**
@@ -673,7 +673,13 @@ does. Household, profile, photo, and consent files persist on disk after
 
 **Notification scheduling is capped at 60 requests globally**, sorted by soonest
 delivery, with recurring tasks expanded 12 occurrences deep. A busy home silently
-loses the tail. Quiet hours **silence** rather than move: `content.sound = nil`
+loses the tail. **First alerts and follow-up nudges are budgeted separately**:
+alerts fill the 60 first, nudges take only the remainder, so a repeat of
+something the phone already showed can never evict the one time another task is
+announced. One nudge per task, not per occurrence, and a task whose first alert
+was dropped gets none. A `.high`/`.urgent` task therefore costs up to two
+requests — a household of mostly urgent tasks reaches the ceiling with roughly
+half as many. Quiet hours **silence** rather than move: `content.sound = nil`
 and `interruptionLevel = .passive`, delivery time unchanged, because the app must
 never show one time and deliver another. `UNCalendarNotificationTrigger` carries
 no timezone — travel silently reschedules everything to the same wall-clock time.

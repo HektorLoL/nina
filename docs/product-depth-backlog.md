@@ -37,6 +37,34 @@ been closed; everything else in this document is still open.
   that Nina does not receive the reason. `member_management.test.sql` 47 → 72,
   `rls_policies.test.sql` 45 → 46 (26 tables).
 
+- **Reminders had no lead time and no second nudge.** "Buscar o Pedro na escola" at 17:30
+  notified at 17:30, when the user was already late leaving, and a missed banner produced no
+  further signal ever. `tasks.remind_offset_minutes` is now a per-task column — not a device
+  preference, which would not survive a device change nor match on a partner's phone — over a
+  closed set (0/5/10/15/30/60/120/1440) so every stored value has exactly one pt-BR label and
+  Nina cannot propose an offset the picker can't render. `resolve_nina_proposal` carries it out
+  of the payload. The lead is subtracted before quiet hours is evaluated, so quiet hours judges
+  the hour the alert actually fires, and a lead landing in the past drops the reminder rather
+  than firing it immediately. A snooze is used verbatim — it is an hour the person already
+  picked. Follow-up nudges for `.high`/`.urgent` are budgeted *separately* from first alerts:
+  alerts fill the 60-request cap first and nudges take the remainder, so a repeat can never
+  evict the only time another task is announced. `nina_ai_v2.test.sql` 92 → 96.
+- **Five invariants CLAUDE.md asserted were not actually enforced.** An adversarial audit of all
+  27 §4 invariants — run because one had already turned out false and been found by accident —
+  asked of each: construct the bypass, then name the test that fails if it breaks. Four
+  SECURITY DEFINER predicates (`is_family_member`, `can_manage_family`, `is_family_creator`,
+  `shares_family_with`) were callable by `anon` with no JWT at all, letting anyone probe the
+  household graph; household premium never expired on its own because `family_has_premium` read
+  a stored flag and never `expires_at`/`revoked_at`; the free chat quota was bypassable tenfold
+  because the rate-limit row stored *when* a window opened but not *how long* it was; a removed
+  member kept their household for as long as they kept tapping, because `refreshHomeFromRemote`
+  discarded the authorization answer along with the stale content its revision guard was meant
+  to protect; and a paid transaction could be `finish()`ed with no server record, destroying
+  StoreKit's redelivery path. The canary added for the first is set-based rather than
+  name-based — it asserts the *set* of anon-executable functions is exactly
+  `get_family_invite_preview`, so the next function created without a revoke fails CI instead
+  of waiting to be found by accident. `repository.premium-transaction-finish` pins the last.
+
 - **Completed tasks accumulated forever, and every refresh re-downloaded the whole history.**
   `loadTasks` selected every task for the family with no `is_done` filter and no bound, and
   `run_nina_retention` never touched tasks. `public.tasks` now carries `completed_at` and

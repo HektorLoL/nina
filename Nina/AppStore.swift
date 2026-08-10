@@ -1641,6 +1641,7 @@ final class AppStore {
         category: TaskCategory,
         priority: TaskPriority = .normal,
         recurrence: TaskRecurrence = .none,
+        reminderLead: TaskReminderLead = .atTime,
         kind: TaskKind = .task,
         createdBy: String = "Manual",
         sectionID: String = TaskSectionDefaults.houseTasksID
@@ -1661,6 +1662,7 @@ final class AppStore {
             category: category,
             priority: priority,
             recurrence: kind == .seed ? .none : recurrence,
+            reminderLead: kind == .seed ? .atTime : reminderLead,
             isDone: false,
             createdBy: createdBy,
             sectionID: sectionID
@@ -1737,6 +1739,7 @@ final class AppStore {
         category: TaskCategory,
         priority: TaskPriority,
         recurrence: TaskRecurrence? = nil,
+        reminderLead: TaskReminderLead? = nil,
         kind: TaskKind? = nil,
         expectedVersion: Int? = nil
     ) {
@@ -1761,10 +1764,16 @@ final class AppStore {
         proposedTask.priority = priority
         if proposedKind == .seed {
             proposedTask.recurrence = .none
+            proposedTask.reminderLead = .atTime
             proposedTask.snoozedUntil = nil
-        } else if let recurrence {
-            proposedTask.recurrence = recurrence
-            proposedTask.snoozedUntil = nil
+        } else {
+            if let recurrence {
+                proposedTask.recurrence = recurrence
+                proposedTask.snoozedUntil = nil
+            }
+            if let reminderLead {
+                proposedTask.reminderLead = reminderLead
+            }
         }
 
         if let expectedVersion, expectedVersion != currentTask.version {

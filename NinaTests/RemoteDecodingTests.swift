@@ -122,6 +122,58 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(decoded.completedAt, completedAt)
     }
 
+    func testATaskCachedByAnOlderBuildWithoutAReminderLeadTimeStillDecodes() throws {
+        let legacy = """
+        {"id":"3F1A0000-0000-4000-8000-00000000DDDD","title":"Levar o Pedro ao dentista",
+         "owner":"Mirna","dueLabel":"amanhã, 09:00","isDone":false,"version":4}
+        """
+
+        let task = try JSONDecoder().decode(TaskItem.self, from: Data(legacy.utf8))
+
+        XCTAssertEqual(task.remindOffsetMinutes, 0)
+        XCTAssertEqual(task.reminderLead, .atTime)
+        XCTAssertEqual(task.version, 4)
+    }
+
+    func testAReminderLeadTimeSurvivesALocalCacheRoundTrip() throws {
+        let task = TaskItem(
+            title: "Pagar o boleto da Enel",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "sexta, 09:00",
+            category: .bills,
+            reminderLead: .thirtyMinutes,
+            isDone: false,
+            createdBy: "Manual"
+        )
+
+        let decoded = try JSONDecoder().decode(TaskItem.self, from: JSONEncoder().encode(task))
+
+        XCTAssertEqual(decoded.reminderLead, .thirtyMinutes)
+        XCTAssertEqual(decoded.remindOffsetMinutes, 30)
+    }
+
+    func testACachedLeadTimeTheDatabaseWouldRejectFallsBackToTheDueMoment() throws {
+        let legacy = """
+        {"id":"3F1A0000-0000-4000-8000-00000000EEEE","title":"Renovar o seguro","owner":"Casa",
+         "dueLabel":"Sem data","isDone":false,"remindOffsetMinutes":37,"version":1}
+        """
+
+        let task = try JSONDecoder().decode(TaskItem.self, from: Data(legacy.utf8))
+
+        XCTAssertEqual(task.remindOffsetMinutes, 0)
+    }
+
+    func testEveryOfferedLeadTimeIsOneTheDatabaseAccepts() {
+        let accepted = [0, 5, 10, 15, 30, 60, 120, 1440]
+
+        XCTAssertEqual(TaskReminderLead.allCases.map(\.minutes), accepted)
+        for option in TaskReminderLead.editorOptions {
+            XCTAssertTrue(accepted.contains(option.minutes))
+            XCTAssertFalse(option.title.contains("!"))
+        }
+    }
+
     func testAShoppingItemCachedByAnOlderBuildWithoutAnOwnerMemberIDStillDecodes() throws {
         let legacy = #"{"id":"3F1A0000-0000-4000-8000-00000000BBBB","title":"Gás","amount":"1 botijão","owner":"Casa","isChecked":false}"#
 

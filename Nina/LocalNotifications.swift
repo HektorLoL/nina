@@ -65,6 +65,9 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
     static let defaultQuietHoursStartMinutes = 22 * 60
     static let defaultQuietHoursEndMinutes = 7 * 60
 
+    static let pendingRequestLimit = 60
+    static let missedReminderNudgeDelay: TimeInterval = 60 * 60
+
     private let center: UNUserNotificationCenter
     private let defaults: UserDefaults
     private let calendar: Calendar
@@ -129,59 +132,124 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         return HouseholdWorkload.isSameOwner(task.owner, viewerName)
     }
 
+    static func plannedNotifications(
+        tasks: [TaskItem],
+        familyID: UUID,
+        viewer: HomeNotificationViewer,
+        now: Date = Date(),
+        defaults: UserDefaults = .standard,
+        calendar: Calendar = .current
+    ) -> [ScheduledNotification] {
+        let quietHours = QuietHoursConfiguration(defaults: defaults, calendar: calendar)
+        var alerts: [ScheduledNotification] = []
+        var nudges: [ScheduledNotification] = []
+
+        for task in tasks where !task.isDone && isForViewer(task, viewer: viewer) {
+            let moments = reminderMoments(task, after: now, calendar: calendar)
+
+            for moment in moments {
+                alerts.append(
+                    ScheduledNotification(
+                        identifier: taskIdentifier(
+                            task.id,
+                            familyID: familyID,
+                            deliveryDate: moment.alertDate
+                        ),
+                        title: task.title,
+                        body: taskNotificationBody(task),
+                        deliveryDate: moment.alertDate,
+                        isSilent: quietHours.contains(moment.alertDate),
+                        kind: .alert
+                    )
+                )
+            }
+
+            guard task.priority == .high || task.priority == .urgent,
+                  let dueMoment = moments.first?.dueMoment else { continue }
+
+            let nudgeDate = dueMoment.addingTimeInterval(missedReminderNudgeDelay)
+            guard nudgeDate > now else { continue }
+
+            nudges.append(
+                ScheduledNotification(
+                    identifier: nudgeIdentifier(
+                        task.id,
+                        familyID: familyID,
+                        deliveryDate: nudgeDate
+                    ),
+                    title: task.title,
+                    body: nudgeNotificationBody(task),
+                    deliveryDate: nudgeDate,
+                    isSilent: quietHours.contains(nudgeDate),
+                    kind: .nudge
+                )
+            )
+        }
+
+        // A nudge repeats something the phone already showed, so it may only spend budget that no
+        // first alert claimed.
+        let deliveredAlerts = alerts
+            .sorted { $0.deliveryDate < $1.deliveryDate }
+            .prefix(pendingRequestLimit)
+        let deliveredNudges = nudges
+            .sorted { $0.deliveryDate < $1.deliveryDate }
+            .prefix(pendingRequestLimit - deliveredAlerts.count)
+
+        return (deliveredAlerts + deliveredNudges).sorted { $0.deliveryDate < $1.deliveryDate }
+    }
+
     private func notificationRequests(
         tasks: [TaskItem],
         familyID: UUID,
         viewer: HomeNotificationViewer
     ) -> [UNNotificationRequest] {
-        let now = Date()
-        let quietHours = QuietHoursConfiguration(defaults: defaults, calendar: calendar)
-        var scheduled: [ScheduledNotification] = []
+        Self.plannedNotifications(
+            tasks: tasks,
+            familyID: familyID,
+            viewer: viewer,
+            now: Date(),
+            defaults: defaults,
+            calendar: calendar
+        )
+        .compactMap { Self.request($0, calendar: calendar) }
+    }
 
-        for task in tasks where !task.isDone && Self.isForViewer(task, viewer: viewer) {
-            let dates = taskDeliveryDates(task, after: now)
-            for deliveryDate in dates {
-                scheduled.append(
-                    ScheduledNotification(
-                        identifier: Self.taskIdentifier(
-                            task.id,
-                            familyID: familyID,
-                            deliveryDate: deliveryDate
-                        ),
-                        title: task.title,
-                        body: taskNotificationBody(task),
-                        deliveryDate: deliveryDate,
-                        isSilent: quietHours.contains(deliveryDate)
-                    )
-                )
+    private static func reminderMoments(
+        _ task: TaskItem,
+        after now: Date,
+        calendar: Calendar
+    ) -> [ReminderMoment] {
+        let lead = TimeInterval(task.reminderLead.minutes * 60)
+
+        func leadAdjusted(_ dueMoments: [Date]) -> [ReminderMoment] {
+            dueMoments.compactMap { dueMoment in
+                let alertDate = dueMoment.addingTimeInterval(-lead)
+                guard alertDate > now else { return nil }
+                return ReminderMoment(dueMoment: dueMoment, alertDate: alertDate)
             }
         }
 
-        return scheduled
-            .filter { $0.deliveryDate > now }
-            .sorted { $0.deliveryDate < $1.deliveryDate }
-            .prefix(60)
-            .compactMap(request)
-    }
-
-    private func taskDeliveryDates(_ task: TaskItem, after now: Date) -> [Date] {
         if let snoozedUntil = task.snoozedUntil, snoozedUntil > now {
-            guard task.recurrence != .none else { return [snoozedUntil] }
-            return [snoozedUntil] + task.scheduledOccurrences(
-                after: snoozedUntil,
-                limit: 12,
-                calendar: calendar
+            let snoozed = ReminderMoment(dueMoment: snoozedUntil, alertDate: snoozedUntil)
+            guard task.recurrence != .none else { return [snoozed] }
+            return [snoozed] + leadAdjusted(
+                task.scheduledOccurrences(after: snoozedUntil, limit: 12, calendar: calendar)
             )
         }
 
-        return task.scheduledOccurrences(
-            after: now,
-            limit: task.recurrence == .none ? 1 : 12,
-            calendar: calendar
+        return leadAdjusted(
+            task.scheduledOccurrences(
+                after: now,
+                limit: task.recurrence == .none ? 1 : 12,
+                calendar: calendar
+            )
         )
     }
 
-    private func request(_ scheduled: ScheduledNotification) -> UNNotificationRequest? {
+    private static func request(
+        _ scheduled: ScheduledNotification,
+        calendar: Calendar
+    ) -> UNNotificationRequest? {
         let content = UNMutableNotificationContent()
         content.title = scheduled.title
         content.body = scheduled.body
@@ -206,12 +274,16 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         )
     }
 
-    private func taskNotificationBody(_ task: TaskItem) -> String {
+    private static func taskNotificationBody(_ task: TaskItem) -> String {
         let detail = task.subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
         if detail.isEmpty {
             return "\(task.owner) - \(task.dueLabel)"
         }
         return "\(task.owner) - \(detail)"
+    }
+
+    private static func nudgeNotificationBody(_ task: TaskItem) -> String {
+        "\(task.owner) - ainda em aberto"
     }
 
     private static func domainStatus(
@@ -242,17 +314,37 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         return "nina.local.task.\(familyID.uuidString).\(id.uuidString).\(minute)"
     }
 
+    private static func nudgeIdentifier(
+        _ id: UUID,
+        familyID: UUID,
+        deliveryDate: Date
+    ) -> String {
+        let minute = Int(deliveryDate.timeIntervalSince1970 / 60)
+        return "nina.local.nudge.\(familyID.uuidString).\(id.uuidString).\(minute)"
+    }
+
     private static func isNinaNotificationIdentifier(_ identifier: String) -> Bool {
         identifier.hasPrefix("nina.local.")
     }
 }
 
-private struct ScheduledNotification {
+enum HomeNotificationKind: Hashable {
+    case alert
+    case nudge
+}
+
+struct ScheduledNotification: Hashable {
     var identifier: String
     var title: String
     var body: String
     var deliveryDate: Date
     var isSilent: Bool
+    var kind: HomeNotificationKind
+}
+
+private struct ReminderMoment {
+    var dueMoment: Date
+    var alertDate: Date
 }
 
 private struct QuietHoursConfiguration {
