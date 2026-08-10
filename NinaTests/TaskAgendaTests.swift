@@ -126,6 +126,15 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertTrue(task.belongsOnAgenda(for: now, calendar: calendar))
     }
 
+    func testTheCompletedListSaysItOnlyShowsTheWindowRetentionActuallyKeeps() {
+        XCTAssertTrue(
+            CompletedTaskRetention.disclosureNote
+                .contains("\(CompletedTaskRetention.visibleDays) dias")
+        )
+        XCTAssertTrue(CompletedTaskRetention.disclosureNote.contains("guardadas"))
+        XCTAssertFalse(CompletedTaskRetention.disclosureNote.contains("!"))
+    }
+
     private func task(dueAt: Date?) -> TaskItem {
         TaskItem(
             title: "Pagar a conta de luz",

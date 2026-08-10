@@ -90,6 +90,38 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(task.version, 3)
     }
 
+    func testACompletedTaskCachedByAnOlderBuildWithoutACompletionTimestampStillDecodes() throws {
+        let legacy = """
+        {"id":"3F1A0000-0000-4000-8000-00000000CCCC","title":"Trocar o filtro","owner":"Casa",
+         "dueLabel":"Sem data","isDone":true,"createdBy":"Manual","version":2}
+        """
+
+        let task = try JSONDecoder().decode(TaskItem.self, from: Data(legacy.utf8))
+
+        XCTAssertTrue(task.isDone)
+        XCTAssertNil(task.completedAt)
+        XCTAssertEqual(task.title, "Trocar o filtro")
+        XCTAssertEqual(task.version, 2)
+    }
+
+    func testACompletionTimestampSurvivesALocalCacheRoundTrip() throws {
+        let completedAt = Date(timeIntervalSince1970: 1_785_000_000)
+        let task = TaskItem(
+            title: "Pagar a escola",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Sem data",
+            category: .home,
+            isDone: true,
+            completedAt: completedAt,
+            createdBy: "Manual"
+        )
+
+        let decoded = try JSONDecoder().decode(TaskItem.self, from: JSONEncoder().encode(task))
+
+        XCTAssertEqual(decoded.completedAt, completedAt)
+    }
+
     func testAShoppingItemCachedByAnOlderBuildWithoutAnOwnerMemberIDStillDecodes() throws {
         let legacy = #"{"id":"3F1A0000-0000-4000-8000-00000000BBBB","title":"Gás","amount":"1 botijão","owner":"Casa","isChecked":false}"#
 

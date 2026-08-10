@@ -454,6 +454,14 @@ enum TaskKind: String, CaseIterable, Identifiable, Codable, Hashable {
     }
 }
 
+// The window must match the archival interval in run_nina_retention; drift makes the list lie.
+enum CompletedTaskRetention {
+    static let visibleDays = 30
+
+    static let disclosureNote =
+        "Aqui ficam as conclusões dos últimos \(visibleDays) dias. As antigas seguem guardadas."
+}
+
 struct TaskItem: Identifiable, Codable, Hashable {
     var id: UUID
     var kind: TaskKind
@@ -468,6 +476,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var recurrence: TaskRecurrence
     var snoozedUntil: Date?
     var isDone: Bool
+    var completedAt: Date?
     var createdBy: String
     var sectionID: String
     var version: Int
@@ -486,6 +495,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         recurrence: TaskRecurrence = .none,
         snoozedUntil: Date? = nil,
         isDone: Bool,
+        completedAt: Date? = nil,
         createdBy: String,
         sectionID: String = TaskSectionDefaults.houseTasksID,
         version: Int = 1
@@ -503,6 +513,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.recurrence = recurrence
         self.snoozedUntil = snoozedUntil
         self.isDone = isDone
+        self.completedAt = completedAt
         self.createdBy = createdBy
         self.sectionID = sectionID
         self.version = version
@@ -522,6 +533,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case recurrence
         case snoozedUntil
         case isDone
+        case completedAt
         case createdBy
         case sectionID
         case version
@@ -542,6 +554,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         recurrence = try container.decodeIfPresent(TaskRecurrence.self, forKey: .recurrence) ?? .none
         snoozedUntil = try container.decodeIfPresent(Date.self, forKey: .snoozedUntil)
         isDone = try container.decodeIfPresent(Bool.self, forKey: .isDone) ?? false
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
         createdBy = try container.decodeIfPresent(String.self, forKey: .createdBy) ?? "Manual"
         sectionID = try container.decodeIfPresent(String.self, forKey: .sectionID) ?? TaskSectionDefaults.houseTasksID
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1

@@ -950,6 +950,7 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                 .from("tasks")
                 .select(Self.taskColumns)
                 .eq("family_id", value: familyID)
+                .is("archived_at", value: nil)
                 .order("created_at", ascending: false)
                 .execute()
                 .value
@@ -1005,7 +1006,7 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
     }
 
     private static let taskColumns =
-        "id,task_kind,section_id,title,subtitle,owner_label,owner_member_id,due_label,due_at,category_id,category_snapshot,priority,recurrence_rule,snoozed_until,is_done,created_by_label,version"
+        "id,task_kind,section_id,title,subtitle,owner_label,owner_member_id,due_label,due_at,category_id,category_snapshot,priority,recurrence_rule,snoozed_until,is_done,completed_at,created_by_label,version"
 }
 
 private struct HomeContextRow: Decodable {
@@ -1730,6 +1731,7 @@ private struct TaskRow: Decodable {
     var recurrenceRule: String
     var snoozedUntil: Date?
     var isDone: Bool
+    var completedAt: Date?
     var createdByLabel: String
     var version: Int
 
@@ -1749,6 +1751,7 @@ private struct TaskRow: Decodable {
         case recurrenceRule = "recurrence_rule"
         case snoozedUntil = "snoozed_until"
         case isDone = "is_done"
+        case completedAt = "completed_at"
         case createdByLabel = "created_by_label"
         case version
     }
@@ -1775,6 +1778,7 @@ private struct TaskRow: Decodable {
         recurrenceRule = try container.decodeIfPresent(String.self, forKey: .recurrenceRule) ?? TaskRecurrence.none.rawValue
         snoozedUntil = try container.decodeIfPresent(Date.self, forKey: .snoozedUntil)
         isDone = try container.decodeIfPresent(Bool.self, forKey: .isDone) ?? false
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
         createdByLabel = try container.decodeIfPresent(String.self, forKey: .createdByLabel) ?? "Manual"
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
     }
@@ -1794,6 +1798,7 @@ private struct TaskRow: Decodable {
             recurrence: TaskRecurrence(rawValue: recurrenceRule) ?? .none,
             snoozedUntil: snoozedUntil,
             isDone: isDone,
+            completedAt: completedAt,
             createdBy: createdByLabel,
             sectionID: sectionID,
             version: version

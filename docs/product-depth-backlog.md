@@ -14,6 +14,21 @@ been closed; everything else in this document is still open.
 
 ## Closed since the audit
 
+- **Completed tasks accumulated forever, and every refresh re-downloaded the whole history.**
+  `loadTasks` selected every task for the family with no `is_done` filter and no bound, and
+  `run_nina_retention` never touched tasks. `public.tasks` now carries `completed_at` and
+  `archived_at`; a trigger stamps completion on a genuine done transition, clears it on re-open,
+  and otherwise forces the previous value so the column is not client-writable. Retention stamps
+  `archived_at` on completions older than 30 days — it archives, never deletes, because the
+  history is the household's. The client reads only unarchived rows, against a matching partial
+  index. Re-opening an archived task un-archives it in the same trigger branch, so a task can
+  never end up open and invisible. Deliberately **no** `.limit()` on the fetch: any single-query
+  cap truncates by age and would drop old *open* tasks, the same silent-tail failure CLAUDE.md
+  already records for the 60-notification cap — archival is what bounds growth. Bonus taken:
+  `nina_weekly_metrics` now derives "completed this week" from `completed_at` instead of
+  `updated_at`, so editing a long-finished task no longer re-counts it — which matters more now,
+  since the archival write itself bumps `updated_at`. `nina_ai_v2.test.sql` 76 → 85.
+
 - **Assignment was a free-text display name.** `tasks.owner_member_id` and
   `shopping_items.owner_member_id` had been FKs to `family_members` since the initial schema and
   were always NULL, so a member who renamed themselves became two people in the workload split

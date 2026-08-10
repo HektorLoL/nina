@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(76);
+select plan(85);
 
 insert into auth.users (
   id,
@@ -641,6 +641,92 @@ select is(
   'weekly workload metrics are deterministic SQL counts'
 );
 
+insert into public.tasks (id, family_id, title, is_done, completed_at, created_at)
+values (
+  '6b000000-0000-0000-0000-000000000001',
+  '62000000-0000-0000-0000-000000000001',
+  'Tarefa concluída há muito tempo',
+  true,
+  now() - interval '40 days',
+  now() - interval '60 days'
+);
+
+insert into public.tasks (id, family_id, title)
+values
+  (
+    '6b000000-0000-0000-0000-000000000002',
+    '62000000-0000-0000-0000-000000000001',
+    'Tarefa concluída esta semana'
+  ),
+  (
+    '6b000000-0000-0000-0000-000000000003',
+    '62000000-0000-0000-0000-000000000001',
+    'Tarefa reaberta'
+  );
+
+insert into public.tasks (id, family_id, title, recurrence_rule, due_at)
+values (
+  '6b000000-0000-0000-0000-000000000004',
+  '62000000-0000-0000-0000-000000000001',
+  'Regar as plantas',
+  'weekly',
+  now() + interval '1 day'
+);
+
+update public.tasks
+set is_done = true
+where id in (
+  '6b000000-0000-0000-0000-000000000002',
+  '6b000000-0000-0000-0000-000000000003'
+);
+
+select ok(
+  (
+    select completed_at is not null
+    from public.tasks
+    where id = '6b000000-0000-0000-0000-000000000003'
+  ),
+  'completing a task stamps the moment it became done'
+);
+
+update public.tasks
+set is_done = false
+where id = '6b000000-0000-0000-0000-000000000003';
+
+select is(
+  (
+    select completed_at
+    from public.tasks
+    where id = '6b000000-0000-0000-0000-000000000003'
+  ),
+  null::timestamptz,
+  'reopening a task clears the completion time instead of leaving it stamped'
+);
+
+update public.tasks
+set due_at = due_at + interval '7 days'
+where id = '6b000000-0000-0000-0000-000000000004';
+
+select is(
+  (
+    select completed_at
+    from public.tasks
+    where id = '6b000000-0000-0000-0000-000000000004'
+  ),
+  null::timestamptz,
+  'rolling a recurring task forward is not a completion'
+);
+
+select set_config(
+  'test.tasks_before_retention',
+  (
+    select count(*)::text
+    from public.tasks
+    where family_id = '62000000-0000-0000-0000-000000000001'
+  ),
+  true
+);
+
 insert into public.chat_messages (
   id,
   family_id,
@@ -742,6 +828,71 @@ select is(
   (select count(*)::integer from public.household_insights where id = '6a000000-0000-0000-0000-000000000001'),
   0,
   'insights older than 90 days are deleted'
+);
+
+select ok(
+  (
+    select archived_at is not null
+    from public.tasks
+    where id = '6b000000-0000-0000-0000-000000000001'
+  ),
+  'retention archives a task completed more than 30 days ago'
+);
+
+select is(
+  (
+    select archived_at
+    from public.tasks
+    where id = '6b000000-0000-0000-0000-000000000002'
+  ),
+  null::timestamptz,
+  'retention leaves a task completed this week in the active list'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.tasks
+    where family_id = '62000000-0000-0000-0000-000000000001'
+  ),
+  current_setting('test.tasks_before_retention')::integer,
+  'retention never deletes household task history'
+);
+
+select is(
+  (
+    select title
+      || ':' || is_done::text
+      || ':' || (completed_at < now() - interval '30 days')::text
+    from public.tasks
+    where id = '6b000000-0000-0000-0000-000000000001'
+  ),
+  'Tarefa concluída há muito tempo:true:true',
+  'an archived task keeps its title, its done state and its completion time'
+);
+
+update public.tasks
+set is_done = false
+where id = '6b000000-0000-0000-0000-000000000001';
+
+select is(
+  (
+    select coalesce(archived_at::text, 'active') || ':'
+      || coalesce(completed_at::text, 'never')
+    from public.tasks
+    where id = '6b000000-0000-0000-0000-000000000001'
+  ),
+  'active:never',
+  'reopening an archived task returns it to the household instead of hiding it'
+);
+
+select is(
+  (
+    private.nina_weekly_metrics('62000000-0000-0000-0000-000000000001')
+      ->> 'tasks_completed'
+  )::integer,
+  1,
+  'weekly metrics count a completion by when it happened, not by the last edit to the row'
 );
 
 set local role authenticated;

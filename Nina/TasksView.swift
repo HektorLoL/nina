@@ -197,7 +197,7 @@ struct TasksView: View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let allTasks = store.tasks(in: sectionID)
             let open = visibleOpenTasks(in: sectionID, relativeTo: context.date)
-            let completed = allTasks.filter(\.isDone)
+            let completed = store.completedTasks(in: sectionID)
 
             VStack(alignment: .leading, spacing: 12) {
                 SectionTitle(title: section.title, subtitle: section.subtitle)
@@ -244,16 +244,25 @@ struct TasksView: View {
                     isShowingCompleted.toggle()
                 }
             } label: {
-                HStack(spacing: 8) {
+                HStack(alignment: .top, spacing: 8) {
                     Image(systemName: isShowingCompleted ? "chevron.down" : "chevron.right")
                         .font(.caption.weight(.black))
-                    Text(
-                        completed.count == 1
-                            ? "1 tarefa concluída"
-                            : "\(completed.count) tarefas concluídas"
-                    )
-                    .font(.subheadline.weight(.black))
-                    Spacer()
+                        .padding(.top, 3)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(
+                            completed.count == 1
+                                ? "1 tarefa concluída"
+                                : "\(completed.count) tarefas concluídas"
+                        )
+                        .font(.subheadline.weight(.black))
+
+                        Text(CompletedTaskRetention.disclosureNote)
+                            .font(.caption)
+                            .multilineTextAlignment(.leading)
+                    }
+
+                    Spacer(minLength: 0)
                 }
                 .foregroundStyle(NinaTheme.muted)
                 .padding(.vertical, 4)

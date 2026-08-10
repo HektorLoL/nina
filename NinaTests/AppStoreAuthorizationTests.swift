@@ -748,6 +748,102 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testAnArchivedTaskNeverComesBackOnTheNextRefresh() async {
+        let user = makeUser()
+        let openTaskID = UUID()
+        let archivedTaskID = UUID()
+        let initialState = makeRemoteState(
+            tasks: [
+                TaskItem(
+                    id: openTaskID,
+                    title: "Pagar o boleto",
+                    subtitle: "",
+                    owner: "Casa",
+                    dueLabel: "Hoje",
+                    category: .home,
+                    isDone: false,
+                    createdBy: "Manual"
+                ),
+                TaskItem(
+                    id: archivedTaskID,
+                    title: "Trocar o filtro",
+                    subtitle: "",
+                    owner: "Casa",
+                    dueLabel: "Sem data",
+                    category: .home,
+                    isDone: true,
+                    completedAt: Date(timeIntervalSinceNow: -40 * 24 * 60 * 60),
+                    createdBy: "Manual"
+                )
+            ]
+        )
+        let refreshedState = makeRemoteState(
+            tasks: [
+                TaskItem(
+                    id: openTaskID,
+                    title: "Pagar o boleto",
+                    subtitle: "",
+                    owner: "Casa",
+                    dueLabel: "Hoje",
+                    category: .home,
+                    isDone: false,
+                    createdBy: "Manual"
+                )
+            ]
+        )
+        let backend = ControlledRefreshHomeBackend(initialState: initialState)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        XCTAssertEqual(store.tasks.count, 2)
+
+        let refreshTask = Task {
+            await store.refreshHomeFromRemote(for: user)
+        }
+        await backend.waitUntilRefreshStarted()
+        await backend.completeRefresh(with: refreshedState)
+        await refreshTask.value
+
+        XCTAssertEqual(store.tasks.map(\.id), [openTaskID])
+        XCTAssertTrue(store.completedTasks.isEmpty)
+        XCTAssertTrue(store.completedTasks(in: TaskSectionDefaults.houseTasksID).isEmpty)
+    }
+
+    @MainActor
+    func testTheOldestVisibleCompletionSitsAtTheBottomOfTheCompletedList() async {
+        let user = makeUser()
+        let oldestID = UUID()
+        let newestID = UUID()
+        let justCompletedID = UUID()
+        let state = makeRemoteState(
+            tasks: [
+                completedTask(
+                    id: oldestID,
+                    title: "Levar o cachorro ao veterinário",
+                    completedAt: Date(timeIntervalSinceNow: -28 * 24 * 60 * 60)
+                ),
+                completedTask(
+                    id: justCompletedID,
+                    title: "Comprar o gás",
+                    completedAt: nil
+                ),
+                completedTask(
+                    id: newestID,
+                    title: "Pagar a escola",
+                    completedAt: Date(timeIntervalSinceNow: -2 * 24 * 60 * 60)
+                )
+            ]
+        )
+        let backend = ControlledRefreshHomeBackend(initialState: state)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let completed = store.completedTasks(in: TaskSectionDefaults.houseTasksID)
+
+        XCTAssertEqual(completed.map(\.id), [justCompletedID, newestID, oldestID])
+    }
+
+    @MainActor
     func testRealtimeEventReloadsSharedActivity() async {
         let user = makeUser()
         let taskID = UUID()
@@ -1894,6 +1990,20 @@ final class AppStoreAuthorizationTests: XCTestCase {
             detail: "Detail",
             actionTitle: "Confirm",
             payload: NinaProposalPayload(title: "Payload", detail: "Detail")
+        )
+    }
+
+    private func completedTask(id: UUID, title: String, completedAt: Date?) -> TaskItem {
+        TaskItem(
+            id: id,
+            title: title,
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Sem data",
+            category: .home,
+            isDone: true,
+            completedAt: completedAt,
+            createdBy: "Manual"
         )
     }
 

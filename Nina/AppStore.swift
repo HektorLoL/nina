@@ -333,7 +333,16 @@ final class AppStore {
     }
 
     func completedTasks(in sectionID: String) -> [TaskItem] {
-        tasks(in: sectionID).filter(\.isDone)
+        tasks(in: sectionID)
+            .filter(\.isDone)
+            .sorted { left, right in
+                let leftCompletion = left.completedAt ?? .distantFuture
+                let rightCompletion = right.completedAt ?? .distantFuture
+                guard leftCompletion == rightCompletion else {
+                    return leftCompletion > rightCompletion
+                }
+                return left.id.uuidString < right.id.uuidString
+            }
     }
 
     func taskCounts(in sectionID: String) -> (open: Int, completed: Int) {
