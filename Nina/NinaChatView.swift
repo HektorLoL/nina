@@ -1053,16 +1053,20 @@ private struct NinaProposalCard: View {
                 )
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(proposal.title)
+                    Text(confirmationPayload.title)
                         .font(.subheadline.weight(.black))
                         .foregroundStyle(NinaTheme.ink)
 
-                    Text(proposal.detail)
-                        .font(.caption)
-                        .foregroundStyle(NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if !confirmationPayload.detail.isEmpty {
+                        Text(confirmationPayload.detail)
+                            .font(.caption)
+                            .foregroundStyle(NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
+
+            confirmationSummary
 
             if isEditing && proposal.state == .pending {
                 VStack(spacing: 8) {
@@ -1100,6 +1104,79 @@ private struct NinaProposalCard: View {
         )
         .disabled(isResolving)
         .opacity(isResolving ? 0.65 : 1)
+    }
+
+    private var confirmationPayload: NinaProposalPayload {
+        proposal.confirmationPayload(
+            title: draftTitle,
+            detail: draftDetail,
+            owner: draftOwner,
+            dueLabel: draftDueLabel,
+            amount: draftAmount
+        )
+    }
+
+    @ViewBuilder
+    private var confirmationSummary: some View {
+        if proposal.kind != .memory {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    summaryChips
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    summaryChips
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var summaryChips: some View {
+        summaryChip(
+            confirmationPayload.owner,
+            systemName: "person.fill",
+            accessibilityLabel: "Responsável \(confirmationPayload.owner)"
+        )
+
+        summaryChip(
+            scheduleSummary,
+            systemName: confirmationPayload.dueAt == nil ? "leaf.fill" : "clock.fill",
+            accessibilityLabel: confirmationPayload.dueAt == nil
+                ? "\(confirmationPayload.dueLabel). Nada marcado, plante depois."
+                : "Quando \(confirmationPayload.dueLabel)"
+        )
+
+        if proposal.kind == .shopping, !confirmationPayload.amount.isEmpty {
+            summaryChip(
+                confirmationPayload.amount,
+                systemName: "cart.fill",
+                accessibilityLabel: "Quantidade \(confirmationPayload.amount)"
+            )
+        }
+    }
+
+    private var scheduleSummary: String {
+        guard confirmationPayload.dueAt != nil else {
+            return "\(confirmationPayload.dueLabel) · plante depois"
+        }
+        return confirmationPayload.dueLabel
+    }
+
+    private func summaryChip(
+        _ title: String,
+        systemName: String,
+        accessibilityLabel: String
+    ) -> some View {
+        Label(title, systemImage: systemName)
+            .font(.caption2.weight(.black))
+            .foregroundStyle(proposal.payload.category.tone.color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(proposal.payload.category.tone.softColor, in: Capsule())
+            .accessibilityLabel(accessibilityLabel)
     }
 
     @ViewBuilder
@@ -1202,13 +1279,7 @@ private struct NinaProposalCard: View {
         memoryVisibility: NinaMemoryVisibility? = nil
     ) {
         isResolving = true
-        let payload = proposal.payload.edited(
-            title: draftTitle,
-            detail: draftDetail,
-            owner: draftOwner,
-            dueLabel: draftDueLabel,
-            amount: draftAmount
-        )
+        let payload = confirmationPayload
 
         Task {
             _ = await store.resolveProposal(

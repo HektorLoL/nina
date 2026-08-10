@@ -1105,6 +1105,49 @@ struct NinaProposal: Identifiable, Codable, Hashable {
             forKey: .allowedMemoryVisibilities
         ) ?? []
     }
+
+    var confirmationPayload: NinaProposalPayload {
+        confirmationPayload(
+            title: payload.title,
+            detail: payload.detail,
+            owner: payload.owner,
+            dueLabel: payload.dueLabel,
+            amount: payload.amount
+        )
+    }
+
+    // The card renders this payload and confirming sends this same payload, so the wording that was
+    // approved is the wording that gets created; the blank fallbacks mirror resolve_nina_proposal.
+    func confirmationPayload(
+        title: String,
+        detail: String,
+        owner: String,
+        dueLabel: String,
+        amount: String,
+        now: Date = .now
+    ) -> NinaProposalPayload {
+        var resolved = payload.edited(
+            title: title,
+            detail: detail,
+            owner: owner,
+            dueLabel: dueLabel,
+            amount: amount,
+            now: now
+        )
+        if resolved.title.isEmpty {
+            resolved.title = self.title
+        }
+        if resolved.detail.isEmpty {
+            resolved.detail = self.detail
+        }
+        if resolved.owner.isEmpty {
+            resolved.owner = "Casa"
+        }
+        if resolved.dueLabel.isEmpty {
+            resolved.dueLabel = "Sem data"
+        }
+        return resolved
+    }
 }
 
 struct NinaMemory: Identifiable, Codable, Hashable {

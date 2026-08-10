@@ -2000,6 +2000,176 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testConfirmingAProposalCreatesTheWordingTheCardShowedAndNotNinasFraming() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let proposal = NinaProposal(
+            kind: .task,
+            title: "Anotei o boleto da luz",
+            detail: "Chegou hoje no seu nome",
+            actionTitle: "Criar tarefa",
+            payload: NinaProposalPayload(
+                title: "Pagar o boleto da Enel",
+                detail: "Vence sexta",
+                owner: "Heitor",
+                dueLabel: "sexta, 09:00",
+                dueAt: "2026-08-14T12:00:00Z"
+            )
+        )
+        store.messages = [
+            ChatMessage(sender: .nina, text: "Confirme", timestamp: .now, proposals: [proposal])
+        ]
+
+        let shown = proposal.confirmationPayload
+        let didAccept = await store.resolveProposal(
+            proposal,
+            decision: .accept,
+            editedPayload: shown
+        )
+        let confirmed = await backend.confirmedPayload(for: proposal.id)
+
+        XCTAssertTrue(didAccept)
+        XCTAssertEqual(shown.title, "Pagar o boleto da Enel")
+        XCTAssertEqual(confirmed?.title, shown.title)
+        XCTAssertEqual(confirmed?.detail, shown.detail)
+        XCTAssertNotEqual(confirmed?.title, proposal.title)
+    }
+
+    @MainActor
+    func testAProposalWithoutPayloadWordingConfirmsTheHeadlineTheCardShowed() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let proposal = NinaProposal(
+            kind: .task,
+            title: "Levar o Thor ao veterinário",
+            detail: "A vacina anual venceu",
+            actionTitle: "Criar tarefa",
+            payload: NinaProposalPayload(title: "   ", detail: "")
+        )
+
+        let shown = proposal.confirmationPayload
+        _ = await store.resolveProposal(proposal, decision: .accept, editedPayload: shown)
+        let confirmed = await backend.confirmedPayload(for: proposal.id)
+
+        XCTAssertEqual(shown.title, "Levar o Thor ao veterinário")
+        XCTAssertEqual(shown.detail, "A vacina anual venceu")
+        XCTAssertEqual(confirmed?.title, shown.title)
+        XCTAssertEqual(confirmed?.detail, shown.detail)
+    }
+
+    @MainActor
+    func testAProposalWithoutADateConfirmsUndatedWithTheHouseCarryingIt() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let proposal = NinaProposal(
+            kind: .task,
+            title: "Trocar a lâmpada da varanda",
+            detail: "Sem pressa",
+            actionTitle: "Criar tarefa",
+            payload: NinaProposalPayload(
+                title: "Trocar a lâmpada da varanda",
+                detail: "Sem pressa",
+                owner: "  ",
+                dueLabel: "",
+                dueAt: nil
+            )
+        )
+
+        let shown = proposal.confirmationPayload
+        _ = await store.resolveProposal(proposal, decision: .accept, editedPayload: shown)
+        let confirmed = await backend.confirmedPayload(for: proposal.id)
+
+        XCTAssertEqual(shown.owner, "Casa")
+        XCTAssertEqual(shown.dueLabel, "Sem data")
+        XCTAssertNil(shown.dueAt)
+        XCTAssertEqual(confirmed?.owner, "Casa")
+        XCTAssertEqual(confirmed?.dueLabel, "Sem data")
+        XCTAssertNil(confirmed?.dueAt)
+    }
+
+    @MainActor
+    func testCorrectingAProposalConfirmsTheCorrectedOwnerQuantityAndDate() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let now = Date(timeIntervalSince1970: 1_786_000_000)
+        let proposal = NinaProposal(
+            kind: .shopping,
+            title: "Arroz na lista",
+            detail: "Acabou ontem",
+            actionTitle: "Adicionar à lista",
+            payload: NinaProposalPayload(
+                title: "Arroz",
+                detail: "Acabou ontem",
+                owner: "Heitor",
+                dueLabel: "amanhã",
+                dueAt: "2026-08-11T12:00:00Z",
+                amount: "1 pacote"
+            )
+        )
+
+        let shown = proposal.confirmationPayload(
+            title: "Arroz integral",
+            detail: proposal.payload.detail,
+            owner: "Mirna",
+            dueLabel: "hoje",
+            amount: "2 pacotes",
+            now: now
+        )
+        _ = await store.resolveProposal(proposal, decision: .accept, editedPayload: shown)
+        let confirmed = await backend.confirmedPayload(for: proposal.id)
+        let expectedDueAt = AppStore.inferredDueAt(from: "hoje", now: now)
+            .map(ISO8601DateFormatter().string(from:))
+
+        XCTAssertEqual(confirmed?.title, "Arroz integral")
+        XCTAssertEqual(confirmed?.owner, "Mirna")
+        XCTAssertEqual(confirmed?.amount, "2 pacotes")
+        XCTAssertEqual(confirmed?.dueLabel, "hoje")
+        XCTAssertEqual(confirmed?.dueAt, expectedDueAt)
+    }
+
+    @MainActor
+    func testConfirmingAMemoryCarriesOnlyTheVisibilityTheUserTapped() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let proposal = NinaProposal(
+            kind: .memory,
+            title: "Guardar uma preferência",
+            detail: "Mirna prefere mercado de manhã",
+            actionTitle: "Guardar",
+            payload: NinaProposalPayload(
+                title: "Compras de manhã",
+                detail: "Mirna prefere ir ao mercado antes das 10h"
+            ),
+            allowedMemoryVisibilities: [.privateMemory, .shared]
+        )
+
+        let shown = proposal.confirmationPayload
+        _ = await store.resolveProposal(
+            proposal,
+            decision: .accept,
+            editedPayload: shown,
+            memoryVisibility: .privateMemory
+        )
+        let confirmed = await backend.confirmedPayload(for: proposal.id)
+        let visibility = await backend.confirmedMemoryVisibility(for: proposal.id)
+
+        XCTAssertNil(shown.visibility)
+        XCTAssertNil(confirmed?.visibility)
+        XCTAssertEqual(visibility, .privateMemory)
+        XCTAssertEqual(confirmed?.title, "Compras de manhã")
+    }
+
+    @MainActor
     func testDeletePrivateHistoryUsesBackendAndClearsLocalThread() async {
         let user = makeUser()
         let backend = RecordingHomeBackend(state: makeRemoteState())
@@ -2576,6 +2746,8 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
     private var realtimeSubscribed = false
     private var realtimeSubscribedContinuation: CheckedContinuation<Void, Never>?
     private var consentWriteFails = false
+    private var confirmedProposalPayloads: [UUID: NinaProposalPayload] = [:]
+    private var confirmedMemoryVisibilities: [UUID: NinaMemoryVisibility] = [:]
 
     init(state: RemoteHomeState, conflictingTask: TaskItem? = nil) {
         self.state = state
@@ -2584,6 +2756,14 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
 
     func recordedMutations() -> [RecordedHomeMutation] {
         mutations
+    }
+
+    func confirmedPayload(for proposalID: UUID) -> NinaProposalPayload? {
+        confirmedProposalPayloads[proposalID]
+    }
+
+    func confirmedMemoryVisibility(for proposalID: UUID) -> NinaMemoryVisibility? {
+        confirmedMemoryVisibilities[proposalID]
     }
 
     func setConsentWriteFails(_ shouldFail: Bool) {
@@ -2688,6 +2868,8 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         memoryVisibility: NinaMemoryVisibility?
     ) async throws -> NinaProposalResolution {
         mutations.append(.resolveNinaProposal(proposalID, decision))
+        confirmedProposalPayloads[proposalID] = editedPayload
+        confirmedMemoryVisibilities[proposalID] = memoryVisibility
         return NinaProposalResolution(
             id: proposalID,
             state: decision == .accept ? .accepted : .rejected

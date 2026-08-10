@@ -37,6 +37,23 @@ been closed; everything else in this document is still open.
   that Nina does not receive the reason. `member_management.test.sql` 47 → 72,
   `rls_policies.test.sql` 45 → 46 (26 tables).
 
+- **A proposal card hid what confirming it would create — and created something else.** The card
+  rendered `proposal.title` while the task was built from `payload.title`, two different
+  model-generated strings, so you could approve one wording and get another; responsável, quando
+  and valor were visible only behind Editar, so tapping "Criar tarefa" assigned a named housemate
+  at a specific hour you never saw. For a product whose thesis is removing the interpersonal cost
+  of assigning work, silently assigning a person is the sharpest possible failure, and a
+  confirmation of something you cannot see is decorative. Rather than picking which string to
+  render, the card now renders *the payload it sends*: `confirmationPayload` applies client-side
+  exactly the coalesce `resolve_nina_proposal` applies server-side, so divergence is impossible by
+  construction rather than by two sites agreeing. An always-visible chip row carries responsável,
+  quando and — for shopping — quantidade, tinted from the payload's own category tone and reading
+  from the live edited payload, so a correction updates the claim before you confirm. **Still
+  open:** an undated proposal says "plante depois" but cannot say "Semente", because
+  `resolve_nina_proposal` never sets `task_kind` — an accepted proposal is always a plain task,
+  so the word would promise a row the pipeline cannot create. That is the seed-proposal gap
+  below, and it needs a migration.
+
 - **Reminders had no lead time and no second nudge.** "Buscar o Pedro na escola" at 17:30
   notified at 17:30, when the user was already late leaving, and a missed banner produced no
   further signal ever. `tasks.remind_offset_minutes` is now a per-task column — not a device
