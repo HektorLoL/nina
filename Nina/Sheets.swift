@@ -1856,6 +1856,7 @@ struct TaskEditorSheet: View {
     @State private var didLoad = false
     @State private var loadedTaskVersion: Int?
     @State private var isShowingDeleteConfirmation = false
+    @FocusState private var isTitleFocused: Bool
 
     private var isEditing: Bool {
         switch mode {
@@ -1951,6 +1952,11 @@ struct TaskEditorSheet: View {
         .task {
             await store.refreshNotificationAuthorizationStatus()
         }
+        .task {
+            guard case .add = mode else { return }
+            await Task.yield()
+            isTitleFocused = true
+        }
         .alert("Apagar esta tarefa?", isPresented: $isShowingDeleteConfirmation) {
             Button("Cancelar", role: .cancel) {}
             Button("Apagar", role: .destructive) {
@@ -1963,6 +1969,20 @@ struct TaskEditorSheet: View {
 
     private var editorFields: some View {
         VStack(alignment: .leading, spacing: 14) {
+            SoftCard {
+                TextField("O que precisa ser feito?", text: $title, axis: .vertical)
+                    .lineLimit(1...3)
+                    .font(.headline)
+                    .textFieldStyle(.plain)
+                    .focused($isTitleFocused)
+
+                Divider()
+
+                TextField("Detalhe opcional", text: $subtitle, axis: .vertical)
+                    .lineLimit(1...3)
+                    .textFieldStyle(.plain)
+            }
+
             SoftCard {
                 VStack(alignment: .leading, spacing: 10) {
                     Label("Tipo", systemImage: kind.symbolName)
@@ -1982,19 +2002,6 @@ struct TaskEditorSheet: View {
                         .foregroundStyle(NinaTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-
-            SoftCard {
-                TextField("O que precisa ser feito?", text: $title, axis: .vertical)
-                    .lineLimit(1...3)
-                    .font(.headline)
-                    .textFieldStyle(.plain)
-
-                Divider()
-
-                TextField("Detalhe opcional", text: $subtitle, axis: .vertical)
-                    .lineLimit(1...3)
-                    .textFieldStyle(.plain)
             }
 
             SoftCard {
@@ -2729,6 +2736,11 @@ struct ShoppingEditorSheet: View {
             }
         }
         .onAppear(perform: loadIfNeeded)
+        .task {
+            guard case .add = mode else { return }
+            await Task.yield()
+            isTitleFocused = true
+        }
     }
 
     private func loadIfNeeded() {

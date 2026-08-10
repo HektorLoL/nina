@@ -966,6 +966,34 @@ struct NinaProposalPayload: Codable, Hashable {
         TaskCategory.allCases.first(where: { $0.id == categoryID })
             ?? .custom(id: categoryID, title: categoryID.capitalized, tone: .lavender)
     }
+
+    private static let dueAtFormatter = ISO8601DateFormatter()
+
+    // Confirming a corrected label has to move the scheduled date with it, and a correction
+    // Nina cannot parse lands undated rather than keeping the date she originally proposed.
+    func edited(
+        title: String,
+        detail: String,
+        owner: String,
+        dueLabel: String,
+        amount: String,
+        now: Date = .now
+    ) -> NinaProposalPayload {
+        var result = self
+        result.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.owner = owner.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.amount = amount.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let trimmedDueLabel = dueLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedDueLabel != self.dueLabel {
+            result.dueAt = AppStore.inferredDueAt(from: trimmedDueLabel, now: now)
+                .map(Self.dueAtFormatter.string(from:))
+        }
+        result.dueLabel = trimmedDueLabel
+
+        return result
+    }
 }
 
 struct NinaProposal: Identifiable, Codable, Hashable {

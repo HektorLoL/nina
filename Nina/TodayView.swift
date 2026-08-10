@@ -10,10 +10,10 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 greetingCard
-                premiumInsightCard
                 overloadCard
                 priorityTasksSection
                 seedsSection
+                premiumInsightCard
             }
             .padding(18)
             .padding(.bottom, 104)
@@ -164,13 +164,18 @@ struct TodayView: View {
                             .foregroundStyle(NinaTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Text("Um retrato para conversar, não para cobrar.")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(NinaTheme.muted.opacity(0.8))
+                        if snapshot.isConclusive {
+                            Text("Um retrato para conversar, não para cobrar.")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(NinaTheme.muted.opacity(0.8))
+                        }
                     }
                 }
 
-                WorkloadBars(snapshot: snapshot)
+                // A split the snapshot refused to conclude must not be drawn anyway.
+                if snapshot.isConclusive {
+                    WorkloadBars(snapshot: snapshot)
+                }
             }
         }
     }

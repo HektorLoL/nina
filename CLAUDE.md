@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-08-08
+Last updated: 2026-08-10
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -154,6 +154,14 @@ product regression, not a refactor.
 
 - **Nina never mutates household data.** Four read-only tools; every durable
   change is a proposal resolved by `resolve_nina_proposal`.
+- **Confirming a corrected proposal must bind the correction.** Editing a
+  proposal's fields before accepting goes through `NinaProposalPayload.edited(…)`,
+  which recomputes `dueAt` from the edited `dueLabel` whenever the label changed
+  and sets it to `nil` when `inferredDueAt` cannot parse the result. A corrected
+  reading that produced an uncorrected `due_at` would make the confirmation
+  ritual — the product's whole trust proposition — decorative. Locked by
+  `RemoteDecodingTests.testCorrectingWhenAProposalHappensMovesTheScheduledDateAndNotJustTheLabel`
+  and `…testAnUnparseableCorrectionLandsUndatedRatherThanKeepingTheModelsDate`.
 - **Adults only**, checked in the Edge Function *and* again inside
   `begin_nina_chat_run` so a direct RPC call cannot bypass it.
 - **AI consent is a server-side record, not a device flag.** `nina_ai_consents`
@@ -185,6 +193,13 @@ product regression, not a refactor.
 - **Insight prompt constraint:** *"Não atribua culpa, intenção, saúde mental ou
   valor moral."* You cannot show a couple a fairness chart without it becoming a
   weapon; the prompt is where that is prevented.
+- **A portrait the snapshot refused to conclude is never drawn.** `HouseholdWorkload`
+  returns an inconclusive snapshot below 6 assigned open tasks or 2 carriers, but
+  that snapshot still carries a fully populated `entries` array — so both render
+  sites (`TodayView.overloadCard`, `HouseView.workloadCard`) gate `WorkloadBars`
+  and the "não para cobrar" caption on `snapshot.isConclusive`, not on
+  `hasAnyLoad`. Rendering bars beside "Ainda sem retrato da casa" reads as the
+  app accusing someone and then denying it.
 
 ### Secrets & data protection
 
@@ -304,6 +319,11 @@ sizes (34pt, 31pt).
 - Disabled states are expressed twice: `.disabled(cond)` **and** `.opacity(…)`.
 - Rows: `IconBubble(40)` + 12pt + title/subtitle VStack + trailing, in
   `.padding(14)`; matching divider is `Divider().padding(.leading, 66)`.
+- Capture sheets put the **title field first and focus it on appear** in `.add`
+  mode (`@FocusState` + `.task { await Task.yield(); isTitleFocused = true }` —
+  the yield is required or the assignment lands before the field exists).
+  Classification (Tipo, Categoria, Prioridade) always comes *after* the title:
+  the user names the thing before the app asks what kind of thing it is.
 
 **Haptics are semantic, not decorative** (`Nina/Haptics.swift`):
 `selection()` = navigate/toggle/close/un-complete · `success()` = completion or
@@ -616,14 +636,28 @@ error** (Debug falls back to mock, Release goes `.unavailable`).
 only remnant is `LegacyReminderItem` for decoding old local snapshots — removing
 it breaks caches written by older builds.
 
-**Demo data is the empty state.** `AppStore.init` seeds every collection from
-`PreviewData` ("Casa Castello", 7 demo tasks), and `resetActivityState()` is
-`apply(.preview)`. Any "is the home empty?" check based on `tasks.isEmpty` is
-wrong. `apply(_:)` also substitutes `PreviewData.taskSections` when the snapshot's
-sections are empty.
+**Demo data is the empty state — locally, not remotely.** `AppStore.init` seeds
+every collection from `PreviewData` ("Casa Castello", 7 demo tasks), and
+`resetActivityState()` is `apply(.preview)`, so any "is the home empty?" check
+based on `tasks.isEmpty` is wrong in mock/DEBUG. A real remote household does
+*not* get demo data: `loadRemoteState` always assigns a snapshot, and `apply(_:)`
+only calls `resetActivityState()` when `state.snapshot` is nil. The one surviving
+substitution on the remote path is `PreviewData.taskSections` — a single
+"Tarefas da casa" section — when the snapshot's sections are empty. So zero
+states *are* reachable for real users and must be designed.
 
 **`toggleTask` on a recurring task does not complete it** — it rolls `dueAt`
 forward. Only `.none`-recurrence tasks flip `isDone`.
+
+**There is no task detail screen, and two detail views ship unreachable.**
+`RouterPath.navigate(to:)` has **zero call sites**, so `Route.task` and
+`Route.member` — and with them `TaskDetailCard` and `MemberRouteDetail` — are
+dead. `MemberDetailSheet` is defined and never constructed;
+`SheetDestination.member(id)` routes to `MemberEditorSheet(mode: .edit(id))`, so
+every member tap lands in an edit form even for a viewer who cannot edit. Two
+consequences: `task.createdBy` is captured on every task and rendered nowhere
+reachable, and tapping a task opens the editor sheet rather than a detail view.
+Do not "fix" a bug by editing `TaskDetailCard` — nobody can see it.
 
 **`enqueueRemoteMutation` silently no-ops** when there is no active user, no
 backend, a DEBUG account, or no active home. The mutation persists locally and
@@ -639,10 +673,14 @@ does. Household, profile, photo, and consent files persist on disk after
 
 **Notification scheduling is capped at 60 requests globally**, sorted by soonest
 delivery, with recurring tasks expanded 12 occurrences deep. A busy home silently
-loses the tail. Quiet hours **shift** rather than suppress, and
-`UNCalendarNotificationTrigger` carries no timezone — travel silently reschedules
-everything to the same wall-clock time. Notifications carry no `userInfo`,
-category, or actions, and there is no `UNUserNotificationCenterDelegate`.
+loses the tail. Quiet hours **silence** rather than move: `content.sound = nil`
+and `interruptionLevel = .passive`, delivery time unchanged, because the app must
+never show one time and deliver another. `UNCalendarNotificationTrigger` carries
+no timezone — travel silently reschedules everything to the same wall-clock time.
+Notifications carry no `userInfo`, category, or actions, and there is no
+`UNUserNotificationCenterDelegate`. The delivered body is
+`"\(task.owner) - \(task.dueLabel)"` — a field dump, not Nina's voice, and
+`task.subtitle` reaches the lock screen verbatim.
 
 **`dueLabel` and `dueAt` can drift.** `inferredDueAt(from:)` parses only a narrow
 set of pt-BR forms; anything else yields `nil` and the task shows a due label but
@@ -700,7 +738,7 @@ ref. **Never run it against production.**
 
 ## 13. Known gaps and launch blockers
 
-Honest state as of 2026-08-08. These are facts about the project, not bugs to
+Honest state as of 2026-08-10. These are facts about the project, not bugs to
 fix unprompted.
 
 - **The flagship AI feature ships off.** `NINA_AI_V2_ENABLED = NO` is the default
@@ -710,12 +748,19 @@ fix unprompted.
   Nina still calls OpenAI and still costs money, but every proposal is discarded
   before it reaches the UI. She can talk; she cannot organize. This contradicts
   the landing page's entire three-step promise.
-- **Premium gates nothing.** `entitlement` is read only in `Sheets.swift`,
-  `TodayView.swift`, and `Components.swift` — for copy and badges. All five
-  marketed benefits (`R$ 24,90/mês`) are either free for everyone or
-  unimplemented. The weekly digest runs for every family with no entitlement
-  predicate. All quotas are universal, not free-tier. Shipping as-is is an App
-  Store review risk. The yearly product id exists with no price string anywhere.
+- **Premium gates three resources server-side; the client never routes you to the
+  paywall.** Since the 2026-08-09 migrations each marketed benefit maps to a gate
+  enforced where the resource is spent: attachments raise
+  `nina_attachments_require_premium` inside `begin_nina_chat_run`, the weekly
+  digest is behind `private.family_has_premium` in `get_nina_weekly_candidates`,
+  and the chat quota splits 30/hour for a covered household versus 10/day
+  otherwise. Two undeliverable benefits were deleted rather than left on the
+  sheet. What is still missing is client-side: a denial becomes a plain Nina chat
+  line (`AppStore.swift` maps `NinaEngineError` to `reply`) with no button to
+  `SheetDestination.premium`, and only the attachment gate has a pre-emptive
+  affordance (the gold "Documentos" chip). The paywall itself also names none of
+  the three ceilings, offers no monthly/annual comparison, and renders "Restaurar
+  compras" as the only full-width button while purchase is a small pill.
 - **Legal identity is deliberately blank.** `PUBLIC_NINA_LEGAL_ENTITY_NAME`,
   `…DOCUMENT`, `PUBLIC_NINA_DPO_NAME` are all `replace_with_…`. The privacy page
   self-declares `data-legal-status="incomplete"` and the online preflight fails

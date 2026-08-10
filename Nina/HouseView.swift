@@ -506,13 +506,17 @@ private extension HouseView {
                             .foregroundStyle(NinaTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Text("Um retrato para conversar, não para cobrar.")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(NinaTheme.muted.opacity(0.8))
+                        if snapshot.isConclusive {
+                            Text("Um retrato para conversar, não para cobrar.")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(NinaTheme.muted.opacity(0.8))
+                        }
                     }
                 }
 
-                WorkloadBars(snapshot: snapshot)
+                if snapshot.isConclusive {
+                    WorkloadBars(snapshot: snapshot)
+                }
             }
         }
     }

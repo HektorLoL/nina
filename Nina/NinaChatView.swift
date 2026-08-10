@@ -1030,6 +1030,7 @@ private struct NinaProposalCard: View {
     @State private var draftDetail: String
     @State private var draftOwner: String
     @State private var draftDueLabel: String
+    @State private var draftAmount: String
     @State private var isEditing = false
     @State private var isResolving = false
 
@@ -1039,6 +1040,7 @@ private struct NinaProposalCard: View {
         _draftDetail = State(initialValue: proposal.payload.detail)
         _draftOwner = State(initialValue: proposal.payload.owner)
         _draftDueLabel = State(initialValue: proposal.payload.dueLabel)
+        _draftAmount = State(initialValue: proposal.payload.amount)
     }
 
     var body: some View {
@@ -1069,6 +1071,9 @@ private struct NinaProposalCard: View {
                     if proposal.kind != .memory {
                         proposalField("Responsável", text: $draftOwner)
                         proposalField("Quando", text: $draftDueLabel)
+                    }
+                    if proposal.kind == .shopping {
+                        proposalField("Quantidade", text: $draftAmount)
                     }
                 }
             }
@@ -1111,7 +1116,11 @@ private struct NinaProposalCard: View {
                     systemName: "house.fill",
                     visibility: .shared
                 )
-                rejectButton
+
+                HStack(spacing: 12) {
+                    editButton
+                    rejectButton
+                }
             }
         } else {
             HStack(spacing: 8) {
@@ -1127,17 +1136,21 @@ private struct NinaProposalCard: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(isEditing ? "Fechar" : "Editar") {
-                    Haptics.selection()
-                    isEditing.toggle()
-                }
-                .font(.caption.weight(.black))
-                .foregroundStyle(NinaTheme.sky)
-                .buttonStyle(.plain)
+                editButton
 
                 rejectButton
             }
         }
+    }
+
+    private var editButton: some View {
+        Button(isEditing ? "Fechar" : "Editar") {
+            Haptics.selection()
+            isEditing.toggle()
+        }
+        .font(.caption.weight(.black))
+        .foregroundStyle(NinaTheme.sky)
+        .buttonStyle(.plain)
     }
 
     private func proposalField(_ title: String, text: Binding<String>) -> some View {
@@ -1189,11 +1202,13 @@ private struct NinaProposalCard: View {
         memoryVisibility: NinaMemoryVisibility? = nil
     ) {
         isResolving = true
-        var payload = proposal.payload
-        payload.title = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        payload.detail = draftDetail.trimmingCharacters(in: .whitespacesAndNewlines)
-        payload.owner = draftOwner.trimmingCharacters(in: .whitespacesAndNewlines)
-        payload.dueLabel = draftDueLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let payload = proposal.payload.edited(
+            title: draftTitle,
+            detail: draftDetail,
+            owner: draftOwner,
+            dueLabel: draftDueLabel,
+            amount: draftAmount
+        )
 
         Task {
             _ = await store.resolveProposal(

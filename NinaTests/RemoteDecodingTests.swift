@@ -183,4 +183,83 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(payload.confidence, 0.82)
         XCTAssertEqual(payload.deduplicationKey, "vet-thor-2026-08")
     }
+
+    func testCorrectingWhenAProposalHappensMovesTheScheduledDateAndNotJustTheLabel() {
+        let now = Date(timeIntervalSince1970: 1_786_000_000)
+        let payload = NinaProposalPayload(
+            title: "Levar o Thor ao veterinário",
+            detail: "Vacina anual",
+            dueLabel: "amanhã",
+            dueAt: "2026-08-11T12:00:00Z"
+        )
+
+        let edited = payload.edited(
+            title: payload.title,
+            detail: payload.detail,
+            owner: payload.owner,
+            dueLabel: "hoje",
+            amount: "",
+            now: now
+        )
+
+        XCTAssertEqual(edited.dueLabel, "hoje")
+        XCTAssertNotEqual(edited.dueAt, payload.dueAt)
+        let expected = try? XCTUnwrap(AppStore.inferredDueAt(from: "hoje", now: now))
+        XCTAssertEqual(edited.dueAt, expected.map(ISO8601DateFormatter().string(from:)))
+    }
+
+    func testAnUnparseableCorrectionLandsUndatedRatherThanKeepingTheModelsDate() {
+        let payload = NinaProposalPayload(
+            title: "Renovar o seguro",
+            detail: "",
+            dueLabel: "sexta, 09:00",
+            dueAt: "2026-08-14T12:00:00Z"
+        )
+
+        let edited = payload.edited(
+            title: payload.title,
+            detail: payload.detail,
+            owner: payload.owner,
+            dueLabel: "quando der",
+            amount: ""
+        )
+
+        XCTAssertEqual(edited.dueLabel, "quando der")
+        XCTAssertNil(edited.dueAt)
+    }
+
+    func testAnUntouchedLabelKeepsTheDateNinaProposed() {
+        let payload = NinaProposalPayload(
+            title: "Pagar o boleto",
+            detail: "",
+            dueLabel: "sexta, 09:00",
+            dueAt: "2026-08-14T12:00:00Z"
+        )
+
+        let edited = payload.edited(
+            title: "Pagar o boleto da Enel",
+            detail: payload.detail,
+            owner: "Heitor",
+            dueLabel: "  sexta, 09:00  ",
+            amount: ""
+        )
+
+        XCTAssertEqual(edited.title, "Pagar o boleto da Enel")
+        XCTAssertEqual(edited.owner, "Heitor")
+        XCTAssertEqual(edited.dueAt, "2026-08-14T12:00:00Z")
+    }
+
+    func testAnEditedShoppingQuantityReachesThePayloadTrimmed() {
+        let payload = NinaProposalPayload(title: "Arroz", detail: "", amount: "1 pacote")
+
+        let edited = payload.edited(
+            title: payload.title,
+            detail: payload.detail,
+            owner: payload.owner,
+            dueLabel: payload.dueLabel,
+            amount: "  2 pacotes  "
+        )
+
+        XCTAssertEqual(edited.amount, "2 pacotes")
+    }
 }
