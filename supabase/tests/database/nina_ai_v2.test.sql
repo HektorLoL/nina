@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(85);
+select plan(92);
 
 insert into auth.users (
   id,
@@ -1398,6 +1398,96 @@ select ok(
 select ok(
   not has_table_privilege('anon', 'public.nina_ai_consents', 'select'),
   'anonymous clients hold no privilege on AI consent records'
+);
+
+select has_column(
+  'public',
+  'nina_chat_rate_limits',
+  'window_length_seconds',
+  'the chat quota row records the window length that opened it'
+);
+
+-- One adult, two tiers, one row. The earlier quota tests use two different
+-- people, which is exactly why a premium claim resetting a free household
+-- daily window stayed invisible.
+reset role;
+set local request.jwt.claim.sub = '';
+
+insert into auth.users (
+  id,
+  aud,
+  role,
+  email,
+  raw_user_meta_data,
+  created_at,
+  updated_at
+)
+values (
+  '61000000-0000-0000-0000-000000000005',
+  'authenticated',
+  'authenticated',
+  'nina-cross-tier@example.com',
+  '{"full_name":"Cross Tier Adult"}'::jsonb,
+  now(),
+  now()
+);
+
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000005';
+
+do $$
+begin
+  for attempt in 1..10 loop
+    perform public.claim_nina_chat_request(10, 86400);
+  end loop;
+end;
+$$;
+
+select is(
+  (
+    select window_length_seconds
+    from public.nina_chat_rate_limits
+    where user_id = '61000000-0000-0000-0000-000000000005'
+  ),
+  86400,
+  'a free household claim stores the daily length of the window it opened'
+);
+
+select ok(
+  not public.claim_nina_chat_request(10, 86400),
+  'the eleventh free household message of the day is refused'
+);
+
+update public.nina_chat_rate_limits
+set window_started_at = now() - interval '2 hours'
+where user_id = '61000000-0000-0000-0000-000000000005';
+
+select ok(
+  public.claim_nina_chat_request(30, 3600),
+  'the same adult may still speak inside the premium household they belong to'
+);
+
+select is(
+  (
+    select request_count
+    from public.nina_chat_rate_limits
+    where user_id = '61000000-0000-0000-0000-000000000005'
+  ),
+  12,
+  'an hourly premium claim counts inside the open daily window instead of restarting it'
+);
+
+select ok(
+  not public.claim_nina_chat_request(10, 86400),
+  'the free household daily cap survives a trip through a premium household'
+);
+
+update public.nina_chat_rate_limits
+set window_started_at = now() - interval '25 hours'
+where user_id = '61000000-0000-0000-0000-000000000005';
+
+select ok(
+  public.claim_nina_chat_request(10, 86400),
+  'a daily window that genuinely elapsed still opens a fresh allowance'
 );
 
 select * from finish();

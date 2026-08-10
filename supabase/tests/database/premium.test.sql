@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(78);
+select plan(84);
 
 insert into auth.users (
   id,
@@ -997,6 +997,69 @@ select is(
 );
 
 reset role;
+
+-- is_active only ever changes when an App Store notification arrives. If that
+-- URL is unconfigured, mis-pointed or down through Apple retries, the flag
+-- stays true next to an expiry that has already passed.
+update public.premium_subscriptions
+set status = 'active',
+    is_active = true,
+    expires_at = now() - interval '1 day',
+    grace_period_expires_at = null,
+    revoked_at = null
+where original_transaction_id = 'premium-neighbour-original-transaction';
+
+select ok(
+  not private.family_has_premium('82000000-0000-0000-0000-000000000002'),
+  'a subscription still flagged active past its expiry no longer covers the household'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000003';
+
+select is(
+  public.get_current_home_context() -> 'premium' ->> 'is_active',
+  'false',
+  'the household context stops reporting cover the moment the expiry passes'
+);
+
+select is(
+  public.get_current_premium_status() ->> 'is_active',
+  'false',
+  'the payer own view cannot disagree with the household about an outlived flag'
+);
+
+reset role;
+set local request.jwt.claim.sub = '';
+
+update public.premium_subscriptions
+set grace_period_expires_at = now() + interval '3 days'
+where original_transaction_id = 'premium-neighbour-original-transaction';
+
+select ok(
+  private.family_has_premium('82000000-0000-0000-0000-000000000002'),
+  'a household inside the Apple grace period keeps its cover'
+);
+
+update public.premium_subscriptions
+set revoked_at = now() - interval '1 hour'
+where original_transaction_id = 'premium-neighbour-original-transaction';
+
+select ok(
+  not private.family_has_premium('82000000-0000-0000-0000-000000000002'),
+  'a refunded subscription stops covering the household even inside the grace period'
+);
+
+update public.premium_subscriptions
+set revoked_at = null,
+    grace_period_expires_at = null,
+    expires_at = null
+where original_transaction_id = 'premium-neighbour-original-transaction';
+
+select ok(
+  private.family_has_premium('82000000-0000-0000-0000-000000000002'),
+  'a purchase Apple gave no expiry date stays covered until a notification says otherwise'
+);
 
 select * from finish();
 rollback;

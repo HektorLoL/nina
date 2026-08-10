@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(46);
+select plan(48);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -250,6 +250,55 @@ select hasnt_table(
   'public',
   'reminders',
   'reminders are unified into tasks and no separate table remains'
+);
+
+-- Postgres grants execute to PUBLIC on every new function and PUBLIC includes
+-- anon, so naming the known offenders would only ever catch the known ones.
+-- The canary is the whole set instead: any function added to public without a
+-- revoke changes this string and fails the suite. Trigger functions are left
+-- out because Postgres refuses to call them directly, and extension-owned
+-- functions because they are not ours to grant.
+select is(
+  (
+    select coalesce(
+      string_agg(routines.proname, ', ' order by routines.proname),
+      ''
+    )
+    from pg_catalog.pg_proc as routines
+    join pg_catalog.pg_namespace as schemas
+      on schemas.oid = routines.pronamespace
+    where schemas.nspname = 'public'
+      and routines.prorettype <> 'pg_catalog.trigger'::regtype
+      and not exists (
+        select 1
+        from pg_catalog.pg_depend as dependencies
+        where dependencies.classid = 'pg_catalog.pg_proc'::regclass
+          and dependencies.objid = routines.oid
+          and dependencies.deptype = 'e'
+      )
+      and has_function_privilege('anon', routines.oid, 'execute')
+  ),
+  'get_family_invite_preview',
+  'the public invite preview is the only function in public an anonymous client may execute'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from pg_catalog.pg_proc as routines
+    join pg_catalog.pg_namespace as schemas
+      on schemas.oid = routines.pronamespace
+    where schemas.nspname = 'public'
+      and routines.proname in (
+        'is_family_member',
+        'can_manage_family',
+        'is_family_creator',
+        'shares_family_with'
+      )
+      and has_function_privilege('authenticated', routines.oid, 'execute')
+  ),
+  4,
+  'signed-in clients keep execute on the membership predicates every content policy evaluates'
 );
 
 set local role authenticated;
