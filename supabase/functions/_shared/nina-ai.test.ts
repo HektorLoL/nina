@@ -16,6 +16,9 @@ import {
   isStructuredOutput,
   isToolCallBatchAllowed,
   legacySuggestionFromProposals,
+  maxExtractedLabelLength,
+  maxExtractedReadings,
+  maxExtractedValueLength,
   maxInputTokens,
   maxToolCalls,
   maxToolRounds,
@@ -235,6 +238,132 @@ Deno.test("every kind the schema offers is a kind the validator accepts", () => 
     reply: "Tipo desconhecido.",
     proposals: [{ ...proposal, kind: "habit" }],
   }));
+});
+
+Deno.test("what Nina read off a document travels with the proposal she derived from it", () => {
+  const boleto = {
+    id: crypto.randomUUID(),
+    kind: "reminder",
+    title: "Pagar a conta de luz",
+    detail: "Vence em 12/09",
+    action_title: "Criar lembrete",
+    payload: {
+      title: "Pagar a conta de luz",
+      detail: "",
+      owner: "Casa",
+      due_label: "12/09",
+      due_at: "2026-09-12T12:00:00-03:00",
+      category: "bills",
+      symbol_name: "bolt.fill",
+      amount: "R$ 187,44",
+      extracted: [
+        { label: "Vencimento", value: "12/09/2026" },
+        { label: "Valor", value: "R$ 187,44" },
+        { label: "Empresa", value: "Enel" },
+      ],
+      visibility: null,
+      confidence: 0.9,
+      deduplication_key: "conta-de-luz-2026-09-12",
+    },
+  };
+  const reply = "Li o boleto assim. Confira antes de confirmar.";
+  const payloadSchema =
+    proposalResponseSchema.properties.proposals.items.properties.payload;
+  const extractedSchema = payloadSchema.properties.extracted;
+
+  assert(payloadSchema.required.includes("extracted"));
+  assert(extractedSchema.type.includes("array"));
+  assert(extractedSchema.type.includes("null"));
+  assertEquals(extractedSchema.maxItems, maxExtractedReadings);
+  assertEquals(
+    extractedSchema.items.properties.label.maxLength,
+    maxExtractedLabelLength,
+  );
+  assertEquals(
+    extractedSchema.items.properties.value.maxLength,
+    maxExtractedValueLength,
+  );
+  assertEquals(extractedSchema.items.required, ["label", "value"]);
+  assertEquals(extractedSchema.items.additionalProperties, false);
+
+  assert(isStructuredOutput({ reply, proposals: [boleto] }));
+  assert(isStructuredOutput({
+    reply,
+    proposals: [{
+      ...boleto,
+      payload: { ...boleto.payload, extracted: [] },
+    }],
+  }));
+  assert(isStructuredOutput({
+    reply,
+    proposals: [{
+      ...boleto,
+      payload: { ...boleto.payload, extracted: null },
+    }],
+  }));
+
+  const { extracted: _absent, ...payloadWithoutReading } = boleto.payload;
+  assert(isStructuredOutput({
+    reply,
+    proposals: [{ ...boleto, payload: payloadWithoutReading }],
+  }));
+});
+
+Deno.test("a reading past its declared bounds is refused instead of quietly trimmed", () => {
+  const proposal = {
+    id: crypto.randomUUID(),
+    kind: "task",
+    title: "Levar o comunicado da escola",
+    detail: "Reunião no dia 20",
+    action_title: "Criar tarefa",
+    payload: {
+      title: "Levar o comunicado da escola",
+      detail: "",
+      owner: "Casa",
+      due_label: "20/09",
+      due_at: null,
+      category: "school",
+      symbol_name: "doc.text.fill",
+      amount: "",
+      extracted: [{ label: "Reunião", value: "20/09/2026" }],
+      visibility: null,
+      confidence: null,
+      deduplication_key: "comunicado-escola",
+    },
+  };
+  const reply = "Li o comunicado assim. Confira antes de confirmar.";
+  const withReading = (extracted: unknown) => ({
+    reply,
+    proposals: [{ ...proposal, payload: { ...proposal.payload, extracted } }],
+  });
+
+  assertFalse(isStructuredOutput(withReading(
+    Array(maxExtractedReadings + 1).fill({
+      label: "Reunião",
+      value: "20/09/2026",
+    }),
+  )));
+  assertFalse(isStructuredOutput(withReading([{
+    label: "R".repeat(maxExtractedLabelLength + 1),
+    value: "20/09/2026",
+  }])));
+  assertFalse(isStructuredOutput(withReading([{
+    label: "Reunião",
+    value: "2".repeat(maxExtractedValueLength + 1),
+  }])));
+  assertFalse(isStructuredOutput(withReading([{ label: "", value: "20/09" }])));
+  assertFalse(isStructuredOutput(withReading([{ label: "Reunião" }])));
+  assertFalse(isStructuredOutput(withReading(["Reunião 20/09/2026"])));
+  assertFalse(isStructuredOutput(withReading("Reunião 20/09/2026")));
+});
+
+Deno.test("the prompt binds every extracted value to what the attachment literally says", () => {
+  assertStringIncludes(
+    ninaSystemPrompt,
+    "Use extracted apenas para o que está escrito literalmente no anexo",
+  );
+  assertStringIncludes(ninaSystemPrompt, "copiado como aparece");
+  assertStringIncludes(ninaSystemPrompt, "em vez de deduzir");
 });
 
 Deno.test("a seed never reaches a V1 client disguised as a reminder", () => {

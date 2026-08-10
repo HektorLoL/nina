@@ -661,10 +661,7 @@ private struct ChatInputBar: View {
             throw ChatAttachmentLoadError.unreadable
         }
 
-        let thumbnail = sourceImage
-            .resizedToFit(maxSide: 320)
-            .jpegData(compressionQuality: 0.72)
-        return (fullData, thumbnail)
+        return (fullData, ChatAttachmentLimits.retainedThumbnailData(for: sourceImage))
         #else
         return (data, nil)
         #endif
@@ -709,10 +706,36 @@ private struct PendingChatAttachment: Identifiable, Hashable {
     }
 }
 
-private enum ChatAttachmentLimits {
+enum ChatAttachmentLimits {
     static let maxCount = 3
     static let maxItemBytes = 5 * 1_024 * 1_024
     static let maxTotalBytes = 8 * 1_024 * 1_024
+
+    // A photographed boleto has to stay readable, and it is also the most sensitive thing this app
+    // keeps at rest, so every retained thumbnail is bounded: under the ceiling or not kept at all.
+    static let maxThumbnailBytes = 320 * 1_024
+
+    #if canImport(UIKit)
+    private static let thumbnailAttempts: [(maxSide: CGFloat, quality: CGFloat)] = [
+        (900, 0.7),
+        (900, 0.5),
+        (640, 0.45)
+    ]
+
+    static func retainedThumbnailData(for image: UIImage) -> Data? {
+        for attempt in thumbnailAttempts {
+            guard let data = image
+                .resizedToFit(maxSide: attempt.maxSide)
+                .jpegData(compressionQuality: attempt.quality) else {
+                continue
+            }
+            if data.count <= maxThumbnailBytes {
+                return data
+            }
+        }
+        return nil
+    }
+    #endif
 
     static let countError = "Você pode enviar até 3 anexos por mensagem."
     static let itemSizeError = "Cada anexo pode ter até 5 MB."
@@ -971,24 +994,34 @@ private struct MessageAttachmentsView: View {
     var attachments: [ChatAttachment]
     var isNina: Bool
 
+    @State private var openedAttachment: ChatAttachment?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(attachments) { attachment in
                 if attachment.kind == .image,
                    let data = attachment.thumbnailData,
                    let image = UIImage(data: data) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(maxWidth: 230, minHeight: 120, maxHeight: 150)
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    Button {
+                        Haptics.lightImpact()
+                        openedAttachment = attachment
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(maxWidth: 230, minHeight: 120, maxHeight: 150)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-                        Text(attachment.filename)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(isNina ? NinaTheme.muted : Color.white.opacity(0.86))
-                            .lineLimit(1)
+                            Label(attachment.filename, systemImage: "arrow.up.left.and.arrow.down.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(isNina ? NinaTheme.muted : Color.white.opacity(0.86))
+                                .lineLimit(1)
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Abrir \(attachment.filename)")
+                    .accessibilityHint("Mostra a foto em tela cheia para você conferir")
                 } else {
                     HStack(spacing: 10) {
                         Image(systemName: attachment.kind == .image ? "photo.fill" : "doc.text.fill")
@@ -1019,6 +1052,107 @@ private struct MessageAttachmentsView: View {
                 }
             }
         }
+        .fullScreenCover(item: $openedAttachment) { attachment in
+            AttachmentImageViewer(attachment: attachment) {
+                Haptics.selection()
+                openedAttachment = nil
+            }
+        }
+    }
+}
+
+// The photographed document never leaves the device to be read: the viewer opens the thumbnail
+// this phone already holds, and nothing here reaches the network.
+private struct AttachmentImageViewer: View {
+    var attachment: ChatAttachment
+    var onClose: () -> Void
+
+    @State private var zoom: CGFloat = 1
+    @State private var settledZoom: CGFloat = 1
+    @State private var pan: CGSize = .zero
+    @State private var settledPan: CGSize = .zero
+
+    private static let maximumZoom: CGFloat = 4
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            if let data = attachment.thumbnailData, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(zoom)
+                    .offset(pan)
+                    .gesture(inspectionGesture)
+                    .onTapGesture(count: 2, perform: resetInspection)
+                    .accessibilityLabel(attachment.filename)
+            } else {
+                Text("Não consegui abrir essa foto agora.")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+            }
+        }
+        .overlay(alignment: .top) { viewerBar }
+        .statusBarHidden()
+    }
+
+    private var viewerBar: some View {
+        HStack(spacing: 12) {
+            Text(attachment.filename)
+                .font(.caption.weight(.heavy))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+
+            Spacer(minLength: 12)
+
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Color.white.opacity(0.18), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Fechar a foto")
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+    }
+
+    private var inspectionGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                zoom = min(max(settledZoom * value.magnification, 1), Self.maximumZoom)
+            }
+            .onEnded { _ in
+                settledZoom = zoom
+                if zoom == 1 {
+                    pan = .zero
+                    settledPan = .zero
+                }
+            }
+            .simultaneously(
+                with: DragGesture()
+                    .onChanged { value in
+                        guard zoom > 1 else { return }
+                        pan = CGSize(
+                            width: settledPan.width + value.translation.width,
+                            height: settledPan.height + value.translation.height
+                        )
+                    }
+                    .onEnded { _ in
+                        settledPan = pan
+                    }
+            )
+    }
+
+    private func resetInspection() {
+        Haptics.selection()
+        zoom = 1
+        settledZoom = 1
+        pan = .zero
+        settledPan = .zero
     }
 }
 
@@ -1067,6 +1201,8 @@ private struct NinaProposalCard: View {
             }
 
             confirmationSummary
+
+            extractedReadings
 
             if isEditing && proposal.state == .pending {
                 VStack(spacing: 8) {
@@ -1161,6 +1297,54 @@ private struct NinaProposalCard: View {
                 accessibilityLabel: "Quantidade \(confirmationPayload.amount)"
             )
         }
+    }
+
+    // What Nina read is evidence, not a field: it keeps showing the document's own wording so a
+    // misread vencimento can be caught against it while the proposal is still correctable.
+    @ViewBuilder
+    private var extractedReadings: some View {
+        if !proposal.payload.extracted.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                Label("O que eu li no anexo", systemImage: "text.viewfinder")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(NinaTheme.muted)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(proposal.payload.extracted.indices, id: \.self) { index in
+                        extractedReadingRow(proposal.payload.extracted[index])
+                    }
+                }
+
+                if proposal.state == .pending {
+                    Text("Corrija se eu tiver lido errado.")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(NinaTheme.muted)
+                }
+            }
+            .padding(10)
+            .background(
+                NinaTheme.card,
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+        }
+    }
+
+    private func extractedReadingRow(_ reading: NinaExtractedReading) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(reading.label)
+                .font(.caption2.weight(.heavy))
+                .foregroundStyle(NinaTheme.muted)
+
+            Spacer(minLength: 8)
+
+            Text(reading.value)
+                .font(.caption2.weight(.black))
+                .foregroundStyle(NinaTheme.ink)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(reading.label): \(reading.value)")
     }
 
     private var scheduleSummary: String {

@@ -37,6 +37,26 @@ been closed; everything else in this document is still open.
   that Nina does not receive the reason. `member_management.test.sql` 47 → 72,
   `rls_policies.test.sql` 45 → 46 (26 tables).
 
+- **Nina never showed what she read off a document, and the photo became unreadable.** A user
+  photographs the energy boleto, Nina says "Anotei o vencimento", and three days later there is a
+  320px thumbnail that cannot be tapped — and after the first refresh not even that, because
+  `apply(_:)` replaced messages wholesale and the server writes assistant messages with empty
+  attachments. The single most valuable thing Nina does with a document was invisible and
+  uncheckable, and the user confirmed a task derived from a reading they were never shown. The
+  proposal payload now carries an `extracted` label/value list, rendered on the card as "O que eu
+  li no anexo" so a misread vencimento can be corrected *before* confirming, with one prompt line
+  binding those values to what is literally on the page rather than inferred. Deliberately **not**
+  solved by storing the original: a bucket plus RLS plus retention would make the most sensitive
+  path in the product strictly worse. Bounds are enforced twice because OpenAI strict mode ignores
+  `maxItems`/`maxLength`, and a reading past its bounds is rejected rather than trimmed — silently
+  truncating a panel captioned "this is what I read" would reintroduce the defect. The value cap
+  of 40 chars sits below a boleto's 47-digit linha digitável, so the panel cannot carry a payment
+  capability. The thumbnail is now tappable and legible, and at-rest imagery went from *unbounded*
+  (320px but no count cap, growing with the conversation) to a finite ~5 MiB. One extra finding
+  fixed: `ChatMessageInsertRow` was base64-ing the document into `chat_messages.attachments` on
+  the legacy path — a column `begin_nina_chat_run` only ever writes as metadata and nothing reads
+  back. Deno 89 → 92, iOS +11.
+
 - **Nina could not propose a semente.** A user saying "um dia quero organizar o quartinho dos
   fundos" — an intention with no date, exactly what Sementes exist for — could at best get a task
   with `due_label: "Sem data"`, which landed in Tarefas as an ordinary undated chore. The one

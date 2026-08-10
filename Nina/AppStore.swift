@@ -224,6 +224,7 @@ final class AppStore {
     @ObservationIgnored private var activeHomeUserID: String?
     @ObservationIgnored private var activeUser: AuthUser?
     @ObservationIgnored private var homeContextGeneration: UInt64 = 0
+    @ObservationIgnored private var messagesContext: HomeContextToken?
     @ObservationIgnored private var localStateRevision: UInt64 = 0
     @ObservationIgnored private var remoteMutationGeneration: UInt64 = 0
     @ObservationIgnored private var remoteMutationTask: Task<Void, Never>?
@@ -2188,7 +2189,7 @@ final class AppStore {
     private func cacheAppSnapshotLocally() {
         guard let activeHomeUserID, hasActiveHome else { return }
 
-        let snapshot = currentSnapshot
+        let snapshot = Self.snapshotForLocalCache(currentSnapshot)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         PrivateLocalDataAccess.writeDataBestEffort(
             data,
@@ -2238,6 +2239,30 @@ final class AppStore {
         }
     }
     #endif
+
+    // Photographed boletos and receitas are the most sensitive thing this app holds, so the copy that
+    // lands on disk carries only the newest few readings and stays far below the protected store cap.
+    nonisolated static let maxLocallyCachedAttachmentImages = 12
+
+    nonisolated static func snapshotForLocalCache(_ snapshot: AppDataSnapshot) -> AppDataSnapshot {
+        var bounded = snapshot
+        var remaining = maxLocallyCachedAttachmentImages
+
+        for messageIndex in bounded.messages.indices.reversed() {
+            for attachmentIndex in bounded.messages[messageIndex].attachments.indices.reversed() {
+                guard bounded.messages[messageIndex].attachments[attachmentIndex].thumbnailData != nil else {
+                    continue
+                }
+                guard remaining > 0 else {
+                    bounded.messages[messageIndex].attachments[attachmentIndex].thumbnailData = nil
+                    continue
+                }
+                remaining -= 1
+            }
+        }
+
+        return bounded
+    }
 
     private var currentSnapshot: AppDataSnapshot {
         AppDataSnapshot(
@@ -2304,8 +2329,41 @@ final class AppStore {
         apply(.preview)
     }
 
+    // The server keeps no attachment imagery, so a refresh would erase the photo the user just sent
+    // unless the device carries its own copy forward; the context token is what keeps that copy from
+    // ever reaching another account's conversation.
+    private var carriableAttachmentImagery: [ChatMessage.ID: [ChatAttachment]] {
+        guard let messagesContext, isCurrentHomeContext(messagesContext) else { return [:] }
+        return messages.reduce(into: [:]) { imagery, message in
+            guard message.attachments.contains(where: { $0.thumbnailData != nil }) else { return }
+            imagery[message.id] = message.attachments
+        }
+    }
+
+    nonisolated private static func messages(
+        _ messages: [ChatMessage],
+        carryingImageryFrom imagery: [ChatMessage.ID: [ChatAttachment]]
+    ) -> [ChatMessage] {
+        guard !imagery.isEmpty else { return messages }
+
+        return messages.map { message in
+            guard let held = imagery[message.id],
+                  held.count == message.attachments.count else {
+                return message
+            }
+
+            var merged = message
+            for index in merged.attachments.indices where merged.attachments[index].thumbnailData == nil {
+                guard held[index].filename == merged.attachments[index].filename else { continue }
+                merged.attachments[index].thumbnailData = held[index].thumbnailData
+            }
+            return merged
+        }
+    }
+
     private func apply(_ snapshot: AppDataSnapshot) {
-        messages = snapshot.messages
+        messages = Self.messages(snapshot.messages, carryingImageryFrom: carriableAttachmentImagery)
+        messagesContext = currentHomeContextToken
         taskSections = snapshot.taskSections.isEmpty ? PreviewData.taskSections : snapshot.taskSections
         customTaskCategories = snapshot.customTaskCategories
         tasks = snapshot.tasks

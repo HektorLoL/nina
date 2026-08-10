@@ -2316,7 +2316,275 @@ final class AppStoreAuthorizationTests: XCTestCase {
             }
         }
     }
+
+    func testTheRetainedThumbnailStaysReadableEnoughToCheckADocument() throws {
+        let source = try XCTUnwrap(Self.densePhotograph(side: 2_400))
+
+        let readable = try XCTUnwrap(ChatAttachmentLimits.retainedThumbnailData(for: source))
+        let decoded = try XCTUnwrap(UIImage(data: readable))
+        let longestSide = max(
+            try XCTUnwrap(decoded.cgImage?.width),
+            try XCTUnwrap(decoded.cgImage?.height)
+        )
+
+        XCTAssertLessThanOrEqual(readable.count, ChatAttachmentLimits.maxThumbnailBytes)
+        XCTAssertGreaterThan(longestSide, 320)
+        XCTAssertEqual(Array(readable.prefix(2)), [0xFF, 0xD8])
+    }
+
+    func testAnImageThatResistsCompressionNeverLandsOnDiskAboveTheCeiling() throws {
+        let source = try XCTUnwrap(Self.densePhotograph(side: 900))
+
+        let unbounded = try XCTUnwrap(source.jpegData(compressionQuality: 0.7))
+        let retained = ChatAttachmentLimits.retainedThumbnailData(for: source)
+
+        XCTAssertGreaterThan(unbounded.count, ChatAttachmentLimits.maxThumbnailBytes)
+        XCTAssertLessThanOrEqual(retained?.count ?? 0, ChatAttachmentLimits.maxThumbnailBytes)
+    }
+
+    private static func densePhotograph(side: Int) -> UIImage? {
+        let bytesPerRow = side * 4
+        var pixels = [UInt8](repeating: 0, count: bytesPerRow * side)
+        var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+        for index in pixels.indices {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            pixels[index] = UInt8(truncatingIfNeeded: seed >> 33)
+        }
+
+        let cgImage = pixels.withUnsafeMutableBytes { buffer -> CGImage? in
+            guard let context = CGContext(
+                data: buffer.baseAddress,
+                width: side,
+                height: side,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            ) else { return nil }
+            return context.makeImage()
+        }
+
+        return cgImage.map(UIImage.init(cgImage:))
+    }
     #endif
+
+    @MainActor
+    func testARefreshNoLongerLosesThePhotoTheUserJustSentToNina() async throws {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember(for: user)])
+        )
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: PersistedNinaEngine(assistantMessageID: UUID())
+        )
+        await store.activateHomeContext(for: user)
+        await store.grantAIMemoryConsent()
+
+        let thumbnail = Data("thumbnail-do-boleto".utf8)
+        await store.sendMessage(
+            "Segue o boleto da Enel",
+            attachments: [
+                NinaAttachmentInput(
+                    metadata: ChatAttachment(
+                        kind: .image,
+                        filename: "foto-1.jpg",
+                        mimeType: "image/jpeg",
+                        byteCount: 412_000,
+                        thumbnailData: thumbnail
+                    ),
+                    data: Data("boleto".utf8)
+                )
+            ]
+        )
+        let sentMessage = try XCTUnwrap(store.messages.last { $0.sender == .user })
+        XCTAssertEqual(sentMessage.attachments.first?.thumbnailData, thumbnail)
+
+        await backend.setHomeState(
+            makeRemoteState(
+                members: [adultMember(for: user)],
+                messages: [
+                    ChatMessage(
+                        id: sentMessage.id,
+                        sender: .user,
+                        text: "Segue o boleto da Enel",
+                        timestamp: sentMessage.timestamp,
+                        attachments: [Self.serverAttachment(filename: "foto-1.jpg")]
+                    )
+                ]
+            )
+        )
+        await store.refreshHomeFromRemote(for: user)
+
+        let refreshed = try XCTUnwrap(store.messages.first { $0.id == sentMessage.id })
+        XCTAssertEqual(refreshed.attachments.first?.thumbnailData, thumbnail)
+        XCTAssertEqual(refreshed.attachments.first?.byteCount, 412_000)
+    }
+
+    @MainActor
+    func testAnAccountSwitchNeverCarriesHouseholdImageryIntoTheNextConversation() async throws {
+        let firstUser = makeUser()
+        let secondUser = makeUser()
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember(for: firstUser)])
+        )
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: PersistedNinaEngine(assistantMessageID: UUID())
+        )
+        await store.activateHomeContext(for: firstUser)
+        await store.grantAIMemoryConsent()
+
+        await store.sendMessage(
+            "Segue a receita do Pedro",
+            attachments: [
+                NinaAttachmentInput(
+                    metadata: ChatAttachment(
+                        kind: .image,
+                        filename: "foto-1.jpg",
+                        mimeType: "image/jpeg",
+                        byteCount: 240_000,
+                        thumbnailData: Data("thumbnail-da-receita".utf8)
+                    ),
+                    data: Data("receita".utf8)
+                )
+            ]
+        )
+        let sentMessage = try XCTUnwrap(store.messages.last { $0.sender == .user })
+
+        await backend.setHomeState(
+            makeRemoteState(
+                members: [adultMember(for: secondUser)],
+                messages: [
+                    ChatMessage(
+                        id: sentMessage.id,
+                        sender: .user,
+                        text: "Segue a receita do Pedro",
+                        timestamp: sentMessage.timestamp,
+                        attachments: [Self.serverAttachment(filename: "foto-1.jpg")]
+                    )
+                ]
+            )
+        )
+        await store.activateHomeContext(for: secondUser)
+
+        let carried = try XCTUnwrap(store.messages.first { $0.id == sentMessage.id })
+        XCTAssertNil(carried.attachments.first?.thumbnailData)
+        XCTAssertTrue(store.messages.allSatisfy { message in
+            message.attachments.allSatisfy { $0.thumbnailData == nil }
+        })
+    }
+
+    @MainActor
+    func testSigningOutDropsTheHouseholdImageryTheDeviceWasHolding() async throws {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember(for: user)])
+        )
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: PersistedNinaEngine(assistantMessageID: UUID())
+        )
+        await store.activateHomeContext(for: user)
+        await store.grantAIMemoryConsent()
+
+        await store.sendMessage(
+            "Segue o comunicado da escola",
+            attachments: [
+                NinaAttachmentInput(
+                    metadata: ChatAttachment(
+                        kind: .image,
+                        filename: "foto-1.jpg",
+                        mimeType: "image/jpeg",
+                        byteCount: 180_000,
+                        thumbnailData: Data("thumbnail-do-comunicado".utf8)
+                    ),
+                    data: Data("comunicado".utf8)
+                )
+            ]
+        )
+        let sentMessage = try XCTUnwrap(store.messages.last { $0.sender == .user })
+
+        await store.activateHomeContext(for: nil)
+        XCTAssertTrue(store.messages.allSatisfy(\.attachments.isEmpty))
+
+        await backend.setHomeState(
+            makeRemoteState(
+                members: [adultMember(for: user)],
+                messages: [
+                    ChatMessage(
+                        id: sentMessage.id,
+                        sender: .user,
+                        text: "Segue o comunicado da escola",
+                        timestamp: sentMessage.timestamp,
+                        attachments: [Self.serverAttachment(filename: "foto-1.jpg")]
+                    )
+                ]
+            )
+        )
+        await store.activateHomeContext(for: user)
+
+        let restored = try XCTUnwrap(store.messages.first { $0.id == sentMessage.id })
+        XCTAssertNil(restored.attachments.first?.thumbnailData)
+    }
+
+    func testTheHouseholdSnapshotOnDiskCarriesOnlyTheNewestDocumentImagery() {
+        let imageCount = AppStore.maxLocallyCachedAttachmentImages + 5
+        let messages = (0..<imageCount).map { index in
+            ChatMessage(
+                sender: .user,
+                text: "Anexo \(index)",
+                timestamp: Date(timeIntervalSince1970: 1_785_000_000 + Double(index)),
+                attachments: [
+                    ChatAttachment(
+                        kind: .image,
+                        filename: "foto-\(index).jpg",
+                        mimeType: "image/jpeg",
+                        byteCount: 300_000,
+                        thumbnailData: Data("thumbnail-\(index)".utf8)
+                    )
+                ]
+            )
+        }
+        let snapshot = AppDataSnapshot(
+            messages: messages,
+            taskSections: [],
+            tasks: [],
+            shoppingItems: [],
+            insights: []
+        )
+
+        let bounded = AppStore.snapshotForLocalCache(snapshot)
+        let kept = bounded.messages.filter { message in
+            message.attachments.contains { $0.thumbnailData != nil }
+        }
+
+        XCTAssertEqual(kept.count, AppStore.maxLocallyCachedAttachmentImages)
+        XCTAssertEqual(kept.map(\.text), messages.suffix(AppStore.maxLocallyCachedAttachmentImages).map(\.text))
+        XCTAssertEqual(bounded.messages.count, messages.count)
+        XCTAssertTrue(bounded.messages.allSatisfy { !$0.attachments.isEmpty })
+    }
+
+    private static func serverAttachment(filename: String) -> ChatAttachment {
+        ChatAttachment(
+            kind: .image,
+            filename: filename,
+            mimeType: "image/jpeg",
+            byteCount: 412_000
+        )
+    }
+
+    private func adultMember(for user: AuthUser) -> HouseholdMember {
+        HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+    }
 
     @MainActor
     func testBackendDiagnosticsRecordsSuccessfulRequest() async throws {
@@ -2499,13 +2767,14 @@ final class AppStoreAuthorizationTests: XCTestCase {
         tasks: [TaskItem] = [],
         shoppingItems: [ShoppingItem] = [],
         members: [HouseholdMember] = [],
+        messages: [ChatMessage] = [],
         aiConsent: NinaAIConsent = .withheld
     ) -> RemoteHomeState {
         RemoteHomeState(
             familyGroup: FamilyGroup(name: familyName, inviteCode: inviteCode, members: members),
             permissionRole: permissionRole,
             snapshot: AppDataSnapshot(
-                messages: [],
+                messages: messages,
                 taskSections: taskSections,
                 tasks: tasks,
                 shoppingItems: shoppingItems,
@@ -2851,6 +3120,10 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
 
     func setAIConsent(_ consent: NinaAIConsent) {
         state.aiConsent = consent
+    }
+
+    func setHomeState(_ state: RemoteHomeState) {
+        self.state = state
     }
 
     func waitUntilRealtimeSubscribed() async {

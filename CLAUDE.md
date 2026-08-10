@@ -797,3 +797,13 @@ fix unprompted.
   provider as `data:` URIs. This is why the App Store labels carry a
   `Sensitive Info` row. Treat any change to the attachment pipeline as a privacy
   change.
+  Three rules hold it in place. **Originals are never stored server-side** — a
+  bucket plus RLS plus retention would make this path strictly worse, so the
+  extraction summary is the answer and the stored original is not. **What the
+  device retains is bounded by construction**: `retainedThumbnailData` walks a
+  quality ladder and keeps nothing at all above 320 KiB, and the cached snapshot
+  holds imagery for only the 12 newest image attachments, so at-rest household
+  document imagery is finite rather than growing with the conversation.
+  **`extracted` readings are capped at 40 characters** — deliberately shorter
+  than a boleto's 47-digit linha digitável, so the panel structurally cannot
+  carry a payment capability.

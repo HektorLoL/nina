@@ -13,6 +13,11 @@ export type ModelPricing = {
   outputUsdPerMillion: number;
 };
 
+export type NinaExtractedReading = {
+  label: string;
+  value: string;
+};
+
 export type NinaProposalPayload = {
   title: string;
   detail: string;
@@ -22,6 +27,7 @@ export type NinaProposalPayload = {
   category: "home" | "bills" | "health" | "school" | "pet" | "food";
   symbol_name: string;
   amount: string;
+  extracted?: NinaExtractedReading[] | null;
   visibility: "private" | "shared" | null;
   confidence: number | null;
   deduplication_key: string;
@@ -71,6 +77,9 @@ export const maxInsightOutputTokens = 1_100;
 export const maxToolRounds = 2;
 export const maxToolCalls = 4;
 export const maxInteractiveModelCalls = maxToolRounds + 1;
+export const maxExtractedReadings = 4;
+export const maxExtractedLabelLength = 24;
+export const maxExtractedValueLength = 40;
 
 export const proposalResponseSchema = {
   type: "object",
@@ -110,6 +119,25 @@ export const proposalResponseSchema = {
               },
               symbol_name: { type: "string" },
               amount: { type: "string" },
+              extracted: {
+                type: ["array", "null"],
+                maxItems: maxExtractedReadings,
+                items: {
+                  type: "object",
+                  properties: {
+                    label: {
+                      type: "string",
+                      maxLength: maxExtractedLabelLength,
+                    },
+                    value: {
+                      type: "string",
+                      maxLength: maxExtractedValueLength,
+                    },
+                  },
+                  required: ["label", "value"],
+                  additionalProperties: false,
+                },
+              },
               visibility: {
                 type: ["string", "null"],
                 enum: ["private", "shared", null],
@@ -130,6 +158,7 @@ export const proposalResponseSchema = {
               "category",
               "symbol_name",
               "amount",
+              "extracted",
               "visibility",
               "confidence",
               "deduplication_key",
@@ -356,6 +385,24 @@ export function functionCalls(
   });
 }
 
+function isExtractedReadings(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (!Array.isArray(value) || value.length > maxExtractedReadings) {
+    return false;
+  }
+
+  return value.every((entry) => {
+    if (!entry || typeof entry !== "object") return false;
+    const reading = entry as Partial<NinaExtractedReading>;
+    return typeof reading.label === "string"
+      && reading.label.length > 0
+      && reading.label.length <= maxExtractedLabelLength
+      && typeof reading.value === "string"
+      && reading.value.length > 0
+      && reading.value.length <= maxExtractedValueLength;
+  });
+}
+
 export function isStructuredOutput(
   value: unknown,
 ): value is NinaStructuredOutput {
@@ -390,6 +437,7 @@ export function isStructuredOutput(
       )
       && typeof proposal.payload.symbol_name === "string"
       && typeof proposal.payload.amount === "string"
+      && isExtractedReadings(proposal.payload.extracted)
       && (
         proposal.payload.visibility === null
         || proposal.payload.visibility === "private"

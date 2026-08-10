@@ -945,6 +945,29 @@ enum NinaMemoryVisibility: String, Codable, CaseIterable, Hashable {
     }
 }
 
+struct NinaExtractedReading: Codable, Hashable {
+    var label: String
+    var value: String
+
+    private enum CodingKeys: String, CodingKey {
+        case label
+        case value
+    }
+
+    init(label: String, value: String) {
+        self.label = label
+        self.value = value
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        label = (try container.decodeIfPresent(String.self, forKey: .label) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        value = (try container.decodeIfPresent(String.self, forKey: .value) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 struct NinaProposalPayload: Codable, Hashable {
     var title: String
     var detail: String
@@ -954,6 +977,7 @@ struct NinaProposalPayload: Codable, Hashable {
     var categoryID: String
     var symbolName: String
     var amount: String
+    var extracted: [NinaExtractedReading]
     var visibility: NinaMemoryVisibility?
     var confidence: Double?
     var deduplicationKey: String
@@ -967,6 +991,7 @@ struct NinaProposalPayload: Codable, Hashable {
         case categoryID = "category"
         case symbolName = "symbol_name"
         case amount
+        case extracted
         case visibility
         case confidence
         case deduplicationKey = "deduplication_key"
@@ -981,6 +1006,7 @@ struct NinaProposalPayload: Codable, Hashable {
         categoryID: String = TaskCategory.home.id,
         symbolName: String = "sparkles",
         amount: String = "",
+        extracted: [NinaExtractedReading] = [],
         visibility: NinaMemoryVisibility? = nil,
         confidence: Double? = nil,
         deduplicationKey: String = ""
@@ -993,6 +1019,7 @@ struct NinaProposalPayload: Codable, Hashable {
         self.categoryID = categoryID
         self.symbolName = symbolName
         self.amount = amount
+        self.extracted = extracted
         self.visibility = visibility
         self.confidence = confidence
         self.deduplicationKey = deduplicationKey
@@ -1010,6 +1037,9 @@ struct NinaProposalPayload: Codable, Hashable {
         categoryID = try container.decodeIfPresent(String.self, forKey: .categoryID) ?? TaskCategory.home.id
         symbolName = try container.decodeIfPresent(String.self, forKey: .symbolName) ?? "sparkles"
         amount = try container.decodeIfPresent(String.self, forKey: .amount) ?? ""
+        // A half-read line is not something the card may present as what Nina read off the document.
+        extracted = (try container.decodeIfPresent([NinaExtractedReading].self, forKey: .extracted) ?? [])
+            .filter { !$0.label.isEmpty && !$0.value.isEmpty }
         visibility = NinaMemoryVisibility(
             rawValue: try container.decodeIfPresent(String.self, forKey: .visibility) ?? ""
         )

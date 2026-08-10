@@ -1695,7 +1695,7 @@ private struct ShoppingItemUpdateRow: Encodable {
     }
 }
 
-private struct ChatMessageInsertRow: Encodable {
+struct ChatMessageInsertRow: Encodable {
     var id: UUID
     var familyID: UUID
     var sender: String
@@ -1716,13 +1716,19 @@ private struct ChatMessageInsertRow: Encodable {
         case createdAt = "created_at"
     }
 
+    // The rendered thumbnail of a photographed boleto is a device-local artifact that nothing on the
+    // server ever reads back, so only the metadata begin_nina_chat_run itself writes goes up.
     init(message: ChatMessage, familyID: UUID, currentUserID: UUID?) {
         id = message.id
         self.familyID = familyID
         sender = message.sender.rawValue
         text = message.text
         suggestion = message.suggestion
-        attachments = message.attachments
+        attachments = message.attachments.map { attachment in
+            var uploaded = attachment
+            uploaded.thumbnailData = nil
+            return uploaded
+        }
         createdBy = message.sender == .user ? currentUserID : nil
         createdAt = message.timestamp
     }

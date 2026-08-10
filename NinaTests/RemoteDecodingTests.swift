@@ -77,6 +77,31 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(decoded, original)
     }
 
+    func testThePhotographedDocumentNeverRidesUpWithTheLegacyChatInsert() throws {
+        let message = ChatMessage(
+            sender: .user,
+            text: "Segue o boleto",
+            timestamp: Date(timeIntervalSince1970: 1_785_000_000),
+            attachments: [
+                ChatAttachment(
+                    kind: .image,
+                    filename: "foto-1.jpg",
+                    mimeType: "image/jpeg",
+                    byteCount: 412_000,
+                    thumbnailData: Data("thumbnail-do-boleto".utf8)
+                )
+            ]
+        )
+
+        let row = ChatMessageInsertRow(message: message, familyID: UUID(), currentUserID: UUID())
+        let encoded = try XCTUnwrap(String(data: JSONEncoder().encode(row), encoding: .utf8))
+
+        XCTAssertFalse(encoded.contains("thumbnail_data"))
+        XCTAssertFalse(encoded.contains(Data("thumbnail-do-boleto".utf8).base64EncodedString()))
+        XCTAssertTrue(encoded.contains("foto-1.jpg"))
+        XCTAssertTrue(encoded.contains("412000"))
+    }
+
     func testATaskCachedByAnOlderBuildWithoutAnOwnerMemberIDStillDecodes() throws {
         let legacy = """
         {"id":"3F1A0000-0000-4000-8000-00000000AAAA","title":"Pagar a conta de luz",
@@ -234,6 +259,96 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(payload.category.id, TaskCategory.pet.id)
         XCTAssertEqual(payload.confidence, 0.82)
         XCTAssertEqual(payload.deduplicationKey, "vet-thor-2026-08")
+    }
+
+    func testWhatNinaReadOffTheDocumentArrivesWithTheProposalSheDerivedFromIt() throws {
+        let json = """
+        {"title":"Pagar o boleto da Enel","detail":"Vence dia 12","owner":"Casa",
+         "due_label":"12/08, 09:00","due_at":"2026-08-12T12:00:00Z","category":"bills",
+         "symbol_name":"bolt.fill","amount":"",
+         "extracted":[{"label":"Vencimento","value":"12/08/2026"},
+                      {"label":"Valor","value":"R$ 187,43"}],
+         "visibility":null,"confidence":0.74,"deduplication_key":"enel-2026-08"}
+        """
+
+        let payload = try JSONDecoder().decode(NinaProposalPayload.self, from: Data(json.utf8))
+
+        XCTAssertEqual(payload.extracted.count, 2)
+        XCTAssertEqual(payload.extracted.first?.label, "Vencimento")
+        XCTAssertEqual(payload.extracted.first?.value, "12/08/2026")
+        XCTAssertEqual(payload.extracted.last?.value, "R$ 187,43")
+    }
+
+    func testAProposalWithoutExtractedReadingsDecodesWithNothingForTheCardToDraw() throws {
+        let older = try JSONDecoder().decode(
+            NinaProposalPayload.self,
+            from: Data(#"{"title":"Pagar o boleto","detail":"","amount":""}"#.utf8)
+        )
+        let explicitlyNull = try JSONDecoder().decode(
+            NinaProposalPayload.self,
+            from: Data(#"{"title":"Pagar o boleto","detail":"","extracted":null}"#.utf8)
+        )
+        let empty = try JSONDecoder().decode(
+            NinaProposalPayload.self,
+            from: Data(#"{"title":"Pagar o boleto","detail":"","extracted":[]}"#.utf8)
+        )
+
+        XCTAssertTrue(older.extracted.isEmpty)
+        XCTAssertTrue(explicitlyNull.extracted.isEmpty)
+        XCTAssertTrue(empty.extracted.isEmpty)
+    }
+
+    func testAHalfReadLineIsNeverShownAsSomethingNinaReadOffTheDocument() throws {
+        let json = """
+        {"title":"Pagar o boleto","detail":"",
+         "extracted":[{"label":"Vencimento","value":"12/08/2026"},
+                      {"label":"Valor","value":"   "},
+                      {"label":"","value":"R$ 90,00"},
+                      {"label":"Código"}]}
+        """
+
+        let payload = try JSONDecoder().decode(NinaProposalPayload.self, from: Data(json.utf8))
+
+        XCTAssertEqual(payload.extracted, [NinaExtractedReading(label: "Vencimento", value: "12/08/2026")])
+    }
+
+    func testCorrectingAProposalKeepsWhatNinaReadOffTheDocumentBesideTheCorrection() {
+        let payload = NinaProposalPayload(
+            title: "Pagar o boleto da Enel",
+            detail: "",
+            dueLabel: "12/08",
+            dueAt: "2026-08-12T12:00:00Z",
+            extracted: [NinaExtractedReading(label: "Vencimento", value: "12/08/2026")]
+        )
+
+        let edited = payload.edited(
+            title: payload.title,
+            detail: payload.detail,
+            owner: payload.owner,
+            dueLabel: "18/08",
+            amount: ""
+        )
+
+        XCTAssertEqual(edited.extracted, payload.extracted)
+        XCTAssertEqual(edited.dueLabel, "18/08")
+    }
+
+    func testExtractedReadingsSurviveALocalCacheRoundTrip() throws {
+        let payload = NinaProposalPayload(
+            title: "Levar a receita na farmácia",
+            detail: "",
+            extracted: [
+                NinaExtractedReading(label: "Medicamento", value: "Amoxicilina 500 mg"),
+                NinaExtractedReading(label: "Posologia", value: "1 comprimido a cada 8 h")
+            ]
+        )
+
+        let decoded = try JSONDecoder().decode(
+            NinaProposalPayload.self,
+            from: JSONEncoder().encode(payload)
+        )
+
+        XCTAssertEqual(decoded.extracted, payload.extracted)
     }
 
     func testASeedProposalFromTheServerDecodesAsASeedAndNotAsAPlainTask() throws {
