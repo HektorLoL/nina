@@ -125,7 +125,9 @@ function schemaIsValid(payload) {
     && payload.proposals.length <= 3
     && payload.proposals.every((proposal) =>
       isUUID(proposal?.id)
-      && ["task", "reminder", "shopping", "memory"].includes(proposal?.kind)
+      && ["task", "reminder", "shopping", "memory", "seed"].includes(
+        proposal?.kind,
+      )
       && proposal?.state === "pending"
       && typeof proposal?.title === "string"
       && typeof proposal?.detail === "string"

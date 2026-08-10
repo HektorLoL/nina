@@ -2094,6 +2094,85 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testConfirmingASeedProposalCarriesNoDateEvenWhenNinaProposedOne() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let proposal = NinaProposal(
+            kind: .seed,
+            title: "Guardar como semente",
+            detail: "Ainda não há uma data clara",
+            actionTitle: "Guardar semente",
+            payload: NinaProposalPayload(
+                title: "Organizar as fotos da família",
+                detail: "Separar os melhores momentos do último ano",
+                owner: "Casa",
+                dueLabel: "sexta, 09:00",
+                dueAt: "2026-08-14T12:00:00Z"
+            )
+        )
+
+        let shown = proposal.confirmationPayload
+        let didAccept = await store.resolveProposal(
+            proposal,
+            decision: .accept,
+            editedPayload: shown
+        )
+        let confirmed = await backend.confirmedPayload(for: proposal.id)
+
+        XCTAssertTrue(didAccept)
+        XCTAssertEqual(shown.dueLabel, "Sem data")
+        XCTAssertNil(shown.dueAt)
+        XCTAssertEqual(confirmed?.title, "Organizar as fotos da família")
+        XCTAssertEqual(confirmed?.dueLabel, "Sem data")
+        XCTAssertNil(confirmed?.dueAt)
+    }
+
+    @MainActor
+    func testTheSeedWordingTheProposalCardShowsIsTheSeedTheHouseStores() async throws {
+        let user = makeUser()
+        let store = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: makeRemoteState(tasks: [])),
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: RecordingNotificationScheduler()
+        )
+        await store.activateHomeContext(for: user)
+        let proposal = NinaProposal(
+            kind: .seed,
+            title: "Guardar como semente",
+            detail: "",
+            actionTitle: "Guardar semente",
+            payload: NinaProposalPayload(
+                title: "Planejar a viagem de fim de ano",
+                detail: "Sem pressa para escolher a data",
+                dueLabel: "dezembro",
+                dueAt: "2026-12-01T12:00:00Z"
+            )
+        )
+
+        let shown = proposal.confirmationPayload
+        store.addTask(
+            title: shown.title,
+            subtitle: shown.detail,
+            owner: shown.owner,
+            dueLabel: shown.dueLabel,
+            category: shown.category,
+            kind: .seed,
+            createdBy: "Nina"
+        )
+
+        let stored = try XCTUnwrap(store.tasks.first(where: { $0.title == shown.title }))
+        XCTAssertEqual(stored.kind, .seed)
+        XCTAssertEqual(stored.kind.title, "Semente")
+        XCTAssertEqual(stored.kind.symbolName, "leaf.fill")
+        XCTAssertEqual(shown.dueLabel, stored.dueLabel)
+        XCTAssertNil(shown.dueAt)
+        XCTAssertNil(stored.dueAt)
+        XCTAssertEqual(store.openSeeds, [stored])
+    }
+
+    @MainActor
     func testCorrectingAProposalConfirmsTheCorrectedOwnerQuantityAndDate() async {
         let user = makeUser()
         let backend = RecordingHomeBackend(state: makeRemoteState())

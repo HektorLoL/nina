@@ -924,6 +924,7 @@ enum NinaProposalKind: String, Codable, Hashable {
     case reminder
     case shopping
     case memory
+    case seed
 }
 
 enum NinaProposalState: String, Codable, Hashable {
@@ -1094,7 +1095,9 @@ struct NinaProposal: Identifiable, Codable, Hashable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        kind = try container.decode(NinaProposalKind.self, forKey: .kind)
+        kind = NinaProposalKind(
+            rawValue: try container.decodeIfPresent(String.self, forKey: .kind) ?? ""
+        ) ?? .task
         state = try container.decodeIfPresent(NinaProposalState.self, forKey: .state) ?? .pending
         title = try container.decode(String.self, forKey: .title)
         detail = try container.decodeIfPresent(String.self, forKey: .detail) ?? ""
@@ -1117,7 +1120,8 @@ struct NinaProposal: Identifiable, Codable, Hashable {
     }
 
     // The card renders this payload and confirming sends this same payload, so the wording that was
-    // approved is the wording that gets created; the blank fallbacks mirror resolve_nina_proposal.
+    // approved is the wording that gets created; the blank fallbacks and the undated semente mirror
+    // resolve_nina_proposal.
     func confirmationPayload(
         title: String,
         detail: String,
@@ -1145,6 +1149,10 @@ struct NinaProposal: Identifiable, Codable, Hashable {
         }
         if resolved.dueLabel.isEmpty {
             resolved.dueLabel = "Sem data"
+        }
+        if kind == .seed {
+            resolved.dueLabel = "Sem data"
+            resolved.dueAt = nil
         }
         return resolved
     }

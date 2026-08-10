@@ -21,6 +21,7 @@ import {
   maxToolRounds,
   pricingForModel,
   pricingVersion,
+  proposalResponseSchema,
   safeErrorCode,
   shouldUseInsightFallback,
 } from "./nina-ai.ts";
@@ -195,6 +196,89 @@ Deno.test("structured output accepts up to three confirmed-action proposals", ()
   }));
 });
 
+Deno.test("every kind the schema offers is a kind the validator accepts", () => {
+  const proposal = {
+    id: crypto.randomUUID(),
+    kind: "seed",
+    title: "Organizar o quartinho dos fundos",
+    detail: "Sem data",
+    action_title: "Plantar semente",
+    payload: {
+      title: "Organizar o quartinho dos fundos",
+      detail: "",
+      owner: "Casa",
+      due_label: "Sem data",
+      due_at: null,
+      category: "home",
+      symbol_name: "leaf.fill",
+      amount: "",
+      visibility: null,
+      confidence: null,
+      deduplication_key: "quartinho-dos-fundos",
+    },
+  };
+  const declaredKinds =
+    proposalResponseSchema.properties.proposals.items.properties.kind.enum;
+
+  assert(declaredKinds.includes("seed"));
+  for (const kind of declaredKinds) {
+    assert(
+      isStructuredOutput({
+        reply:
+          "Anotei. Como ainda não há uma data clara, posso guardar isso como semente.",
+        proposals: [{ ...proposal, kind }],
+      }),
+      kind,
+    );
+  }
+  assertFalse(isStructuredOutput({
+    reply: "Tipo desconhecido.",
+    proposals: [{ ...proposal, kind: "habit" }],
+  }));
+});
+
+Deno.test("a seed never reaches a V1 client disguised as a reminder", () => {
+  const seed = {
+    id: crypto.randomUUID(),
+    kind: "seed" as const,
+    title: "Repintar a varanda",
+    detail: "Sem data",
+    action_title: "Plantar semente",
+    payload: {
+      title: "Repintar a varanda",
+      detail: "",
+      owner: "Casa",
+      due_label: "Sem data",
+      due_at: null,
+      category: "home" as const,
+      symbol_name: "leaf.fill",
+      amount: "",
+      visibility: null,
+      confidence: null,
+      deduplication_key: "repintar-varanda",
+    },
+  };
+  const task = {
+    ...seed,
+    id: crypto.randomUUID(),
+    kind: "task" as const,
+    title: "Comprar a tinta",
+    action_title: "Criar tarefa",
+    payload: {
+      ...seed.payload,
+      title: "Comprar a tinta",
+      deduplication_key: "comprar-tinta",
+    },
+  };
+
+  assertEquals(legacySuggestionFromProposals([seed]), null);
+  assertEquals(legacySuggestionFromProposals([seed, task])?.kind, "task");
+  assertEquals(
+    legacySuggestionFromProposals([seed, task])?.title,
+    "Comprar a tinta",
+  );
+});
+
 Deno.test("response parsing handles tool calls, output, and safe errors", () => {
   assertEquals(functionCalls({
     output: [{
@@ -276,6 +360,12 @@ Deno.test("policy preserves confirmation, injection, and sensitive-domain bounda
   assert(isToolCallBatchAllowed(0, 0, 4));
   assertFalse(isToolCallBatchAllowed(1, 3, 2));
   assertFalse(isToolCallBatchAllowed(2, 0, 1));
+});
+
+Deno.test("the prompt still tells Nina to leave an undated intention undated", () => {
+  assertStringIncludes(ninaSystemPrompt, "intenção sem data");
+  assertStringIncludes(ninaSystemPrompt, "use kind \"seed\"");
+  assertStringIncludes(ninaSystemPrompt, "mantenha due_at como null");
 });
 
 Deno.test("production function keeps moderation, timeouts, and content-free logs", async () => {

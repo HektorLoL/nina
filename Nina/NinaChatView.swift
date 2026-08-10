@@ -1047,8 +1047,8 @@ private struct NinaProposalCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
                 IconBubble(
-                    systemName: proposal.payload.symbolName,
-                    tone: proposal.payload.category.tone,
+                    systemName: isSeed ? TaskKind.seed.symbolName : proposal.payload.symbolName,
+                    tone: isSeed ? .mint : proposal.payload.category.tone,
                     size: 38
                 )
 
@@ -1074,7 +1074,9 @@ private struct NinaProposalCard: View {
                     proposalField("Detalhes", text: $draftDetail)
                     if proposal.kind != .memory {
                         proposalField("Responsável", text: $draftOwner)
-                        proposalField("Quando", text: $draftDueLabel)
+                        if !isSeed {
+                            proposalField("Quando", text: $draftDueLabel)
+                        }
                     }
                     if proposal.kind == .shopping {
                         proposalField("Quantidade", text: $draftAmount)
@@ -1116,6 +1118,10 @@ private struct NinaProposalCard: View {
         )
     }
 
+    private var isSeed: Bool {
+        proposal.kind == .seed
+    }
+
     @ViewBuilder
     private var confirmationSummary: some View {
         if proposal.kind != .memory {
@@ -1136,46 +1142,61 @@ private struct NinaProposalCard: View {
         summaryChip(
             confirmationPayload.owner,
             systemName: "person.fill",
+            tone: proposal.payload.category.tone,
             accessibilityLabel: "Responsável \(confirmationPayload.owner)"
         )
 
         summaryChip(
             scheduleSummary,
-            systemName: confirmationPayload.dueAt == nil ? "leaf.fill" : "clock.fill",
-            accessibilityLabel: confirmationPayload.dueAt == nil
-                ? "\(confirmationPayload.dueLabel). Nada marcado, plante depois."
-                : "Quando \(confirmationPayload.dueLabel)"
+            systemName: confirmationPayload.dueAt == nil ? TaskKind.seed.symbolName : "clock.fill",
+            tone: isSeed ? .mint : proposal.payload.category.tone,
+            accessibilityLabel: scheduleAccessibilityLabel
         )
 
         if proposal.kind == .shopping, !confirmationPayload.amount.isEmpty {
             summaryChip(
                 confirmationPayload.amount,
                 systemName: "cart.fill",
+                tone: proposal.payload.category.tone,
                 accessibilityLabel: "Quantidade \(confirmationPayload.amount)"
             )
         }
     }
 
     private var scheduleSummary: String {
+        if isSeed {
+            return "\(TaskKind.seed.title) · plante depois"
+        }
         guard confirmationPayload.dueAt != nil else {
             return "\(confirmationPayload.dueLabel) · plante depois"
         }
         return confirmationPayload.dueLabel
     }
 
+    private var scheduleAccessibilityLabel: String {
+        if isSeed {
+            return "\(TaskKind.seed.title). Sem data definida, plante depois."
+        }
+        guard confirmationPayload.dueAt != nil else {
+            return "\(confirmationPayload.dueLabel). Nada marcado, plante depois."
+        }
+        return "Quando \(confirmationPayload.dueLabel)"
+    }
+
     private func summaryChip(
         _ title: String,
         systemName: String,
+        tone: MemberTone,
         accessibilityLabel: String
     ) -> some View {
         Label(title, systemImage: systemName)
             .font(.caption2.weight(.black))
-            .foregroundStyle(proposal.payload.category.tone.color)
+            .foregroundStyle(tone.color)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(proposal.payload.category.tone.softColor, in: Capsule())
+            .background(tone.softColor, in: Capsule())
             .accessibilityLabel(accessibilityLabel)
     }
 

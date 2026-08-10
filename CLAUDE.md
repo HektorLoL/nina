@@ -438,8 +438,10 @@ Five Deno functions. `verify_jwt` per `supabase/config.toml`: **true** for
   deploy env cannot silently swap the model.
 - Bodies are read through bounded stream readers, never `await request.json()`.
 
-`supabase/functions/_shared/nina-chat-policy.ts` holds the entire 22-line system
-prompt. **Edits there are product changes, not code changes.**
+`supabase/functions/_shared/nina-chat-policy.ts` holds the entire system prompt.
+**Edits there are product changes, not code changes.** Its brevity is deliberate
+— add a rule only when the product genuinely gains one, in Nina's own register,
+and pin it with a source-text assertion so a reword cannot quietly drop it.
 
 ---
 

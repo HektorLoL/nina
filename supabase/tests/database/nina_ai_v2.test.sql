@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(96);
+select plan(105);
 
 insert into auth.users (
   id,
@@ -478,6 +478,123 @@ select is(
   ),
   30,
   'confirming a proposal carries its reminder lead time into the task'
+);
+
+reset role;
+set local request.jwt.claim.sub = '';
+
+select lives_ok(
+  $$insert into public.nina_proposals (
+      id,
+      family_id,
+      owner_user_id,
+      kind,
+      title,
+      detail,
+      payload
+    )
+    values (
+      '66000000-0000-0000-0000-000000000003',
+      '62000000-0000-0000-0000-000000000001',
+      '61000000-0000-0000-0000-000000000001',
+      'seed',
+      'Organizar o quartinho dos fundos',
+      'Um dia, sem data marcada',
+      jsonb_build_object(
+        'title', 'Organizar o quartinho dos fundos',
+        'due_label', 'Amanhã',
+        'due_at', '2026-06-17T09:00:00-03:00',
+        'recurrence_rule', 'weekly',
+        'remind_offset_minutes', 60
+      )
+    )$$,
+  'a semente is a proposal kind Nina is allowed to offer'
+);
+
+select throws_ok(
+  $$insert into public.nina_proposals (family_id, owner_user_id, kind, title)
+    values (
+      '62000000-0000-0000-0000-000000000001',
+      '61000000-0000-0000-0000-000000000001',
+      'habit',
+      'Tipo inventado'
+    )$$,
+  '23514',
+  null,
+  'a proposal kind outside the offered set is still refused'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select lives_ok(
+  $$select public.resolve_nina_proposal(
+    '66000000-0000-0000-0000-000000000003',
+    'accept',
+    '{}'::jsonb,
+    null
+  )$$,
+  'the owner of a semente proposal can confirm it'
+);
+
+select is(
+  (
+    select task_kind
+    from public.tasks
+    where title = 'Organizar o quartinho dos fundos'
+  ),
+  'seed',
+  'confirming a semente proposal plants a semente instead of an undated chore'
+);
+
+select is(
+  (
+    select due_at
+    from public.tasks
+    where title = 'Organizar o quartinho dos fundos'
+  ),
+  null::timestamptz,
+  'a confirmed semente carries no date even when the proposal named one'
+);
+
+select is(
+  (
+    select due_label
+    from public.tasks
+    where title = 'Organizar o quartinho dos fundos'
+  ),
+  'Sem data',
+  'a confirmed semente reads as dateless everywhere the household sees it'
+);
+
+select is(
+  (
+    select recurrence_rule
+    from public.tasks
+    where title = 'Organizar o quartinho dos fundos'
+  ),
+  'none',
+  'a semente never repeats, because there is no occurrence to repeat'
+);
+
+select is(
+  (
+    select remind_offset_minutes
+    from public.tasks
+    where title = 'Organizar o quartinho dos fundos'
+  ),
+  0,
+  'a semente drops a lead time that has no due moment to count back from'
+);
+
+select is(
+  (
+    select task_kind
+    from public.tasks
+    where title = 'Separar documentos'
+  ),
+  'task',
+  'a task proposal still lands as an ordinary task'
 );
 
 reset role;

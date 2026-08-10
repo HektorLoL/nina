@@ -236,6 +236,78 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(payload.deduplicationKey, "vet-thor-2026-08")
     }
 
+    func testASeedProposalFromTheServerDecodesAsASeedAndNotAsAPlainTask() throws {
+        let json = """
+        {"id":"5A1B0000-0000-4000-8000-000000000001","kind":"seed","state":"pending",
+         "title":"Guardar como semente","detail":"Ainda não há uma data clara",
+         "action_title":"Guardar semente",
+         "payload":{"title":"Organizar as fotos da família","detail":"","category":"home"}}
+        """
+
+        let proposal = try JSONDecoder().decode(NinaProposal.self, from: Data(json.utf8))
+
+        XCTAssertEqual(proposal.kind, .seed)
+        XCTAssertEqual(proposal.actionTitle, "Guardar semente")
+    }
+
+    func testAProposalKindFromANewerServerDoesNotCostTheUserTheConversation() throws {
+        let json = """
+        {"id":"5A1B0000-0000-4000-8000-000000000002","kind":"ritual","state":"pending",
+         "title":"Combinar o rodízio da louça","detail":"","action_title":"Combinar",
+         "payload":{"title":"Rodízio da louça","detail":""}}
+        """
+
+        let proposal = try JSONDecoder().decode(NinaProposal.self, from: Data(json.utf8))
+
+        XCTAssertEqual(proposal.kind, .task)
+        XCTAssertEqual(proposal.title, "Combinar o rodízio da louça")
+    }
+
+    func testASeedProposalConfirmsUndatedEvenWhenNinaAttachedADate() {
+        let proposal = NinaProposal(
+            kind: .seed,
+            title: "Guardar como semente",
+            detail: "",
+            actionTitle: "Guardar semente",
+            payload: NinaProposalPayload(
+                title: "Planejar a viagem de fim de ano",
+                detail: "",
+                dueLabel: "dezembro",
+                dueAt: "2026-12-01T12:00:00Z"
+            )
+        )
+
+        let shown = proposal.confirmationPayload
+
+        XCTAssertEqual(shown.dueLabel, "Sem data")
+        XCTAssertNil(shown.dueAt)
+    }
+
+    func testACorrectionCannotGiveASeedADateTheCardNeverOffered() {
+        let proposal = NinaProposal(
+            kind: .seed,
+            title: "Guardar como semente",
+            detail: "",
+            actionTitle: "Guardar semente",
+            payload: NinaProposalPayload(
+                title: "Trocar a lâmpada da varanda",
+                detail: "",
+                dueLabel: "Sem data"
+            )
+        )
+
+        let shown = proposal.confirmationPayload(
+            title: proposal.payload.title,
+            detail: proposal.payload.detail,
+            owner: proposal.payload.owner,
+            dueLabel: "amanhã",
+            amount: ""
+        )
+
+        XCTAssertEqual(shown.dueLabel, "Sem data")
+        XCTAssertNil(shown.dueAt)
+    }
+
     func testCorrectingWhenAProposalHappensMovesTheScheduledDateAndNotJustTheLabel() {
         let now = Date(timeIntervalSince1970: 1_786_000_000)
         let payload = NinaProposalPayload(

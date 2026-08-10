@@ -37,6 +37,24 @@ been closed; everything else in this document is still open.
   that Nina does not receive the reason. `member_management.test.sql` 47 → 72,
   `rls_policies.test.sql` 45 → 46 (26 tables).
 
+- **Nina could not propose a semente.** A user saying "um dia quero organizar o quartinho dos
+  fundos" — an intention with no date, exactly what Sementes exist for — could at best get a task
+  with `due_label: "Sem data"`, which landed in Tarefas as an ordinary undated chore. The one
+  primitive that distinguishes Nina from every other task app was unreachable through the
+  conversation that is supposed to be the product's front door. `seed` is now a proposal kind at
+  every layer: the `nina_proposals` CHECK, the model's strict `json_schema` enum *and* the runtime
+  validator (both, or the model emits a kind the function rejects), one line of the system prompt,
+  and `NinaProposalKind`. `resolve_nina_proposal` writes `task_kind = 'seed'` and forces `due_at`
+  null, `due_label` 'Sem data', `remind_offset_minutes` 0 and `recurrence_rule` 'none' — a lead
+  time counts backwards from a due moment that does not exist, and a weekly undated seed is inert
+  nonsense. The card now says "Semente · plante depois" truthfully, which the previous iteration
+  had deliberately refused to write while the pipeline could not deliver it.
+  Two latent bugs fell out: `NinaProposalKind` decoded strictly, so a single unrecognized kind
+  from a newer server threw and took the entire chat response with it; and
+  `legacySuggestionFromProposal` was a denylist, so a seed would have reached a V1 client
+  relabelled as a *reminder* — the exact flattening the primitive exists to refuse.
+  `nina_ai_v2.test.sql` 96 → 105, Deno 86 → 89.
+
 - **A proposal card hid what confirming it would create — and created something else.** The card
   rendered `proposal.title` while the task was built from `payload.title`, two different
   model-generated strings, so you could approve one wording and get another; responsável, quando

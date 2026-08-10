@@ -29,7 +29,7 @@ export type NinaProposalPayload = {
 
 export type NinaProposalOutput = {
   id: string;
-  kind: "task" | "reminder" | "shopping" | "memory";
+  kind: "task" | "reminder" | "shopping" | "memory" | "seed";
   title: string;
   detail: string;
   action_title: string;
@@ -91,7 +91,7 @@ export const proposalResponseSchema = {
           },
           kind: {
             type: "string",
-            enum: ["task", "reminder", "shopping", "memory"],
+            enum: ["task", "reminder", "shopping", "memory", "seed"],
           },
           title: { type: "string" },
           detail: { type: "string" },
@@ -369,7 +369,9 @@ export function isStructuredOutput(
       proposal
       && typeof proposal.id === "string"
       && typeof proposal.kind === "string"
-      && ["task", "reminder", "shopping", "memory"].includes(proposal.kind)
+      && ["task", "reminder", "shopping", "memory", "seed"].includes(
+        proposal.kind,
+      )
       && typeof proposal.title === "string"
       && typeof proposal.detail === "string"
       && typeof proposal.action_title === "string"
@@ -418,16 +420,15 @@ export function isToolCallBatchAllowed(
 export function legacySuggestionFromProposal(
   proposal: NinaProposalOutput | undefined,
 ): Record<string, unknown> | null {
-  if (!proposal || proposal.kind === "shopping" || proposal.kind === "memory") {
+  if (!proposal || (proposal.kind !== "task" && proposal.kind !== "reminder")) {
     return null;
   }
 
-  const legacyKind = proposal.kind === "task" ? "task" : "reminder";
   return {
     title: proposal.title,
     detail: proposal.detail,
     action_title: proposal.action_title,
-    kind: legacyKind,
+    kind: proposal.kind,
     payload_title: proposal.payload.title,
     payload_detail: proposal.payload.detail,
     payload_owner: proposal.payload.owner,
