@@ -178,6 +178,13 @@ private struct HomeContextToken {
     var generation: UInt64
 }
 
+private enum HomeMembershipOutcome {
+    case member(RemoteHomeState)
+    case awaitingApproval(FamilyJoinRequest)
+    case notAMember(FamilyAccessDecision?)
+    case unverifiable
+}
+
 @MainActor
 @Observable
 final class AppStore {
@@ -540,77 +547,116 @@ final class AppStore {
         guard user.id == activeHomeUserID else { return }
 
         let contextToken = currentHomeContextToken
-        let requestedUserID = user.id
         let requestedRevision = localStateRevision
         isSyncingHome = true
         syncErrorMessage = nil
         defer { finishSyncingHome(ifCurrent: contextToken) }
 
+        guard let outcome = await loadMembershipOutcome(
+            for: user,
+            from: remoteHomeBackend,
+            contextToken: contextToken
+        ) else {
+            return
+        }
+
+        applyMembershipOutcome(
+            outcome,
+            for: user.id,
+            mergingContentAtRevision: requestedRevision
+        )
+    }
+
+    private func loadMembershipOutcome(
+        for user: AuthUser,
+        from backend: any RemoteHomeBackend,
+        contextToken: HomeContextToken
+    ) async -> HomeMembershipOutcome? {
         do {
-            let state = try await remoteHomeBackend.loadHome(for: user)
-
-            guard isCurrentHomeContext(contextToken),
-                  activeHomeUserID == requestedUserID,
-                  localStateRevision == requestedRevision else {
-                return
+            let state = try await backend.loadHome(for: user)
+            guard isCurrentHomeContext(contextToken) else { return nil }
+            if let state {
+                return .member(state)
             }
 
-            guard let state else {
-                let request = try await remoteHomeBackend.loadPendingJoinRequest()
-                guard isCurrentHomeContext(contextToken),
-                      localStateRevision == requestedRevision else {
-                    return
-                }
-
-                if let request {
-                    pendingJoinRequest = request
-                    homeAccessState = .pendingApproval
-                    currentPermissionRole = .member
-                    familyGroup = PreviewData.familyGroup
-                    resetActivityState()
-                    return
-                }
-
-                let decision = try await remoteHomeBackend.loadFamilyAccessDecision()
-                guard isCurrentHomeContext(contextToken),
-                      localStateRevision == requestedRevision else {
-                    return
-                }
-
-                clearCachedHome(for: requestedUserID)
-                currentPermissionRole = .member
-                familyGroup = PreviewData.familyGroup
-                resetActivityState()
-
-                if let decision {
-                    familyAccessDecision = decision
-                    homeAccessState = .accessDecision
-                    return
-                }
-
-                homeAccessState = .noHome
-                return
+            let request = try await backend.loadPendingJoinRequest()
+            guard isCurrentHomeContext(contextToken) else { return nil }
+            if let request {
+                return .awaitingApproval(request)
             }
 
-            apply(state)
+            let decision = try await backend.loadFamilyAccessDecision()
+            guard isCurrentHomeContext(contextToken) else { return nil }
+            return .notAMember(decision)
+        } catch is CancellationError {
+            return nil
+        } catch {
+            guard isCurrentHomeContext(contextToken) else { return nil }
+            return .unverifiable
+        }
+    }
+
+    // Membership decides access; only the content merge may be withheld by a local edit.
+    private func applyMembershipOutcome(
+        _ outcome: HomeMembershipOutcome,
+        for userID: String,
+        mergingContentAtRevision requestedRevision: UInt64
+    ) {
+        let hadAuthorizedHome = homeAccessState == .authorized
+        let hasUnmergedLocalEdits = localStateRevision != requestedRevision
+        let lostMembershipNotice = Self.lostMembershipNotice(
+            forAuthorizedHome: hadAuthorizedHome,
+            discardingLocalEdits: hasUnmergedLocalEdits
+        )
+
+        switch outcome {
+        case .member(let state):
             homeAccessState = .authorized
+            guard !hasUnmergedLocalEdits else { return }
+            apply(state)
             cacheActiveHomeLocally()
             cacheAppSnapshotLocally()
-        } catch is CancellationError {
-            return
-        } catch {
-            guard isCurrentHomeContext(contextToken),
-                  activeHomeUserID == requestedUserID else { return }
-            guard localStateRevision == requestedRevision else {
-                syncErrorMessage = "Não foi possível atualizar a casa. Suas alterações locais foram mantidas."
-                return
-            }
+        case .awaitingApproval(let request):
+            releaseHousehold(discardingQueuedWrites: true)
+            clearCachedHome(for: userID)
+            pendingJoinRequest = request
+            homeAccessState = .pendingApproval
+            syncErrorMessage = lostMembershipNotice
+        case .notAMember(let decision):
+            releaseHousehold(discardingQueuedWrites: true)
+            clearCachedHome(for: userID)
+            familyAccessDecision = decision
+            homeAccessState = decision == nil ? .noHome : .accessDecision
+            syncErrorMessage = lostMembershipNotice
+        case .unverifiable:
+            releaseHousehold(discardingQueuedWrites: false)
             homeAccessState = .unavailable
-            currentPermissionRole = .member
-            familyGroup = PreviewData.familyGroup
-            resetActivityState()
             syncErrorMessage = "Não foi possível verificar sua participação nesta casa."
         }
+    }
+
+    private func releaseHousehold(discardingQueuedWrites: Bool) {
+        if discardingQueuedWrites {
+            remoteMutationTask?.cancel()
+            remoteMutationTask = nil
+            remoteMutationGeneration &+= 1
+        }
+        stopRealtimeSync()
+        pendingJoinRequest = nil
+        familyAccessDecision = nil
+        currentPermissionRole = .member
+        familyGroup = PreviewData.familyGroup
+        resetActivityState()
+    }
+
+    private static func lostMembershipNotice(
+        forAuthorizedHome hadAuthorizedHome: Bool,
+        discardingLocalEdits: Bool
+    ) -> String? {
+        guard hadAuthorizedHome else { return nil }
+        return discardingLocalEdits
+            ? "Você não faz mais parte desta casa. O que você mudou agora não foi salvo."
+            : "Você não faz mais parte desta casa."
     }
 
     @discardableResult

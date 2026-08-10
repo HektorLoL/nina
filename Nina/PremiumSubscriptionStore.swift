@@ -363,7 +363,6 @@ final class PremiumSubscriptionStore {
                 applyLocal(local)
 
                 guard backend != nil else {
-                    await transaction.finish()
                     statusMessage = "Premium ativado."
                     return
                 }
@@ -420,14 +419,12 @@ final class PremiumSubscriptionStore {
         }
     }
 
+    // An unfinished transaction is App Store redelivery: never spend it without a server record.
     private func handle(transactionUpdate update: VerificationResult<Transaction>) async {
         do {
             let verifiedTransaction = try verifiedTransaction(from: update)
             let transaction = verifiedTransaction.transaction
-            guard productIDs.contains(transaction.productID) else {
-                await transaction.finish()
-                return
-            }
+            guard productIDs.contains(transaction.productID) else { return }
 
             let local = PremiumLocalTransaction(
                 transaction: transaction,
@@ -435,11 +432,7 @@ final class PremiumSubscriptionStore {
             )
             applyLocal(local)
 
-            guard backend != nil else {
-                await transaction.finish()
-                return
-            }
-            guard let currentUser else { return }
+            guard backend != nil, let currentUser else { return }
 
             isSyncingBackend = true
             let didRecord = await recordOnServer(

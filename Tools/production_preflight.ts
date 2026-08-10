@@ -39,6 +39,39 @@ const localSecretPaths = [
   "web/.dev.vars",
 ];
 
+const premiumRecordedSaleGuard = "if didRecord {";
+
+export function premiumTransactionFinishes(
+  source: string,
+): { total: number; afterServerRecord: number } {
+  let depth = 0;
+  let guardDepth: number | undefined;
+  let total = 0;
+  let afterServerRecord = 0;
+
+  for (const line of source.split("\n")) {
+    if (guardDepth === undefined && line.includes(premiumRecordedSaleGuard)) {
+      guardDepth = depth;
+    }
+    if (line.includes("transaction.finish()")) {
+      total += 1;
+      if (guardDepth !== undefined) afterServerRecord += 1;
+    }
+    depth += countOccurrences(line, "{") - countOccurrences(line, "}");
+    if (guardDepth !== undefined && depth <= guardDepth) guardDepth = undefined;
+  }
+
+  return { total, afterServerRecord };
+}
+
+function countOccurrences(value: string, character: string): number {
+  let count = 0;
+  for (const entry of value) {
+    if (entry === character) count += 1;
+  }
+  return count;
+}
+
 function check(
   id: string,
   condition: boolean,
@@ -590,6 +623,7 @@ export async function repositoryChecks(
     inviteLinks,
     sheets,
     ninaApp,
+    premiumSubscriptionStore,
   ] = await Promise.all([
     readText(root, "Nina.xcodeproj/project.pbxproj"),
     readText(root, "Nina/Config/Nina.xcconfig"),
@@ -606,6 +640,7 @@ export async function repositoryChecks(
     readText(root, "Nina/InviteLinks.swift"),
     readText(root, "Nina/Sheets.swift"),
     readText(root, "Nina/NinaApp.swift"),
+    readText(root, "Nina/PremiumSubscriptionStore.swift"),
   ]);
 
   const bundleID = firstBuildSetting(project, "PRODUCT_BUNDLE_IDENTIFIER") ??
@@ -621,6 +656,7 @@ export async function repositoryChecks(
   const associationAppIDs: string[] = association?.applinks?.details?.flatMap(
     (detail: { appIDs?: string[] }) => detail.appIDs ?? [],
   ) ?? [];
+  const premiumFinishes = premiumTransactionFinishes(premiumSubscriptionStore);
   const files = await trackedFiles(root);
   const trackedLocalSecrets = localSecretPaths.filter((path) =>
     files.includes(path)
@@ -714,6 +750,14 @@ export async function repositoryChecks(
         ninaApp.includes("PrivacyExportFileStore.removeAll"),
       "Deletion invalidates stale loads and privacy exports have a bounded protected lifecycle.",
       "Restore explicit-ID deletion, stale-load invalidation, and privacy-export cleanup.",
+    ),
+    check(
+      "repository.premium-transaction-finish",
+      premiumFinishes.total >= 1 &&
+        premiumFinishes.total === premiumFinishes.afterServerRecord &&
+        premiumSubscriptionStore.includes("await recordOnServer("),
+      "Purchased transactions are finished only after the server records them.",
+      "Finish a purchased App Store transaction only where the server recorded it; an unrecognized or unrecorded product must stay in the queue.",
     ),
     check(
       "repository.secret-ignore",

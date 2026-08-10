@@ -791,7 +791,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
-    func testLocalShoppingEditSurvivesFailedRefresh() async {
+    func testAnUnverifiableMembershipEndsHomeAccessEvenWithALocalEditPending() async {
         let user = makeUser()
         let itemID = UUID()
         let initialState = makeRemoteState(
@@ -824,11 +824,104 @@ final class AppStoreAuthorizationTests: XCTestCase {
         await refreshTask.value
         await store.waitForPendingRemoteMutations()
 
-        XCTAssertEqual(store.homeAccessState, .authorized)
-        XCTAssertEqual(store.shoppingItems.first?.title, "Local coffee")
-        XCTAssertEqual(store.shoppingItems.first?.amount, "2")
-        XCTAssertEqual(store.shoppingItems.first?.owner, "Owner")
-        XCTAssertNotNil(store.syncErrorMessage)
+        XCTAssertEqual(store.homeAccessState, .unavailable)
+        XCTAssertFalse(store.hasActiveHome)
+        XCTAssertNotEqual(store.familyGroup.name, initialState.familyGroup.name)
+        XCTAssertFalse(store.shoppingItems.contains { $0.id == itemID })
+        XCTAssertEqual(
+            store.syncErrorMessage,
+            "Não foi possível verificar sua participação nesta casa."
+        )
+    }
+
+    @MainActor
+    func testARemovedMemberLosesTheHouseEvenWhileStillEditingIt() async throws {
+        let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-app-store-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
+        let user = makeUser()
+        let taskID = UUID()
+        let initialState = makeRemoteState(
+            familyName: "Casa Aurora",
+            tasks: [
+                TaskItem(
+                    id: taskID,
+                    title: "Pagar o boleto",
+                    subtitle: "",
+                    owner: "Casa",
+                    dueLabel: "Hoje",
+                    category: .bills,
+                    isDone: false,
+                    createdBy: "Manual"
+                )
+            ]
+        )
+        let backend = ControlledRefreshHomeBackend(initialState: initialState)
+        let store = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: NoopHomeNotificationScheduler()
+        )
+        await store.activateHomeContext(for: user)
+        let householdScope = PrivateLocalDataScope.household(for: user.id)
+        let homeKey = "nina.home.familyGroup.\(user.id)"
+        XCTAssertNotNil(try privateDataStore.data(forKey: homeKey, ownerScope: householdScope))
+
+        let refreshTask = Task {
+            await store.refreshHomeFromRemote(for: user)
+        }
+        await backend.waitUntilRefreshStarted()
+
+        store.toggleTask(try XCTUnwrap(store.tasks.first(where: { $0.id == taskID })))
+        await backend.completeRefreshWithoutHome()
+        await refreshTask.value
+        await store.waitForPendingRemoteMutations()
+
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertFalse(store.hasActiveHome)
+        XCTAssertNotEqual(store.familyGroup.name, "Casa Aurora")
+        XCTAssertFalse(store.tasks.contains { $0.id == taskID })
+        XCTAssertEqual(
+            store.syncErrorMessage,
+            "Você não faz mais parte desta casa. O que você mudou agora não foi salvo."
+        )
+        XCTAssertNil(try privateDataStore.data(forKey: homeKey, ownerScope: householdScope))
+    }
+
+    @MainActor
+    func testADeclinedRemovalReachesTheMemberWhoKeptEditingDuringTheRefresh() async {
+        let user = makeUser()
+        let decision = makeAccessDecision(outcome: .removed)
+        let initialState = makeRemoteState(familyName: "Casa Aurora")
+        let backend = ControlledRefreshHomeBackend(
+            initialState: initialState,
+            accessDecision: decision
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let refreshTask = Task {
+            await store.refreshHomeFromRemote(for: user)
+        }
+        await backend.waitUntilRefreshStarted()
+
+        store.addShoppingItem(title: "Café", amount: "1", owner: "Casa")
+        await backend.completeRefreshWithoutHome()
+        await refreshTask.value
+        await store.waitForPendingRemoteMutations()
+
+        XCTAssertEqual(store.homeAccessState, .accessDecision)
+        XCTAssertEqual(store.familyAccessDecision, decision)
+        XCTAssertFalse(store.hasActiveHome)
+        XCTAssertFalse(store.shoppingItems.contains { $0.title == "Café" })
     }
 
     @MainActor
@@ -2633,14 +2726,20 @@ private actor ControlledRefreshHomeBackend: RemoteHomeBackend {
 
     private let initialState: RemoteHomeState
     private let controlsInitialLoad: Bool
+    private let accessDecision: FamilyAccessDecision?
     private var loadCount = 0
     private var refreshStarted = false
     private var refreshStartedContinuation: CheckedContinuation<Void, Never>?
     private var refreshContinuation: CheckedContinuation<RemoteHomeState?, Error>?
 
-    init(initialState: RemoteHomeState, controlsInitialLoad: Bool = false) {
+    init(
+        initialState: RemoteHomeState,
+        controlsInitialLoad: Bool = false,
+        accessDecision: FamilyAccessDecision? = nil
+    ) {
         self.initialState = initialState
         self.controlsInitialLoad = controlsInitialLoad
+        self.accessDecision = accessDecision
     }
 
     func waitUntilRefreshStarted() async {
@@ -2655,9 +2754,18 @@ private actor ControlledRefreshHomeBackend: RemoteHomeBackend {
         refreshContinuation = nil
     }
 
+    func completeRefreshWithoutHome() {
+        refreshContinuation?.resume(returning: nil)
+        refreshContinuation = nil
+    }
+
     func failRefresh() {
         refreshContinuation?.resume(throwing: RefreshFailure())
         refreshContinuation = nil
+    }
+
+    func loadFamilyAccessDecision() async throws -> FamilyAccessDecision? {
+        accessDecision
     }
 
     func loadHome(for user: AuthUser) async throws -> RemoteHomeState? {

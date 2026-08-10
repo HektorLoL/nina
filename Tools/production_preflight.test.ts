@@ -7,6 +7,7 @@ import {
   isSecretSupabaseKey,
   parseEnvironmentFile,
   type PreflightEnvironment,
+  premiumTransactionFinishes,
   productionEnvironmentChecks,
   type RepositoryFacts,
 } from "./production_preflight.ts";
@@ -189,6 +190,34 @@ Deno.test("iOS artifact rejects unresolved settings, drift, and server credentia
   assert(failedIDs.includes("artifact.ai-release-decision"));
   assert(failedIDs.includes("artifact.resolved-settings"));
   assert(failedIDs.includes("artifact.credential-scan"));
+});
+
+Deno.test("the shipped premium store finishes a purchase only after the server records it", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../Nina/PremiumSubscriptionStore.swift", import.meta.url),
+  );
+
+  const finishes = premiumTransactionFinishes(source);
+
+  assert(finishes.total >= 1);
+  assertEquals(finishes.afterServerRecord, finishes.total);
+});
+
+Deno.test("a transaction finished outside the recorded-sale branch is counted as unguarded", () => {
+  const unknownProductIsDiscarded = `
+    guard productIDs.contains(transaction.productID) else {
+        await transaction.finish()
+        return
+    }
+    if didRecord {
+        await transaction.finish()
+    }
+  `;
+
+  assertEquals(
+    premiumTransactionFinishes(unknownProductIsDiscarded),
+    { total: 2, afterServerRecord: 1 },
+  );
 });
 
 Deno.test("online deployment checks verify health, policy, headers, and AASA", async () => {
