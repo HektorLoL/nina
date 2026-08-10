@@ -945,6 +945,43 @@ enum NinaMemoryVisibility: String, Codable, CaseIterable, Hashable {
     }
 }
 
+enum NinaProposalSource: String, Codable, Hashable {
+    case message = "mensagem"
+    case attachment = "anexo"
+    case existingTask = "tarefa_existente"
+    case memory = "memoria"
+    case routine = "rotina"
+
+    var title: String {
+        switch self {
+        case .message: "Da conversa"
+        case .attachment: "Do anexo"
+        case .existingTask: "De uma tarefa da casa"
+        case .memory: "De algo que guardei"
+        case .routine: "Da rotina da casa"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .message: "bubble.left.fill"
+        case .attachment: "paperclip"
+        case .existingTask: "checklist"
+        case .memory: "brain.head.profile"
+        case .routine: "repeat"
+        }
+    }
+
+    var tone: MemberTone {
+        switch self {
+        case .message: .mint
+        case .attachment: .sky
+        case .existingTask: .amber
+        case .memory, .routine: .lavender
+        }
+    }
+}
+
 struct NinaExtractedReading: Codable, Hashable {
     var label: String
     var value: String
@@ -978,6 +1015,8 @@ struct NinaProposalPayload: Codable, Hashable {
     var symbolName: String
     var amount: String
     var extracted: [NinaExtractedReading]
+    var rationale: String
+    var source: NinaProposalSource?
     var visibility: NinaMemoryVisibility?
     var confidence: Double?
     var deduplicationKey: String
@@ -992,6 +1031,8 @@ struct NinaProposalPayload: Codable, Hashable {
         case symbolName = "symbol_name"
         case amount
         case extracted
+        case rationale
+        case source
         case visibility
         case confidence
         case deduplicationKey = "deduplication_key"
@@ -1007,6 +1048,8 @@ struct NinaProposalPayload: Codable, Hashable {
         symbolName: String = "sparkles",
         amount: String = "",
         extracted: [NinaExtractedReading] = [],
+        rationale: String = "",
+        source: NinaProposalSource? = nil,
         visibility: NinaMemoryVisibility? = nil,
         confidence: Double? = nil,
         deduplicationKey: String = ""
@@ -1020,6 +1063,8 @@ struct NinaProposalPayload: Codable, Hashable {
         self.symbolName = symbolName
         self.amount = amount
         self.extracted = extracted
+        self.rationale = rationale
+        self.source = source
         self.visibility = visibility
         self.confidence = confidence
         self.deduplicationKey = deduplicationKey
@@ -1040,6 +1085,11 @@ struct NinaProposalPayload: Codable, Hashable {
         // A half-read line is not something the card may present as what Nina read off the document.
         extracted = (try container.decodeIfPresent([NinaExtractedReading].self, forKey: .extracted) ?? [])
             .filter { !$0.label.isEmpty && !$0.value.isEmpty }
+        rationale = (try container.decodeIfPresent(String.self, forKey: .rationale) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        source = NinaProposalSource(
+            rawValue: try container.decodeIfPresent(String.self, forKey: .source) ?? ""
+        )
         visibility = NinaMemoryVisibility(
             rawValue: try container.decodeIfPresent(String.self, forKey: .visibility) ?? ""
         )

@@ -1197,6 +1197,8 @@ private struct NinaProposalCard: View {
                             .foregroundStyle(NinaTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+
+                    proposalBasis
                 }
             }
 
@@ -1256,6 +1258,54 @@ private struct NinaProposalCard: View {
 
     private var isSeed: Bool {
         proposal.kind == .seed
+    }
+
+    // The basis says where a proposal came from; how sure Nina is never joins it, because a score
+    // on a household suggestion reads as a verdict on the house instead of a portrait of it.
+    @ViewBuilder
+    private var proposalBasis: some View {
+        if proposal.payload.source != nil || !proposal.payload.rationale.isEmpty {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    basisParts
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    basisParts
+                }
+            }
+            .padding(.top, 3)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(basisAccessibilityLabel)
+        }
+    }
+
+    @ViewBuilder
+    private var basisParts: some View {
+        if let source = proposal.payload.source {
+            Label(source.title, systemImage: source.symbolName)
+                .font(.caption2.weight(.black))
+                .foregroundStyle(source.tone.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(source.tone.softColor, in: Capsule())
+        }
+
+        if !proposal.payload.rationale.isEmpty {
+            Text(proposal.payload.rationale)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var basisAccessibilityLabel: String {
+        [proposal.payload.source?.title, proposal.payload.rationale]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: ". ")
     }
 
     @ViewBuilder

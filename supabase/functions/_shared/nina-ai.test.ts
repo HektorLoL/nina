@@ -20,6 +20,7 @@ import {
   maxExtractedReadings,
   maxExtractedValueLength,
   maxInputTokens,
+  maxRationaleLength,
   maxToolCalls,
   maxToolRounds,
   pricingForModel,
@@ -355,6 +356,167 @@ Deno.test("a reading past its declared bounds is refused instead of quietly trim
   assertFalse(isStructuredOutput(withReading([{ label: "Reunião" }])));
   assertFalse(isStructuredOutput(withReading(["Reunião 20/09/2026"])));
   assertFalse(isStructuredOutput(withReading("Reunião 20/09/2026")));
+});
+
+Deno.test("a proposal carries the basis it was built from, or none at all", () => {
+  const vet = {
+    id: crypto.randomUUID(),
+    kind: "task",
+    title: "Marcar veterinário para o Thor",
+    detail: "Esta semana",
+    action_title: "Criar tarefa",
+    payload: {
+      title: "Marcar veterinário para o Thor",
+      detail: "",
+      owner: "Heitor",
+      due_label: "Esta semana",
+      due_at: null,
+      category: "pet",
+      symbol_name: "pawprint.fill",
+      amount: "",
+      extracted: null,
+      rationale: "Você falou do Thor nesta conversa",
+      source: "mensagem",
+      visibility: null,
+      confidence: null,
+      deduplication_key: "veterinario-thor",
+    },
+  };
+  const reply = "Posso deixar isso marcado para esta semana.";
+  const payloadSchema =
+    proposalResponseSchema.properties.proposals.items.properties.payload;
+  const rationaleSchema = payloadSchema.properties.rationale;
+  const sourceSchema = payloadSchema.properties.source;
+
+  assert(payloadSchema.required.includes("rationale"));
+  assert(payloadSchema.required.includes("source"));
+  assert(rationaleSchema.type.includes("string"));
+  assert(rationaleSchema.type.includes("null"));
+  assertEquals(rationaleSchema.maxLength, maxRationaleLength);
+  assert(sourceSchema.type.includes("string"));
+  assert(sourceSchema.type.includes("null"));
+  assert(sourceSchema.enum.includes(null));
+
+  assert(isStructuredOutput({ reply, proposals: [vet] }));
+  assert(isStructuredOutput({
+    reply,
+    proposals: [{
+      ...vet,
+      payload: { ...vet.payload, rationale: null, source: null },
+    }],
+  }));
+  assert(isStructuredOutput({
+    reply,
+    proposals: [{
+      ...vet,
+      payload: {
+        ...vet.payload,
+        rationale: "R".repeat(maxRationaleLength),
+      },
+    }],
+  }));
+
+  const { rationale: _noBasis, source: _noOrigin, ...payloadWithoutBasis } =
+    vet.payload;
+  assert(isStructuredOutput({
+    reply,
+    proposals: [{ ...vet, payload: payloadWithoutBasis }],
+  }));
+});
+
+Deno.test("a basis Nina cannot have had is refused instead of reaching the card", () => {
+  const proposal = {
+    id: crypto.randomUUID(),
+    kind: "reminder",
+    title: "Levar o Thor para tomar vacina",
+    detail: "Sexta",
+    action_title: "Criar lembrete",
+    payload: {
+      title: "Levar o Thor para tomar vacina",
+      detail: "",
+      owner: "Heitor",
+      due_label: "Sexta",
+      due_at: null,
+      category: "pet",
+      symbol_name: "pawprint.fill",
+      amount: "",
+      extracted: null,
+      rationale: "Está na carteirinha que você mandou",
+      source: "anexo",
+      visibility: null,
+      confidence: null,
+      deduplication_key: "vacina-thor",
+    },
+  };
+  const reply = "Li a carteirinha assim. Confira antes de confirmar.";
+  const withBasis = (rationale: unknown, source: unknown) => ({
+    reply,
+    proposals: [{
+      ...proposal,
+      payload: { ...proposal.payload, rationale, source },
+    }],
+  });
+
+  assertFalse(isStructuredOutput(withBasis(
+    "R".repeat(maxRationaleLength + 1),
+    "anexo",
+  )));
+  assertFalse(isStructuredOutput(withBasis("", "anexo")));
+  assertFalse(isStructuredOutput(withBasis("   ", "anexo")));
+  assertFalse(isStructuredOutput(withBasis(42, "anexo")));
+  assertFalse(isStructuredOutput(withBasis(["anexo"], "anexo")));
+  assertFalse(isStructuredOutput(withBasis("Está na carteirinha", "intuicao")));
+  assertFalse(isStructuredOutput(withBasis("Está na carteirinha", "Anexo")));
+  assertFalse(isStructuredOutput(withBasis("Está na carteirinha", 1)));
+});
+
+Deno.test("every source the schema offers is a source the validator accepts", () => {
+  const proposal = {
+    id: crypto.randomUUID(),
+    kind: "task",
+    title: "Repor a ração do Thor",
+    detail: "Quando acabar",
+    action_title: "Criar tarefa",
+    payload: {
+      title: "Repor a ração do Thor",
+      detail: "",
+      owner: "Casa",
+      due_label: "Quando acabar",
+      due_at: null,
+      category: "pet",
+      symbol_name: "pawprint.fill",
+      amount: "",
+      extracted: null,
+      rationale: "Vocês compram a ração todo mês",
+      source: "rotina",
+      visibility: null,
+      confidence: null,
+      deduplication_key: "racao-thor",
+    },
+  };
+  const declaredSources =
+    proposalResponseSchema.properties.proposals.items.properties.payload
+      .properties.source.enum;
+
+  assertEquals(declaredSources.length, 6);
+  for (const source of declaredSources) {
+    assert(
+      isStructuredOutput({
+        reply: "Posso deixar isso pronto para você confirmar.",
+        proposals: [{
+          ...proposal,
+          payload: { ...proposal.payload, source },
+        }],
+      }),
+      String(source),
+    );
+  }
+});
+
+Deno.test("the prompt would rather Nina name no basis than invent one", () => {
+  assertStringIncludes(ninaSystemPrompt, "Use rationale e source");
+  assertStringIncludes(ninaSystemPrompt, "apenas com o que você recebeu");
+  assertStringIncludes(ninaSystemPrompt, "em vez de inventar uma origem");
 });
 
 Deno.test("the prompt binds every extracted value to what the attachment literally says", () => {

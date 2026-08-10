@@ -18,6 +18,13 @@ export type NinaExtractedReading = {
   value: string;
 };
 
+export type NinaProposalSource =
+  | "mensagem"
+  | "anexo"
+  | "tarefa_existente"
+  | "memoria"
+  | "rotina";
+
 export type NinaProposalPayload = {
   title: string;
   detail: string;
@@ -28,6 +35,8 @@ export type NinaProposalPayload = {
   symbol_name: string;
   amount: string;
   extracted?: NinaExtractedReading[] | null;
+  rationale?: string | null;
+  source?: NinaProposalSource | null;
   visibility: "private" | "shared" | null;
   confidence: number | null;
   deduplication_key: string;
@@ -80,6 +89,7 @@ export const maxInteractiveModelCalls = maxToolRounds + 1;
 export const maxExtractedReadings = 4;
 export const maxExtractedLabelLength = 24;
 export const maxExtractedValueLength = 40;
+export const maxRationaleLength = 60;
 
 export const proposalResponseSchema = {
   type: "object",
@@ -138,6 +148,23 @@ export const proposalResponseSchema = {
                   additionalProperties: false,
                 },
               },
+              rationale: {
+                type: ["string", "null"],
+                maxLength: maxRationaleLength,
+                description:
+                  "A short Brazilian Portuguese phrase naming what this proposal is based on.",
+              },
+              source: {
+                type: ["string", "null"],
+                enum: [
+                  "mensagem",
+                  "anexo",
+                  "tarefa_existente",
+                  "memoria",
+                  "rotina",
+                  null,
+                ],
+              },
               visibility: {
                 type: ["string", "null"],
                 enum: ["private", "shared", null],
@@ -159,6 +186,8 @@ export const proposalResponseSchema = {
               "symbol_name",
               "amount",
               "extracted",
+              "rationale",
+              "source",
               "visibility",
               "confidence",
               "deduplication_key",
@@ -403,6 +432,21 @@ function isExtractedReadings(value: unknown): boolean {
   });
 }
 
+function isProposalRationale(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  return typeof value === "string"
+    && value.trim().length > 0
+    && value.length <= maxRationaleLength;
+}
+
+function isProposalSource(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  return typeof value === "string"
+    && ["mensagem", "anexo", "tarefa_existente", "memoria", "rotina"].includes(
+      value,
+    );
+}
+
 export function isStructuredOutput(
   value: unknown,
 ): value is NinaStructuredOutput {
@@ -438,6 +482,8 @@ export function isStructuredOutput(
       && typeof proposal.payload.symbol_name === "string"
       && typeof proposal.payload.amount === "string"
       && isExtractedReadings(proposal.payload.extracted)
+      && isProposalRationale(proposal.payload.rationale)
+      && isProposalSource(proposal.payload.source)
       && (
         proposal.payload.visibility === null
         || proposal.payload.visibility === "private"

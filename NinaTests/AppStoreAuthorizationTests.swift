@@ -2038,6 +2038,75 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testAProposalCachedByAnOlderBuildWithoutABasisStillConfirms() async throws {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let cached = """
+        {"id":"7A2C0000-0000-4000-8000-00000000000A","kind":"task","state":"pending",
+         "title":"Anotei o boleto da luz","detail":"Chegou hoje","action_title":"Criar tarefa",
+         "payload":{"title":"Pagar o boleto da Enel","detail":"Vence sexta","owner":"Heitor",
+         "due_label":"sexta, 09:00","due_at":"2026-08-14T12:00:00Z","category":"bills"}}
+        """
+        let proposal = try JSONDecoder().decode(NinaProposal.self, from: Data(cached.utf8))
+        store.messages = [
+            ChatMessage(sender: .nina, text: "Confirme", timestamp: .now, proposals: [proposal])
+        ]
+
+        let shown = proposal.confirmationPayload
+        let didAccept = await store.resolveProposal(
+            proposal,
+            decision: .accept,
+            editedPayload: shown
+        )
+        let confirmed = await backend.confirmedPayload(for: proposal.id)
+
+        XCTAssertTrue(didAccept)
+        XCTAssertTrue(shown.rationale.isEmpty)
+        XCTAssertNil(shown.source)
+        XCTAssertEqual(confirmed?.title, "Pagar o boleto da Enel")
+        XCTAssertEqual(confirmed?.owner, "Heitor")
+        XCTAssertEqual(confirmed?.dueLabel, "sexta, 09:00")
+        XCTAssertTrue(confirmed?.rationale.isEmpty ?? false)
+        XCTAssertNil(confirmed?.source)
+    }
+
+    @MainActor
+    func testConfirmingAProposalCarriesTheBasisItWasShownWith() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let proposal = NinaProposal(
+            kind: .task,
+            title: "Anotei o boleto da luz",
+            detail: "Chegou hoje",
+            actionTitle: "Criar tarefa",
+            payload: NinaProposalPayload(
+                title: "Pagar o boleto da Enel",
+                detail: "Vence sexta",
+                owner: "Heitor",
+                dueLabel: "sexta, 09:00",
+                dueAt: "2026-08-14T12:00:00Z",
+                rationale: "Vencimento que li na foto",
+                source: .attachment,
+                confidence: 0.42
+            )
+        )
+
+        let shown = proposal.confirmationPayload
+        _ = await store.resolveProposal(proposal, decision: .accept, editedPayload: shown)
+        let confirmed = await backend.confirmedPayload(for: proposal.id)
+
+        XCTAssertEqual(confirmed?.source, .attachment)
+        XCTAssertEqual(confirmed?.rationale, "Vencimento que li na foto")
+        XCTAssertFalse(confirmed?.title.contains("42") ?? true)
+        XCTAssertFalse(confirmed?.detail.contains("42") ?? true)
+        XCTAssertFalse(confirmed?.rationale.contains("42") ?? true)
+    }
+
+    @MainActor
     func testAProposalWithoutPayloadWordingConfirmsTheHeadlineTheCardShowed() async {
         let user = makeUser()
         let backend = RecordingHomeBackend(state: makeRemoteState())

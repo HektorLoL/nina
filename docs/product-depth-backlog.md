@@ -37,6 +37,22 @@ been closed; everything else in this document is still open.
   that Nina does not receive the reason. `member_management.test.sql` 47 → 72,
   `rls_policies.test.sql` 45 → 46 (26 tables).
 
+- **A proposal was an assertion with no basis.** Seeing "Marcar veterinário para o Thor · Heitor
+  · esta semana", a user had no way to tell whether Nina read it in their message, found it in an
+  existing task, recalled a confirmed memory, or invented it — exactly the moment trust is won or
+  lost. The payload now carries `rationale` and `source` (mensagem / anexo / tarefa_existente /
+  memoria / rotina), rendered as one chip plus a line under the card header, with a prompt rule
+  that would rather she name no basis than invent one — an invented basis is strictly worse than
+  none, because the chip is what invites the user to stop checking. No migration: both live inside
+  `payload`, which `complete_nina_chat_run` inserts verbatim. **`confidence` stays unrendered**,
+  deliberately: it has been decoded end to end since V2 and read by nothing, and a percentage on a
+  household suggestion reads as Nina scoring the house rather than portraying it — the opposite of
+  "um retrato para conversar, não para cobrar". A test pins that, feeding two payloads identical
+  but for confidence 0.11 vs 0.99 and asserting tone, symbol and copy are unchanged, so no future
+  traffic-light tint can creep in. The basis sits inside the header column rather than as a third
+  metadata row, so the card still carries two blocks below the header and the proposal itself is
+  not buried. Deno 92 → 96, iOS +8.
+
 - **Nina never showed what she read off a document, and the photo became unreadable.** A user
   photographs the energy boleto, Nina says "Anotei o vencimento", and three days later there is a
   320px thumbnail that cannot be tapped — and after the first refresh not even that, because

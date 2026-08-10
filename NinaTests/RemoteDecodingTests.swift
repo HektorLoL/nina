@@ -351,6 +351,134 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(decoded.extracted, payload.extracted)
     }
 
+    func testTheBasisNinaBuiltAProposalFromArrivesWithTheProposal() throws {
+        let json = """
+        {"title":"Pagar o boleto da Enel","detail":"Vence dia 12","owner":"Casa",
+         "due_label":"12/08, 09:00","due_at":"2026-08-12T12:00:00Z","category":"bills",
+         "symbol_name":"bolt.fill","amount":"",
+         "rationale":"Vencimento que li na foto","source":"anexo",
+         "visibility":null,"confidence":0.74,"deduplication_key":"enel-2026-08"}
+        """
+
+        let payload = try JSONDecoder().decode(NinaProposalPayload.self, from: Data(json.utf8))
+
+        XCTAssertEqual(payload.rationale, "Vencimento que li na foto")
+        XCTAssertEqual(payload.source, .attachment)
+        XCTAssertEqual(payload.source?.title, "Do anexo")
+        XCTAssertEqual(payload.source?.tone, .sky)
+    }
+
+    func testAProposalWithoutABasisDecodesWithNothingForTheCardToDraw() throws {
+        let older = try JSONDecoder().decode(
+            NinaProposalPayload.self,
+            from: Data(#"{"title":"Pagar o boleto","detail":""}"#.utf8)
+        )
+        let explicitlyNull = try JSONDecoder().decode(
+            NinaProposalPayload.self,
+            from: Data(#"{"title":"Pagar o boleto","detail":"","rationale":null,"source":null}"#.utf8)
+        )
+        let blank = try JSONDecoder().decode(
+            NinaProposalPayload.self,
+            from: Data(#"{"title":"Pagar o boleto","detail":"","rationale":"   ","source":""}"#.utf8)
+        )
+
+        for payload in [older, explicitlyNull, blank] {
+            XCTAssertTrue(payload.rationale.isEmpty)
+            XCTAssertNil(payload.source)
+        }
+    }
+
+    func testASourceFromANewerServerLeavesTheChipOffInsteadOfDrawingABlankOne() throws {
+        let payload = try JSONDecoder().decode(
+            NinaProposalPayload.self,
+            from: Data(#"{"title":"Combinar o rodízio","detail":"","source":"intuicao"}"#.utf8)
+        )
+
+        XCTAssertNil(payload.source)
+        XCTAssertEqual(payload.title, "Combinar o rodízio")
+    }
+
+    func testEverySourceTheServerCanSendNamesItselfInNinasVoice() {
+        let sources: [(String, NinaProposalSource)] = [
+            ("mensagem", .message),
+            ("anexo", .attachment),
+            ("tarefa_existente", .existingTask),
+            ("memoria", .memory),
+            ("rotina", .routine)
+        ]
+
+        for (wireValue, source) in sources {
+            XCTAssertEqual(NinaProposalSource(rawValue: wireValue), source)
+            XCTAssertFalse(source.title.isEmpty)
+            XCTAssertFalse(source.title.contains("!"))
+            XCTAssertNotEqual(source.tone, .coral)
+        }
+    }
+
+    func testTheBasisSurvivesALocalCacheRoundTrip() throws {
+        let payload = NinaProposalPayload(
+            title: "Levar o Thor ao veterinário",
+            detail: "",
+            rationale: "Você comentou na conversa",
+            source: .message
+        )
+
+        let decoded = try JSONDecoder().decode(
+            NinaProposalPayload.self,
+            from: JSONEncoder().encode(payload)
+        )
+
+        XCTAssertEqual(decoded.rationale, "Você comentou na conversa")
+        XCTAssertEqual(decoded.source, .message)
+    }
+
+    func testCorrectingAProposalKeepsTheBasisItWasBuiltFrom() {
+        let payload = NinaProposalPayload(
+            title: "Pagar o boleto da Enel",
+            detail: "",
+            dueLabel: "12/08",
+            dueAt: "2026-08-12T12:00:00Z",
+            rationale: "Vencimento que li na foto",
+            source: .attachment
+        )
+
+        let edited = payload.edited(
+            title: payload.title,
+            detail: payload.detail,
+            owner: payload.owner,
+            dueLabel: "18/08",
+            amount: ""
+        )
+
+        XCTAssertEqual(edited.rationale, payload.rationale)
+        XCTAssertEqual(edited.source, .attachment)
+    }
+
+    func testHowSureNinaIsChangesNothingTheProposalCardCanDraw() throws {
+        func payload(confidence: Double) throws -> NinaProposalPayload {
+            try JSONDecoder().decode(
+                NinaProposalPayload.self,
+                from: Data("""
+                {"title":"Pagar o boleto da Enel","detail":"Vence dia 12",
+                 "rationale":"Vencimento que li na foto","source":"anexo",
+                 "confidence":\(confidence)}
+                """.utf8)
+            )
+        }
+
+        let unsure = try payload(confidence: 0.11)
+        let sure = try payload(confidence: 0.99)
+
+        XCTAssertEqual(unsure.confidence, 0.11)
+        XCTAssertEqual(sure.confidence, 0.99)
+        XCTAssertEqual(unsure.rationale, sure.rationale)
+        XCTAssertEqual(unsure.source?.title, sure.source?.title)
+        XCTAssertEqual(unsure.source?.tone, sure.source?.tone)
+        XCTAssertEqual(unsure.source?.symbolName, sure.source?.symbolName)
+        XCTAssertFalse(unsure.rationale.contains("11"))
+        XCTAssertFalse(sure.rationale.contains("99"))
+    }
+
     func testASeedProposalFromTheServerDecodesAsASeedAndNotAsAPlainTask() throws {
         let json = """
         {"id":"5A1B0000-0000-4000-8000-000000000001","kind":"seed","state":"pending",
