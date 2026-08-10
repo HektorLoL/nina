@@ -1260,13 +1260,15 @@ final class AppStore {
         }
         guard isCurrentHomeContext(contextToken) else { return }
 
+        let gate = NinaProposalGate.current
         let ninaMessage = ChatMessage(
             id: response.assistantMessageID ?? UUID(),
             sender: .nina,
             text: response.reply,
             timestamp: .now,
-            suggestion: response.suggestion,
-            proposals: NinaAIConfiguration.isV2Enabled ? response.proposals : []
+            suggestion: response.serverPersisted ? nil : response.suggestion,
+            proposals: gate.visibleProposals(response.proposals),
+            hasWithheldProposals: gate.withholdsProposals(response.proposals)
         )
         messages.append(ninaMessage)
         persistActivityLocally()
@@ -1295,6 +1297,8 @@ final class AppStore {
     }
 
     func applySuggestion(_ suggestion: NinaSuggestion) {
+        guard messages.contains(where: { $0.suggestion == suggestion }) else { return }
+
         switch suggestion.kind {
         case .task, .gift, .document, .redistribution:
             addTask(

@@ -37,6 +37,21 @@ been closed; everything else in this document is still open.
   that Nina does not receive the reason. `member_management.test.sql` 47 → 72,
   `rls_policies.test.sql` 45 → 46 (26 tables).
 
+- **Flipping NINA_AI_V2_ENABLED would have shipped an inbox pre-loaded with stale work.** The flag
+  is client-only — `nina-chat` writes a `nina_proposals` row on every turn regardless — so today a
+  user taps "Criar tarefa" on a *legacy* card, the task appears, and the proposal row stays pending
+  forever because `applySuggestion` never called `resolveNinaProposal`. Two confirmation paths, two
+  records, one never closed. The day the flag goes YES, up to 30 days of accumulated proposals
+  surface at once as live cards — including ones already actioned — and confirming them duplicates
+  tasks the household has been living with for weeks. Now: one flag reader (`NinaProposalGate`),
+  one confirmation path (a server-recorded turn drops its legacy suggestion, and `applySuggestion`
+  refuses a suggestion no message carries), and an honest closed state while the flag is off
+  ("Confirmação ainda fechada … Não criei nada na casa") instead of a silently empty surface. The
+  part that outlives the code is the runbook step: a one-time dashboard statement closing
+  outstanding pending proposals *before* the first build carrying YES is archived — not a
+  migration, because it is a one-time data decision. Skipping it cannot be undone after that build
+  is public.
+
 - **A proposal was an assertion with no basis.** Seeing "Marcar veterinário para o Thor · Heitor
   · esta semana", a user had no way to tell whether Nina read it in their message, found it in an
   existing task, recalled a confirmed memory, or invented it — exactly the moment trust is won or

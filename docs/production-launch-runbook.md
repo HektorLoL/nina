@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-08-09
+Last updated: 2026-08-10
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -40,6 +40,9 @@ Distribute only the relevant values:
 Do not upload the complete inventory to any one platform. In particular, never
 place `NINA_SUPABASE_SECRET_KEY` or `OPENAI_API_KEY` in an Astro `PUBLIC_*`
 variable, Xcode setting, app plist, or client bundle.
+
+If this release is the first to set `NINA_AI_V2_ENABLED=YES`, section 3 carries a
+one-time database step that must run before the archive is built.
 
 Validate the inventory before deployment:
 
@@ -87,6 +90,36 @@ home has a remaining owner, no invite retains the deleted UUID, and shared
 records that survive have nullable creator references cleared. Function failure
 logs may contain the request ID and stage only, never the user ID, bearer token,
 request body, or raw upstream error.
+
+### Close out pending proposals before enabling the AI flag
+
+`NINA_AI_V2_ENABLED` is a client flag with no server counterpart: `nina-chat`
+writes a `nina_proposals` row on every turn whether or not the flag is on, and
+those rows stay `pending` until retention rejects them at 30 days. So the first
+build shipped with `YES` surfaces up to 30 days of accumulated proposals at once
+as live confirmation cards, and confirming one creates a task the household has
+been living with for weeks.
+
+Run this once against production in the Supabase dashboard SQL editor, after the
+decision to flip the flag and before archiving the build that carries it. It is a
+one-time data decision rather than schema, which is why it is not a migration:
+
+```sql
+update public.nina_proposals
+set state = 'rejected',
+    resolved_at = now(),
+    resolved_payload = jsonb_build_object('reason', 'v2_rollout')
+where state = 'pending';
+```
+
+Confirm it took effect with `select count(*) from public.nina_proposals where
+state = 'pending';`, which must read `0` at that moment. It closes proposals the
+app never showed anyone, so nothing a user acted on is lost; rows created after
+this point belong to turns whose users will actually see the cards.
+
+Skipping it ships an inbox pre-loaded with stale, already-satisfied work on first
+launch. Running it after that build is public does not undo the duplicate tasks
+users have already confirmed.
 
 ## 4. Website deployment
 

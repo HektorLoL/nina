@@ -977,7 +977,11 @@ private struct MessageBubble: View {
                     NinaProposalCard(proposal: proposal)
                 }
 
-                if message.proposals.isEmpty, let suggestion = message.suggestion {
+                if message.hasWithheldProposals {
+                    WithheldProposalsCard()
+                }
+
+                if let suggestion = message.suggestion {
                     SuggestionMiniCard(suggestion: suggestion)
                 }
             }
@@ -1545,6 +1549,33 @@ private struct NinaProposalCard: View {
             )
             isResolving = false
         }
+    }
+}
+
+private struct WithheldProposalsCard: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            IconBubble(systemName: "hourglass", tone: .sky, size: 36)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Confirmação ainda fechada")
+                    .font(.subheadline.weight(.black))
+                    .foregroundStyle(NinaTheme.ink)
+
+                Text(
+                    "Entendi algo para organizar, mas nesta versão ainda não dá para você confirmar. Não criei nada na casa."
+                )
+                    .font(.caption)
+                    .foregroundStyle(NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(
+            NinaTheme.cream.opacity(0.86),
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
+        .accessibilityElement(children: .combine)
     }
 }
 

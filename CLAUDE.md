@@ -480,13 +480,16 @@ Worker routes.
 
 ## 9. Code conventions (repo-wide)
 
-**Comments: eight in ~20,000 lines of Swift, and that is deliberate.** Zero
-`MARK:`, zero `TODO`/`FIXME`/`HACK`/`WIP` anywhere in the repo. The surviving
-comments are all one kind: a single line stating a non-obvious **invariant or
-security property**, never a description of mechanics —
+**Comments are rare and all of one kind, and that is deliberate.** Zero `MARK:`,
+zero `TODO`/`FIXME`/`HACK`/`WIP` anywhere in the repo. Every comment that
+survives is a single line stating a non-obvious **invariant or security
+property**, never a description of mechanics —
 `// A filled honeypot receives the same generic success as a real submission.`
 **Writing explanatory comments here is off-convention.** Put the explanation in
-a name, a test name, or a README.
+a name, a test name, or a README. The count grows as invariants are discovered
+and pinned; what must not change is the kind. If a comment you are about to
+write would still be true after the code around it was rewritten differently,
+it is an invariant and belongs — otherwise it does not.
 
 **Language split:** English identifiers, English SQL exception codes, English
 commits and `docs/`. pt-BR for every user-facing string. `web/README.md` is the
@@ -752,10 +755,36 @@ fix unprompted.
 - **The flagship AI feature ships off.** `NINA_AI_V2_ENABLED = NO` is the default
   in `Nina.xcconfig`, the secrets example, and the production inventory, and
   `supabase/README.md` makes it policy pending a test-account rollout. The flag
-  is consumed in exactly two places, both `proposals: isV2Enabled ? … : []` — so
-  Nina still calls OpenAI and still costs money, but every proposal is discarded
-  before it reaches the UI. She can talk; she cannot organize. This contradicts
-  the landing page's entire three-step promise.
+  has exactly one reader, `NinaProposalGate` in `BackendConfiguration.swift`,
+  applied at the live turn (`AppStore.sendMessage`) and the hydration path
+  (`RemoteHomeBackend.NinaStateMessageRow.domainMessage`) — so Nina still calls
+  OpenAI and still costs money, but every proposal is discarded before it reaches
+  the UI. She can talk; she cannot organize. This contradicts the landing page's
+  entire three-step promise.
+
+  **What flag-off means, and what turning it on costs.** There is no server-side
+  flag: `nina-chat` writes `nina_proposals` unconditionally, so the discard is
+  purely cosmetic and the rows accumulate as `pending` until retention rejects
+  them at 30 days. Two rules keep that survivable. First, **a server-recorded
+  turn has exactly one confirmation path** — its proposal row. `sendMessage`
+  drops `response.suggestion` whenever `serverPersisted`, `NinaStateMessageRow`
+  never decodes the stored legacy suggestion at all, and `applySuggestion`
+  refuses a suggestion no message in the thread carries, so the legacy
+  `SuggestionMiniCard` now reaches only `MockNinaEngine` output — the sole
+  producer of a `NinaSuggestion` with no backing row. Before this, tapping
+  "Criar tarefa" on the legacy card created the task locally and left the
+  proposal pending forever: two confirmations, one of them never closed. Locked
+  by
+  `AppStoreAuthorizationTests.testAServerRecordedTurnDropsTheLegacySuggestionSoOnlyItsProposalConfirms`
+  and `…testTheLegacyPathCreatesNothingForATurnTheServerAlreadyRecordedAProposalFor`.
+  Second, **the discard is stated, not silent**: a turn whose pending proposals
+  were withheld carries `ChatMessage.hasWithheldProposals` and renders
+  "Confirmação ainda fechada", the same honesty the web invite page's
+  "Verificação pendente" state buys. Flipping the flag to `YES` therefore needs
+  one operational step nothing in the source can perform — reject the outstanding
+  pending proposals once, server-side, before the build ships. The exact
+  statement is in `docs/production-launch-runbook.md` §3; skipping it launches an
+  inbox full of stale cards that duplicate tasks when confirmed.
 - **Premium gates three resources server-side; the client never routes you to the
   paywall.** Since the 2026-08-09 migrations each marketed benefit maps to a gate
   enforced where the resource is spent: attachments raise

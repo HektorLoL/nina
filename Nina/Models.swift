@@ -1269,6 +1269,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
     var timestamp: Date
     var suggestion: NinaSuggestion?
     var proposals: [NinaProposal]
+    var hasWithheldProposals: Bool
     var attachments: [ChatAttachment]
 
     init(
@@ -1278,6 +1279,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         timestamp: Date,
         suggestion: NinaSuggestion? = nil,
         proposals: [NinaProposal] = [],
+        hasWithheldProposals: Bool = false,
         attachments: [ChatAttachment] = []
     ) {
         self.id = id
@@ -1286,6 +1288,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         self.timestamp = timestamp
         self.suggestion = suggestion
         self.proposals = proposals
+        self.hasWithheldProposals = hasWithheldProposals
         self.attachments = attachments
     }
 
@@ -1296,6 +1299,7 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         case timestamp
         case suggestion
         case proposals
+        case hasWithheldProposals
         case attachments
     }
 
@@ -1307,6 +1311,10 @@ struct ChatMessage: Identifiable, Codable, Hashable {
         timestamp = try container.decodeIfPresent(Date.self, forKey: .timestamp) ?? .now
         suggestion = try container.decodeIfPresent(NinaSuggestion.self, forKey: .suggestion)
         proposals = try container.decodeIfPresent([NinaProposal].self, forKey: .proposals) ?? []
+        hasWithheldProposals = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .hasWithheldProposals
+        ) ?? false
         attachments = try container.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
     }
 }

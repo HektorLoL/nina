@@ -1927,7 +1927,6 @@ private struct NinaStateMessageRow: Decodable {
     var id: UUID
     var sender: String
     var text: String
-    var suggestion: NinaSuggestion?
     var attachments: [ChatAttachment]
     var createdAt: Date
     var proposals: [NinaProposal]
@@ -1936,7 +1935,6 @@ private struct NinaStateMessageRow: Decodable {
         case id
         case sender
         case text
-        case suggestion
         case attachments
         case createdAt = "created_at"
         case proposals
@@ -1947,20 +1945,22 @@ private struct NinaStateMessageRow: Decodable {
         id = try container.decode(UUID.self, forKey: .id)
         sender = try container.decode(String.self, forKey: .sender)
         text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
-        suggestion = try container.decodeIfPresent(NinaSuggestion.self, forKey: .suggestion)
         attachments = try container.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         proposals = try container.decodeIfPresent([NinaProposal].self, forKey: .proposals) ?? []
     }
 
+    // The stored legacy suggestion is deliberately not decoded: a server-recorded turn confirms
+    // through its proposal row, and a second path would create the same thing twice.
     var domainMessage: ChatMessage {
-        ChatMessage(
+        let gate = NinaProposalGate.current
+        return ChatMessage(
             id: id,
             sender: MessageSender(rawValue: sender) ?? .user,
             text: text,
             timestamp: createdAt,
-            suggestion: suggestion,
-            proposals: NinaAIConfiguration.isV2Enabled ? proposals : [],
+            proposals: gate.visibleProposals(proposals),
+            hasWithheldProposals: gate.withholdsProposals(proposals),
             attachments: attachments
         )
     }

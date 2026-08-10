@@ -249,6 +249,22 @@ enum NinaAIConfiguration {
     }
 }
 
+struct NinaProposalGate {
+    var isV2Enabled: Bool
+
+    static var current: NinaProposalGate {
+        NinaProposalGate(isV2Enabled: NinaAIConfiguration.isV2Enabled)
+    }
+
+    func visibleProposals(_ proposals: [NinaProposal]) -> [NinaProposal] {
+        isV2Enabled ? proposals : []
+    }
+
+    func withholdsProposals(_ proposals: [NinaProposal]) -> Bool {
+        !isV2Enabled && proposals.contains { $0.state == .pending }
+    }
+}
+
 enum BackendServices {
     static var environment: BackendEnvironment {
         #if canImport(Supabase)

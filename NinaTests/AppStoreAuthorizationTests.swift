@@ -1249,6 +1249,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
 
         XCTAssertTrue(message.attachments.isEmpty)
         XCTAssertTrue(message.proposals.isEmpty)
+        XCTAssertFalse(message.hasWithheldProposals)
     }
 
     func testNinaV2ResponseDecodesMultipleProposals() throws {
@@ -1934,6 +1935,72 @@ final class AppStoreAuthorizationTests: XCTestCase {
             return false
         })
         XCTAssertEqual(store.messages.last?.id, assistantID)
+    }
+
+    @MainActor
+    func testAServerRecordedTurnDropsTheLegacySuggestionSoOnlyItsProposalConfirms() async {
+        let store = await makeStoreForServerRecordedTurn()
+
+        await store.sendMessage("Marque o veterinário do Thor")
+
+        XCTAssertNil(store.messages.last?.suggestion)
+    }
+
+    @MainActor
+    func testTheLegacyPathCreatesNothingForATurnTheServerAlreadyRecordedAProposalFor() async {
+        let store = await makeStoreForServerRecordedTurn()
+        await store.sendMessage("Marque o veterinário do Thor")
+        let tasksAfterTurn = store.tasks
+        let messagesAfterTurn = store.messages
+
+        store.applySuggestion(Self.legacySuggestion)
+
+        XCTAssertEqual(store.tasks, tasksAfterTurn)
+        XCTAssertEqual(store.messages, messagesAfterTurn)
+    }
+
+    @MainActor
+    func testALocalNinaTurnKeepsTheSuggestionItAloneHasNoProposalFor() async throws {
+        let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
+        await store.sendMessage("Marcar veterinário do Thor")
+        let suggestion = try XCTUnwrap(store.messages.last?.suggestion)
+        let taskCountAfterTurn = store.tasks.count
+
+        store.applySuggestion(suggestion)
+
+        XCTAssertEqual(store.tasks.count, taskCountAfterTurn + 1)
+    }
+
+    func testProposalsAreDiscardedWhileTheAIFlagIsOff() {
+        let pending = makeProposal(kind: .task)
+
+        XCTAssertTrue(NinaProposalGate(isV2Enabled: false).visibleProposals([pending]).isEmpty)
+        XCTAssertEqual(NinaProposalGate(isV2Enabled: true).visibleProposals([pending]), [pending])
+    }
+
+    func testATurnWhosePendingProposalsWereDiscardedSaysSoInsteadOfLookingEmpty() {
+        let pending = makeProposal(kind: .task)
+        var resolved = makeProposal(kind: .task)
+        resolved.state = .accepted
+
+        XCTAssertTrue(NinaProposalGate(isV2Enabled: false).withholdsProposals([pending]))
+        XCTAssertFalse(NinaProposalGate(isV2Enabled: false).withholdsProposals([resolved]))
+        XCTAssertFalse(NinaProposalGate(isV2Enabled: false).withholdsProposals([]))
+        XCTAssertFalse(NinaProposalGate(isV2Enabled: true).withholdsProposals([pending]))
+    }
+
+    func testACachedTurnRemembersThatItsProposalsWereWithheld() throws {
+        let message = ChatMessage(
+            sender: .nina,
+            text: "Preparei uma proposta.",
+            timestamp: Date(timeIntervalSince1970: 1_785_639_600),
+            hasWithheldProposals: true
+        )
+
+        let encoded = try JSONEncoder().encode(message)
+        let decoded = try JSONDecoder().decode(ChatMessage.self, from: encoded)
+
+        XCTAssertTrue(decoded.hasWithheldProposals)
     }
 
     @MainActor
@@ -2795,6 +2862,47 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
     }
 
+    private static let legacySuggestion = NinaSuggestion(
+        title: "Veterinário do Thor",
+        detail: "Marcar consulta e verificar carteira de vacinas.",
+        actionTitle: "Criar tarefa",
+        kind: .task,
+        payloadTitle: "Marcar veterinário para o Thor",
+        payloadDetail: "Conferir horários e carteira de vacinas.",
+        payloadOwner: "Heitor",
+        payloadDueLabel: "Esta semana",
+        category: .pet,
+        symbolName: "pawprint.fill"
+    )
+
+    @MainActor
+    private func makeStoreForServerRecordedTurn() async -> AppStore {
+        let user = makeUser()
+        let adultMember = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember])
+        )
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: PersistedNinaEngine(
+                assistantMessageID: UUID(),
+                suggestion: Self.legacySuggestion,
+                proposals: [makeProposal(kind: .task)]
+            )
+        )
+        await store.activateHomeContext(for: user)
+        await store.grantAIMemoryConsent()
+        return store
+    }
+
     private func makeProposal(kind: NinaProposalKind) -> NinaProposal {
         NinaProposal(
             kind: kind,
@@ -2856,6 +2964,8 @@ final class AppStoreAuthorizationTests: XCTestCase {
 
 private struct PersistedNinaEngine: NinaEngine {
     var assistantMessageID: UUID
+    var suggestion: NinaSuggestion?
+    var proposals: [NinaProposal] = []
 
     func respond(
         to text: String,
@@ -2865,12 +2975,12 @@ private struct PersistedNinaEngine: NinaEngine {
     ) async throws -> NinaEngineResponse {
         NinaEngineResponse(
             reply: "Preparei uma proposta.",
-            suggestion: nil,
+            suggestion: suggestion,
             version: 2,
             runID: UUID(),
             threadID: UUID(),
             assistantMessageID: assistantMessageID,
-            proposals: [],
+            proposals: proposals,
             serverPersisted: true
         )
     }
