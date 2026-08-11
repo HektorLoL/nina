@@ -8,8 +8,9 @@ Nina's shipping build).
 
 Paper file: https://app.paper.design/file/01KZP8YB2108T0W8ZQSA9YGP9W/1-0
 
-**Build status.** Bands 0–2 are built on canvas. Bands 3–7 are specified here
-and not yet drawn — the Paper MCP weekly quota was exhausted mid-build.
+**Build status.** All seven bands are built on canvas — 25 boards. Section 3
+records the spec each was built from, plus the three places the build knowingly
+departs from that spec.
 
 ---
 
@@ -61,7 +62,7 @@ This is Tiimo's "taxonomy is positioning" move applied to Nina's actual thesis.
 
 ---
 
-## 2. Built (bands 0–2)
+## 2. The 25 boards
 
 | Board | What it establishes |
 |---|---|
@@ -75,6 +76,21 @@ This is Tiimo's "taxonomy is positioning" move applied to Nina's actual thesis.
 | `O7 · Convite é a primeira tela` | the invite-first entry path |
 | `H1 · Hoje` | main page rebuilt — first task row at ~350px, was ~780px |
 | `H2 · Hoje no zero` | empty state that congratulates and grants permission to stop |
+| `C1 · Captura` | title focused, chips above the keyboard, Tipo after the title |
+| `C2 · Captura de semente` | the date chip visibly disables — the primitive taught in place |
+| `C3 · Detalhe da tarefa` | the screen that does not exist today, with provenance |
+| `C4 · Ações rápidas` | long-press sheet, the swipe substitute |
+| `N1 · Conversa` | the launch tab, with the tappable load strip |
+| `N2 · Proposta de memória` | Corrigir plus two visibility exits, sharing named irreversible |
+| `N3 · Duas propostas` | a Semente proposed, and a date refused rather than invented |
+| `N4 · Negação de premium` | a server denial that routes, instead of dead-ending |
+| `S1 · Retrato inconclusivo` | the refusal rendered honestly — **no chart at all** |
+| `S2 · Retrato conclusivo` | three-band axis, household order, no number anywhere |
+| `S3 · Casa` | roles, slots with a singular branch, invite preview |
+| `S4 · Memórias no zero` | the privacy invariant moved to where it does its work |
+| `G1 · Compras` | aisle sections, square boxes, positional stability, household nudge |
+| `P1 · Paywall` | ✗ column, named ceilings, CTA hierarchy corrected |
+| `V1 · Estados vazios` | six zero states, each doing one of the three jobs |
 
 ### O2 in detail — the eight AI grammar rules on one card
 
@@ -99,9 +115,24 @@ toggle, so the user confirms a date they never saw.
 
 ---
 
-## 3. Not yet built (bands 3–7)
+## 3. Band specs, and where the build departed from them
 
-Build order, one band per row, 390×844, pitch 470px horizontal / 1040px vertical.
+One band per row, 390×844, pitch 470px horizontal / 1040px vertical.
+
+Three departures, all deliberate:
+
+- **`C2` became "Captura de semente" rather than a date-correction sheet.** The
+  date-correction point is already carried by `O2`'s Quando field; showing the
+  date chip *disabling itself* when Tipo flips to Semente teaches a product
+  primitive that has no other home.
+- **`G2` (household nudge) and `G3` (shopping mode) were folded into `G1`.** Both
+  are visible on that one board — the nudge banner at the top, the
+  Montar/Comprar switch in the header. They did not need their own artboards, and
+  splitting them would have hidden that they coexist.
+- **The workload boards moved from bars to bands.** The spec said "replace ranked
+  bars with a three-band axis"; the built version drops the track-and-marker idea
+  entirely for three equal segments, which removes the last thing a reader could
+  measure one person against another with.
 
 ### Band 3 — Captura e o objeto tarefa (y = 3200)
 
@@ -317,5 +348,12 @@ Design decisions above that are not purely client work:
 
 ## 6. Next
 
-Bands 3–7 are ready to build as specified. The Paper MCP weekly quota resets in
-four days; nothing else blocks the build.
+The canvas is complete. What it is not yet: a design QA pass in the house format
+(`compared sources → P0/P1/P2 → final checks → Result`), and a decision on the §5
+server work, two items of which are correctness bugs rather than design.
+
+Two boards are worth revisiting before any of this reaches code. `C4`'s
+long-press sheet has never been tested against the tab pager's gesture area, and
+`S2`'s three-band encoding is the single least reversible choice in the rebrand —
+it is the one thing here that should be put in front of a real couple before it
+is built.
