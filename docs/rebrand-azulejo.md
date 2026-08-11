@@ -393,6 +393,39 @@ Design decisions above that are not purely client work:
 
 ---
 
+## 5b. Advertising — the `Advertisement` page
+
+Seven boards on the file's second page, kept separate from the product boards.
+Three web sections at 1440 and four App Store screenshots at 430×932 (6.7").
+Patterns checked on Mobbin: the editorial statement-beside-a-real-screen from
+[1Password](https://mobbin.com/sites/sections/60389765-0d29-4b2f-ac9c-2ce9986e4412),
+and the caption-above-device-on-a-brand-panel convention every App Store listing
+uses.
+
+**`A2` exists to correct the site.** The landing page currently advertises
+**82% / 48% / 64%** for the workload feature — three percentages for a product
+whose entire stance is that there is no score, and which the redesigned portrait
+now refuses to show at all. The mapping doc flagged this and it is still live at
+`web/src/pages/index.astro:234,239,244`. The new section makes the absence the
+headline: *"Sem porcentagem. Sem placar. Sem ganhador."* Shipping the rebrand
+without this edit would leave the marketing site promising a number the app
+deliberately withholds.
+
+### What these boards promise that the build does not yet keep
+
+Both `A1` and `B2` sell the confirmation ritual — Nina proposing and a human
+confirming. **`NINA_AI_V2_ENABLED = NO` is the default**, so on the shipping
+build every proposal is discarded before it reaches the UI: she can talk, she
+cannot organise. The advertising is therefore written for the flag-on product.
+Turning it on needs the one operational step in
+`docs/production-launch-runbook.md` §3 — rejecting the outstanding pending
+proposals server-side before the build ships.
+
+Two further blockers, neither of them design work. `NINA_APP_APPLE_ID` is still a
+placeholder, so the App Store screenshots have nowhere to be submitted. And the
+legal identity is still `replace_with_…`, so no footer on these boards carries an
+entity name, a CNPJ, or a DPO.
+
 ## 6. Next
 
 The canvas is complete and the QA pass is recorded in `design-qa-azulejo.md`
