@@ -8,9 +8,13 @@ Nina's shipping build).
 
 Paper file: https://app.paper.design/file/01KZP8YB2108T0W8ZQSA9YGP9W/1-0
 
-**Build status.** All seven bands are built on canvas — 25 boards. Section 3
-records the spec each was built from, plus the three places the build knowingly
-departs from that spec.
+**Build status.** Ten bands, 37 boards, all on the `Design principles` page.
+Section 3 records the spec each was built from, plus the three places the build
+knowingly departs from that spec. The QA verdict is in `design-qa-azulejo.md`.
+
+Bands 8–10 cover what the pattern mapping listed under "what this mapping did
+not cover": the Tarefas tab, the document path, the privacy tree, every failure
+state, and the surfaces where Nina speaks outside the app.
 
 ---
 
@@ -91,6 +95,18 @@ This is Tiimo's "taxonomy is positioning" move applied to Nina's actual thesis.
 | `G1 · Compras` | aisle sections, square boxes, positional stability, household nudge |
 | `P1 · Paywall` | ✗ column, named ceilings, CTA hierarchy corrected |
 | `V1 · Estados vazios` | six zero states, each doing one of the three jobs |
+| `T1 · Tarefas` | the fourth tab, never drawn before; all sections stacked, not one-at-a-time |
+| `T2 · Sementes` | the third primitive gets its own surface |
+| `T3 · Concluir sem pressa` | the 3-second reversible completion and its haptic asymmetry |
+| `D1 · Documento lido` | the sensitive path's success state — what Nina read, and what is not kept |
+| `D2 · Consentimento de IA` | the LGPD gate, per adult, with a real decline path |
+| `D3 · Privacidade e dados` | export, retention, revocation, where the data lives |
+| `D4 · Apagar a conta` | the destructive confirm that names what remains |
+| `E1 · Conflito de edição` | both versions shown; no dismissal, because dismissal used to mean remote-wins |
+| `E2 · Sem internet` | the error the app currently buzzes for and never displays |
+| `E3 · Esperando aprovação` | the waiting room, told it will be notified rather than polled |
+| `W1 · Notificações` | Nina's voice on the lock screen, and what never reaches it |
+| `W2 · Widget` | lock screen and home screen; counts how much, never what |
 
 ### O2 in detail — the eight AI grammar rules on one card
 
