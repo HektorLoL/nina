@@ -106,7 +106,38 @@ This is Tiimo's "taxonomy is positioning" move applied to Nina's actual thesis.
 | `E2 · Sem internet` | the error the app currently buzzes for and never displays |
 | `E3 · Esperando aprovação` | the waiting room, told it will be notified rather than polled |
 | `W1 · Notificações` | Nina's voice on the lock screen, and what never reaches it |
-| `W2 · Widget` | lock screen and home screen; counts how much, never what |
+| `W2 · Widget` | the three widget families at their real fixed sizes |
+
+### W1 and W2 were rebuilt against real iOS
+
+The first versions were not buildable. Three things were wrong, found by looking
+at shipping widgets and lock screens on Mobbin rather than reasoning from memory:
+
+- **The widget was one invented size.** iOS widgets come in fixed families and
+  you do not get to choose a shape: `systemSmall` 155×155, `systemMedium`
+  330×155, `systemLarge` 330×346. The board now shows all three at those exact
+  proportions, and the interesting design work is what survives the shrink — the
+  large one lists five rows with an overdue block, the medium keeps three rows,
+  the small keeps a single number and the overdue count. Reference:
+  [Todoist](https://mobbin.com/screens/e3664e12-9fd4-4240-aca2-522f44003b9e),
+  [Tiimo](https://mobbin.com/screens/328f199c-2624-429a-aa4f-60ebf1ada74d) and
+  [Abode](https://mobbin.com/screens/3dd68d11-1906-459e-a6fa-6fd7f1d629f3) all
+  present exactly this family stack on a neutral ground.
+- **The lock screen had no lock screen.** No date line, no flashlight or camera
+  buttons, no correct clock weight. Notifications also sit low on the screen
+  above those buttons, not floating under the clock. Reference:
+  [Transit](https://mobbin.com/screens/b84f786b-1c21-4110-9977-f0544d9adcf5) and
+  [Tide Guide](https://mobbin.com/screens/45be33cf-6385-4455-a699-7a4c55e5511a).
+- **A design-rationale card was rendered inside the phone as product UI** — the
+  same defect the QA pass caught on `O7` and I repeated here. Both boards are now
+  pure screens. The rules those cards carried live here instead:
+
+**What Nina says outside the app.** She speaks as a person, never a hyphen-joined
+field dump. The task's detail never reaches the lock screen or a widget — it may
+be a boleto or a prescription. Quiet hours remove the sound and never move the
+delivery time, because showing one time and delivering at another would be a lie.
+The widget reports how much is on you, never what it is: whoever passes your desk
+can read it.
 
 ### O2 in detail — the eight AI grammar rules on one card
 
