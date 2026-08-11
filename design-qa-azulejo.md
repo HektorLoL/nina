@@ -139,3 +139,106 @@ discarded; 52 survived.
   affordance noted above.
 
 Result: passed
+
+---
+
+# Round 2 — bands 8–10, plus a regression check
+
+Last updated: 2026-08-11
+
+## Compared
+
+The 12 boards added after round 1 (`T1`–`T3`, `D1`–`D4`, `E1`–`E3`, `W1`–`W2`),
+plus a regression sweep over the 11 boards repaired in round 1.
+
+Same method: seven reviewers, each pipelined into an adversarial refuter. Two
+changes from round 1. The refuters were told the type-floor rule is settled, so
+the ten muted-below-15px findings could not be re-litigated after being decided
+on measurement. And two of the seven groups re-checked already-repaired boards,
+because a fix that silently comes undone is worse than a defect never found.
+
+62 findings raised, 27 refuted, 35 resolved.
+
+## The systemic finding
+
+**Four of the five P0s were the same mistake.** Terracotta — reserved for
+lateness — was carrying *destruction* on `D3` and `D4`, and *connection failure*
+on `E2`. Moss, reserved for confirmed/done, was carrying three
+not-yet-agreed policy statements on `D2`, as green ticks sitting directly above
+an Accept button on an LGPD consent gate, where a false already-granted read does
+real harm.
+
+These were not four unrelated slips. The palette had a stated answer for
+*lateness* and for *done*, and no answer at all for *destructive* or for
+*negative but not late* — so all four times I reached for the nearest alarming
+colour I had. The repaint is the smaller half of the fix; the rule below is the
+rest.
+
+**Added to the system.** Destruction is carried by weight and by friction, never
+by hue: an ink fill, terminal position, and a typed-confirmation gate. Negative
+system states that are not lateness — offline, sync pending, unavailable — use
+grout with ink text. Affirming a fact that is not a completed state uses cobalt,
+which the paywall table had already solved correctly and which the rest of the
+file should have copied. Terracotta stays lateness-only, with the one accepted
+exception already recorded above.
+
+## Findings Resolved
+
+- P0: Three moss check marks on the AI consent gate implied the user had already
+  agreed to what they were being asked to agree to. Now muted.
+- P0: `Apagar a minha conta` was drawn in terracotta on the privacy screen, and
+  the terracotta CTA plus terracotta-wash loss card anchored the deletion screen.
+  All now ink and ground; the alarm is carried by the typed `apagar` gate.
+- P0: The offline banner was terracotta. Losing connection is not lateness. Now
+  grout, matching the lock note on `E3`.
+- P0: `A casa` carried a `CA` monogram disc on the workload portrait — the same
+  person-style avatar for non-person work that was removed from `O2` in round 1
+  and missed here. Now the house glyph. This is the defect most worth watching:
+  it is a per-instance fix and there is no rule that prevents the next one.
+- P1: A design-rationale card was rendered inside the phone on `T3`, and the
+  rationale survived as body copy in a notification on `W1`. Third and fourth
+  occurrences of this defect in the file. Both removed.
+- P1: `D3` called Nina "a IA" three cards below a toggle that calls her a person.
+  Now "um serviço de IA", which names the third party rather than her.
+- P1: `E1` used a tu-form imperative ("Escolhe uma") on a você screen.
+- P1: Counts that reconciled with nothing — `Tudo 14` over seven rows,
+  `Concluídas hoje · 4` over one row, `2 esperando` over no queued rows.
+- P1: `systemMedium` laid out 136px of content in a 125px box, so its last row
+  overflowed the widget frame.
+- P1: The `systemLarge` widget set a whole lowercase phrase in Fraunces at a
+  one-off size. Now split — Fraunces on the numeral, Inter on the words — the
+  pattern `systemSmall` and `H1` already used.
+- P1: The boleto was dated "terça, 10 de agosto" where 10 August is Monday on
+  every other board.
+- P1: Two cobalt fills competed on `S3`; Nina's avatar is now the neutral disc so
+  the invite CTA is the screen's single cobalt moment.
+- P1: `Responsável` and `dono` named the same concept across `O2`, `C3`, `E1`,
+  `V1`, `S1` and `S2`. Standardised on `dono`.
+- P2: Tab-bar labels were 11px, below the settled 12px faint floor, on nine
+  boards. `S4` was missing its home indicator. `G1` named the same two items
+  "comprados" and "no carrinho" on one screen. The paywall subtitle commented on
+  the team's own delivery capacity inside a phone frame.
+
+## Accepted Without Change
+
+- The undo toast on `T3` uses two greys derived from ink that are not tokens.
+  Worth promoting to tokens when a second dark component exists; one usage does
+  not justify two tokens.
+- `H1` still carries two raw literals — the overdue checkbox ring and a
+  de-emphasised label on the ink tile. The palette genuinely lacks a legible
+  muted value for text on ink, so this needs a token decision rather than a
+  substitution.
+
+## Final Checks
+
+- No unresolved P0 findings.
+- Terracotta across all 37 boards now marks lateness and nothing else.
+- Moss marks completed states and nothing else.
+- No design rationale is rendered inside any phone frame.
+- No board credits unassigned work to a person or gives it a person-style mark.
+- One vocabulary for task ownership across every board.
+
+Result: passed, with visual re-verification of the repaired boards outstanding —
+Paper's screenshot renderer became intermittent while the fixes were being
+applied. The changes were style and text edits to structures already verified in
+this round, but they have not each been seen rendered.
