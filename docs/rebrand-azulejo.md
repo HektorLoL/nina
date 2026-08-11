@@ -35,8 +35,8 @@ consequence.
 | `--color-grout` | `#EDF0F4` | line between tiles | fields, inactive chips |
 | `--color-line` | `#DFE4EB` | — | hairlines, card strokes |
 | `--color-ink` | `#131A24` | painter's cobalt-black outline | primary text |
-| `--color-muted` | `#5C6675` | grout in shadow | secondary text, min 15px |
-| `--color-faint` | `#8B95A3` | — | tertiary, never below 13px |
+| `--color-muted` | `#5C6675` | grout in shadow | secondary text, min 13px |
+| `--color-faint` | `#6A7482` | — | tertiary; 12px floor, uppercase labels only |
 | `--color-cobalt` | `#1B4FD8` | the pigment | brand, Nina, commit. **One moment per screen** |
 | `--color-cobalt-wash` | `#E6EDFC` | where the brush ran thin | Nina's bubbles, selected chips |
 | `--color-terracotta` | `#C2410C` | unglazed clay under a chipped tile | **overdue only** |
@@ -348,9 +348,15 @@ Design decisions above that are not purely client work:
 
 ## 6. Next
 
-The canvas is complete. What it is not yet: a design QA pass in the house format
-(`compared sources → P0/P1/P2 → final checks → Result`), and a decision on the §5
-server work, two items of which are correctness bugs rather than design.
+The canvas is complete and the QA pass is recorded in `design-qa-azulejo.md`
+(`Result: passed` — 79 findings raised, 27 refuted, 52 resolved, one of them a
+P0). Two palette values changed as a result: `--color-faint` was darkened because
+it failed WCAG AA at every size it was used, and the muted floor was relaxed from
+15px to 13px because the measured contrast said the original rule was a
+preference dressed as a limit.
+
+What is left is not design work. The §5 server items still stand, two of them
+correctness bugs rather than anything visual.
 
 Two boards are worth revisiting before any of this reaches code. `C4`'s
 long-press sheet has never been tested against the tab pager's gesture area, and

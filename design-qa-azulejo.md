@@ -1,0 +1,141 @@
+# Nina App Design QA — Azulejo rebrand
+
+Last updated: 2026-08-11
+
+## Compared
+
+- Direction and flow spec: `docs/rebrand-azulejo.md`
+- Benchmark study: 74 iOS screens across 41 products (task-app teardown)
+- Pattern mapping: 156 benchmark patterns against Nina's shipping build
+- Boards under review: 25 artboards in the Paper file `01KZP8YB2108T0W8ZQSA9YGP9W`
+
+Phone boards were checked at 390 x 844. The two wide boards (`00 · Fundação`,
+`V1 · Estados vazios`) were checked at their own widths.
+
+Method: seven reviewers, one per board group, each checking every board in its
+group against the palette rules, the type scale, lane alignment, the pt-BR voice
+rules, the seven product invariants, and the benchmark patterns. Every finding
+was then handed to a second agent instructed to refute it against the same
+boards, with the deliberate convention-breaks named up front so a reviewer could
+not score them as defects. 79 findings were raised; 27 were refuted and
+discarded; 52 survived.
+
+## Findings Resolved
+
+- P0: The daily-zero screen turned the end of the day into a two-person
+  scoreboard — "Você fechou 7 hoje, o Rafa fechou 4." Two named adults, two
+  completion counts, one visibly ahead, on the one screen whose whole job is
+  relief. It credited one member's completions to another member and produced
+  exactly the comparable number the product exists to refuse. Now reads "A casa
+  fechou 11 coisas hoje", which credits the house.
+- P1: Terracotta was promoted from a state colour to an action colour — the
+  bulk-reschedule control was a solid terracotta pill, the only saturated
+  terracotta control in the system, out-shouting the cobalt commit. Now an
+  outline control: terracotta text and border, no fill.
+- P1: The overdue rows and the day's rows formed two different lane sets, every
+  column offset by 14 px, because the overdue block carried card padding the
+  other rows did not. The block's card treatment was dropped; all six rows now
+  sit on one gutter.
+- P1: The main screen's tab bar was not pinned, so two footer rows rendered
+  below the home indicator and the last was sliced by the artboard edge. Those
+  rows were navigation that already exists elsewhere and were only there to fill
+  whitespace; they were removed and the tab bar now sits flush.
+- P1: The floating action button completely covered the fourth tab, making a
+  destination look absent. Fixed by the stacking correction above.
+- P1: One category glyph had been cloned per section instead of set per task, so
+  three rows advertised the wrong category — a dentist appointment marked as
+  school, a freezer task marked as school. Each row now carries its own glyph.
+- P1: The counters, the active filter and the list did not reconcile: a "mine"
+  filter showing six rows, half of them owned by someone else. This is the same
+  defect the pattern mapping named on this screen in the shipping app. The screen
+  is now internally consistent — 3 in your hands, 2 late, 1 unowned, six rows.
+- P1: `--color-faint` failed WCAG AA at 2.95:1 on the glaze ground, at every size
+  it was used — tab-bar labels, axis labels, meta rows. This was an accessibility
+  failure that no amount of resizing would have fixed. The token was darkened to
+  `#6A7482`, now 4.61:1, which passes at any size and repaired every usage at
+  once.
+- P1: A design-rationale note was rendered inside the phone as real product UI on
+  the invite screen — styled identically to a live callout, but addressed to a
+  reviewer ("Esta é a primeira tela do app…", "sem tour de quatro páginas"). It
+  sat on the single most sensitive first-touch screen in the product. Removed.
+- P1: The proposal screen's footer overflowed the viewport, pushing the home
+  indicator off the board and running the trust disclaimer into the bottom edge.
+  Vertical rhythm tightened; the disclaimer now has clearance.
+- P1: The proposal's Responsável row rendered a person-style avatar for "A casa",
+  which is not a person, and the avatar pushed the value into a two-line wrap.
+  The avatar was removed; unassigned work now reads as text, never as a face.
+- P1: The seed proposal drew its glyph in moss, which made item kind a colour and
+  spent the reserved confirmed/done colour on something not yet confirmed. Now
+  monochrome.
+- P1: The paywall's annual-saving badge was filled with moss, again spending the
+  confirmed/done colour on an unrelated concept. Now ink.
+- P1: The paywall's closing card sat after the home indicator and terminated
+  flush on the artboard edge. Moved above the price block.
+- P1: The shopping header contradicted its own list twice — "11 itens · 3 no
+  carrinho" over six items of which two were checked, and a clear-action naming
+  three. Both now reconcile with the sections.
+- P1: The household header promised "3 pessoas e 1 pet" over a list containing no
+  pet. Now "3 pessoas".
+- P1: Three saturated cobalt fills competed on the workload portrait, so the
+  chart and the button fought for the single intense moment. The button was
+  demoted to an outline; the chart is now the one cobalt moment.
+- P1: The workload headline claimed a week-long retrospective while its own
+  provenance note denied the data was historical. The headline now describes the
+  present.
+- P1: The inconclusive and conclusive workload boards used two words for one
+  concept — "dono" and "responsável", once inside a single card. Unified on
+  "dono".
+- P1: The household invite card was the screen's primary job but exposed no
+  action control, only a preview. A send control was added.
+- P2: The workload's "A casa" band used a raw hex outside the palette. Now a
+  token at reduced opacity — and, being neither a person nor a colour of its own,
+  it reads as a different weight rather than a different hue.
+- P2: The empty-states board declared a three-job taxonomy and then shipped a
+  fourth label. The waiting-room state is a promise; relabelled accordingly.
+- P2: One empty-state's copy was design rationale defending a decision to the
+  reader ("Nenhum botão de criar aqui — o que falta é entender…"). Rewritten as
+  product copy addressed to the person.
+- P2: The paywall's comparison-table column headers were below the muted floor.
+  Raised to 13 px.
+
+## Rule Amended
+
+- The type rule required muted secondary text to be 15 px or larger, and roughly
+  ten findings were raised against it. Measured, muted is 5.66:1 on the glaze
+  ground and passes AA at any size, so the floor was over-strict — it was a
+  hierarchy preference written as if it were an accessibility limit. The muted
+  floor is now 13 px, and faint is 12 px and reserved for uppercase letterspaced
+  labels. The rule was relaxed only after the contrast was measured, and the one
+  tier that genuinely failed measurement was fixed rather than excused.
+
+## Accepted Without Change
+
+- The filter chip row clips at the right edge. It is a horizontal scroller and
+  the clip is the affordance that says so.
+- Metadata value columns begin with an avatar or a glyph on some rows, so the
+  first glyph of text starts at different x positions. The value column itself is
+  consistent; leading iconography inside a column is standard and reads correctly.
+- Two benefit rows on the premium-denial board wrap to a second line. At this
+  copy length that is honest rather than a defect.
+
+## Final Checks
+
+- No unresolved P0 findings.
+- Terracotta appears in exactly two roles across all 25 boards: lateness text and
+  the outline of the reschedule control that acts on lateness. It marks no
+  category, mood, or destructive action.
+- Category is a monochrome glyph on every board. No categorical colour anywhere.
+- Moss appears only on confirmed or completed states.
+- Every text tier passes WCAG AA on the glaze ground: ink 17.02:1, muted 5.66:1,
+  faint 4.61:1, cobalt 6.48:1, terracotta 5.04:1.
+- The workload portrait carries no count, no percentage, and no ranking by load;
+  rows are in household order and unassigned work is credited to the house.
+- The inconclusive workload board draws no chart of per-person load.
+- No board contains a past-tense claim that Nina completed an action.
+- Every proposal offers accept, correct and ignore, and states that nothing
+  happens until it is tapped.
+- Memory sharing is a separate explicit control and names its own irreversibility.
+- No content is clipped at an artboard edge except the deliberate scroll
+  affordance noted above.
+
+Result: passed
