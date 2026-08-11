@@ -238,7 +238,76 @@ exception already recorded above.
 - No board credits unassigned work to a person or gives it a person-style mark.
 - One vocabulary for task ownership across every board.
 
-Result: passed, with visual re-verification of the repaired boards outstanding —
+Result (round 2): passed, with visual re-verification of the repaired boards outstanding —
 Paper's screenshot renderer became intermittent while the fixes were being
 applied. The changes were style and text edits to structures already verified in
 this round, but they have not each been seen rendered.
+
+---
+
+# Round 3 — the advertising boards
+
+Last updated: 2026-08-11
+
+## Compared
+
+The seven boards on the file's `Advertisement` page: three web sections at 1440
+and four App Store screenshots at 430×932.
+
+Same reviewer-plus-refuter structure, with one group added that the product
+passes did not need: an **over-claim auditor** reading every line of user-facing
+copy — headlines, footnotes, and the text inside the phone mockups — against a
+ground-truth list assembled from the repository. A craft defect on a marketing
+page costs a wince. A false claim costs trust, or an ANPD complaint.
+
+33 findings raised, 23 refuted, 10 resolved. Every P0 was an over-claim, and none
+of them was a design problem.
+
+## Findings Resolved
+
+- P0: **A privacy feature was advertised that does not exist.** The documents
+  section closed with *"A Nina nunca fala de documento na tela bloqueada. Quem
+  passa pela mesa não lê o seu boleto."* `LocalNotifications.swift` has no
+  preview control of any kind — no `hiddenPreviewsBodyPlaceholder`, no category,
+  no `userInfo` — and `task.subtitle` reaches the lock screen verbatim, which
+  `CLAUDE.md` §12 already records as a trap. The seeded demo data proves it: a
+  task carrying `subtitle: "Vencimento salvo a partir do boleto."` puts the word
+  *boleto* on the lock screen. The claim was replaced with one the build keeps:
+  chat threads are per-adult, so the other adult cannot read your conversation.
+  A lock-screen line can only follow a change in the notification builder, never
+  precede one.
+- P0: **An unqualified data-residency guarantee on the one board about the
+  crossing.** *"A casa, as tarefas e as memórias ficam em São Paulo e não saem do
+  Brasil"* sat under a headline about photographing a boleto. The three nouns it
+  picked are the three that actually cross: `search_tasks` and `search_memories`
+  return their rows as tool outputs, which are fed to OpenAI alongside the image
+  on every turn. Now scoped to records, with the model carve-out named on the
+  same card rather than implied on a policy page.
+- P0: **The hero repeated the residency claim unscoped** — *"seus dados ficam em
+  São Paulo"* — beside a mockup showing a boleto entering the chat. Scoped to the
+  house and its tasks. The verifier's argument was the decisive one: the deck's
+  own third section bounds the identical claim correctly, so the omission was not
+  a limit of knowledge.
+- P1: **A delivery guarantee the product does not make.** *"Todo domingo a Nina
+  desenha…"* is three over-claims in two words: the digest is Premium-gated, it
+  is capped per run, and it requires enough assigned work to conclude at all. Now
+  conditional, with a fourth checklist line naming the Premium gate — which the
+  section had omitted entirely.
+- P1/P2: Sentence-case running text set in the faint tier across five nodes,
+  including both boards' closing ethical caption. Faint is reserved for uppercase
+  letterspaced labels; these are now muted.
+- P2: The proposal card's state label sat below the type floor; the first App
+  Store screen left a large blank below its last example.
+
+## Final Checks
+
+- Every number, timeframe, guarantee and capability on the seven boards is
+  grounded in the repository, or has been cut.
+- No residency claim appears without its model carve-out on the same surface.
+- No claim describes behaviour that depends on a code change not yet made.
+- The Premium gate is named wherever a Premium-only feature is advertised.
+
+Result (round 3): passed. Two known gaps remain deliberate and are recorded in
+`docs/rebrand-azulejo.md` §5b — the boards advertise the proposal flow while
+`NINA_AI_V2_ENABLED` is `NO`, and no board carries a legal entity, because there
+is not yet one to carry.
