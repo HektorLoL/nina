@@ -25,9 +25,9 @@ Practical consequences that persist:
 - **`git blame` is near-useless before 2026-08-08.** One commit covers seven
   weeks across five workstreams. The commit message enumerates them.
 - **CI now runs and is green.** First execution was 2026-08-08 on `main`; all
-  four jobs pass, with the pgTAP suite completing all 232 assertions. Its first
-  run failed 5 of 6 pgTAP files, which is how the `profiles` grant gap below was
-  found — treat a red database job as a real signal, not flakiness.
+  four jobs pass, including the full pgTAP suite. Its first run failed 5 of 6
+  pgTAP files, which is how the `profiles` grant gap below was found — treat a
+  red database job as a real signal, not flakiness.
 - **Local secret files are intentionally untracked and have no backup**:
   `Nina/Config/SupabaseSecrets.xcconfig`, `config/production.env`,
   `supabase/.env.local`, `web/.dev.vars`. Each has a tracked `.example` sibling.
@@ -567,6 +567,13 @@ never delete it.
 RLS does **not** raise on UPDATE/DELETE — it filters rows. `throws_ok` passes
 vacuously; use `pg_temp.affected_rows($$…$$)` and assert 0.
 
+**The database gate runs locally — use it.** `docs/local-database.md` sets up a
+container runtime once; after that `deno task db:reset && deno task db:test`
+replays all migrations onto an empty database and runs the full suite in about
+thirty seconds. Every migration below was written before that existed, which is
+why the traps read like a list of things CI told someone hours later. Do not
+push a migration to find out whether it applies.
+
 Three pgTAP traps that all cost a CI round-trip on 2026-08-08:
 
 - **A file aborts on the first error and blows its whole plan**, reported as
@@ -592,7 +599,11 @@ deno task preflight:repo
 ```
 
 ```bash
-npx supabase start && npx supabase db lint --local --fail-on error && npx supabase test db
+deno task db:runtime && deno task db:up && deno task db:test
+```
+
+```bash
+deno task db:reset && deno task db:test
 ```
 
 ```bash
@@ -696,6 +707,14 @@ Notifications carry no `userInfo`, category, or actions, and there is no
 **`dueLabel` and `dueAt` can drift.** `inferredDueAt(from:)` parses only a narrow
 set of pt-BR forms; anything else yields `nil` and the task shows a due label but
 never fires a notification.
+
+**`deno task db:test` runs against the database as it stands, not against the
+migrations.** It never applies anything. Editing a migration and re-running only
+`db:test` tests the previous schema and passes for the wrong reason —
+`deno task db:reset` first. Editing a pgTAP file alone needs no reset. Also note
+`supabase start` writes an untracked `supabase/.branches/`; it is ignored, and
+must stay ignored, because another session's `git add -A` would otherwise commit
+local machine state.
 
 **`deno.json` enumerates individual files, not directories.** A new
 `web/src/*.ts` or `_shared/*.ts` module is neither formatted, linted, nor

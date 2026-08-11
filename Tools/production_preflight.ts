@@ -41,6 +41,11 @@ const localSecretPaths = [
 
 const premiumRecordedSaleGuard = "if didRecord {";
 
+const databaseGateCommands = [
+  "db lint --local --fail-on error",
+  "test db",
+];
+
 export function premiumTransactionFinishes(
   source: string,
 ): { total: number; afterServerRecord: number } {
@@ -62,6 +67,33 @@ export function premiumTransactionFinishes(
   }
 
   return { total, afterServerRecord };
+}
+
+export function pinnedSupabaseCLIVersions(
+  workflow: string,
+  denoConfig: string,
+): { continuousIntegration: string[]; localTasks: string[] } {
+  const matched = (source: string, pattern: RegExp): string[] => [
+    ...new Set([...source.matchAll(pattern)].map((match) => match[1])),
+  ];
+  return {
+    continuousIntegration: matched(
+      workflow,
+      /supabase\/setup-cli@[\s\S]{0,240}?\bversion:\s*"?(\d+\.\d+\.\d+)"?/g,
+    ),
+    localTasks: matched(denoConfig, /\bsupabase@(\d+\.\d+\.\d+)\b/g),
+  };
+}
+
+function agreesOnOneVersion(
+  versions: { continuousIntegration: string[]; localTasks: string[] },
+): boolean {
+  const pinned = new Set([
+    ...versions.continuousIntegration,
+    ...versions.localTasks,
+  ]);
+  return versions.continuousIntegration.length > 0 &&
+    versions.localTasks.length > 0 && pinned.size === 1;
 }
 
 function countOccurrences(value: string, character: string): number {
@@ -617,6 +649,7 @@ export async function repositoryChecks(
     privacyManifest,
     privacyPage,
     workflow,
+    denoConfig,
     privateLocalDataStore,
     appStore,
     profileStore,
@@ -634,6 +667,7 @@ export async function repositoryChecks(
     readText(root, "Nina/PrivacyInfo.xcprivacy"),
     readText(root, "web/src/pages/privacidade.astro"),
     readText(root, ".github/workflows/ci.yml"),
+    readText(root, "deno.json"),
     readText(root, "Nina/PrivateLocalDataStore.swift"),
     readText(root, "Nina/AppStore.swift"),
     readText(root, "Nina/ProfileStore.swift"),
@@ -793,6 +827,15 @@ export async function repositoryChecks(
       workflow.includes("deno task preflight:repo"),
       "CI enforces repository production invariants.",
       "Add the repository preflight task to CI.",
+    ),
+    check(
+      "repository.database-gate-parity",
+      agreesOnOneVersion(pinnedSupabaseCLIVersions(workflow, denoConfig)) &&
+        databaseGateCommands.every((command) =>
+          workflow.includes(command) && denoConfig.includes(command)
+        ),
+      "The local database gate runs the same Supabase CLI and commands CI does.",
+      "Pin the same Supabase CLI version in CI and the db:* tasks, and keep both running db lint and pgTAP.",
     ),
   ];
 

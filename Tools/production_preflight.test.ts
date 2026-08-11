@@ -6,6 +6,7 @@ import {
   isPublishableSupabaseKey,
   isSecretSupabaseKey,
   parseEnvironmentFile,
+  pinnedSupabaseCLIVersions,
   type PreflightEnvironment,
   premiumTransactionFinishes,
   productionEnvironmentChecks,
@@ -218,6 +219,44 @@ Deno.test("a transaction finished outside the recorded-sale branch is counted as
     premiumTransactionFinishes(unknownProductIsDiscarded),
     { total: 2, afterServerRecord: 1 },
   );
+});
+
+Deno.test("the shipped database gate pins one Supabase CLI version for CI and local runs", async () => {
+  const [workflow, denoConfig] = await Promise.all([
+    Deno.readTextFile(new URL("../.github/workflows/ci.yml", import.meta.url)),
+    Deno.readTextFile(new URL("../deno.json", import.meta.url)),
+  ]);
+
+  const versions = pinnedSupabaseCLIVersions(workflow, denoConfig);
+
+  assert(versions.continuousIntegration.length > 0);
+  assert(versions.localTasks.length > 0);
+  assertEquals(
+    new Set([...versions.continuousIntegration, ...versions.localTasks]).size,
+    1,
+  );
+});
+
+Deno.test("a version pinned on only one side is not read as agreement", () => {
+  const workflowOnly = pinnedSupabaseCLIVersions(
+    "uses: supabase/setup-cli@v2\n        with:\n          version: 2.110.0\n",
+    '{ "tasks": { "db:up": "npx --yes supabase start" } }',
+  );
+
+  assertEquals(workflowOnly, {
+    continuousIntegration: ["2.110.0"],
+    localTasks: [],
+  });
+});
+
+Deno.test("an unrelated pinned version in CI is not mistaken for the database gate", () => {
+  const versions = pinnedSupabaseCLIVersions(
+    'uses: actions/setup-node@v6\n        with:\n          node-version: "22.12.0"\n',
+    '{ "tasks": { "db:up": "npx --yes supabase@2.110.0 start" } }',
+  );
+
+  assertEquals(versions.continuousIntegration, []);
+  assertEquals(versions.localTasks, ["2.110.0"]);
 });
 
 Deno.test("online deployment checks verify health, policy, headers, and AASA", async () => {

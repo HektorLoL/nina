@@ -14,6 +14,15 @@ been closed; everything else in this document is still open.
 
 ## Closed since the audit
 
+- **The database had no gate outside CI.** No container runtime existed on the machine, so every
+  migration, policy, and grant was verified by pushing to `main` and reading a workflow log — a
+  round-trip per one-character SQL mistake, and the direct cause of the three pgTAP traps recorded
+  in CLAUDE.md §10. `docs/local-database.md` now sets the runtime up once, and
+  `deno task db:reset && deno task db:test` replays all migrations onto an empty database and runs
+  the full suite in roughly thirty seconds. The tasks pin the same Supabase CLI version CI pins,
+  and `repository.database-gate-parity` fails the preflight if the two drift or if either side
+  stops running the linter or pgTAP — a local gate on a different CLI is worse than none, because
+  it produces confident green runs that CI then contradicts.
 - **A member could read the household invite code straight off the table.** CLAUDE.md stated the
   masking in `get_current_home_context` as an invariant, but `grant select on public.families to
   authenticated` plus the `is_family_member` policy meant any member could bypass it with a direct

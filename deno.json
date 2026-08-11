@@ -15,6 +15,11 @@
     "lint:deletion": "deno lint supabase/functions/_shared/delete-account*.ts supabase/functions/delete-account/index.ts",
     "lint:web": "deno lint web/src/waitlist.ts web/src/worker.ts web/src/legal.ts web/src/appStore.ts web/tests/*.ts Tools/production_preflight*.ts",
     "test": "deno test --allow-read supabase/functions/_shared/*.test.ts web/tests/*.test.ts Tools/production_preflight.test.ts",
+    "db:runtime": "colima start --profile nina --cpu 4 --memory 6 --disk 60 --vm-type vz --mount-type virtiofs",
+    "db:up": "npx --yes supabase@2.110.0 start",
+    "db:test": "npx --yes supabase@2.110.0 db lint --local --fail-on error && npx --yes supabase@2.110.0 test db",
+    "db:reset": "npx --yes supabase@2.110.0 db reset",
+    "db:down": "npx --yes supabase@2.110.0 stop --no-backup",
     "preflight:repo": "deno run --allow-read --allow-run=git Tools/production_preflight.ts repository",
     "preflight:production": "deno run --allow-read --allow-run=git,plutil --allow-env --allow-net Tools/production_preflight.ts production"
   }

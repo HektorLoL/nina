@@ -56,7 +56,10 @@ and fails on incomplete controller, DPO, or mailbox values.
 
 ## 3. Database and Edge Functions
 
-Use a separate staging Supabase project first. Apply migrations in order, then
+Run the local gate first — `docs/local-database.md` — so a migration that cannot
+apply from empty is caught on the machine rather than against a shared project.
+
+Then use a separate staging Supabase project. Apply migrations in order, and
 run:
 
 ```sh

@@ -4,6 +4,7 @@ DerivedData/
 Nina.xcodeproj/project.xcworkspace/xcuserdata/
 Nina/Config/SupabaseSecrets.xcconfig
 config/production.env
+supabase/.branches/
 supabase/.env.local
 supabase/.temp/
 web/.astro/
