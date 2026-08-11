@@ -1,6 +1,6 @@
 # Nina — rebrand "Azulejo"
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 Design direction and full flow proposal, derived from `task-app-design-teardown`
 (74 screens / 41 products) and `nina-pattern-mapping` (156 patterns mapped to
@@ -8,9 +8,11 @@ Nina's shipping build).
 
 Paper file: https://app.paper.design/file/01KZP8YB2108T0W8ZQSA9YGP9W/1-0
 
-**Build status.** Ten bands, 37 boards, all on the `Design principles` page.
+**Build status.** Twelve bands, 47 boards, all on the `Design principles` page.
 Section 3 records the spec each was built from, plus the three places the build
 knowingly departs from that spec. The QA verdict is in `design-qa-azulejo.md`.
+Band 11 is the brand mark (§2b) and bands 12–13 are the built zero states (§2c);
+neither has been through a QA pass yet.
 
 Bands 8–10 cover what the pattern mapping listed under "what this mapping did
 not cover": the Tarefas tab, the document path, the privacy tree, every failure
@@ -107,6 +109,16 @@ This is Tiimo's "taxonomy is positioning" move applied to Nina's actual thesis.
 | `E3 · Esperando aprovação` | the waiting room, told it will be notified rather than polled |
 | `W1 · Notificações` | Nina's voice on the lock screen, and what never reaches it |
 | `W2 · Widget` | the three widget families at their real fixed sizes |
+| `M1 · A marca` | the mark, its construction, the icon, the size ladder, the refusals |
+| `M2 · A Nina presente` | the five presence states, and the rule for the mark on an empty screen |
+| `Z1 · Hoje no primeiro dia` | the first screen a new household sees — promise, not congratulation |
+| `Z2 · Tarefas no zero` | the tab with nothing in it, and the two ways in |
+| `Z3 · Sementes no zero` | the primitive taught by showing one, not by describing it |
+| `Z4 · Compras no zero` | the aisle structure promised before there is anything to sort |
+| `Z5 · Busca sem resultado` | the one zero state with no mark and deliberately no ＋ |
+| `Z6 · A casa é só você` | why the workload portrait is dormant, said out loud |
+| `Z7 · Nenhum documento lido` | the premium gate that routes instead of dead-ending |
+| `Z8 · Avisos desligados` | Nina drawn without pigment, because she genuinely cannot reach you |
 
 ### W1 and W2 were rebuilt against real iOS
 
@@ -138,6 +150,191 @@ be a boleto or a prescription. Quiet hours remove the sound and never move the
 delivery time, because showing one time and delivering at another would be a lie.
 The widget reports how much is on you, never what it is: whoever passes your desk
 can read it.
+
+## 2b. The mark — "o colo"
+
+Until now Nina's entire visual identity was **a 24px flat cobalt circle**. It
+appears three times on the shipping boards — the chat header, the chat avatar,
+her row in Casa — and it has no more character than a radio button. The app also
+has no logo, no icon, and no wordmark.
+
+**The mark is an open cobalt cup holding a single disc it never closes over.**
+An arc band of 220°, mass entirely beneath the thing it holds, with the disc
+floating clear of the floor.
+
+The forcing question was *what does a listening presence look like if it
+deliberately has no eyes?* Eyes are the wrong answer twice over: they are
+illegible below about 20px, and this is a product whose spine is that nobody is
+watching the household. Eyes are above you; hands are below you. So the mark's
+mass sits under.
+
+Five directions were drawn independently under different constraints — azulejo
+tile geometry, an N monogram, a domestic object, the no-eyes presence question,
+and a deliberate contrarian — then scored by three judges on separate lenses
+(small-size craft, distinctiveness, thesis fit). **Two of the five arrived at the
+same idea from opposite starting points**, which is the strongest evidence in the
+run; the winner was refined against every criticism levelled at it.
+
+### Geometry, on the 64 grid
+
+| | |
+|---|---|
+| Opening | 220°, never closes |
+| Mouth / belly | 42.29 / 55.0 — ratio 0.769 |
+| Disc | r 8.4 at (32 · 27.8) |
+| Floor gap | 5.1 — 8.0% of the box |
+| Construction | filled paths, never a stroked arc |
+
+**Two masters, not one scale.** The 24 drawing is separate: arc centre (12, 9.0),
+centreline radius 8.2, band 4.0, cap 2.0, disc r 2.7 at (12, 10.5). The floor gap
+*grows* as the mark shrinks — 8.0% at 64, 8.3% at 24 — which is the inverse of
+what scaling produces. Below 18px the mark retires and the disc ships alone.
+
+### The rules that carry meaning rather than taste
+
+- **The floor gap is the mark's critical dimension.** Holding requires not
+  gripping. It is the first thing checked in review and the last thing anyone may
+  tune. A bowl's contents rest on the floor; this disc never touches it.
+- **The disc is never concentric with the cup.** Concentric reads as an iris.
+- **Never a stroked arc.** A stroked construction is a spinner; this is a mass.
+- **Never rotates, in any state, at any size.** Rotation is machine grammar.
+- **The cup never closes.** There is no completion state. A ring closing is the
+  productivity gesture this product exists to refuse.
+- **Moss touches the mark at exactly one moment** — the instant a *person*
+  confirmed something, for 600ms, on the disc only. Nina never colours herself for
+  her own output. **Terracotta never touches the mark**: Nina does not wear overdue.
+- **The mark never sits inside a badge, plaque, ring or circle of its own.**
+- **Never stacked above the wordmark.** Stacked, the cup contains the word and the
+  claim becomes that she holds your name — a creepier, different product.
+
+### Two rules the build corrected
+
+- **The 1.18× clipping rule was wrong at avatar size and is dropped.** The spec
+  said the mark should be clipped by its circular container rather than inset. At
+  40px on a cobalt disc that closes the cup into a ring and turns the held disc
+  into a pupil — it renders **an eye**, the one thing the mark exists not to be.
+  It also contradicted the no-container rule above. Nina's avatar is now the mark
+  in cobalt directly on the ground, no disc behind it, occupying the same 40px
+  lane as a human's avatar. That difference is worth keeping: the people have
+  filled avatars, Nina is a drawing.
+- **The mark does not spend the one-cobalt-moment ration; a second cobalt
+  *control* does.** `--color-cobalt` is "one moment per screen", and a zero state
+  has both a cobalt mark and a cobalt button. Identity plus one action is one
+  moment. Two controls competing for primacy is not — which is why `Z2` lost its
+  FAB: with an explicit "Contar pra Nina" button on an empty list, the ＋ was
+  redundant and broke the rule. The FAB returns as soon as there is a list.
+
+### The icon — azulejo *reserva*
+
+Cobalt floods the tile edge to edge and the mark is left in bare glaze. Inside
+the app cobalt is rationed; the icon spends the whole ration at once, on the
+outside. The mark occupies 66.1% of the frame width and is optically lifted 18
+units so the bottom-heavy mass does not sink. It holds at 29pt, and unlike a
+light-ground icon it survives iOS tinting intact.
+
+### The presence states
+
+Personality comes from **position, never expression**. Only two variables ever
+change: whether the disc is present, and where it sits vertically. That
+vocabulary is deliberately too small to build a cartoon out of. Every state has a
+geometric tell that survives with all motion disabled — a state that exists only
+in movement does not exist in a screenshot, a notification, or for a user with
+`reduceMotion` on.
+
+| State | The change | When |
+|---|---|---|
+| Ouvindo | disc to cy 25.6, slow breath | composer focused |
+| Lendo | disc becomes a bar, width oscillates, never rotates | turn in flight, document extraction |
+| Esperando você | disc lifts to cy 17.6 and breaks the rim, fully static | proposals pending confirmation |
+| Guardado | disc settles to cy 30, moss for 600ms, fires once | a human accepted |
+| Sem pigmento | whole mark in `--color-muted` | backend down, consent withdrawn |
+
+### The unresolved risk, and the kill criterion
+
+**A vessel attached to a woman's name, in a product about domestic labour that in
+Brazil falls disproportionately on women, can read as woman-as-receptacle.** This
+was not designed away and probably cannot be: every fix that made the mark better
+at *holding* left it untouched. The abstraction, the 220° opening and the fact
+that the cup never closes are the arguments that it lands on "cradle" rather than
+"womb" — nothing is captured, the disc can be taken back, and in the waiting state
+it is actively offered upward. That is a belief, not a proof, and the person most
+likely to feel the wrong read is the primary domestic manager, which is the exact
+user the product is built for.
+
+**Before this ships: put the 64 mark and the 1024 icon in front of six to eight
+Brazilian women in the primary-manager segment, cold, with no name and no
+explanation, and ask only what they see.** If the receptacle read lands, no tuning
+of the aperture or the offset rescues it — softening the geometry produces a bowl,
+which is a misread the craft judge already measured at 60 and 40pt. Go back to the
+board instead.
+
+Two smaller risks, accepted with open eyes. **Distinctiveness is earned slowly
+here** — a cupped form holding a mass is the house style of care and community
+branding worldwide, Pocket is close prior art, and what separates this mark is a
+ratio and an offset, neither of which is a memorable event. Nobody sees it cold
+and thinks "Nina"; for the first year it will be carried by the states, the
+lockup and the icon's cobalt flood, and the word *colo* should travel with it.
+And the floor gap is the one dimension whose loss destroys the meaning rather than
+merely blurring it — which is why it is recorded above as a measured number
+rather than as a look.
+
+---
+
+## 2c. The zero states
+
+`V1` was a copy deck: six cards of text on one board, no screens. Bands 12–13
+build eight of them as real 390×844 surfaces. `H2`, `S1`, `S4`, `E2` and `E3`
+already existed as screens and are unchanged.
+
+**Which surfaces get the mark, and which do not.** The mark appears when the user
+has *arrived somewhere that is not filled yet* — a promise or a lesson. It does
+not appear when the emptiness is a *result the user just produced*. Personality in
+a result state is noise, and a cobalt mark beside a failure reads as a character
+shrugging at you.
+
+- On a zero state the mark is drawn as **the cup alone, holding nothing** — not a
+  pose, the literal state of the household. When the first item arrives the disc
+  fades in once over 320ms, and that is the only motion a zero state may have.
+- Never wider than 30% of the screen or 120pt. Above the sentence, never beside
+  it, never behind it as a watermark. One per screen.
+- **`Z5` (search) carries no mark at all**, and no ＋ button: someone who searched
+  wants to find, not to invent. Two escape routes instead, one of which is Nina,
+  who is the only surface that can search by meaning.
+- **`Z8` uses `Sem pigmento`** — the failure-state exception, because there Nina
+  herself is the subject and the thing being reported is that she cannot reach you.
+
+Three of the eight do work no copy deck could show. `Z3` teaches what a semente is
+by rendering one, labelled, instead of describing it. `Z6` says out loud that the
+workload portrait is dormant in a one-adult household — and then says the rest of
+the app is not, so the screen does not read as broken. `Z7` gives the document
+premium gate a route to the paywall, which is a named gap in §13 of `CLAUDE.md`:
+today a server denial becomes a plain chat line with no button.
+
+### The references
+
+Fourteen zero states in Nina's category, read on Mobbin as images rather than
+from memory. The useful finding is that **most of the products that feel like
+*someone* on a blank screen have no mascot at all** — the mascot apps (Tiimo's
+blob, Evernote's figure) all pair the drawn face with emoji chips, which Nina's
+voice bans outright. Character is coming from drawing technique, scale and
+restraint.
+
+| App | Surface | How personality is carried | What Nina took |
+|---|---|---|---|
+| [Crouton](https://mobbin.com/screens/7abf40d4-4a0c-49c0-b38a-4c309e9cce8a) | no household created yet | nothing — a grey house icon at glyph scale | **The control.** Nina's exact surface, proving a house glyph on a household zero state is a dead end. It reads as a system symbol, not as anyone. |
+| [Julienne](https://mobbin.com/screens/26b0e9cd-8558-4c68-b518-6d6da5d39de9) | empty shopping list | one warm domestic object, **no headline at all** | The direct rebuttal to "no face means characterless" — deletes the headline and lets one object plus one promise hold the page |
+| [Microsoft Copilot](https://mobbin.com/screens/ef2922b1-15ce-468e-b028-2ed58480b34f) | new conversation | oversized type on a tinted ground, brand mark only ~20px in the composer | Proof a chat-first product needs no mascot; the greeting owns the top fifth |
+| [Qonto](https://mobbin.com/screens/c860545e-73c8-477d-a8fe-17f29ccbbabd) | AI agent chat, empty | a ~44px abstract brand object as the **speaker's avatar, above the greeting** | The closest structural sibling. Placement, not decoration: above and left-aligned, a plain mark reads as who is talking |
+| [Greenlight](https://mobbin.com/screens/db1e1eea-0f9e-4f91-8c99-7f53be7f055f) | empty chore list | a full-width branded art panel; the panel *is* the brand | The azulejo answer sitting in a competitor's app — a fired tile already **is** a panel with a painted figure in it |
+| [Superlist](https://mobbin.com/screens/20c766b0-bed3-4dab-9e4e-5061ec393bc8) | empty shared team space | ~90px hairline doodle, no fill, no colour | Not the doodle — the move: an empty shared surface is the best place in the product to state a trust guarantee, because the user is reading rather than scanning |
+| [Cherrypick](https://mobbin.com/screens/5dac7c84-338f-4e95-a256-d04d827c684c) | empty grocery basket | ~200px hand-drawn outline creature, one stroke weight, one filled accent | The cheapest possible face, and the scale argument: at 200px an outline drawing cannot be confused with a 20px category glyph |
+| [Todoist](https://mobbin.com/screens/9f6317c5-f56f-4235-a9ea-971ef68aa477) | search returned nothing | painterly collage; one line of plain fact, no apology | `Z5`'s register — no "try another spelling", warmth from the medium rather than the words |
+| [The Atlantic](https://mobbin.com/screens/be11d892-94f3-4e86-a718-ca08c5a27b37) | empty saved collection | a greyed wireframe of the app's own card, one control left on in brand colour | Teach by rendering the real object — `Z3` does exactly this with a semente |
+| [BlaBlaCar](https://mobbin.com/screens/e8084665-d73a-4c3e-b3f7-ad9efc1534ad) | waiting for driver approval | one flat object on a full-bleed brand colour | Flood a blocked state in `--color-cobalt-wash` so waiting is a room, not an error — offered for `E3` |
+| [Fanatics Live](https://mobbin.com/screens/211a7715-c3dc-46cc-af99-467d6575c34d) | offline | a 56px muted glyph; 100% of the character is copy voice | The cheapest fix of all, and the model for `.unavailable` |
+| [Things 3](https://mobbin.com/screens/7e2dac24-0465-4935-b8be-e1d80d3f0bf0) | empty project | nothing, deliberately — two italic lines in 60% white | The counterexample. Absence *is* character when the brand is a quiet tool. Nina's premise is the opposite, so steal the **proportion**, not the emptiness |
+| [Evernote](https://mobbin.com/screens/9e3fbaf7-2ec1-4505-9627-fa76cef34e92) | Tasks tab empty | a drawn character **touching the app's own UI** — leaning on the empty row, pointing at the checkbox | Why most mascot work fails: this one is simultaneously the personality and the instruction |
+| [Tiimo](https://mobbin.com/screens/325c4ef5-cf3b-4359-9da9-6f90753b9f17) | all tasks completed | scattered off-grid object field behind a serif headline | **Study the composition, refuse the content.** "You completed 6 tasks" + Share + Today/This week converts a finished day into a scoreboard — deviation #4 |
 
 ### O2 in detail — the eight AI grammar rules on one card
 
@@ -390,6 +587,14 @@ Design decisions above that are not purely client work:
   exist not to be. Correctness bug, needs `task_kind = 'task'` on both queries.
 - A `Cuidado` value added to the category CHECK.
 - Sharing a memory needs a confirm step.
+- **`Z7` assumes a `Documentos` surface that does not exist today.** Attachments
+  are sent from the chat composer and the reading lands in the thread; there is no
+  list of what Nina has read. The board is drawn as that surface's zero state
+  because it is where the missing paywall route belongs. If the surface is not
+  built, the same card belongs on the composer's `Documentos` chip instead.
+- **`Z8` assumes a notification-permission screen**, which the app also does not
+  have. `LocalNotifications.swift` requests authorization and never reports a
+  denial anywhere in the UI.
 
 ---
 
@@ -443,3 +648,20 @@ long-press sheet has never been tested against the tab pager's gesture area, and
 `S2`'s three-band encoding is the single least reversible choice in the rebrand —
 it is the one thing here that should be put in front of a real couple before it
 is built.
+
+Bands 11–13 (2026-08-11) add a third item to that list, and it outranks both:
+**the mark's receptacle read has a stated kill criterion and no test has been
+run.** See §2b. A logo is harder to withdraw than a chart encoding, because it
+ends up on the App Store listing, the icon, and every screenshot.
+
+One copy defect was caught during the build and is worth recording because it is
+the second occurrence of the same mistake. `Z8` was first written with *"a Nina
+nunca conta o que a tarefa é — pode ser um boleto ou uma receita"*. That is the
+same lock-screen redaction promise QA round 3 cut from the advertising boards:
+`LocalNotifications.swift` has no preview control and `task.subtitle` reaches the
+lock screen verbatim. It is legitimate as `W1`'s design intent and illegitimate as
+present-tense product copy, and the distinction is easy to lose when moving
+between the two. It now carries the quiet-hours rule instead, which the build
+genuinely keeps.
+
+Bands 11–13 have not been through a QA pass.
