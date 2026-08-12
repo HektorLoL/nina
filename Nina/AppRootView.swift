@@ -25,25 +25,13 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
             HouseView()
         }
     }
-
-    @ViewBuilder
-    var label: some View {
-        switch self {
-        case .nina:
-            Label("Nina", systemImage: "sparkles")
-        case .today:
-            Label("Hoje", systemImage: "sun.max.fill")
-        case .tasks:
-            Label("Tarefas", systemImage: "checklist")
-        case .house:
-            Label("Casa", systemImage: "house.fill")
-        }
-    }
 }
 
 enum Route: Hashable {
     case task(UUID)
     case member(UUID)
+    case workload
+    case memories
 }
 
 enum SheetDestination: Identifiable, Hashable {
@@ -194,9 +182,9 @@ struct AppRootView: View {
                     .zIndex(1)
             }
         }
-        .background(NinaTheme.screenGradient.ignoresSafeArea())
+        .background(NinaTheme.ground.ignoresSafeArea())
         .environment(tabSwipeLock)
-        .tint(NinaTheme.mint)
+        .tint(NinaTheme.cobalt)
         .keyboardDismissesOnOutsideTap()
         .animation(.easeInOut(duration: 0.28), value: entryPhase)
         .onChange(of: authSession.currentUser?.id) { oldValue, newValue in
@@ -254,26 +242,16 @@ struct AppRootView: View {
                 }
             }
         }
-        .alert(
-            "Outra pessoa editou esta tarefa",
-            isPresented: Binding(
-                get: { store.taskEditConflict != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        store.acceptRemoteTaskConflict()
-                    }
-                }
-            ),
-            presenting: store.taskEditConflict
-        ) { _ in
-            Button("Manter minha edição") {
-                store.keepLocalTaskConflict()
-            }
-            Button("Usar a edição mais recente", role: .cancel) {
-                store.acceptRemoteTaskConflict()
-            }
-        } message: { conflict in
-            Text("A tarefa “\(conflict.remoteTask.title)” mudou em outro aparelho. Escolha qual versão deve ficar.")
+        // A conflict has no dismissal. Swiping the old alert away silently chose
+        // remote-wins, which threw away an edit the person had just typed.
+        .sheet(
+            item: Binding(
+                get: { store.taskEditConflict },
+                set: { _ in }
+            )
+        ) { conflict in
+            TaskEditConflictSheet(conflict: conflict)
+                .interactiveDismissDisabled()
         }
     }
 
@@ -346,15 +324,23 @@ struct AppRootView: View {
     @ViewBuilder
     private var appShell: some View {
         ZStack(alignment: .bottom) {
-            NinaTheme.screenGradient
+            NinaTheme.ground
                 .ignoresSafeArea()
 
             tabPager
                 .ignoresSafeArea()
 
-            KeyboardAwareBottomTabBar(selectedTab: selectedTab, select: selectTab)
+            // A pushed screen owns the whole viewport: it has its own back
+            // affordance and a footer that would otherwise sit under the bar.
+            if tabRouter.router(for: selectedTab).path.isEmpty {
+                KeyboardAwareBottomTabBar(selectedTab: selectedTab, select: selectTab)
+                    .transition(.opacity)
+            }
         }
-        .background(NinaTheme.screenGradient.ignoresSafeArea())
+        .background(NinaTheme.ground.ignoresSafeArea())
+        .onReceive(NotificationCenter.default.publisher(for: .ninaSelectChatTab)) { _ in
+            selectTab(.nina)
+        }
     }
 
     @ViewBuilder
@@ -384,21 +370,11 @@ struct AppRootView: View {
     private func tabContent(for tab: AppTab) -> some View {
         let router = tabRouter.router(for: tab)
 
+        // Each screen draws its own header, so the navigation bar never appears.
         NavigationStack(path: tabRouter.binding(for: tab)) {
             tab.makeContentView()
                 .withAppRoutes()
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            Haptics.lightImpact()
-                            router.presentedSheet = .settings
-                        } label: {
-                            Image(systemName: "gearshape.fill")
-                                .font(.title3.weight(.bold))
-                        }
-                        .accessibilityLabel("Abrir ajustes")
-                    }
-                }
+                .toolbar(.hidden, for: .navigationBar)
         }
         .withSheetDestinations(
             sheet: Binding(
@@ -406,7 +382,7 @@ struct AppRootView: View {
                 set: { router.presentedSheet = $0 }
             )
         )
-        .background(NinaTheme.screenGradient.ignoresSafeArea())
+        .background(NinaTheme.ground.ignoresSafeArea())
         .environment(router)
     }
 
@@ -466,13 +442,10 @@ struct AppRootView: View {
 
 private struct HomeAccessLoadingView: View {
     var body: some View {
-        VStack(spacing: 14) {
-            ProgressView()
-                .tint(NinaTheme.mint)
-
-            Text("Verificando sua casa...")
-                .font(.headline.weight(.heavy))
-                .foregroundStyle(NinaTheme.ink)
+        VStack(spacing: 16) {
+            NinaMark(size: 84, presence: .reading)
+            Text("Vendo se a casa ainda é sua.")
+                .ninaText(.label, NinaTheme.muted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ninaScreenBackground()
@@ -485,37 +458,32 @@ private struct HomeAccessUnavailableView: View {
     @Environment(OnboardingStore.self) private var onboardingStore
 
     var body: some View {
-        VStack(spacing: 18) {
-            IconBubble(systemName: "wifi.exclamationmark", tone: .coral, size: 62)
+        // Nina is the subject here, so she renders without pigment rather than
+        // beside an alarm colour: losing the connection is not lateness.
+        VStack(spacing: 0) {
+            ZeroState(
+                headline: "Não deu para confirmar a sua casa.",
+                body_: store.syncErrorMessage
+                    ?? "Sem conexão, a Nina não consegue checar se você ainda faz parte desta casa. Nada foi perdido.",
+                presence: .unavailable
+            ) {
+                VStack(spacing: 10) {
+                    NinaButton(
+                        title: "Tentar de novo",
+                        systemName: "arrow.clockwise",
+                        isEnabled: !store.isSyncingHome
+                    ) {
+                        Task { await store.activateHomeContext(for: authSession.currentUser) }
+                    }
 
-            VStack(spacing: 8) {
-                Text("Não foi possível verificar sua casa")
-                    .font(.title2.weight(.black))
-                    .foregroundStyle(NinaTheme.ink)
-                    .multilineTextAlignment(.center)
-
-                Text(store.syncErrorMessage ?? "Conecte-se à internet e tente novamente.")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(NinaTheme.muted)
-                    .multilineTextAlignment(.center)
-            }
-
-            PrimaryCapsuleButton(title: "Tentar novamente", systemName: "arrow.clockwise") {
-                Task {
-                    await store.activateHomeContext(for: authSession.currentUser)
+                    NinaButton(title: "Sair da conta", kind: .quiet) {
+                        Task {
+                            onboardingStore.cancelReplay()
+                            await authSession.signOut()
+                        }
+                    }
                 }
             }
-            .disabled(store.isSyncingHome)
-            .opacity(store.isSyncingHome ? 0.6 : 1)
-
-            Button("Sair") {
-                Task {
-                    onboardingStore.cancelReplay()
-                    await authSession.signOut()
-                }
-            }
-            .font(.headline.weight(.heavy))
-            .foregroundStyle(NinaTheme.coral)
         }
         .padding(28)
         .frame(maxWidth: 520)
@@ -731,72 +699,24 @@ private struct KeyboardAwareBottomTabBar: View {
 private struct AppLoadingScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isBreathing = false
-    @State private var activeDot = 0
 
     var body: some View {
         ZStack {
-            NinaTheme.screenGradient
-                .ignoresSafeArea()
+            NinaTheme.ground.ignoresSafeArea()
 
-            VStack(spacing: 22) {
-                ZStack {
-                    Circle()
-                        .stroke(NinaTheme.mint.opacity(0.14), lineWidth: 16)
-                        .frame(width: 124, height: 124)
-                        .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1.04 : 0.96))
-                        .opacity(reduceMotion ? 1 : (isBreathing ? 0.55 : 1))
+            VStack(spacing: 20) {
+                NinaMark(size: 96, presence: .listening)
+                    .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1.02 : 0.98))
 
-                    NinaAvatarView(size: 88)
-                        .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1.02 : 0.98))
-                }
-
-                VStack(spacing: 7) {
-                    Text("Nina")
-                        .font(.system(size: 34, weight: .black, design: .rounded))
-                        .foregroundStyle(NinaTheme.ink)
-
-                    Text("Organizando a casa...")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(NinaTheme.muted)
-                }
-
-                HStack(spacing: 7) {
-                    ForEach(0..<3, id: \.self) { index in
-                        Capsule()
-                            .fill(index == activeDot ? NinaTheme.mint : NinaTheme.line.opacity(0.75))
-                            .frame(width: index == activeDot ? 18 : 8, height: 8)
-                    }
-                }
-                .animation(.spring(response: 0.28, dampingFraction: 0.78), value: activeDot)
+                Text("Nina").ninaText(.display)
             }
-            .padding(.horizontal, 34)
-            .padding(.vertical, 32)
-            .background(NinaTheme.card, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(NinaTheme.cardStroke, lineWidth: 1)
-            )
-            .cardShadow()
-            .padding(24)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Nina está carregando")
+            .accessibilityLabel("Nina")
         }
         .task {
             guard !reduceMotion else { return }
-
-            await MainActor.run {
-                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                    isBreathing = true
-                }
-            }
-
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 320_000_000)
-                guard !Task.isCancelled else { return }
-
-                await MainActor.run {
-                    activeDot = (activeDot + 1) % 3
-                }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                isBreathing = true
             }
         }
     }
@@ -806,316 +726,48 @@ private struct BottomTabBar: View {
     @Environment(AppStore.self) private var store
     var selectedTab: AppTab
     var select: (AppTab) -> Void
-    @Namespace private var sliderNamespace
-    @Namespace private var glassNamespace
 
     var body: some View {
-        tabButtons
-            .frame(height: 60)
-            .padding(.horizontal, 14)
-            .padding(.top, 10)
-            .padding(.bottom, 8)
-            .bottomTabBarSurface()
-            .padding(.horizontal, 18)
-            .padding(.bottom, 6)
-            .bottomTabBarShadow()
-            .animation(.interactiveSpring(response: 0.44, dampingFraction: 0.86, blendDuration: 0.12), value: selectedTab)
-    }
-
-    @ViewBuilder
-    private var tabSelectionTrack: some View {
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: 6) {
-                tabSelectionPills
-            }
-        } else {
-            tabSelectionPills
-        }
-        #else
-        tabSelectionPills
-        #endif
-    }
-
-    private var tabButtons: some View {
-        ZStack {
-            tabSelectionTrack
-                .allowsHitTesting(false)
-
-            HStack(spacing: 6) {
-                ForEach(AppTab.allCases) { tab in
-                    Button {
-                        select(tab)
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: tab.systemImage)
-                                .font(.system(size: 19, weight: .black))
-                                .overlay(alignment: .topTrailing) {
-                                    if waitingCount(for: tab) > 0 {
-                                        TabWaitingBadge(count: waitingCount(for: tab))
-                                            .offset(x: 13, y: -9)
-                                    }
-                                }
-
-                            Text(tab.title)
-                                .font(.caption2.weight(.black))
-                        }
-                        .foregroundStyle(selectedTab == tab ? NinaTheme.mintInk : NinaTheme.ink.opacity(0.72))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 60)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(accessibilityLabel(for: tab))
-                }
-            }
-        }
-    }
-
-    private func waitingCount(for tab: AppTab) -> Int {
-        tab == .house ? store.pendingJoinRequestCount : 0
-    }
-
-    private func accessibilityLabel(for tab: AppTab) -> String {
-        let count = waitingCount(for: tab)
-        guard count > 0 else { return "Aba \(tab.title)" }
-        if count == 1 {
-            return "Aba \(tab.title), 1 pedido de entrada esperando"
-        }
-        return "Aba \(tab.title), \(count) pedidos de entrada esperando"
-    }
-
-    private var tabSelectionPills: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 0) {
             ForEach(AppTab.allCases) { tab in
-                ZStack {
-                    if selectedTab == tab {
-                        TabSelectionPill()
-                            .frame(height: 62)
-                            .padding(.horizontal, -3)
-                            .offset(y: 1)
-                            .matchedGeometryEffect(id: "tab-slider", in: sliderNamespace)
-                            .tabSliderGlassID(in: glassNamespace)
+                Button {
+                    select(tab)
+                } label: {
+                    VStack(spacing: 4) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: tab.systemImage)
+                                .font(.system(size: 22, weight: .regular))
+                                .frame(height: 24)
+
+                            if tab == .house, store.pendingJoinRequestCount > 0 {
+                                Circle()
+                                    .fill(NinaTheme.cobalt)
+                                    .frame(width: 7, height: 7)
+                                    .offset(x: 6, y: -1)
+                            }
+                        }
+
+                        Text(tab.title)
+                            .font(.system(size: 12, weight: tab == selectedTab ? .semibold : .regular))
                     }
+                    .foregroundStyle(tab == selectedTab ? NinaTheme.cobalt : NinaTheme.muted)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 60)
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab.title)
+                .accessibilityAddTraits(tab == selectedTab ? [.isSelected] : [])
             }
         }
-    }
-}
-
-private struct TabWaitingBadge: View {
-    var count: Int
-
-    var body: some View {
-        Text(count > 9 ? "9+" : "\(count)")
-            .font(.caption2.weight(.black))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(NinaTheme.mint, in: Capsule())
-            .accessibilityHidden(true)
-    }
-}
-
-private struct TabSelectionPill: View {
-    var body: some View {
-        lens
-            .compositingGroup()
-            .shadow(color: NinaTheme.mint.opacity(0.18), radius: 12, x: 0, y: 6)
-            .shadow(color: NinaTheme.shadow.opacity(0.22), radius: 16, x: 0, y: 10)
-    }
-
-    @ViewBuilder
-    private var lens: some View {
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.02))
-                .glassEffect(
-                    .regular.tint(NinaTheme.mint.opacity(0.18)),
-                    in: Capsule(style: .continuous)
-                )
-                .overlay(lensHighlights)
-        } else {
-            fallbackLens
+        .padding(.top, 9)
+        .padding(.bottom, 2)
+        .background(alignment: .top) {
+            NinaTheme.ground
+                .overlay(alignment: .top) {
+                    Rectangle().fill(NinaTheme.line).frame(height: 1)
+                }
+                .ignoresSafeArea(edges: .bottom)
         }
-        #else
-        fallbackLens
-        #endif
-    }
-
-    private var fallbackLens: some View {
-        ZStack {
-            Capsule(style: .continuous)
-                .fill(.ultraThinMaterial)
-
-            Capsule(style: .continuous)
-                .fill(
-                    LinearGradient(
-                        stops: [
-                            .init(color: Color.white.opacity(0.72), location: 0),
-                            .init(color: Color.white.opacity(0.24), location: 0.46),
-                            .init(color: NinaTheme.mint.opacity(0.16), location: 1)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-
-            Capsule(style: .continuous)
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color.white.opacity(0.86),
-                            Color.white.opacity(0.18),
-                            Color.clear
-                        ],
-                        center: .topLeading,
-                        startRadius: 3,
-                        endRadius: 92
-                    )
-                )
-                .blendMode(.screen)
-        }
-        .clipShape(Capsule(style: .continuous))
-        .overlay(lensHighlights)
-    }
-
-    private var lensHighlights: some View {
-        ZStack {
-            Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.78), lineWidth: 1)
-
-            Capsule(style: .continuous)
-                .stroke(
-                    AngularGradient(
-                        colors: [
-                            Color.white.opacity(0),
-                            NinaTheme.sky.opacity(0.55),
-                            NinaTheme.lavender.opacity(0.5),
-                            NinaTheme.gold.opacity(0.58),
-                            NinaTheme.coral.opacity(0.38),
-                            Color.white.opacity(0)
-                        ],
-                        center: .center
-                    ),
-                    lineWidth: 2.2
-                )
-                .blur(radius: 0.7)
-                .opacity(0.9)
-
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.88),
-                            Color.white.opacity(0.24),
-                            Color.clear
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(height: 18)
-                .padding(.horizontal, 18)
-                .offset(y: -19)
-                .blur(radius: 1.3)
-
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.clear,
-                            NinaTheme.sky.opacity(0.24),
-                            NinaTheme.gold.opacity(0.22),
-                            Color.clear
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(height: 12)
-                .padding(.horizontal, 10)
-                .offset(y: 21)
-                .blur(radius: 1.6)
-        }
-        .allowsHitTesting(false)
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func bottomTabBarSurface() -> some View {
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            self
-                .background(bottomTabBarGlassBackground)
-                .overlay(bottomTabBarStroke)
-        } else {
-            bottomTabBarFallbackSurface()
-        }
-        #else
-        bottomTabBarFallbackSurface()
-        #endif
-    }
-
-    private func bottomTabBarFallbackSurface() -> some View {
-        background {
-            bottomTabBarFallbackBackground
-        }
-        .overlay(bottomTabBarStroke)
-    }
-
-    @ViewBuilder
-    private var bottomTabBarGlassBackground: some View {
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(Color.white.opacity(0.01))
-                .glassEffect(
-                    .regular.tint(Color.white.opacity(0.08)),
-                    in: RoundedRectangle(cornerRadius: 30, style: .continuous)
-                )
-        } else {
-            bottomTabBarFallbackBackground
-        }
-        #else
-        bottomTabBarFallbackBackground
-        #endif
-    }
-
-    private var bottomTabBarFallbackBackground: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(.ultraThinMaterial)
-
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(NinaTheme.bar.opacity(0.88))
-        }
-    }
-
-    private var bottomTabBarStroke: some View {
-        RoundedRectangle(cornerRadius: 30, style: .continuous)
-            .stroke(NinaTheme.line.opacity(0.7), lineWidth: 1)
-    }
-
-    @ViewBuilder
-    func tabSliderGlassID(in namespace: Namespace.ID) -> some View {
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            self.glassEffectID("tab-slider", in: namespace)
-        } else {
-            self
-        }
-        #else
-        self
-        #endif
-    }
-
-    func bottomTabBarShadow() -> some View {
-        shadow(color: NinaTheme.shadow.opacity(0.28), radius: 6, x: 0, y: 2)
     }
 }
 
@@ -1135,10 +787,10 @@ private extension AppTab {
 
     var systemImage: String {
         switch self {
-        case .nina: "sparkles"
-        case .today: "sun.max.fill"
-        case .tasks: "checklist"
-        case .house: "house.fill"
+        case .nina: "bubble.left"
+        case .today: "clock"
+        case .tasks: "text.alignleft"
+        case .house: "house"
         }
     }
 }
@@ -1147,12 +799,21 @@ private struct AppRoutesModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .navigationDestination(for: Route.self) { route in
-                switch route {
-                case .task(let id):
-                    TaskRouteDetail(taskID: id)
-                case .member(let id):
-                    MemberRouteDetail(memberID: id)
+                Group {
+                    switch route {
+                    case .task(let id):
+                        TaskRouteDetail(taskID: id)
+                    case .member(let id):
+                        MemberRouteDetail(memberID: id)
+                    case .workload:
+                        WorkloadView()
+                    case .memories:
+                        MemoriesView()
+                    }
                 }
+                // Pushed screens draw their own back affordance, so the system
+                // bar would be a second one sitting on top of it.
+                .toolbar(.hidden, for: .navigationBar)
             }
     }
 }
@@ -1215,13 +876,16 @@ private struct TaskRouteDetail: View {
 
     var body: some View {
         if let task = store.tasks.first(where: { $0.id == taskID }) {
-            TaskDetailCard(task: task)
-                .padding(20)
-                .ninaScreenBackground()
-                .navigationTitle("Tarefa")
-                .navigationBarTitleDisplayMode(.inline)
+            TaskDetailView(task: task)
         } else {
-            ContentUnavailableView("Tarefa não encontrada", systemImage: "checklist")
+            ZeroState(
+                headline: "Essa tarefa não está mais aqui.",
+                body_: "Alguém da casa pode ter concluído ou apagado.",
+                showsMark: false
+            )
+            .padding(24)
+            .frame(maxHeight: .infinity)
+            .ninaScreenBackground()
         }
     }
 }
@@ -1232,13 +896,16 @@ private struct MemberRouteDetail: View {
 
     var body: some View {
         if let member = store.familyGroup.members.first(where: { $0.id == memberID }) {
-            MemberDetailContent(member: member)
-                .padding(20)
-                .ninaScreenBackground()
-                .navigationTitle(member.name)
-                .navigationBarTitleDisplayMode(.inline)
+            MemberDetailView(member: member)
         } else {
-            ContentUnavailableView("Pessoa não encontrada", systemImage: "person.crop.circle")
+            ZeroState(
+                headline: "Essa pessoa não está mais na casa.",
+                body_: "Alguém com permissão pode ter removido o perfil.",
+                showsMark: false
+            )
+            .padding(24)
+            .frame(maxHeight: .infinity)
+            .ninaScreenBackground()
         }
     }
 }

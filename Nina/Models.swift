@@ -321,17 +321,22 @@ struct TaskCategory: Identifiable, Codable, Hashable, CaseIterable {
     var symbolName: String
     var tone: MemberTone
 
-    static let home = TaskCategory(id: "home", title: "Casa", symbolName: "house.fill", tone: .mint)
-    static let bills = TaskCategory(id: "bills", title: "Contas", symbolName: "creditcard.fill", tone: .sky)
-    static let health = TaskCategory(id: "health", title: "Saúde", symbolName: "cross.case.fill", tone: .coral)
-    static let school = TaskCategory(id: "school", title: "Escola", symbolName: "backpack.fill", tone: .amber)
-    static let pet = TaskCategory(id: "pet", title: "Pet", symbolName: "pawprint.fill", tone: .lavender)
+    // Outline glyphs, never filled: category is a glyph and colour is spent on
+    // lateness alone, so the drawing has to carry the whole distinction.
+    static let home = TaskCategory(id: "home", title: "Casa", symbolName: "house", tone: .mint)
+    static let bills = TaskCategory(id: "bills", title: "Contas", symbolName: "creditcard", tone: .sky)
+    static let health = TaskCategory(id: "health", title: "Saúde", symbolName: "cross.case", tone: .coral)
+    static let school = TaskCategory(id: "school", title: "Escola", symbolName: "backpack", tone: .amber)
+    static let pet = TaskCategory(id: "pet", title: "Pet", symbolName: "pawprint", tone: .lavender)
     static let food = TaskCategory(id: "food", title: "Comida", symbolName: "fork.knife", tone: .mint)
+    // The six above are a taxonomy of logistics. Cuidado names the labour the
+    // product most wants to make visible: remembering, scheduling, following up.
+    static let care = TaskCategory(id: "care", title: "Cuidado", symbolName: "heart", tone: .coral)
 
-    static let allCases: [TaskCategory] = [.home, .bills, .health, .school, .pet, .food]
+    static let allCases: [TaskCategory] = [.home, .bills, .health, .school, .pet, .food, .care]
 
     static func custom(id: String, title: String, tone: MemberTone) -> TaskCategory {
-        TaskCategory(id: id, title: title, symbolName: "tag.fill", tone: tone)
+        TaskCategory(id: id, title: title, symbolName: "tag", tone: tone)
     }
 
     private enum CodingKeys: String, CodingKey {

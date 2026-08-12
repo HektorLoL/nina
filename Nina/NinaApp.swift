@@ -42,6 +42,10 @@ struct NinaApp: App {
     var body: some Scene {
         WindowGroup {
             AppRootView()
+                // The azulejo palette is a fired tin glaze and exists only in
+                // light. Rendering it against a dark system setting would ship a
+                // palette nobody designed or reviewed.
+                .preferredColorScheme(.light)
                 .environment(store)
                 .environment(authSession)
                 .environment(onboardingStore)

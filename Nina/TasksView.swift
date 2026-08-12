@@ -1,941 +1,541 @@
 import SwiftUI
 
-private enum TaskSectionContent: Hashable {
-    case taskSection(String)
-    case shopping
-}
-
-private struct TaskSectionDescriptor: Identifiable, Hashable {
-    var id: String
-    var title: String
-    var subtitle: String
-    var systemImage: String
-    var tone: MemberTone
-    var content: TaskSectionContent
-    var addDestination: SheetDestination
-    var addAccessibilityLabel: String
-}
-
-struct TasksView: View {
-    @Environment(AppStore.self) private var store
-    @Environment(RouterPath.self) private var router
-    @State private var selectedSectionID = AppStore.houseTasksSectionID
-    @State private var isPresentingSectionCreator = false
-    @State private var sectionPendingDeletion: TaskSectionDescriptor?
-    @State private var searchQuery = ""
-    @State private var selectedFilter: TaskListFilter = .all
-    @State private var isShowingCompleted = false
-    @State private var isConfirmingShoppingClear = false
-
-    private static let shoppingSectionID = "shopping-list"
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-
-                TaskSectionChooser(
-                    sections: sections,
-                    selectedSection: selectedSection,
-                    selectSection: selectSection,
-                    createSection: presentSectionCreator,
-                    canDeleteSelectedSection: canDeleteSelectedSection,
-                    deleteSelectedSection: requestDeleteSelectedSection
-                )
-
-                selectedSectionContent
-            }
-            .padding(18)
-            .padding(.bottom, 104)
-        }
-        .ninaScreenBackground()
-        .searchable(
-            text: $searchQuery,
-            placement: .navigationBarDrawer(displayMode: .automatic),
-            prompt: "Buscar por título, responsável ou categoria"
-        )
-        .navigationTitle("Tarefas")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Haptics.lightImpact()
-                    router.presentedSheet = selectedSection.addDestination
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title3.weight(.bold))
-                }
-                .accessibilityLabel(selectedSection.addAccessibilityLabel)
-            }
-        }
-        .sheet(isPresented: $isPresentingSectionCreator) {
-            NavigationStack {
-                TaskSectionCreatorSheet(createSection: createTaskSection)
-            }
-            .presentationDragIndicator(.visible)
-        }
-        .alert(
-            "Excluir esta seção?",
-            isPresented: Binding(
-                get: { sectionPendingDeletion != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        sectionPendingDeletion = nil
-                    }
-                }
-            ),
-            presenting: sectionPendingDeletion
-        ) { section in
-            Button("Cancelar", role: .cancel) {
-                sectionPendingDeletion = nil
-            }
-            Button("Excluir seção", role: .destructive) {
-                deleteTaskSection(section)
-            }
-        } message: { section in
-            let taskCount = store.tasks(in: section.id).count
-            if taskCount == 0 {
-                Text("A seção “\(section.title)” será apagada.")
-            } else {
-                Text(
-                    "\(taskCount) \(taskCount == 1 ? "tarefa será movida" : "tarefas serão movidas") para “Tarefas da casa”."
-                )
-            }
-        }
-        .alert("Limpar os itens comprados?", isPresented: $isConfirmingShoppingClear) {
-            Button("Cancelar", role: .cancel) {}
-            Button("Limpar", role: .destructive) {
-                clearBoughtShoppingItems()
-            }
-        } message: {
-            let count = store.shoppingItems.count(where: \.isChecked)
-            Text(
-                count == 1
-                    ? "1 item comprado sai da lista da casa."
-                    : "\(count) itens comprados saem da lista da casa."
-            )
-        }
-    }
-
-    private func clearBoughtShoppingItems() {
-        Haptics.success()
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
-            store.clearCheckedShoppingItems()
-        }
-    }
-
-    private var sections: [TaskSectionDescriptor] {
-        taskSectionDescriptors + [
-            TaskSectionDescriptor(
-                id: Self.shoppingSectionID,
-                title: "Lista de compras",
-                subtitle: "\(store.pendingShoppingItems.count) itens pendentes",
-                systemImage: "cart.fill",
-                tone: .amber,
-                content: .shopping,
-                addDestination: .addShoppingItem,
-                addAccessibilityLabel: "Adicionar compra"
-            )
-        ]
-    }
-
-    private var taskSectionDescriptors: [TaskSectionDescriptor] {
-        store.taskSections.map { section in
-            TaskSectionDescriptor(
-                id: section.id,
-                title: section.title,
-                subtitle: taskSectionSubtitle(section.id),
-                systemImage: section.symbolName,
-                tone: section.tone,
-                content: .taskSection(section.id),
-                addDestination: .addTaskInSection(section.id),
-                addAccessibilityLabel: "Adicionar tarefa em \(section.title)"
-            )
-        }
-    }
-
-    private var selectedSection: TaskSectionDescriptor {
-        sections.first { $0.id == selectedSectionID } ?? sections[0]
-    }
-
-    private var canDeleteSelectedSection: Bool {
-        guard case .taskSection(let sectionID) = selectedSection.content else {
-            return false
-        }
-        return sectionID != AppStore.houseTasksSectionID
-    }
-
-    @ViewBuilder
-    private var selectedSectionContent: some View {
-        switch selectedSection.content {
-        case .taskSection(let sectionID):
-            taskList(for: selectedSection, sectionID: sectionID)
-        case .shopping:
-            shoppingList
-        }
-    }
-
-    private var header: some View {
-        SoftCard(padding: 18) {
-            HStack(spacing: 14) {
-                IconBubble(systemName: "checklist", tone: .mint, size: 54)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Organização manual")
-                        .font(.title2.weight(.black))
-                        .foregroundStyle(NinaTheme.ink)
-
-                    Text("Para quando você quer resolver direto, sem conversar.")
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
-                }
-            }
-        }
-    }
-
-    private func taskList(for section: TaskSectionDescriptor, sectionID: String) -> some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            let allTasks = store.tasks(in: sectionID)
-            let open = visibleOpenTasks(in: sectionID, relativeTo: context.date)
-            let completed = store.completedTasks(in: sectionID)
-
-            VStack(alignment: .leading, spacing: 12) {
-                SectionTitle(title: section.title, subtitle: section.subtitle)
-
-                if !allTasks.isEmpty {
-                    TaskFilterBar(
-                        selectedFilter: $selectedFilter,
-                        counts: filterCounts(in: sectionID, relativeTo: context.date)
-                    )
-                }
-
-                if allTasks.isEmpty {
-                    TaskSectionEmptyState(section: section) {
-                        Haptics.lightImpact()
-                        router.presentedSheet = section.addDestination
-                    }
-                } else if open.isEmpty {
-                    TaskFilterEmptyState(filter: selectedFilter, hasSearch: !trimmedQuery.isEmpty)
-                } else {
-                    ForEach(open) { task in
-                        TaskCard(
-                            task: task,
-                            isMarkedComplete: task.isDone,
-                            onToggle: toggleTask,
-                            togglesOnTap: false,
-                            referenceDate: context.date
-                        )
-                    }
-                }
-
-                if !completed.isEmpty, trimmedQuery.isEmpty, selectedFilter == .all {
-                    completedDisclosure(completed, referenceDate: context.date)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func completedDisclosure(_ completed: [TaskItem], referenceDate: Date) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button {
-                Haptics.selection()
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
-                    isShowingCompleted.toggle()
-                }
-            } label: {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: isShowingCompleted ? "chevron.down" : "chevron.right")
-                        .font(.caption.weight(.black))
-                        .padding(.top, 3)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(
-                            completed.count == 1
-                                ? "1 tarefa concluída"
-                                : "\(completed.count) tarefas concluídas"
-                        )
-                        .font(.subheadline.weight(.black))
-
-                        Text(CompletedTaskRetention.disclosureNote)
-                            .font(.caption)
-                            .multilineTextAlignment(.leading)
-                    }
-
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(NinaTheme.muted)
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if isShowingCompleted {
-                ForEach(completed) { task in
-                    TaskCard(
-                        task: task,
-                        isMarkedComplete: true,
-                        onToggle: toggleTask,
-                        togglesOnTap: false,
-                        referenceDate: referenceDate
-                    )
-                }
-            }
-        }
-        .padding(.top, 6)
-    }
-
-    private var trimmedQuery: String {
-        searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func visibleOpenTasks(in sectionID: String, relativeTo referenceDate: Date) -> [TaskItem] {
-        let calendar = Calendar.current
-        let viewer = store.currentFamilyMember
-        return store.openTasks(in: sectionID)
-            .filter {
-                selectedFilter.matches(
-                    $0,
-                    referenceDate: referenceDate,
-                    calendar: calendar,
-                    currentMemberID: viewer?.id,
-                    currentUserName: viewer?.name
-                )
-            }
-            .filter { matchesSearch($0) }
-            .sorted { left, right in
-                let leftOverdue = left.isOverdue(relativeTo: referenceDate, calendar: calendar)
-                let rightOverdue = right.isOverdue(relativeTo: referenceDate, calendar: calendar)
-                if leftOverdue != rightOverdue { return leftOverdue }
-
-                if left.priority.sortRank != right.priority.sortRank {
-                    return left.priority.sortRank > right.priority.sortRank
-                }
-
-                let leftDate = left.displayDate(relativeTo: referenceDate, calendar: calendar) ?? .distantFuture
-                let rightDate = right.displayDate(relativeTo: referenceDate, calendar: calendar) ?? .distantFuture
-                if leftDate != rightDate { return leftDate < rightDate }
-
-                return left.title.localizedCaseInsensitiveCompare(right.title) == .orderedAscending
-            }
-    }
-
-    private func matchesSearch(_ task: TaskItem) -> Bool {
-        let query = trimmedQuery
-        guard !query.isEmpty else { return true }
-        return [task.title, task.subtitle, task.owner, task.category.title]
-            .contains { $0.localizedCaseInsensitiveContains(query) }
-    }
-
-    private func filterCounts(in sectionID: String, relativeTo referenceDate: Date) -> [TaskListFilter: Int] {
-        let calendar = Calendar.current
-        let open = store.openTasks(in: sectionID).filter(matchesSearch)
-        let viewer = store.currentFamilyMember
-
-        return TaskListFilter.allCases.reduce(into: [:]) { counts, filter in
-            counts[filter] = open.count {
-                filter.matches(
-                    $0,
-                    referenceDate: referenceDate,
-                    calendar: calendar,
-                    currentMemberID: viewer?.id,
-                    currentUserName: viewer?.name
-                )
-            }
-        }
-    }
-
-    private var shoppingList: some View {
-        let pending = store.shoppingItems.filter { !$0.isChecked && matchesShoppingSearch($0) }
-        let bought = store.shoppingItems.filter { $0.isChecked && matchesShoppingSearch($0) }
-
-        return VStack(alignment: .leading, spacing: 12) {
-            SectionTitle(
-                title: "Lista de compras",
-                subtitle: store.pendingShoppingItems.count == 1
-                    ? "1 item pendente"
-                    : "\(store.pendingShoppingItems.count) itens pendentes"
-            )
-
-            if store.shoppingItems.isEmpty {
-                ShoppingEmptyState {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .addShoppingItem
-                }
-            } else if pending.isEmpty, bought.isEmpty {
-                TaskFilterEmptyState(filter: .all, hasSearch: true)
-            } else {
-                ForEach(pending) { item in
-                    shoppingRow(item)
-                }
-
-                if pending.isEmpty {
-                    Text("Tudo comprado. Nada pendente na lista.")
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
-                        .padding(.vertical, 4)
-                }
-
-                if !bought.isEmpty {
-                    HStack {
-                        Text(bought.count == 1 ? "1 comprado" : "\(bought.count) comprados")
-                            .font(.subheadline.weight(.black))
-                            .foregroundStyle(NinaTheme.muted)
-
-                        Spacer()
-
-                        Button("Limpar comprados") {
-                            Haptics.warning()
-                            isConfirmingShoppingClear = true
-                        }
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(NinaTheme.coral)
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 6)
-
-                    ForEach(bought) { item in
-                        shoppingRow(item)
-                    }
-                }
-            }
-        }
-    }
-
-    private func shoppingRow(_ item: ShoppingItem) -> some View {
-        ShoppingRow(item: item, tone: shoppingTone(for: item))
-            .onTapGesture {
-                Haptics.lightImpact()
-                router.presentedSheet = .editShoppingItem(item.id)
-            }
-            .contextMenu {
-                Button(role: .destructive) {
-                    deleteShoppingItem(item)
-                } label: {
-                    Label("Apagar item", systemImage: "trash")
-                }
-            }
-    }
-
-    private func shoppingTone(for item: ShoppingItem) -> MemberTone {
-        let people = store.familyGroup.members.filter { $0.role != .assistant }
-        if let memberID = item.ownerMemberID {
-            return people.first { $0.id == memberID }?.tone ?? .amber
-        }
-        return people
-            .first { $0.name.localizedCaseInsensitiveCompare(item.owner) == .orderedSame }?
-            .tone ?? .amber
-    }
-
-    private func matchesShoppingSearch(_ item: ShoppingItem) -> Bool {
-        let query = trimmedQuery
-        guard !query.isEmpty else { return true }
-        return [item.title, item.amount, item.owner]
-            .contains { $0.localizedCaseInsensitiveContains(query) }
-    }
-
-    private func deleteShoppingItem(_ item: ShoppingItem) {
-        Haptics.success()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.84)) {
-            store.deleteShoppingItem(item.id)
-        }
-    }
-
-    private func toggleTask(_ task: TaskItem) {
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-            store.toggleTask(task)
-        }
-    }
-
-    private func selectSection(_ section: TaskSectionDescriptor) {
-        guard selectedSectionID != section.id else { return }
-
-        Haptics.selection()
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
-            selectedSectionID = section.id
-        }
-    }
-
-    private func presentSectionCreator() {
-        Haptics.lightImpact()
-        isPresentingSectionCreator = true
-    }
-
-    private func requestDeleteSelectedSection() {
-        guard canDeleteSelectedSection else { return }
-        Haptics.warning()
-        sectionPendingDeletion = selectedSection
-    }
-
-    private func deleteTaskSection(_ section: TaskSectionDescriptor) {
-        guard case .taskSection(let sectionID) = section.content,
-              store.deleteTaskSection(sectionID) else {
-            sectionPendingDeletion = nil
-            return
-        }
-
-        Haptics.success()
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
-            selectedSectionID = AppStore.houseTasksSectionID
-        }
-        sectionPendingDeletion = nil
-    }
-
-    private func createTaskSection(_ title: String, symbolName: String) {
-        let section = store.addTaskSection(title: title, symbolName: symbolName)
-
-        Haptics.success()
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
-            selectedSectionID = section.id
-        }
-    }
-
-    private func taskSectionSubtitle(_ sectionID: String) -> String {
-        let counts = store.taskCounts(in: sectionID)
-        let seedCount = store.openTasks(in: sectionID).count { $0.kind == .seed }
-        let seedSummary = seedCount == 0 ? "" : " · \(seedCount) \(seedCount == 1 ? "semente" : "sementes")"
-        return "\(counts.open) abertas · \(counts.completed) concluídas\(seedSummary)"
-    }
-}
-
 enum TaskListFilter: String, CaseIterable, Identifiable, Hashable {
     case all
     case mine
-    case overdue
     case seeds
+    case shopping
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .all: "Todas"
+        case .all: "Tudo"
         case .mine: "Minhas"
-        case .overdue: "Atrasadas"
         case .seeds: "Sementes"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .all: "tray.full.fill"
-        case .mine: "person.fill"
-        case .overdue: "exclamationmark.circle.fill"
-        case .seeds: "leaf.fill"
-        }
-    }
-
-    var tone: MemberTone {
-        switch self {
-        case .all: .mint
-        case .mine: .sky
-        case .overdue: .coral
-        case .seeds: .lavender
-        }
-    }
-
-    var emptyMessage: String {
-        switch self {
-        case .all: "Nada por aqui ainda."
-        case .mine: "Nenhuma tarefa está com você agora."
-        case .overdue: "Nada atrasado. A casa está em dia."
-        case .seeds: "Nenhuma semente guardada nesta seção."
-        }
-    }
-
-    func matches(
-        _ task: TaskItem,
-        referenceDate: Date,
-        calendar: Calendar,
-        currentMemberID: UUID?,
-        currentUserName: String?
-    ) -> Bool {
-        switch self {
-        case .all:
-            true
-        case .mine:
-            if let currentMemberID, let ownerMemberID = task.ownerMemberID {
-                ownerMemberID == currentMemberID
-            } else {
-                currentUserName.map { task.owner.localizedCaseInsensitiveCompare($0) == .orderedSame } ?? false
-            }
-        case .overdue:
-            task.isOverdue(relativeTo: referenceDate, calendar: calendar)
-        case .seeds:
-            task.kind == .seed
+        case .shopping: "Compras"
         }
     }
 }
 
-private struct TaskFilterBar: View {
-    @Binding var selectedFilter: TaskListFilter
-    var counts: [TaskListFilter: Int]
+struct TasksView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(RouterPath.self) private var router
+
+    @State private var filter: TaskListFilter = .all
+    @State private var searchQuery = ""
+    @State private var isSearching = false
+    @State private var collapsed: Set<String> = []
+    @State private var isShowingCompleted = false
+    @State private var isConfirmingShoppingClear = false
+    @FocusState private var isSearchFocused: Bool
+
+    private var openTasks: [TaskItem] {
+        store.tasks.filter { $0.kind == .task && !$0.isDone }
+    }
+
+    private var mine: [TaskItem] {
+        guard let me = store.currentFamilyMember else { return [] }
+        return openTasks.filter { $0.ownerMemberID == me.id }
+    }
+
+    private var completedToday: [TaskItem] {
+        store.tasks.filter { task in
+            guard let completedAt = task.completedAt else { return false }
+            return Calendar.current.isDateInToday(completedAt)
+        }
+    }
 
     var body: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                ForEach(TaskListFilter.allCases) { filter in
-                    let count = counts[filter] ?? 0
-                    let isSelected = selectedFilter == filter
+        if isSearching {
+            searchScreen
+        } else {
+            main
+        }
+    }
 
+
+    private var main: some View {
+        ZStack(alignment: .bottomTrailing) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    filters
+                    content
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 104)
+            }
+
+            if filter != .shopping, !store.tasks.isEmpty {
+                fab
+            }
+        }
+        .ninaScreenBackground()
+    }
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(filter == .shopping ? "Compras" : "Tarefas").ninaText(.screen)
+                Text(subtitle).ninaText(.label, NinaTheme.muted)
+            }
+
+            Spacer()
+
+            Button {
+                Haptics.lightImpact()
+                isSearching = true
+                isSearchFocused = true
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 19, weight: .regular))
+                    .foregroundStyle(NinaTheme.ink)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Buscar")
+            .padding(.top, 4)
+        }
+    }
+
+    private var subtitle: String {
+        switch filter {
+        case .shopping: "A lista é da casa inteira."
+        case .seeds: "O que não tem dia marcado."
+        default: "Tudo o que a casa tem em aberto."
+        }
+    }
+
+    private var filters: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(TaskListFilter.allCases) { option in
                     Button {
-                        Haptics.lightImpact()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                            selectedFilter = filter
-                        }
+                        Haptics.selection()
+                        filter = option
                     } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: filter.symbolName)
-                                .font(.caption2.weight(.black))
-                            Text(filter.title)
-                                .font(.caption.weight(.black))
-                            Text("\(count)")
-                                .font(.caption2.weight(.heavy))
-                                .opacity(0.75)
-                        }
-                        .foregroundStyle(isSelected ? .white : filter.tone.color)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            isSelected ? filter.tone.color : filter.tone.softColor,
-                            in: Capsule()
-                        )
+                        NinaChip(text: chipTitle(option), isSet: filter == option)
                     }
                     .buttonStyle(.plain)
-                    .disabled(count == 0 && filter != .all && !isSelected)
-                    .opacity(count == 0 && filter != .all && !isSelected ? 0.45 : 1)
-                    .accessibilityLabel("\(filter.title), \(count) tarefas")
-                    .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
                 }
             }
-            .padding(.horizontal, 2)
+            .padding(.vertical, 1)
         }
-        .scrollIndicators(.hidden)
+        .scrollClipDisabled()
     }
-}
 
-private struct TaskFilterEmptyState: View {
-    var filter: TaskListFilter
-    var hasSearch: Bool
+    private func chipTitle(_ option: TaskListFilter) -> String {
+        let count: Int = switch option {
+        case .all: openTasks.count
+        case .mine: mine.count
+        case .seeds: store.openSeeds.count
+        case .shopping: store.pendingShoppingItems.count
+        }
+        return count > 0 ? "\(option.title) \(count)" : option.title
+    }
 
-    var body: some View {
-        SoftCard(padding: 18) {
-            HStack(spacing: 12) {
-                IconBubble(
-                    systemName: hasSearch ? "magnifyingglass" : filter.symbolName,
-                    tone: filter.tone,
-                    size: 40
-                )
-
-                Text(hasSearch ? "Nenhuma tarefa encontrada para essa busca." : filter.emptyMessage)
-                    .font(.subheadline)
-                    .foregroundStyle(NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: 0)
+    @ViewBuilder
+    private var content: some View {
+        switch filter {
+        case .shopping: shopping
+        case .seeds: seeds
+        case .mine: grouped(mine, emptyHeadline: "Nada está com você agora.", emptyBody: "Quando alguém da casa te passar alguma coisa, ela aparece aqui.")
+        case .all:
+            if store.tasks.isEmpty {
+                firstTasks
+            } else {
+                grouped(openTasks, emptyHeadline: "Nada em aberto.", emptyBody: "A casa está em dia. Pode deixar assim.")
             }
         }
     }
-}
 
-private struct TaskSectionChooser: View {
-    var sections: [TaskSectionDescriptor]
-    var selectedSection: TaskSectionDescriptor
-    var selectSection: (TaskSectionDescriptor) -> Void
-    var createSection: () -> Void
-    var canDeleteSelectedSection: Bool
-    var deleteSelectedSection: () -> Void
 
-    var body: some View {
-        Menu {
-            ForEach(sections) { section in
-                Button {
-                    selectSection(section)
-                } label: {
-                    Label {
-                        Text(section.title)
-                    } icon: {
-                        Image(systemName: selectedSection.id == section.id ? "checkmark" : section.systemImage)
+    @ViewBuilder
+    private func grouped(_ tasks: [TaskItem], emptyHeadline: String, emptyBody: String) -> some View {
+        if tasks.isEmpty, completedToday.isEmpty {
+            ZeroState(headline: emptyHeadline, body_: emptyBody, presence: .stored)
+                .padding(.top, 40)
+        } else {
+            VStack(spacing: 18) {
+                ForEach(categoryGroups(of: tasks), id: \.0.id) { category, items in
+                    categorySection(category, items)
+                }
+
+                if !completedToday.isEmpty {
+                    completedSection
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private func categoryGroups(of tasks: [TaskItem]) -> [(TaskCategory, [TaskItem])] {
+        var order: [String] = []
+        var buckets: [String: (TaskCategory, [TaskItem])] = [:]
+        for task in tasks {
+            let key = task.category.id
+            if buckets[key] == nil {
+                buckets[key] = (task.category, [])
+                order.append(key)
+            }
+            buckets[key]?.1.append(task)
+        }
+        return order.compactMap { buckets[$0] }
+    }
+
+    private func categorySection(_ category: TaskCategory, _ items: [TaskItem]) -> some View {
+        let isCollapsed = collapsed.contains(category.id)
+        return VStack(spacing: 0) {
+            Button {
+                Haptics.selection()
+                if isCollapsed { collapsed.remove(category.id) } else { collapsed.insert(category.id) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(NinaTheme.faint)
+                    Text("\(category.title.uppercased()) · \(items.count)")
+                        .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+                    Spacer()
+                    if isCollapsed {
+                        Text("recolhida").ninaText(.meta, NinaTheme.faint)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, isCollapsed ? 0 : 8)
+
+            if !isCollapsed {
+                ForEach(items) { task in
+                    TaskRowView(task: task)
+                    if task.id != items.last?.id {
+                        NinaDivider(inset: 36)
                     }
                 }
             }
+        }
+    }
 
-            Divider()
-
-            Button(action: createSection) {
-                Label("Nova seção", systemImage: "plus.circle.fill")
+    private var completedSection: some View {
+        VStack(spacing: 0) {
+            Button {
+                Haptics.selection()
+                isShowingCompleted.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isShowingCompleted ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(NinaTheme.faint)
+                    Text("CONCLUÍDAS HOJE · \(completedToday.count)")
+                        .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+                    Spacer()
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .padding(.bottom, isShowingCompleted ? 8 : 0)
 
-            if canDeleteSelectedSection {
-                Divider()
+            if isShowingCompleted {
+                ForEach(completedToday) { task in
+                    TaskRowView(task: task)
+                    if task.id != completedToday.last?.id {
+                        NinaDivider(inset: 36)
+                    }
+                }
 
-                Button(role: .destructive, action: deleteSelectedSection) {
-                    Label("Excluir seção", systemImage: "trash.fill")
+                Text(CompletedTaskRetention.disclosureNote)
+                    .ninaText(.meta, NinaTheme.faint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 10)
+            }
+        }
+    }
+
+    private var firstTasks: some View {
+        ZeroState(
+            headline: "A casa ainda não combinou nada.",
+            body_: "Tarefa aqui é coisa que a casa combinou. Pode ter dono e dia, ou pode só ficar em aberto até alguém pegar."
+        ) {
+            VStack(spacing: 6) {
+                NinaButton(title: "Contar pra Nina", systemName: "bubble.left") {
+                    Haptics.lightImpact()
+                    NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
+                }
+                NinaButton(title: "Escrever sem a Nina", kind: .quiet) {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .addTask
                 }
             }
+        }
+        .padding(.top, 44)
+    }
+
+
+    @ViewBuilder
+    private var seeds: some View {
+        if store.openSeeds.isEmpty {
+            VStack(spacing: 20) {
+                ZeroState(
+                    headline: "Semente é vontade sem data.",
+                    body_: "O que você quer fazer um dia e não quer marcar agora. Fica guardado sem cobrar nada."
+                )
+
+                // Teaching by showing the real object: a semente rendered as it
+                // will look, with the date slot deliberately empty.
+                VStack(alignment: .leading, spacing: 10) {
+                    Eyebrow(text: "Uma semente é assim")
+                    HStack(spacing: 12) {
+                        CategoryGlyph(systemName: "leaf", size: 18, tint: NinaTheme.ink)
+                        Text("Pintar a sala")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(NinaTheme.ink)
+                        Spacer()
+                        Text("Plante depois").ninaText(.meta, NinaTheme.faint)
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+
+                NinaButton(title: "Plantar uma semente", kind: .outline) {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .addTask
+                }
+            }
+            .padding(.top, 34)
+        } else {
+            VStack(spacing: 0) {
+                ForEach(store.openSeeds) { seed in
+                    TaskRowView(task: seed)
+                    if seed.id != store.openSeeds.last?.id {
+                        NinaDivider(inset: 36)
+                    }
+                }
+
+                Text("Semente não vira atraso e não conta no retrato da casa. Ela só vira tarefa no dia em que você tocar em Plantar.")
+                    .ninaText(.caption, NinaTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+                    .padding(.top, 18)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+
+    @ViewBuilder
+    private var shopping: some View {
+        if store.shoppingItems.isEmpty {
+            VStack(spacing: 22) {
+                ZeroState(
+                    headline: "Nada faltando por enquanto.",
+                    body_: "O que acabar em casa entra aqui. Qualquer pessoa da casa pode botar na lista, e a Nina não cobra de ninguém."
+                )
+
+                addShoppingField
+            }
+            .padding(.top, 34)
+        } else {
+            VStack(spacing: 0) {
+                // Checked items stay exactly where they are: in an aisle you need
+                // positional stability, so nothing reflows under your thumb.
+                ForEach(store.shoppingItems) { item in
+                    shoppingRow(item)
+                    if item.id != store.shoppingItems.last?.id {
+                        NinaDivider(inset: 36)
+                    }
+                }
+
+                addShoppingField.padding(.top, 16)
+
+                if store.shoppingItems.contains(where: \.isChecked) {
+                    NinaButton(title: "Limpar o que já foi comprado", kind: .quiet) {
+                        Haptics.warning()
+                        isConfirmingShoppingClear = true
+                    }
+                    .padding(.top, 10)
+                }
+            }
+            .padding(.top, 4)
+            .alert("Limpar os comprados?", isPresented: $isConfirmingShoppingClear) {
+                Button("Limpar", role: .destructive) {
+                    _ = store.clearCheckedShoppingItems()
+                }
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Some da lista para todo mundo da casa.")
+            }
+        }
+    }
+
+    private func shoppingRow(_ item: ShoppingItem) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                item.isChecked ? Haptics.selection() : Haptics.success()
+                store.toggleShoppingItem(item)
+            } label: {
+                // Squares carry stock; circles carry things with an owner and a moment.
+                NinaCheckbox(isOn: item.isChecked, isSquare: true)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                Haptics.lightImpact()
+                router.presentedSheet = .editShoppingItem(item.id)
+            } label: {
+                HStack(spacing: 10) {
+                    Text(item.title)
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(item.isChecked ? NinaTheme.muted : NinaTheme.ink)
+                        .strikethrough(item.isChecked, color: NinaTheme.muted)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    if !item.amount.isEmpty {
+                        Text(item.amount).ninaText(.meta, NinaTheme.muted)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(minHeight: 48)
+    }
+
+    private var addShoppingField: some View {
+        Button {
+            Haptics.lightImpact()
+            router.presentedSheet = .addShoppingItem
         } label: {
-            HStack(spacing: 12) {
-                IconBubble(systemName: selectedSection.systemImage, tone: selectedSection.tone, size: 44)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(selectedSection.title)
-                        .font(.headline.weight(.heavy))
-                        .foregroundStyle(NinaTheme.ink)
-
-                    Text(selectedSection.subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption.weight(.black))
+            HStack(spacing: 10) {
+                Image(systemName: "plus")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(NinaTheme.cobalt)
+                Text("Adicionar item")
+                    .font(.system(size: 16, weight: .regular))
                     .foregroundStyle(NinaTheme.muted)
-                    .frame(width: 28, height: 28)
-                    .background(NinaTheme.field, in: Circle())
+                Spacer()
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(NinaTheme.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(NinaTheme.cardStroke, lineWidth: 1)
-            )
-            .cardShadow()
+            .padding(.horizontal, 16)
+            .frame(height: 50)
+            .frame(maxWidth: .infinity)
+            .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Selecionar seção de tarefas")
-        .accessibilityValue(selectedSection.title)
-        .accessibilityHint("Abre a lista de seções")
-    }
-}
-
-private struct TaskSectionEmptyState: View {
-    var section: TaskSectionDescriptor
-    var addTask: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SoftCard(padding: 16) {
-                HStack(spacing: 12) {
-                    IconBubble(systemName: section.systemImage, tone: section.tone, size: 42)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Nenhuma tarefa ou semente ainda")
-                            .font(.headline.weight(.heavy))
-                            .foregroundStyle(NinaTheme.ink)
-
-                        Text("Tudo limpo por enquanto.")
-                            .font(.subheadline)
-                            .foregroundStyle(NinaTheme.muted)
-                    }
-                }
-            }
-
-            PrimaryCapsuleButton(
-                title: "Adicionar",
-                systemName: "plus.circle.fill",
-                action: addTask
-            )
-            .accessibilityLabel(section.addAccessibilityLabel)
-        }
-    }
-}
-
-private struct TaskSectionIconOption: Identifiable {
-    var id: String { systemName }
-    var systemName: String
-    var accessibilityTitle: String
-}
-
-private struct TaskSectionCreatorSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var title = ""
-    @State private var selectedSymbolName = "list.bullet.rectangle.fill"
-    @FocusState private var isTitleFocused: Bool
-    var createSection: (String, String) -> Void
-
-    private static let iconOptions = [
-        TaskSectionIconOption(systemName: "list.bullet.rectangle.fill", accessibilityTitle: "Lista"),
-        TaskSectionIconOption(systemName: "house.fill", accessibilityTitle: "Casa"),
-        TaskSectionIconOption(systemName: "briefcase.fill", accessibilityTitle: "Trabalho"),
-        TaskSectionIconOption(systemName: "backpack.fill", accessibilityTitle: "Escola"),
-        TaskSectionIconOption(systemName: "pawprint.fill", accessibilityTitle: "Pet"),
-        TaskSectionIconOption(systemName: "creditcard.fill", accessibilityTitle: "Contas"),
-        TaskSectionIconOption(systemName: "cross.case.fill", accessibilityTitle: "Saúde"),
-        TaskSectionIconOption(systemName: "fork.knife", accessibilityTitle: "Comida"),
-        TaskSectionIconOption(systemName: "cart.fill", accessibilityTitle: "Compras"),
-        TaskSectionIconOption(systemName: "calendar", accessibilityTitle: "Calendário"),
-        TaskSectionIconOption(systemName: "figure.2.and.child.holdinghands", accessibilityTitle: "Família"),
-        TaskSectionIconOption(systemName: "sparkles", accessibilityTitle: "Outros")
-    ]
-
-    private var trimmedTitle: String {
-        title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                SectionTitle(
-                    title: "Nova seção",
-                    subtitle: "Escola, pet, contas ou qualquer rotina."
-                )
 
-                SoftCard {
-                    TextField("Nome da seção", text: $title)
-                        .font(.headline)
-                        .textFieldStyle(.plain)
-                        .submitLabel(.done)
-                        .focused($isTitleFocused)
+    private var searchScreen: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundStyle(NinaTheme.muted)
+                    TextField("Procurar na casa", text: $searchQuery)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(NinaTheme.ink)
+                        .focused($isSearchFocused)
+                        .submitLabel(.search)
                 }
+                .padding(.horizontal, 12)
+                .frame(height: 40)
+                .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
 
-                SoftCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Ícone da seção")
-                            .font(.subheadline.weight(.heavy))
-                            .foregroundStyle(NinaTheme.muted)
-
-                        LazyVGrid(
-                            columns: Array(
-                                repeating: GridItem(.flexible(), spacing: 10),
-                                count: 4
-                            ),
-                            spacing: 10
-                        ) {
-                            ForEach(Self.iconOptions) { option in
-                                let isSelected = selectedSymbolName == option.systemName
-
-                                Button {
-                                    Haptics.selection()
-                                    selectedSymbolName = option.systemName
-                                } label: {
-                                    Image(systemName: option.systemName)
-                                        .font(.title3.weight(.bold))
-                                        .foregroundStyle(isSelected ? .white : NinaTheme.ink)
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 46)
-                                        .background(
-                                            isSelected ? NinaTheme.mint : NinaTheme.field,
-                                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        )
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(option.accessibilityTitle)
-                                .accessibilityValue(isSelected ? "Selecionado" : "Não selecionado")
-                            }
-                        }
-                    }
-                }
-
-                PrimaryCapsuleButton(title: "Criar seção", systemName: "plus.circle.fill") {
-                    createSection(trimmedTitle, selectedSymbolName)
-                    dismiss()
-                }
-                .disabled(trimmedTitle.isEmpty)
-                .opacity(trimmedTitle.isEmpty ? 0.5 : 1)
-            }
-            .padding(18)
-        }
-        .scrollDismissesKeyboard(.interactively)
-        .ninaSheetBackground()
-        .navigationTitle("Nova seção")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Fechar") {
+                Button("Cancelar") {
                     Haptics.selection()
-                    dismiss()
+                    searchQuery = ""
+                    isSearching = false
                 }
-            }
-        }
-        .task {
-            await Task.yield()
-            isTitleFocused = true
-        }
-    }
-}
-
-private struct ShoppingEmptyState: View {
-    var addItem: () -> Void
-
-    var body: some View {
-        SoftCard(padding: 18) {
-            HStack(spacing: 12) {
-                IconBubble(systemName: "cart.fill", tone: .amber, size: 40)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("A lista está vazia")
-                        .font(.headline.weight(.black))
-                        .foregroundStyle(NinaTheme.ink)
-
-                    Text("Some o que faltar em casa. A Nina também pode montar a lista com você.")
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-            }
-
-            PrimaryCapsuleButton(title: "Adicionar item", systemName: "plus", action: addItem)
-        }
-    }
-}
-
-private struct ShoppingRow: View {
-    @Environment(AppStore.self) private var store
-    var item: ShoppingItem
-    var tone: MemberTone = .amber
-
-    var body: some View {
-        SoftCard(padding: 14) {
-            HStack(spacing: 12) {
-                Button {
-                    if item.isChecked {
-                        Haptics.selection()
-                    } else {
-                        Haptics.success()
-                    }
-                    store.toggleShoppingItem(item)
-                } label: {
-                    Image(systemName: item.isChecked ? "checkmark.circle.fill" : "circle")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(item.isChecked ? NinaTheme.mint : NinaTheme.muted.opacity(0.45))
-                }
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(NinaTheme.cobalt)
                 .buttonStyle(.plain)
-                .accessibilityLabel(item.isChecked ? "Marcar como pendente" : "Marcar como comprado")
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 14)
 
-                IconBubble(systemName: "cart.fill", tone: tone, size: 40)
+            if searchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                Spacer()
+            } else if searchResults.isEmpty {
+                // No create button: someone who searched does not want to invent
+                // the thing, they want to find it.
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Nada com esse nome.").ninaText(.screen)
+                    Text("Procurei em tarefas, sementes e compras, abertas e concluídas. Pode estar guardado com outra palavra.")
+                        .ninaText(.label, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.title)
-                        .font(.headline.weight(.heavy))
-                        .foregroundStyle(NinaTheme.ink)
-                        .strikethrough(item.isChecked)
+                    HStack(spacing: 8) {
+                        Button {
+                            Haptics.selection()
+                            searchQuery = ""
+                            isSearching = false
+                            filter = .all
+                        } label: {
+                            NinaChip(text: "Ver tudo em aberto")
+                        }
+                        .buttonStyle(.plain)
 
-                    Text(item.amount.isEmpty ? "Sem quantidade" : item.amount)
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
+                        Button {
+                            Haptics.lightImpact()
+                            searchQuery = ""
+                            isSearching = false
+                            NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
+                        } label: {
+                            NinaChip(text: "Perguntar pra Nina", isSet: true)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 12)
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
 
                 Spacer()
-
-                Text(item.owner)
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(tone.color)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(tone.softColor, in: Capsule())
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(searchResults) { task in
+                            TaskRowView(task: task)
+                            NinaDivider(inset: 36)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaScreenBackground()
     }
-}
 
-#Preview {
-    NavigationStack {
-        TasksView()
-            .environment(AppStore())
-            .environment(RouterPath())
+    private var searchResults: [TaskItem] {
+        let query = searchQuery.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return [] }
+        return store.tasks.filter { task in
+            task.title.localizedCaseInsensitiveContains(query)
+                || task.subtitle.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private var fab: some View {
+        Button {
+            Haptics.lightImpact()
+            router.presentedSheet = .addTask
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(NinaTheme.onCobalt)
+                .frame(width: 56, height: 56)
+                .background(NinaTheme.cobalt, in: Circle())
+                .cardShadow()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Adicionar")
+        .padding(.trailing, 20)
+        .padding(.bottom, 96)
     }
 }

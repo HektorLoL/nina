@@ -3,13 +3,12 @@ import SwiftUI
 
 struct LoginView: View {
     @Environment(AuthSessionStore.self) private var authSession
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var email = ""
     @State private var code = ""
     @State private var localError: String?
     @State private var appleRawNonce: String?
-    @State private var didAppear = false
+    @State private var isEmailFlowVisible = false
     @FocusState private var focusedField: LoginField?
 
     private enum LoginField {
@@ -34,30 +33,20 @@ struct LoginView: View {
     }
 
     var body: some View {
-        ZStack {
-            NinaTheme.screenGradient
-                .ignoresSafeArea()
-
-            ScrollView {
-                VStack(spacing: 24) {
-                    hero
-                    formCard
-                    footer
-                }
-                .padding(.horizontal, 22)
-                .padding(.top, 42)
-                .padding(.bottom, 34)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 26) {
+                hero
+                form
+                footer
             }
-            .scrollDismissesKeyboard(.interactively)
+            .padding(.horizontal, 20)
+            .padding(.top, 46)
+            .padding(.bottom, 34)
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity)
         }
-        .onAppear {
-            guard !didAppear else { return }
-            withAnimation(reduceMotion ? nil : .spring(response: 0.58, dampingFraction: 0.84)) {
-                didAppear = true
-            }
-        }
+        .scrollDismissesKeyboard(.interactively)
+        .ninaScreenBackground()
         .onChange(of: email) { _, _ in clearLocalError() }
         .onChange(of: code) { _, newValue in
             code = String(newValue.filter(\.isNumber).prefix(6))
@@ -66,177 +55,134 @@ struct LoginView: View {
     }
 
     private var hero: some View {
-        VStack(spacing: 18) {
-            ZStack {
-                Circle()
-                    .fill(NinaTheme.mint.opacity(0.16))
-                    .frame(width: 142, height: 142)
-                    .scaleEffect(didAppear && !reduceMotion ? 1 : 0.9)
+        VStack(alignment: .leading, spacing: 18) {
+            NinaMark(size: 64)
 
-                Circle()
-                    .stroke(NinaTheme.sky.opacity(0.22), lineWidth: 14)
-                    .frame(width: 118, height: 118)
-                    .scaleEffect(didAppear && !reduceMotion ? 1.05 : 0.92)
-
-                NinaAvatarView(size: 86)
-                    .offset(y: didAppear && !reduceMotion ? 0 : 8)
-            }
-
-            VStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Sua amiga Nina")
-                    .font(.system(size: 34, weight: .black, design: .rounded))
-                    .foregroundStyle(NinaTheme.ink)
-                    .multilineTextAlignment(.center)
+                    .ninaText(.display)
 
-                Text("Sua casa, tarefas e lembretes ficam organizados em um espaço seguro.")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(NinaTheme.muted)
-                    .multilineTextAlignment(.center)
+                Text("Conta pra ela o que está pesando na casa. Ela monta as tarefas e espera você confirmar — nada entra sozinho.")
+                    .ninaText(.label, NinaTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .opacity(didAppear ? 1 : 0)
-        .offset(y: didAppear || reduceMotion ? 0 : 18)
     }
 
-    private var formCard: some View {
-        SoftCard(padding: 18) {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionTitle(
-                    title: "Acesso",
-                    subtitle: "Crie sua conta com Apple. Um email já vinculado também pode receber um código."
-                )
-
-                SignInWithAppleButton(.continue) { request in
-                    do {
-                        let rawNonce = try AppleSignInNonce.make()
-                        appleRawNonce = rawNonce
-                        request.requestedScopes = [.fullName, .email]
-                        request.nonce = AppleSignInNonce.sha256(rawNonce)
-                    } catch {
-                        appleRawNonce = nil
-                        authSession.report(.unavailable)
-                    }
-                } onCompletion: { result in
-                    handleAppleCompletion(result)
+    private var form: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SignInWithAppleButton(.continue) { request in
+                do {
+                    let rawNonce = try AppleSignInNonce.make()
+                    appleRawNonce = rawNonce
+                    request.requestedScopes = [.fullName, .email]
+                    request.nonce = AppleSignInNonce.sha256(rawNonce)
+                } catch {
+                    appleRawNonce = nil
+                    authSession.report(.unavailable)
                 }
-                .signInWithAppleButtonStyle(.black)
-                .frame(height: 52)
-                .clipShape(Capsule())
-                .disabled(authSession.isSigningIn || !authSession.isBackendAvailable)
-                .opacity(authSession.isSigningIn || !authSession.isBackendAvailable ? 0.62 : 1)
-                .accessibilityIdentifier("apple-sign-in")
+            } onCompletion: { result in
+                handleAppleCompletion(result)
+            }
+            .signInWithAppleButtonStyle(.black)
+            .frame(height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
+            .disabled(authSession.isSigningIn || !authSession.isBackendAvailable)
+            .opacity(authSession.isSigningIn || !authSession.isBackendAvailable ? 0.5 : 1)
+            .accessibilityIdentifier("apple-sign-in")
 
-                HStack(spacing: 12) {
-                    Rectangle()
-                        .fill(NinaTheme.line)
-                        .frame(height: 1)
-
-                    Text("email vinculado")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(NinaTheme.muted)
-
-                    Rectangle()
-                        .fill(NinaTheme.line)
-                        .frame(height: 1)
+            if isEmailFlowVisible {
+                emailFields
+            } else {
+                NinaButton(title: "Usar meu e-mail", kind: .outline, fillsWidth: true) {
+                    Haptics.lightImpact()
+                    isEmailFlowVisible = true
+                    focusedField = .email
                 }
+            }
 
-                LoginInputRow(
-                    title: "Email",
-                    systemName: "envelope.fill",
-                    tone: .mint
-                ) {
-                    TextField("voce@exemplo.com", text: $email)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .textContentType(.emailAddress)
-                        .submitLabel(isWaitingForCode ? .next : .send)
-                        .focused($focusedField, equals: .email)
-                        .disabled(isWaitingForCode)
-                        .onSubmit {
-                            if isWaitingForCode {
-                                focusedField = .code
-                            } else {
-                                requestCode()
-                            }
-                        }
-                }
-
-                if isWaitingForCode {
-                    LoginInputRow(
-                        title: "Código",
-                        systemName: "number.circle.fill",
-                        tone: .lavender
-                    ) {
-                        TextField("000000", text: $code)
-                            .keyboardType(.numberPad)
-                            .textContentType(.oneTimeCode)
-                            .submitLabel(.go)
-                            .focused($focusedField, equals: .code)
-                            .onSubmit(verifyCode)
-                    }
-
-                    Button("Usar outro email") {
-                        authSession.pendingLoginEmail = nil
-                        code = ""
-                        focusedField = .email
-                    }
-                    .font(.caption.weight(.heavy))
-                    .foregroundStyle(NinaTheme.sky)
-                }
-
-                #if DEBUG
-                Text("Acesso local de Debug: teste1@ninai.test ou teste2@ninai.test")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(NinaTheme.muted)
+            if let displayedError {
+                // A failed sign-in is not lateness, so it never takes terracotta.
+                Text(displayedError)
+                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
                     .fixedSize(horizontal: false, vertical: true)
-                #endif
-
-                if let displayedError {
-                    Label(displayedError, systemImage: "exclamationmark.circle.fill")
-                        .font(.caption.weight(.heavy))
-                        .foregroundStyle(NinaTheme.coral)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                        .accessibilityIdentifier("login-error")
-                }
-
-                LoginPrimaryButton(
-                    title: isDebugLoginEmail
-                        ? "Entrar para testar"
-                        : (isWaitingForCode ? "Confirmar código" : "Enviar código"),
-                    systemName: isDebugLoginEmail
-                        ? "arrow.right"
-                        : (isWaitingForCode ? "checkmark" : "paperplane.fill"),
-                    isLoading: authSession.isSigningIn || authSession.isRequestingCode,
-                    action: isWaitingForCode ? verifyCode : requestCode
-                )
-                .disabled(!authSession.isBackendAvailable && !isDebugLoginEmail)
+                    .accessibilityIdentifier("login-error")
             }
         }
-        .opacity(didAppear ? 1 : 0)
-        .offset(y: didAppear || reduceMotion ? 0 : 28)
-        .animation(reduceMotion ? nil : .spring(response: 0.52, dampingFraction: 0.86).delay(0.08), value: didAppear)
+        .animation(.easeInOut(duration: 0.2), value: isEmailFlowVisible)
         .animation(.easeInOut(duration: 0.18), value: displayedError)
         .animation(.easeInOut(duration: 0.2), value: isWaitingForCode)
     }
 
+    @ViewBuilder
+    private var emailFields: some View {
+        LoginField_(title: "E-mail") {
+            TextField("voce@exemplo.com", text: $email)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textContentType(.emailAddress)
+                .submitLabel(isWaitingForCode ? .next : .send)
+                .focused($focusedField, equals: .email)
+                .disabled(isWaitingForCode)
+                .onSubmit {
+                    if isWaitingForCode {
+                        focusedField = .code
+                    } else {
+                        requestCode()
+                    }
+                }
+        }
+
+        if isWaitingForCode {
+            LoginField_(title: "Código") {
+                TextField("000000", text: $code)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .submitLabel(.go)
+                    .focused($focusedField, equals: .code)
+                    .onSubmit(verifyCode)
+            }
+
+            NinaButton(title: "Usar outro e-mail", kind: .quiet) {
+                authSession.pendingLoginEmail = nil
+                code = ""
+                focusedField = .email
+            }
+        }
+
+        #if DEBUG
+        Text("Debug local: teste1@ninai.test ou teste2@ninai.test")
+            .ninaText(.meta, NinaTheme.faint)
+        #endif
+
+        NinaButton(
+            title: isLoadingAuth
+                ? "Aguarde..."
+                : (isDebugLoginEmail
+                    ? "Entrar para testar"
+                    : (isWaitingForCode ? "Confirmar código" : "Enviar código")),
+            fillsWidth: true,
+            isEnabled: !isLoadingAuth && (authSession.isBackendAvailable || isDebugLoginEmail),
+            action: isWaitingForCode ? verifyCode : requestCode
+        )
+    }
+
+    private var isLoadingAuth: Bool {
+        authSession.isSigningIn || authSession.isRequestingCode
+    }
+
     private var footer: some View {
-        VStack(spacing: 8) {
-            Label("Sua sessão e sua participação na casa são verificadas pelo Supabase.", systemImage: "lock.shield.fill")
-                .font(.caption.weight(.heavy))
-                .foregroundStyle(NinaTheme.muted)
-                .multilineTextAlignment(.center)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Ao continuar você aceita os Termos e a Política de Privacidade.")
+                .ninaText(.meta, NinaTheme.muted)
 
             if !authSession.isBackendAvailable {
                 Text("Configure o projeto Supabase para habilitar o acesso.")
-                    .font(.caption)
-                    .foregroundStyle(NinaTheme.coral)
+                    .ninaText(.meta, NinaTheme.muted)
             }
         }
-        .opacity(didAppear ? 1 : 0)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.28).delay(0.18), value: didAppear)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func handleAppleCompletion(_ result: Result<ASAuthorization, Error>) {
@@ -304,63 +250,21 @@ struct LoginView: View {
     }
 }
 
-private struct LoginInputRow<Field: View>: View {
+private struct LoginField_<Field: View>: View {
     var title: String
-    var systemName: String
-    var tone: MemberTone
     @ViewBuilder var field: Field
 
     var body: some View {
-        HStack(spacing: 12) {
-            IconBubble(systemName: systemName, tone: tone, size: 42)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(NinaTheme.muted)
-
-                field
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(NinaTheme.ink)
-            }
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).ninaText(.meta, NinaTheme.muted)
+            field
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(NinaTheme.ink)
         }
-        .padding(14)
-        .background(NinaTheme.field, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(NinaTheme.line, lineWidth: 1)
-        )
-    }
-}
-
-private struct LoginPrimaryButton: View {
-    var title: String
-    var systemName: String
-    var isLoading: Bool
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                if isLoading {
-                    ProgressView()
-                        .tint(.white)
-                } else {
-                    Image(systemName: systemName)
-                        .font(.headline.weight(.black))
-                }
-
-                Text(isLoading ? "Aguarde..." : title)
-                    .font(.headline.weight(.heavy))
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(NinaTheme.mint, in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(isLoading)
-        .accessibilityLabel(isLoading ? "Aguarde" : title)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
     }
 }
 

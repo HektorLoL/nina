@@ -274,16 +274,21 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         )
     }
 
+    // The detail never reaches the lock screen. It may be a boleto, a receita or a
+    // comunicado escolar, and whoever walks past the table reads it. Only the
+    // title the person wrote themselves and who is holding it ever leave the app.
     private static func taskNotificationBody(_ task: TaskItem) -> String {
-        let detail = task.subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if detail.isEmpty {
-            return "\(task.owner) - \(task.dueLabel)"
+        guard !HouseholdWorkload.isSharedOwner(task.owner) else {
+            return "É a hora, e ainda não tem dono."
         }
-        return "\(task.owner) - \(detail)"
+        return "É a hora. Ficou com \(task.owner)."
     }
 
     private static func nudgeNotificationBody(_ task: TaskItem) -> String {
-        "\(task.owner) - ainda em aberto"
+        guard !HouseholdWorkload.isSharedOwner(task.owner) else {
+            return "Passou da hora e ninguém pegou."
+        }
+        return "Passou da hora e continua com \(task.owner)."
     }
 
     private static func domainStatus(

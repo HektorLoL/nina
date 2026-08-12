@@ -97,91 +97,98 @@ struct InviteAcceptanceView: View {
         inviteLinkStore.pendingCode ?? ""
     }
 
+    private var householdName: String {
+        preview?.familyName ?? "uma casa"
+    }
+
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    SoftCard(padding: 20) {
-                        HStack(spacing: 16) {
-                            IconBubble(systemName: "person.2.badge.plus", tone: .mint, size: 58)
-
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("Convite para uma casa")
-                                    .font(.title2.weight(.black))
-                                    .foregroundStyle(NinaTheme.ink)
-
-                                Text("Envie seu pedido para uma pessoa responsável pela casa.")
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(NinaTheme.muted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-
-                    inviteCard
-
-                    if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption.weight(.heavy))
-                            .foregroundStyle(NinaTheme.coral)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    PrimaryCapsuleButton(
-                        title: isJoining ? "Enviando..." : "Pedir para entrar",
-                        systemName: "paperplane.circle.fill"
-                    ) {
-                        acceptInvite()
-                    }
-                    .disabled(isLoading || isJoining || preview?.isValid != true)
-                    .opacity(isLoading || isJoining || preview?.isValid != true ? 0.5 : 1)
-
-                    Button("Agora não") {
-                        inviteLinkStore.clear()
-                    }
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(NinaTheme.muted)
-                    .frame(maxWidth: .infinity)
-                }
-                .padding(18)
-                .padding(.bottom, 28)
+        VStack(alignment: .leading, spacing: 0) {
+            if isLoading {
+                loadingHeader
+            } else if preview?.isValid == true {
+                validHeader
+            } else {
+                invalidHeader
             }
-            .ninaScreenBackground()
-            .navigationTitle("Convite")
-            .navigationBarTitleDisplayMode(.inline)
+
+            Spacer(minLength: 24)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .ninaText(.caption, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 10)
+            }
+
+            actions
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 40)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .ninaScreenBackground()
         .task(id: code) {
             await loadPreview()
         }
     }
 
-    @ViewBuilder
-    private var inviteCard: some View {
-        SoftCard(padding: 18) {
-            if isLoading {
-                HStack(spacing: 12) {
-                    ProgressView()
-                        .tint(NinaTheme.mint)
+    private var loadingHeader: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            NinaMark(size: 44, presence: .reading)
+            Text("Vendo de quem é este link.").ninaText(.label, NinaTheme.muted)
+        }
+    }
 
-                    Text("Verificando convite...")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(NinaTheme.muted)
-                }
-            } else if let preview, preview.isValid {
-                SectionTitle(
-                    title: preview.familyName ?? "Casa compartilhada",
-                    subtitle: invitePreviewSubtitle(preview)
-                )
-
-                Label(preview.code, systemImage: "lock.shield.fill")
-                    .font(.subheadline.weight(.black))
-                    .foregroundStyle(NinaTheme.sky)
-                    .textSelection(.enabled)
-            } else {
-                Label("Este convite não existe mais ou foi renovado.", systemImage: "link.badge.xmark")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(NinaTheme.coral)
+    private var validHeader: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                MemberAvatar(initials: householdName.ninaInitials, tone: .mint, size: 44)
+                Text("Alguém quer dividir a \(householdName) com você.")
+                    .ninaText(.caption, NinaTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text("Você abriu o link.\nAinda não entrou.")
+                .ninaText(.display)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Possessing an invite grants nothing: the link opens a request, and
+            // an owner or admin approves it. Saying so here is the whole screen.
+            Text("Ter o link não dá acesso a nada. Ele pede entrada, e alguém da casa precisa aprovar — até lá você não vê nenhuma tarefa, nenhuma conta, nenhuma criança desta casa.")
+                .ninaText(.label, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var invalidHeader: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Este link não vale mais.")
+                .ninaText(.display)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // The RPC answers the same way for every failure, so the copy names
+            // no reason: guessing one would be inventing it.
+            Text("Ele pode ter expirado, já ter sido usado o bastante, ou ter sido renovado. Peça um novo para quem te chamou.")
+                .ninaText(.label, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        VStack(spacing: 10) {
+            if preview?.isValid == true {
+                NinaButton(
+                    title: isJoining ? "Enviando..." : "Pedir para entrar",
+                    fillsWidth: true,
+                    isEnabled: !isLoading && !isJoining
+                ) {
+                    acceptInvite()
+                }
+            }
+
+            NinaButton(title: "Montar a minha própria casa", kind: .outline, fillsWidth: true) {
+                inviteLinkStore.clear()
             }
         }
     }
@@ -212,19 +219,9 @@ struct InviteAcceptanceView: View {
                 Haptics.success()
                 inviteLinkStore.clear()
             } else {
-                errorMessage = store.syncErrorMessage ?? "Não foi possível entrar nesta casa."
+                // AppStore already fires the error haptic on every failure path.
+                errorMessage = store.syncErrorMessage ?? "Não foi possível pedir entrada agora."
             }
         }
-    }
-
-    private func invitePreviewSubtitle(_ preview: FamilyInvitePreview) -> String {
-        var parts = ["A Nina protege este convite com um código único."]
-        if let usesRemaining = preview.usesRemaining {
-            parts.append("\(usesRemaining) acessos disponíveis.")
-        }
-        if let expiresAt = preview.expiresAt {
-            parts.append("Expira em \(expiresAt.formatted(date: .abbreviated, time: .omitted)).")
-        }
-        return parts.joined(separator: " ")
     }
 }

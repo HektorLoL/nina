@@ -191,14 +191,11 @@ final class PremiumSubscriptionTests: XCTestCase {
         XCTAssertEqual(NinaLegalLinks.privacyPolicy.absoluteString, "https://ninai.app/privacidade")
     }
 
-    func testTheFeaturedTeaserStopsSellingOnceTheHouseholdIsPremium() {
-        XCTAssertNotEqual(PremiumTeaserStyle.featured.activeTitle, PremiumTeaserStyle.featured.title)
-        XCTAssertNotEqual(
-            PremiumTeaserStyle.featured.activeSubtitle,
-            PremiumTeaserStyle.featured.subtitle
-        )
-        XCTAssertTrue(PremiumTeaserStyle.featured.activeTitle.contains("ativo"))
-        XCTAssertFalse(PremiumTeaserStyle.featured.activeSubtitle.contains("!"))
+    func testTheTeaserStopsSellingOnceTheHouseholdIsPremium() {
+        XCTAssertNotEqual(PremiumTeaserCopy.activeTitle, PremiumTeaserCopy.title)
+        XCTAssertNotEqual(PremiumTeaserCopy.activeSubtitle, PremiumTeaserCopy.subtitle)
+        XCTAssertTrue(PremiumTeaserCopy.activeTitle.contains("ativo"))
+        XCTAssertFalse(PremiumTeaserCopy.activeSubtitle.contains("!"))
     }
 
     func testAHomeCachedBeforeTheWeeklyDigestSettingExistedKeepsTheDigestOn() throws {

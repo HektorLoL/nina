@@ -209,7 +209,27 @@ final class NotificationTargetingTests: XCTestCase {
             planned.last?.deliveryDate,
             date(year: 2026, month: 8, day: 8, hour: 19, minute: 0)
         )
-        XCTAssertEqual(planned.last?.body, "Ana - ainda em aberto")
+        XCTAssertEqual(planned.last?.body, "Passou da hora e continua com Ana.")
+    }
+
+    func testTheTaskDetailNeverReachesTheLockScreen() {
+        var task = homeTask(
+            owner: "Ana",
+            dueAt: date(year: 2026, month: 8, day: 8, hour: 18, minute: 0)
+        )
+        task.subtitle = "Vencimento salvo a partir do boleto"
+        task.priority = .urgent
+
+        let planned = plan([task])
+
+        XCTAssertFalse(planned.isEmpty)
+        for notification in planned {
+            XCTAssertFalse(
+                notification.body.contains("boleto"),
+                "A photographed document's reading must never leave the app: whoever walks past the table reads the lock screen."
+            )
+            XCTAssertFalse(notification.body.contains(task.subtitle))
+        }
     }
 
     func testAHighPriorityTaskIsFollowedUpAndANormalOneIsNot() {

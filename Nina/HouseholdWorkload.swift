@@ -1,10 +1,30 @@
 import Foundation
 
+// A qualitative band, never a quantity. A number lets two people compare
+// themselves against each other, which is the thing the portrait exists to avoid.
+enum WorkloadBand: Int, Hashable {
+    case light = 0
+    case similar = 1
+    case heavier = 2
+
+    var title: String {
+        switch self {
+        case .light: "leve"
+        case .similar: "parecido"
+        case .heavier: "mais pesado"
+        }
+    }
+}
+
 struct HouseholdWorkloadEntry: Identifiable, Hashable {
     var memberID: UUID?
     var name: String
     var tone: MemberTone
+    // Never rendered. It exists to compute the band and to answer per-member
+    // queries; putting it on screen would restore the scoreboard.
     var openCount: Int
+    var band: WorkloadBand = .similar
+    var isShared: Bool = false
 
     var id: String { memberID?.uuidString ?? "label:\(name)" }
 }
@@ -37,7 +57,7 @@ struct HouseholdWorkloadSnapshot: Hashable {
         leadName: nil,
         leadShare: 0,
         headline: "Ainda sem retrato da casa",
-        message: "A Nina precisa de algumas tarefas com responsável para desenhar a divisão sem chutar."
+        message: "Preciso de algumas tarefas com dono para desenhar a divisão sem chutar. E não desenho nenhum gráfico até lá."
     )
 }
 
@@ -96,17 +116,36 @@ enum HouseholdWorkload {
             )
         }
 
-        entries.sort { left, right in
-            left.openCount == right.openCount
-                ? left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
-                : left.openCount > right.openCount
-        }
-
+        // Household order, never sorted by load. Row order is an encoding, and
+        // sorting descending *is* the ranking the caption disclaims.
         let assignedCount = entries.reduce(0) { $0 + $1.openCount }
         let carriers = entries.count { $0.openCount > 0 }
         let isConclusive = assignedCount >= minimumAssignedSample && carriers >= minimumCarriers
 
-        guard isConclusive, let lead = entries.first, assignedCount > 0 else {
+        if carriers > 0 {
+            let average = Double(assignedCount) / Double(carriers)
+            for index in entries.indices {
+                entries[index].band = band(for: entries[index].openCount, average: average)
+            }
+        }
+
+        // Unassigned work is credited to the house and never to a person.
+        if sharedCount > 0 {
+            entries.append(
+                HouseholdWorkloadEntry(
+                    memberID: nil,
+                    name: sharedOwnerLabel,
+                    tone: .lavender,
+                    openCount: sharedCount,
+                    band: .similar,
+                    isShared: true
+                )
+            )
+        }
+
+        let ranked = entries.filter { !$0.isShared }.max { $0.openCount < $1.openCount }
+
+        guard isConclusive, let lead = ranked, assignedCount > 0 else {
             return HouseholdWorkloadSnapshot(
                 entries: entries,
                 sharedCount: sharedCount,
@@ -120,11 +159,17 @@ enum HouseholdWorkload {
             )
         }
 
-        let runnerUpCount = entries.dropFirst().first?.openCount ?? 0
+        let runnerUpCount = entries
+            .filter { !$0.isShared && $0.memberID != lead.memberID }
+            .map(\.openCount)
+            .max() ?? 0
         let leadShare = Double(lead.openCount) / Double(assignedCount)
         let isBalanced = leadShare <= overloadShareThreshold
             || lead.openCount - runnerUpCount < overloadLeadMargin
 
+        // The message carries no count and no percentage, for the same reason the
+        // chart does not: a quantified comparison between two people is a
+        // scoreboard whatever the caption says.
         return HouseholdWorkloadSnapshot(
             entries: entries,
             sharedCount: sharedCount,
@@ -133,11 +178,19 @@ enum HouseholdWorkload {
             isBalanced: isBalanced,
             leadName: lead.name,
             leadShare: leadShare,
-            headline: isBalanced ? "Divisão equilibrada" : "Sinal de sobrecarga",
+            headline: isBalanced ? "A casa está parecida" : "Sinal de sobrecarga",
             message: isBalanced
-                ? "As tarefas abertas estão bem distribuídas entre vocês. Nada para ajustar agora."
-                : "\(lead.name) está com \(lead.openCount) das \(assignedCount) tarefas abertas. Um bom momento para conversar sobre a divisão."
+                ? "O que está aberto agora está bem dividido entre vocês. Nada para ajustar."
+                : "\(lead.name) está com a parte mais pesada do que está aberto agora. Pode ser uma boa hora para conversar."
         )
+    }
+
+    private static func band(for count: Int, average: Double) -> WorkloadBand {
+        guard average > 0 else { return .similar }
+        let ratio = Double(count) / average
+        if ratio >= 1.25 { return .heavier }
+        if ratio <= 0.75 { return .light }
+        return .similar
     }
 
     static func openTaskCount(

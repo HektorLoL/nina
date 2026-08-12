@@ -7,9 +7,15 @@ import UIKit
 
 struct NinaChatView: View {
     @Environment(AppStore.self) private var store
-    @Environment(TabSwipeLock.self) private var tabSwipeLock
-    @State private var tabSwipeUnlockTask: Task<Void, Never>?
+    @Environment(RouterPath.self) private var router
     @State private var didLoadInitialMessages = false
+
+    private static let captureExamples = [
+        "a escola pediu autorização até sexta",
+        "acabou o café e o detergente",
+        "quem vai buscar o Téo quinta?",
+        "um dia quero pintar a sala"
+    ]
 
     var body: some View {
         Group {
@@ -24,55 +30,52 @@ struct NinaChatView: View {
             }
         }
         .ninaScreenBackground()
-        .navigationTitle("Nina")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var consentContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                AIMemoryConsentCard()
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 104)
-        }
     }
 
     private var chatContent: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    header
-                    connectionNotice
-                    quickPrompts
+        VStack(spacing: 0) {
+            header
+            houseStrip
 
-                    LazyVStack(spacing: 14) {
-                        ForEach(store.messages) { message in
-                            MessageBubble(message: message)
-                                .id(message.id)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        connectionNotice
+
+                        if store.messages.isEmpty {
+                            capturePrompt
                         }
 
-                        if store.isNinaResponding {
-                            NinaTypingBubble()
-                                .id("nina-typing")
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            ForEach(store.messages) { message in
+                                MessageBubble(message: message)
+                                    .id(message.id)
+                            }
+
+                            if store.isNinaResponding {
+                                NinaTypingBubble()
+                                    .id("nina-typing")
+                            }
+
+                            if pendingProposalCount > 0 {
+                                waitingLine
+                            }
                         }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 18)
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 18)
-                .padding(.bottom, 18)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .task(id: store.messages.last?.id) {
-                await Task.yield()
-                guard didLoadInitialMessages else {
-                    didLoadInitialMessages = true
-                    return
+                .scrollDismissesKeyboard(.interactively)
+                .task(id: store.messages.last?.id) {
+                    await Task.yield()
+                    guard didLoadInitialMessages else {
+                        didLoadInitialMessages = true
+                        return
+                    }
+                    guard let lastID = store.messages.last?.id else { return }
+                    proxy.scrollTo(lastID, anchor: .bottom)
                 }
-                guard let lastID = store.messages.last?.id else { return }
-                proxy.scrollTo(lastID, anchor: .bottom)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -80,139 +83,181 @@ struct NinaChatView: View {
         }
     }
 
-    private var adultOnlyContent: some View {
-        VStack(spacing: 18) {
-            Spacer()
-
-            NinaAvatarView(size: 86)
-
-            VStack(spacing: 8) {
-                Text("Conversa disponível para adultos")
-                    .font(.title3.weight(.black))
-                    .foregroundStyle(NinaTheme.ink)
-
-                Text("Tarefas e informações compartilhadas da casa continuam visíveis, mas a conversa privada com a Nina é restrita aos adultos.")
-                    .font(.subheadline)
-                    .foregroundStyle(NinaTheme.muted)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
+    private var consentContent: some View {
+        ScrollView {
+            AIMemoryConsentCard()
+                .padding(.horizontal, 20)
+                .padding(.top, 30)
+                .padding(.bottom, 104)
         }
-        .padding(28)
+    }
+
+    private var adultOnlyContent: some View {
+        VStack {
+            Spacer(minLength: 0)
+
+            ZeroState(
+                headline: "A conversa é dos adultos da casa.",
+                body_: "Tarefas, compras e o que a casa combinou continuam aqui para você. Só a conversa com a Nina fica com os adultos.",
+                presence: .unavailable
+            )
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 104)
     }
 
     private var header: some View {
-        SoftCard(padding: 18) {
-            HStack(spacing: 16) {
-                NinaAvatarView(size: 78)
+        HStack {
+            NinaWordmark(size: 24)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Oi, eu sou a Nina")
-                        .font(.title2.weight(.black))
-                        .foregroundStyle(NinaTheme.ink)
+            Spacer()
 
-                    Text("Escreva, envie uma foto ou anexe um documento. Eu ajudo a organizar.")
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            Button {
+                Haptics.lightImpact()
+                router.presentedSheet = .settings
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 19, weight: .regular))
+                    .foregroundStyle(NinaTheme.ink)
+                    .frame(width: 36, height: 36)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Abrir ajustes")
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+    }
 
+    @ViewBuilder
+    private var houseStrip: some View {
+        if mineCount > 0 || overdueCount > 0 {
             HStack(spacing: 8) {
-                Label(store.familyGroup.name, systemImage: "house.fill")
-                Spacer(minLength: 12)
-                Label(
-                    store.isUsingLocalNina ? "modo local, sem memória durável" : "conversa privada",
-                    systemImage: store.isUsingLocalNina ? "iphone" : "lock.fill"
-                )
+                Text("\(mineCount) na sua mão")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(NinaTheme.ink)
+
+                if overdueCount > 0 {
+                    Text("·")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(NinaTheme.line)
+
+                    Text(overdueCount == 1 ? "1 atrasada" : "\(overdueCount) atrasadas")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(NinaTheme.terracotta)
+                }
+
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity)
-            .font(.caption.weight(.heavy))
-            .foregroundStyle(NinaTheme.mint)
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .background(
+                NinaTheme.grout,
+                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+            )
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .accessibilityElement(children: .combine)
         }
     }
 
     @ViewBuilder
     private var connectionNotice: some View {
         if let notice = store.ninaConnectionNotice {
-            Label(notice, systemImage: "wifi.exclamationmark")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(NinaTheme.muted)
+            noticeRow(systemName: "wifi.exclamationmark", text: notice)
+        } else if store.isUsingLocalNina {
+            noticeRow(systemName: "iphone", text: "Modo local. A conversa fica só neste aparelho.")
+        }
+    }
+
+    private func noticeRow(systemName: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemName)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(NinaTheme.ink)
+
+            Text(text)
+                .ninaText(.caption, NinaTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 4)
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            NinaTheme.grout,
+            in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+        )
     }
 
-    private var quickPrompts: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(title: "Jogue uma lembrança aqui", subtitle: "A Nina organiza sem você precisar escolher categoria.")
+    private var capturePrompt: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Joga uma lembrança aqui.")
+                .ninaText(.zero)
+                .fixedSize(horizontal: false, vertical: true)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    QuickChip(title: "Veterinário do Thor", systemName: "pawprint.fill", tone: .lavender) {
-                        sendPreset("Lembrar de marcar veterinário para o Thor.")
-                    }
+            Text("Do jeito que veio na cabeça. Eu leio, monto uma proposta e espero você confirmar. Nada entra na casa sozinho.")
+                .ninaText(.label, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
 
-                    QuickChip(title: "Gás acaba em 10 dias", systemName: "flame.fill", tone: .coral) {
-                        sendPreset("O gás acaba daqui uns 10 dias.")
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Self.captureExamples, id: \.self) { example in
+                    Button {
+                        Haptics.lightImpact()
+                        sendPreset(example)
+                    } label: {
+                        NinaChip(text: example)
                     }
-
-                    QuickChip(title: "Aniversário da minha mãe", systemName: "gift.fill", tone: .amber) {
-                        sendPreset("Minha mãe faz aniversário semana que vem.")
-                    }
-
-                    QuickChip(title: "Receita médica", systemName: "pills.fill", tone: .mint) {
-                        sendPreset("Tenho uma foto de receita médica para organizar.")
-                    }
+                    .buttonStyle(.plain)
                 }
-                .padding(.vertical, 2)
             }
-            .simultaneousGesture(quickPromptDragLock)
-            .onDisappear(perform: unlockTabSwipeImmediately)
+            .padding(.top, 4)
             .allowsHitTesting(!store.isNinaResponding)
-            .opacity(store.isNinaResponding ? 0.58 : 1)
+            .opacity(store.isNinaResponding ? 0.5 : 1)
+        }
+        .padding(.top, 10)
+    }
+
+    private var waitingLine: some View {
+        HStack(spacing: 8) {
+            NinaMark(size: 10)
+            Text(waitingText)
+                .ninaText(.caption, NinaTheme.cobalt, weight: .semibold)
+        }
+        .padding(.top, 2)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var waitingText: String {
+        switch pendingProposalCount {
+        case 1: "A Nina está esperando você."
+        case 2: "A Nina está esperando as duas."
+        default: "A Nina está esperando as \(pendingProposalCount)."
         }
     }
 
-    private var quickPromptDragLock: some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .local)
-            .onChanged { value in
-                guard isHorizontalDrag(value.translation) else { return }
-                tabSwipeUnlockTask?.cancel()
-                tabSwipeUnlockTask = nil
-                tabSwipeLock.isLocked = true
-            }
-            .onEnded { _ in
-                scheduleTabSwipeUnlock()
-            }
+    private var pendingProposalCount: Int {
+        store.messages.reduce(0) { total, message in
+            total + message.proposals.count { $0.state == .pending }
+        }
+    }
+
+    private var openTasks: [TaskItem] {
+        store.tasks.filter { $0.kind == .task && !$0.isDone }
+    }
+
+    private var mineCount: Int {
+        guard let me = store.currentFamilyMember else { return 0 }
+        return openTasks.count { $0.ownerMemberID == me.id }
+    }
+
+    private var overdueCount: Int {
+        openTasks.count { $0.isOverdue() }
     }
 
     private func sendPreset(_ text: String) {
         Task {
             await store.sendMessage(text)
         }
-    }
-
-    private func isHorizontalDrag(_ translation: CGSize) -> Bool {
-        abs(translation.width) > 8 && abs(translation.width) > abs(translation.height)
-    }
-
-    private func scheduleTabSwipeUnlock() {
-        tabSwipeUnlockTask?.cancel()
-        tabSwipeUnlockTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 160_000_000)
-            guard !Task.isCancelled else { return }
-            tabSwipeLock.isLocked = false
-            tabSwipeUnlockTask = nil
-        }
-    }
-
-    private func unlockTabSwipeImmediately() {
-        tabSwipeUnlockTask?.cancel()
-        tabSwipeUnlockTask = nil
-        tabSwipeLock.isLocked = false
     }
 }
 
@@ -221,75 +266,75 @@ private struct AIMemoryConsentCard: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        SoftCard(padding: 18) {
-            HStack(alignment: .top, spacing: 14) {
-                IconBubble(systemName: "lock.shield.fill", tone: .mint, size: 50)
+        VStack(alignment: .leading, spacing: 16) {
+            NinaMark(size: 48, presence: .listening)
 
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Antes de conversar")
-                        .font(.title3.weight(.black))
-                        .foregroundStyle(NinaTheme.ink)
+            Text("Antes de eu ler qualquer coisa.")
+                .ninaText(.screen)
+                .fixedSize(horizontal: false, vertical: true)
 
-                    Text("A Nina usa suas mensagens, anexos e dados confirmados da casa para responder, sugerir tarefas e propor memórias. Nada vira tarefa ou memória sem sua confirmação.")
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            Text("Para eu entender o que você escreve, o texto sai do seu aparelho e vai para um modelo fora do Brasil. Você decide isso por conta própria, e cada adulto da casa decide a dele separado.")
+                .ninaText(.label, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 12) {
+                consentLine("Nada do que você manda fica guardado lá. A sua conversa não treina modelo nenhum.")
+                consentLine("A sua conversa é só sua. O outro adulto da casa não lê o que você escreve para mim.")
+                consentLine("Dá para desligar quando quiser, em Casa · Privacidade. Aí eu paro de ler na hora.")
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .ninaCard(fill: NinaTheme.grout, stroke: .clear)
 
-            VStack(alignment: .leading, spacing: 8) {
-                ConsentLine(systemName: "person.fill", text: "Memórias pessoais começam privadas.")
-                ConsentLine(systemName: "person.2.fill", text: "Compartilhar uma memória com a casa é sempre uma escolha explícita.")
-                ConsentLine(systemName: "trash.fill", text: "Você pode apagar seu histórico privado e revogar este consentimento em Ajustes.")
-                ConsentLine(systemName: "globe.americas.fill", text: "Suas mensagens e anexos são processados por um provedor de modelo fora do Brasil, que não os guarda.")
-            }
-
-            PrimaryCapsuleButton(title: "Aceitar e conversar", systemName: "checkmark.shield.fill") {
+            NinaButton(
+                title: "Aceitar e conversar com a Nina",
+                fillsWidth: true,
+                isEnabled: !store.isSyncingHome
+            ) {
                 Haptics.success()
                 Task {
                     await store.grantAIMemoryConsent()
                 }
             }
-            .disabled(store.isSyncingHome)
-            .opacity(store.isSyncingHome ? 0.5 : 1)
 
             if let error = store.syncErrorMessage {
-                Label(error, systemImage: "exclamationmark.circle.fill")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(NinaTheme.coral)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "exclamationmark.circle")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(NinaTheme.ink)
+
+                    Text(error)
+                        .ninaText(.caption, NinaTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    NinaTheme.grout,
+                    in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+                )
             }
 
-            Text("Ao aceitar, você permite esse processamento para recursos de IA e memória da Nina. Você pode continuar usando tarefas e casa sem aceitar.")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(NinaTheme.muted)
+            Text("Sem aceitar, tudo o mais continua funcionando: tarefas, compras, casa. Só a conversa fica desligada.")
+                .ninaText(.meta, NinaTheme.faint)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button("Ler a política de privacidade") {
+            NinaButton(title: "Ler a política de privacidade", kind: .quiet) {
                 Haptics.selection()
                 openURL(NinaLegalLinks.privacyPolicy)
             }
-            .font(.caption.weight(.black))
-            .foregroundStyle(NinaTheme.sky)
-            .buttonStyle(.plain)
         }
     }
-}
 
-private struct ConsentLine: View {
-    var systemName: String
-    var text: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: systemName)
-                .font(.caption.weight(.black))
-                .foregroundStyle(NinaTheme.mint)
-                .frame(width: 18, height: 18)
+    private func consentLine(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(NinaTheme.ink)
+                .frame(width: 16, height: 18)
 
             Text(text)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(NinaTheme.muted)
+                .ninaText(.caption, NinaTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -298,151 +343,96 @@ private struct ConsentLine: View {
 private struct ChatInputBar: View {
     @Environment(AppStore.self) private var store
     @Environment(RouterPath.self) private var router
+    @Environment(TabSwipeLock.self) private var tabSwipeLock
     @State private var draft = ""
     @State private var isKeyboardVisible = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var pendingAttachments: [PendingChatAttachment] = []
     @State private var isShowingDocumentPicker = false
-    @State private var isShowingOrganizerHelp = false
     @State private var isShowingDocumentReadingNotice = false
     @State private var isLoadingAttachments = false
     @State private var attachmentError: String?
+    @State private var tabSwipeUnlockTask: Task<Void, Never>?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if !pendingAttachments.isEmpty {
-                AttachmentDraftStrip(
-                    attachments: pendingAttachments,
-                    onRemove: removeAttachment
-                )
-            }
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(NinaTheme.line)
+                .frame(height: 1)
 
-            if let attachmentError {
-                Label(attachmentError, systemImage: "exclamationmark.circle.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(NinaTheme.coral)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 10)
-            }
-
-            TextField("Escreva para a Nina", text: $draft, axis: .vertical)
-                .lineLimit(1...4)
-                .font(.body)
-                .foregroundStyle(NinaTheme.ink)
-                .padding(.horizontal, 10)
-                .padding(.top, 8)
-                .padding(.bottom, 2)
-                .frame(minHeight: 34, alignment: .topLeading)
-                .textInputAutocapitalization(.sentences)
-                .submitLabel(.send)
-                .onSubmit(sendDraft)
-                .disabled(store.isNinaResponding)
-                .transaction { transaction in
-                    transaction.animation = nil
+            VStack(alignment: .leading, spacing: 10) {
+                if !pendingAttachments.isEmpty {
+                    AttachmentDraftStrip(
+                        attachments: pendingAttachments,
+                        onRemove: removeAttachment
+                    )
+                    .simultaneousGesture(tabSwipeDragLock)
+                    .onDisappear(perform: unlockTabSwipeImmediately)
                 }
 
-            HStack(spacing: 10) {
-                if canReadDocuments {
-                    PhotosPicker(
-                        selection: $selectedPhotoItems,
-                        maxSelectionCount: max(remainingAttachmentSlots, 1),
-                        matching: .images
-                    ) {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 16, weight: .heavy))
+                if let attachmentError {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.circle")
+                            .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(NinaTheme.ink)
-                            .frame(width: 36, height: 36)
-                            .background(NinaTheme.cream.opacity(0.72), in: Circle())
+
+                        Text(attachmentError)
+                            .ninaText(.meta, NinaTheme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        NinaTheme.grout,
+                        in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+                    )
+                }
+
+                attachmentControls
+
+                HStack(alignment: .bottom, spacing: 10) {
+                    TextField("Escreve pra Nina", text: $draft, axis: .vertical)
+                        .lineLimit(1...4)
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundStyle(NinaTheme.ink)
+                        .tint(NinaTheme.cobalt)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 13)
+                        .frame(minHeight: 46, alignment: .leading)
+                        .background(
+                            NinaTheme.grout,
+                            in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+                        )
+                        .textInputAutocapitalization(.sentences)
+                        .submitLabel(.send)
+                        .onSubmit(sendDraft)
+                        .disabled(store.isNinaResponding)
+                        .opacity(store.isNinaResponding ? 0.55 : 1)
+                        .transaction { transaction in
+                            transaction.animation = nil
+                        }
+
+                    Button(action: sendDraft) {
+                        Image(systemName: store.isNinaResponding ? "ellipsis" : "arrow.up")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(canSend ? NinaTheme.onCobalt : NinaTheme.muted)
+                            .frame(width: 46, height: 46)
+                            .background(canSend ? NinaTheme.cobalt : NinaTheme.grout, in: Circle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(
-                        store.isNinaResponding
-                            || isLoadingAttachments
-                            || remainingAttachmentSlots == 0
-                    )
-                    .accessibilityLabel("Adicionar fotos")
-
-                    Button {
-                        Haptics.selection()
-                        isShowingDocumentPicker = true
-                    } label: {
-                        Image(systemName: isLoadingAttachments ? "ellipsis" : "paperclip")
-                            .font(.system(size: 16, weight: .heavy))
-                            .foregroundStyle(NinaTheme.ink)
-                            .frame(width: 36, height: 36)
-                            .background(NinaTheme.cream.opacity(0.72), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(
-                        store.isNinaResponding
-                            || isLoadingAttachments
-                            || remainingAttachmentSlots == 0
-                    )
-                    .accessibilityLabel("Adicionar documento")
-                } else {
-                    documentReadingChip
+                    .disabled(!canSend)
+                    .opacity(canSend ? 1 : 0.6)
+                    .accessibilityLabel("Enviar mensagem")
                 }
-
-                Button {
-                    Haptics.selection()
-                    isShowingOrganizerHelp = true
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 12, weight: .black))
-
-                        Text("Nina organiza")
-                            .font(.caption.weight(.black))
-                    }
-                    .foregroundStyle(NinaTheme.mintInk)
-                    .padding(.horizontal, 11)
-                    .frame(height: 36)
-                    .background(NinaTheme.mint.opacity(0.12), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Como a Nina organiza")
-                .accessibilityHint("Explica o que acontece depois de enviar")
-                .popover(isPresented: $isShowingOrganizerHelp, arrowEdge: .bottom) {
-                    OrganizerHelpCard()
-                        .presentationCompactAdaptation(.popover)
-                }
-
-                Spacer(minLength: 8)
-
-                Button(action: sendDraft) {
-                    Image(systemName: store.isNinaResponding ? "ellipsis" : "arrow.up")
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .background(sendButtonColor, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSend)
-                .accessibilityLabel("Enviar mensagem")
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+
+            footerNote
         }
-        .padding(8)
-        .background(NinaTheme.field, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(NinaTheme.cardStroke, lineWidth: 1)
-        )
-        .cardShadow()
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
         .padding(.bottom, isKeyboardVisible ? 8 : 92)
-        .background {
-            NinaTheme.screenGradient
-                .opacity(isKeyboardVisible ? 0.98 : 0)
-                .mask(
-                    LinearGradient(
-                        colors: [.clear, .black, .black],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-        }
+        .background(NinaTheme.ground)
         .transaction { transaction in
             transaction.animation = nil
         }
@@ -464,33 +454,104 @@ private struct ChatInputBar: View {
         }
     }
 
+    @ViewBuilder
+    private var attachmentControls: some View {
+        HStack(spacing: 8) {
+            if canReadDocuments {
+                PhotosPicker(
+                    selection: $selectedPhotoItems,
+                    maxSelectionCount: max(remainingAttachmentSlots, 1),
+                    matching: .images
+                ) {
+                    NinaChip(text: "Foto", systemName: "photo", isDisabled: !canAttach)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canAttach)
+                .accessibilityLabel("Adicionar fotos")
+
+                Button {
+                    Haptics.lightImpact()
+                    isShowingDocumentPicker = true
+                } label: {
+                    NinaChip(
+                        text: isLoadingAttachments ? "Abrindo" : "Documento",
+                        systemName: "paperclip",
+                        isDisabled: !canAttach
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(!canAttach)
+                .accessibilityLabel("Adicionar documento")
+            } else {
+                documentReadingChip
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
     private var documentReadingChip: some View {
         Button {
             Haptics.lightImpact()
             isShowingDocumentReadingNotice = true
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "doc.text.viewfinder")
-                    .font(.system(size: 12, weight: .black))
-
-                Text("Documentos")
-                    .font(.caption.weight(.black))
-            }
-            .foregroundStyle(NinaTheme.premiumInk)
-            .padding(.horizontal, 11)
-            .frame(height: 36)
-            .background(NinaTheme.gold.opacity(0.22), in: Capsule())
+            NinaChip(text: "Documentos", systemName: "lock")
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Leitura de documentos")
-        .accessibilityHint("Explica por que enviar fotos e documentos faz parte do Premium")
+        .accessibilityHint("Explica por que enviar foto e documento faz parte do Premium")
         .popover(isPresented: $isShowingDocumentReadingNotice, arrowEdge: .bottom) {
-            DocumentReadingPremiumCard {
+            PremiumGateCard(
+                title: "Ver o Premium",
+                detail: "Ler boleto, receita e comunicado por foto faz parte do Premium da casa. Sem ele, o envio de foto e documento fica desligado por aqui."
+            ) {
+                Haptics.lightImpact()
                 isShowingDocumentReadingNotice = false
                 router.presentedSheet = .premium
             }
+            .padding(14)
+            .frame(width: 330)
+            .ninaSheetBackground()
             .presentationCompactAdaptation(.popover)
         }
+    }
+
+    @ViewBuilder
+    private var footerNote: some View {
+        if !pendingAttachments.isEmpty {
+            footerLine(
+                systemName: "lock",
+                text: "A foto não fica guardada em nenhum servidor. O que sobra é o que eu leio dela, e uma miniatura no seu aparelho."
+            )
+        } else if hasPendingProposals {
+            footerLine(
+                systemName: "info.circle",
+                text: "A Nina pode ler errado. Nada entra na casa até você confirmar cada uma."
+            )
+        }
+    }
+
+    private func footerLine(systemName: String, text: String) -> some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(NinaTheme.line)
+                .frame(height: 1)
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: systemName)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(NinaTheme.faint)
+
+                Text(text)
+                    .ninaText(.micro, NinaTheme.faint)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var trimmedDraft: String {
@@ -505,6 +566,10 @@ private struct ChatInputBar: View {
         max(ChatAttachmentLimits.maxCount - pendingAttachments.count, 0)
     }
 
+    private var canAttach: Bool {
+        !store.isNinaResponding && !isLoadingAttachments && remainingAttachmentSlots > 0
+    }
+
     private var canSend: Bool {
         (!trimmedDraft.isEmpty || !pendingAttachments.isEmpty)
             && store.canSendNinaMessages
@@ -512,8 +577,43 @@ private struct ChatInputBar: View {
             && !isLoadingAttachments
     }
 
-    private var sendButtonColor: Color {
-        canSend ? NinaTheme.mint : NinaTheme.muted.opacity(0.36)
+    private var hasPendingProposals: Bool {
+        store.messages.contains { message in
+            message.proposals.contains { $0.state == .pending }
+        }
+    }
+
+    private var tabSwipeDragLock: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .local)
+            .onChanged { value in
+                guard isHorizontalDrag(value.translation) else { return }
+                tabSwipeUnlockTask?.cancel()
+                tabSwipeUnlockTask = nil
+                tabSwipeLock.isLocked = true
+            }
+            .onEnded { _ in
+                scheduleTabSwipeUnlock()
+            }
+    }
+
+    private func isHorizontalDrag(_ translation: CGSize) -> Bool {
+        abs(translation.width) > 8 && abs(translation.width) > abs(translation.height)
+    }
+
+    private func scheduleTabSwipeUnlock() {
+        tabSwipeUnlockTask?.cancel()
+        tabSwipeUnlockTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 160_000_000)
+            guard !Task.isCancelled else { return }
+            tabSwipeLock.isLocked = false
+            tabSwipeUnlockTask = nil
+        }
+    }
+
+    private func unlockTabSwipeImmediately() {
+        tabSwipeUnlockTask?.cancel()
+        tabSwipeUnlockTask = nil
+        tabSwipeLock.isLocked = false
     }
 
     private func sendDraft() {
@@ -798,15 +898,16 @@ private struct AttachmentDraftStrip: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 ForEach(attachments) { attachment in
                     AttachmentDraftChip(attachment: attachment) {
                         onRemove(attachment)
                     }
                 }
             }
-            .padding(.horizontal, 2)
+            .padding(.vertical, 1)
         }
+        .scrollClipDisabled()
     }
 }
 
@@ -818,28 +919,32 @@ private struct AttachmentDraftChip: View {
         HStack(spacing: 10) {
             attachmentPreview
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(attachment.metadata.filename)
-                    .font(.caption.weight(.heavy))
-                    .foregroundStyle(NinaTheme.ink)
+                    .ninaText(.meta, NinaTheme.ink, weight: .semibold)
                     .lineLimit(1)
 
                 Text(attachment.metadata.byteCount.formattedFileSize)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(NinaTheme.muted)
+                    .ninaText(.micro, NinaTheme.muted)
             }
 
+            Spacer(minLength: 4)
+
             Button(action: onRemove) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18, weight: .bold))
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(NinaTheme.muted)
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Remover \(attachment.metadata.filename)")
         }
         .padding(8)
         .frame(width: 214, alignment: .leading)
-        .background(NinaTheme.cream.opacity(0.78), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            NinaTheme.grout,
+            in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+        )
     }
 
     @ViewBuilder
@@ -850,83 +955,33 @@ private struct AttachmentDraftChip: View {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
-                .frame(width: 42, height: 42)
+                .frame(width: 40, height: 40)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else {
-            Image(systemName: "doc.text.fill")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(NinaTheme.sky)
-                .frame(width: 42, height: 42)
-                .background(NinaTheme.sky.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            CategoryGlyph(systemName: "doc", size: 16, tint: NinaTheme.muted)
+                .frame(width: 40, height: 40)
+                .background(
+                    NinaTheme.ground,
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                )
         }
-    }
-}
-
-private struct OrganizerHelpCard: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("A Nina organiza ao enviar", systemImage: "sparkles")
-                .font(.headline.weight(.black))
-                .foregroundStyle(NinaTheme.ink)
-
-            Text("Ela lê sua mensagem e seus anexos, depois sugere uma tarefa, lembrete ou memória. Nada é criado sem sua confirmação, e memórias pessoais começam privadas.")
-                .font(.subheadline)
-                .foregroundStyle(NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(18)
-        .frame(width: 290, alignment: .leading)
-        .background(NinaTheme.sheet)
-    }
-}
-
-private struct DocumentReadingPremiumCard: View {
-    var onOpenPremium: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Leitura de documentos", systemImage: "doc.text.viewfinder")
-                .font(.headline.weight(.black))
-                .foregroundStyle(NinaTheme.ink)
-
-            Text("A Nina lê boletos, receitas e comunicados da escola e transforma em tarefas. Isso faz parte do Premium da casa, então o envio de fotos e documentos está desligado por aqui.")
-                .font(.subheadline)
-                .foregroundStyle(NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button("Ver o Premium") {
-                Haptics.lightImpact()
-                onOpenPremium()
-            }
-            .font(.subheadline.weight(.black))
-            .foregroundStyle(NinaTheme.sky)
-            .buttonStyle(.plain)
-        }
-        .padding(18)
-        .frame(width: 290, alignment: .leading)
-        .background(NinaTheme.sheet)
     }
 }
 
 private struct NinaTypingBubble: View {
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            NinaAvatarView(size: 38)
+        HStack(alignment: .top, spacing: 10) {
+            NinaMark(size: 22, presence: .reading)
+                .padding(.top, 4)
 
-            HStack(spacing: 7) {
-                ProgressView()
-                    .controlSize(.small)
-
-                Text("Nina está organizando")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(NinaTheme.muted)
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 42)
-            .background(
-                NinaTheme.card,
-                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-            )
+            Text("A Nina está lendo")
+                .ninaText(.caption, NinaTheme.muted)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(
+                    NinaTheme.grout,
+                    in: RoundedRectangle(cornerRadius: NinaTheme.Radius.card, style: .continuous)
+                )
 
             Spacer(minLength: 40)
         }
@@ -943,35 +998,17 @@ private struct MessageBubble: View {
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             if isNina {
-                NinaAvatarView(size: 38)
+                NinaMark(size: 22)
+                    .padding(.top, 4)
             } else {
-                Spacer(minLength: 40)
+                Spacer(minLength: 44)
             }
 
-            VStack(alignment: isNina ? .leading : .trailing, spacing: 10) {
-                VStack(alignment: .leading, spacing: 10) {
-                    if !message.attachments.isEmpty {
-                        MessageAttachmentsView(
-                            attachments: message.attachments,
-                            isNina: isNina
-                        )
-                    }
-
-                    if !message.text.isEmpty {
-                        Text(message.text)
-                            .font(.body)
-                            .foregroundStyle(isNina ? NinaTheme.ink : .white)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(
-                        isNina ? NinaTheme.card : NinaTheme.sky,
-                        in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    )
+            VStack(alignment: isNina ? .leading : .trailing, spacing: 12) {
+                bubble
+                    .frame(maxWidth: 268, alignment: isNina ? .leading : .trailing)
 
                 ForEach(message.proposals) { proposal in
                     NinaProposalCard(proposal: proposal)
@@ -981,16 +1018,55 @@ private struct MessageBubble: View {
                     WithheldProposalsCard()
                 }
 
+                if let premiumCeiling {
+                    PremiumGateCard(title: "Ver o Premium", detail: premiumCeiling) {
+                        Haptics.lightImpact()
+                        router.presentedSheet = .premium
+                    }
+                }
+
                 if let suggestion = message.suggestion {
                     SuggestionMiniCard(suggestion: suggestion)
                 }
             }
-            .frame(maxWidth: 300, alignment: isNina ? .leading : .trailing)
+            .frame(maxWidth: .infinity, alignment: isNina ? .leading : .trailing)
+        }
+    }
 
-            if isNina {
-                Spacer(minLength: 40)
+    private var bubble: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !message.attachments.isEmpty {
+                MessageAttachmentsView(
+                    attachments: message.attachments,
+                    isNina: isNina
+                )
+            }
+
+            if !message.text.isEmpty {
+                Text(message.text)
+                    .ninaText(.body, isNina ? NinaTheme.ink : NinaTheme.ground)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            isNina ? NinaTheme.cobaltWash : NinaTheme.ink,
+            in: RoundedRectangle(cornerRadius: NinaTheme.Radius.card, style: .continuous)
+        )
+    }
+
+    // A server denial arrives as an ordinary Nina line, so the ceiling it names is recovered here:
+    // a refusal this household can lift must carry the route, never end the conversation.
+    private var premiumCeiling: String? {
+        guard isNina, !store.householdPremium.isActive else { return nil }
+        if message.text == NinaEngineError.attachmentsRequirePremium.userMessage {
+            return "Ler boleto, receita e comunicado por foto faz parte do Premium da casa."
+        }
+        if message.text == NinaEngineError.rateLimited.userMessage {
+            return "No Premium são 30 mensagens por hora, e não 10 por dia."
+        }
+        return nil
     }
 }
 
@@ -1015,11 +1091,10 @@ private struct MessageAttachmentsView: View {
                                 .resizable()
                                 .scaledToFill()
                                 .frame(maxWidth: 230, minHeight: 120, maxHeight: 150)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
 
-                            Label(attachment.filename, systemImage: "arrow.up.left.and.arrow.down.right")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(isNina ? NinaTheme.muted : Color.white.opacity(0.86))
+                            Text(attachment.filename)
+                                .ninaText(.micro, isNina ? NinaTheme.muted : NinaTheme.ground.opacity(0.72))
                                 .lineLimit(1)
                         }
                     }
@@ -1028,30 +1103,30 @@ private struct MessageAttachmentsView: View {
                     .accessibilityHint("Mostra a foto em tela cheia para você conferir")
                 } else {
                     HStack(spacing: 10) {
-                        Image(systemName: attachment.kind == .image ? "photo.fill" : "doc.text.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(isNina ? NinaTheme.sky : .white)
-                            .frame(width: 34, height: 34)
-                            .background(
-                                isNina ? NinaTheme.sky.opacity(0.14) : Color.white.opacity(0.16),
-                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            )
+                        CategoryGlyph(
+                            systemName: attachment.kind == .image ? "photo" : "doc",
+                            size: 16,
+                            tint: isNina ? NinaTheme.muted : NinaTheme.ground
+                        )
+                        .frame(width: 34, height: 34)
+                        .background(
+                            isNina ? NinaTheme.ground : NinaTheme.ground.opacity(0.14),
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        )
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(attachment.filename)
-                                .font(.caption.weight(.heavy))
-                                .foregroundStyle(isNina ? NinaTheme.ink : .white)
+                                .ninaText(.meta, isNina ? NinaTheme.ink : NinaTheme.ground, weight: .semibold)
                                 .lineLimit(1)
 
                             Text(attachment.byteCount.formattedFileSize)
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(isNina ? NinaTheme.muted : Color.white.opacity(0.78))
+                                .ninaText(.micro, isNina ? NinaTheme.muted : NinaTheme.ground.opacity(0.72))
                         }
                     }
                     .padding(8)
                     .background(
-                        isNina ? NinaTheme.cream.opacity(0.72) : Color.white.opacity(0.12),
-                        in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        isNina ? NinaTheme.ground : NinaTheme.ground.opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
                     )
                 }
             }
@@ -1080,7 +1155,7 @@ private struct AttachmentImageViewer: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            NinaTheme.ink.ignoresSafeArea()
 
             if let data = attachment.thumbnailData, let image = UIImage(data: data) {
                 Image(uiImage: image)
@@ -1092,9 +1167,8 @@ private struct AttachmentImageViewer: View {
                     .onTapGesture(count: 2, perform: resetInspection)
                     .accessibilityLabel(attachment.filename)
             } else {
-                Text("Não consegui abrir essa foto agora.")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
+                Text("Não consigo abrir essa foto agora.")
+                    .ninaText(.label, NinaTheme.ground)
             }
         }
         .overlay(alignment: .top) { viewerBar }
@@ -1104,23 +1178,22 @@ private struct AttachmentImageViewer: View {
     private var viewerBar: some View {
         HStack(spacing: 12) {
             Text(attachment.filename)
-                .font(.caption.weight(.heavy))
-                .foregroundStyle(.white)
+                .ninaText(.caption, NinaTheme.ground, weight: .semibold)
                 .lineLimit(1)
 
             Spacer(minLength: 12)
 
             Button(action: onClose) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(NinaTheme.ground)
                     .frame(width: 38, height: 38)
-                    .background(Color.white.opacity(0.18), in: Circle())
+                    .background(NinaTheme.ground.opacity(0.18), in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Fechar a foto")
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 20)
         .padding(.vertical, 10)
     }
 
@@ -1171,6 +1244,7 @@ private struct NinaProposalCard: View {
     @State private var draftAmount: String
     @State private var isEditing = false
     @State private var isResolving = false
+    @State private var isConfirmingShare = false
 
     init(proposal: NinaProposal) {
         self.proposal = proposal
@@ -1182,31 +1256,66 @@ private struct NinaProposalCard: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            if proposal.state == .pending {
+                banner
+            }
+
+            face
+
+            actions
+        }
+        .clipShape(RoundedRectangle(cornerRadius: NinaTheme.Radius.card, style: .continuous))
+        .ninaCard()
+        .disabled(isResolving)
+        .opacity(isResolving ? 0.55 : 1)
+        .alert("Compartilhar com a casa?", isPresented: $isConfirmingShare) {
+            Button("Compartilhar") {
+                resolve(decision: .accept, memoryVisibility: .shared)
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text(shareWarning)
+        }
+    }
+
+    private var banner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: proposal.kind == .memory ? "lock" : "plus")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(NinaTheme.faint)
+
+            Eyebrow(text: proposal.kind == .memory ? "Memória · ainda não guardada" : "Isto ainda não existe")
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 38)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NinaTheme.grout)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(NinaTheme.line).frame(height: 1)
+        }
+    }
+
+    private var face: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                IconBubble(
-                    systemName: isSeed ? TaskKind.seed.symbolName : proposal.payload.symbolName,
-                    tone: isSeed ? .mint : proposal.payload.category.tone,
-                    size: 38
-                )
+            objectRow
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(confirmationPayload.title)
-                        .font(.subheadline.weight(.black))
-                        .foregroundStyle(NinaTheme.ink)
+            if !confirmationPayload.detail.isEmpty {
+                Text(confirmationPayload.detail)
+                    .ninaText(.caption, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-                    if !confirmationPayload.detail.isEmpty {
-                        Text(confirmationPayload.detail)
-                            .font(.caption)
-                            .foregroundStyle(NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    proposalBasis
+            if proposal.kind == .memory, proposal.state == .pending {
+                NinaButton(title: isEditing ? "Fechar" : "Corrigir o texto", kind: .outline) {
+                    Haptics.selection()
+                    isEditing.toggle()
                 }
             }
 
-            confirmationSummary
+            proposalBasis
 
             extractedReadings
 
@@ -1226,28 +1335,59 @@ private struct NinaProposalCard: View {
                 }
             }
 
-            if proposal.state == .pending {
-                pendingActions
-            } else {
-                Label(
-                    proposal.state == .accepted ? "Confirmado" : "Ignorado",
-                    systemImage: proposal.state == .accepted
-                        ? "checkmark.circle.fill"
-                        : "xmark.circle.fill"
-                )
-                .font(.caption.weight(.black))
-                .foregroundStyle(
-                    proposal.state == .accepted ? NinaTheme.mint : NinaTheme.muted
-                )
+            decisiveRows
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NinaTheme.ground)
+    }
+
+    // The card draws the real object — the same checkbox and the same category glyph a task row
+    // carries — so what a person confirms is what the house is about to get.
+    private var objectRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if isSeed {
+                CategoryGlyph(systemName: "leaf", size: 18, tint: NinaTheme.ink)
+            } else if proposal.kind != .memory {
+                NinaCheckbox(isOn: false, size: 22)
+                    .padding(.top, 1)
+            }
+
+            objectTitle
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            if isSeed {
+                Eyebrow(text: TaskKind.seed.title)
+                    .padding(.horizontal, 10)
+                    .frame(height: 24)
+                    .background(NinaTheme.grout, in: Capsule())
+            } else if proposal.kind != .memory {
+                HStack(spacing: 6) {
+                    CategoryGlyph(
+                        systemName: confirmationPayload.category.symbolName,
+                        size: 14,
+                        tint: NinaTheme.muted
+                    )
+                    Text(confirmationPayload.category.title)
+                        .ninaText(.meta, NinaTheme.muted)
+                }
+                .padding(.top, 2)
             }
         }
-        .padding(12)
-        .background(
-            NinaTheme.cream.opacity(0.9),
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-        )
-        .disabled(isResolving)
-        .opacity(isResolving ? 0.65 : 1)
+    }
+
+    @ViewBuilder
+    private var objectTitle: some View {
+        if proposal.kind == .memory {
+            Text(confirmationPayload.title).ninaText(.section)
+        } else {
+            Text(confirmationPayload.title)
+                .font(.system(size: 17, weight: .semibold))
+                .tracking(-0.1)
+                .foregroundStyle(NinaTheme.ink)
+        }
     }
 
     private var confirmationPayload: NinaProposalPayload {
@@ -1269,39 +1409,28 @@ private struct NinaProposalCard: View {
     @ViewBuilder
     private var proposalBasis: some View {
         if proposal.payload.source != nil || !proposal.payload.rationale.isEmpty {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    basisParts
+            VStack(alignment: .leading, spacing: 7) {
+                if let source = proposal.payload.source {
+                    HStack(spacing: 6) {
+                        Image(systemName: source.symbolName)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(NinaTheme.muted)
+                        Text(source.title)
+                            .ninaText(.micro, NinaTheme.muted, weight: .semibold)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 26)
+                    .background(NinaTheme.grout, in: Capsule())
                 }
 
-                VStack(alignment: .leading, spacing: 5) {
-                    basisParts
+                if !proposal.payload.rationale.isEmpty {
+                    Text(proposal.payload.rationale)
+                        .ninaText(.meta, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.top, 3)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(basisAccessibilityLabel)
-        }
-    }
-
-    @ViewBuilder
-    private var basisParts: some View {
-        if let source = proposal.payload.source {
-            Label(source.title, systemImage: source.symbolName)
-                .font(.caption2.weight(.black))
-                .foregroundStyle(source.tone.color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(source.tone.softColor, in: Capsule())
-        }
-
-        if !proposal.payload.rationale.isEmpty {
-            Text(proposal.payload.rationale)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -1312,225 +1441,254 @@ private struct NinaProposalCard: View {
             .joined(separator: ". ")
     }
 
-    @ViewBuilder
-    private var confirmationSummary: some View {
-        if proposal.kind != .memory {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) {
-                    summaryChips
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    summaryChips
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var summaryChips: some View {
-        summaryChip(
-            confirmationPayload.owner,
-            systemName: "person.fill",
-            tone: proposal.payload.category.tone,
-            accessibilityLabel: "Responsável \(confirmationPayload.owner)"
-        )
-
-        summaryChip(
-            scheduleSummary,
-            systemName: confirmationPayload.dueAt == nil ? TaskKind.seed.symbolName : "clock.fill",
-            tone: isSeed ? .mint : proposal.payload.category.tone,
-            accessibilityLabel: scheduleAccessibilityLabel
-        )
-
-        if proposal.kind == .shopping, !confirmationPayload.amount.isEmpty {
-            summaryChip(
-                confirmationPayload.amount,
-                systemName: "cart.fill",
-                tone: proposal.payload.category.tone,
-                accessibilityLabel: "Quantidade \(confirmationPayload.amount)"
-            )
-        }
-    }
-
     // What Nina read is evidence, not a field: it keeps showing the document's own wording so a
     // misread vencimento can be caught against it while the proposal is still correctable.
     @ViewBuilder
     private var extractedReadings: some View {
         if !proposal.payload.extracted.isEmpty {
-            VStack(alignment: .leading, spacing: 7) {
-                Label("O que eu li no anexo", systemImage: "text.viewfinder")
-                    .font(.caption2.weight(.black))
-                    .foregroundStyle(NinaTheme.muted)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "eye")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(NinaTheme.faint)
+                    Eyebrow(text: "O que eu li")
+                    Spacer(minLength: 0)
+                }
 
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(spacing: 0) {
                     ForEach(proposal.payload.extracted.indices, id: \.self) { index in
+                        if index > 0 {
+                            NinaDivider(inset: 0)
+                        }
                         extractedReadingRow(proposal.payload.extracted[index])
                     }
                 }
 
                 if proposal.state == .pending {
                     Text("Corrija se eu tiver lido errado.")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(NinaTheme.muted)
+                        .ninaText(.meta, NinaTheme.muted)
+                }
+
+                if confirmationPayload.category.id == TaskCategory.bills.id {
+                    Text("Eu não copio a linha digitável. Para pagar, você abre o boleto no banco, porque este cartão não serve para isso.")
+                        .ninaText(.meta, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(10)
-            .background(
-                NinaTheme.card,
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-            )
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .ninaCard(radius: NinaTheme.Radius.field, fill: NinaTheme.grout, stroke: .clear)
         }
     }
 
     private func extractedReadingRow(_ reading: NinaExtractedReading) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(reading.label)
-                .font(.caption2.weight(.heavy))
-                .foregroundStyle(NinaTheme.muted)
+                .ninaText(.caption, NinaTheme.muted)
 
             Spacer(minLength: 8)
 
             Text(reading.value)
-                .font(.caption2.weight(.black))
-                .foregroundStyle(NinaTheme.ink)
+                .ninaText(.label, NinaTheme.ink, weight: .semibold)
                 .multilineTextAlignment(.trailing)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(minHeight: 38)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(reading.label): \(reading.value)")
     }
 
-    private var scheduleSummary: String {
+    // Quando, Repete and Dono are decided on the card face: a field kept behind the correction
+    // toggle would let a person confirm a date they never saw.
+    @ViewBuilder
+    private var decisiveRows: some View {
+        if proposal.kind != .memory {
+            VStack(spacing: 0) {
+                NinaDivider(inset: 0)
+
+                decisiveRow("Quando") {
+                    Text(scheduleValue)
+                        .ninaText(.label, isSeed ? NinaTheme.muted : NinaTheme.ink)
+                }
+
+                if proposal.kind == .task || proposal.kind == .reminder {
+                    NinaDivider(inset: 0)
+                    decisiveRow("Repete") {
+                        Text("Não repete").ninaText(.label)
+                    }
+                }
+
+                NinaDivider(inset: 0)
+
+                decisiveRow("Dono") {
+                    Text(ownerValue).ninaText(.label)
+                }
+
+                if proposal.kind == .shopping, !confirmationPayload.amount.isEmpty {
+                    NinaDivider(inset: 0)
+                    decisiveRow("Quantidade") {
+                        Text(confirmationPayload.amount).ninaText(.label)
+                    }
+                }
+            }
+        }
+    }
+
+    private func decisiveRow<V: View>(_ label: String, @ViewBuilder value: () -> V) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(label)
+                .ninaText(.caption, NinaTheme.muted)
+                .frame(width: 86, alignment: .leading)
+            value()
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 42)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var scheduleValue: String {
         if isSeed {
-            return "\(TaskKind.seed.title) · plante depois"
+            return "sem data, e tudo bem"
         }
         guard confirmationPayload.dueAt != nil else {
-            return "\(confirmationPayload.dueLabel) · plante depois"
+            return "\(confirmationPayload.dueLabel) · sem lembrete"
         }
         return confirmationPayload.dueLabel
     }
 
-    private var scheduleAccessibilityLabel: String {
-        if isSeed {
-            return "\(TaskKind.seed.title). Sem data definida, plante depois."
-        }
-        guard confirmationPayload.dueAt != nil else {
-            return "\(confirmationPayload.dueLabel). Nada marcado, plante depois."
-        }
-        return "Quando \(confirmationPayload.dueLabel)"
+    private var ownerValue: String {
+        HouseholdWorkload.isSharedOwner(confirmationPayload.owner)
+            ? "A casa, por enquanto"
+            : confirmationPayload.owner
     }
 
-    private func summaryChip(
-        _ title: String,
-        systemName: String,
-        tone: MemberTone,
-        accessibilityLabel: String
-    ) -> some View {
-        Label(title, systemImage: systemName)
-            .font(.caption2.weight(.black))
-            .foregroundStyle(tone.color)
-            .lineLimit(1)
-            .minimumScaleFactor(0.82)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(tone.softColor, in: Capsule())
-            .accessibilityLabel(accessibilityLabel)
-    }
-
-    @ViewBuilder
-    private var pendingActions: some View {
-        if proposal.kind == .memory {
-            VStack(alignment: .leading, spacing: 8) {
-                proposalButton(
-                    "Guardar para mim",
-                    systemName: "lock.fill",
-                    visibility: .privateMemory
-                )
-                proposalButton(
-                    "Compartilhar com a casa",
-                    systemName: "house.fill",
-                    visibility: .shared
-                )
-
-                HStack(spacing: 12) {
-                    editButton
-                    rejectButton
+    private var actions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if proposal.state == .pending {
+                if proposal.kind == .memory {
+                    memoryActions
+                } else {
+                    standardActions
                 }
+            } else {
+                resolvedLine
             }
-        } else {
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NinaTheme.grout)
+        .overlay(alignment: .top) {
+            Rectangle().fill(NinaTheme.line).frame(height: 1)
+        }
+    }
+
+    private var standardActions: some View {
+        VStack(spacing: 8) {
+            NinaButton(title: proposal.actionTitle, fillsWidth: true) {
+                resolve(decision: .accept)
+            }
+
             HStack(spacing: 8) {
-                Button {
-                    resolve(decision: .accept)
-                } label: {
-                    Label(proposal.actionTitle, systemImage: "checkmark.circle.fill")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
-                        .background(NinaTheme.mint, in: Capsule())
+                NinaButton(
+                    title: isEditing ? "Fechar" : correctionTitle,
+                    kind: .outline,
+                    fillsWidth: true
+                ) {
+                    Haptics.selection()
+                    isEditing.toggle()
                 }
-                .buttonStyle(.plain)
 
-                editButton
-
-                rejectButton
+                NinaButton(title: "Não", kind: .quiet, fillsWidth: true) {
+                    resolve(decision: .reject)
+                }
+                .frame(height: 50)
             }
         }
     }
 
-    private var editButton: some View {
-        Button(isEditing ? "Fechar" : "Editar") {
-            Haptics.selection()
-            isEditing.toggle()
+    private var correctionTitle: String {
+        proposal.payload.extracted.isEmpty ? "Corrigir" : "Corrigir o que li"
+    }
+
+    // Sharing is the one move nobody can take back, so it names who gains the reading and asks
+    // again; keeping it for yourself stays the single tap.
+    private var memoryActions: some View {
+        VStack(spacing: 8) {
+            NinaButton(title: "Guardar só para mim", systemName: "lock", fillsWidth: true) {
+                resolve(decision: .accept, memoryVisibility: .privateMemory)
+            }
+
+            NinaButton(title: "Compartilhar com a casa", kind: .outline, fillsWidth: true) {
+                Haptics.warning()
+                isConfirmingShare = true
+            }
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(NinaTheme.faint)
+
+                Text(shareWarning)
+                    .ninaText(.meta, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 2)
+
+            NinaButton(title: "Não guardar nada", kind: .quiet, fillsWidth: true) {
+                resolve(decision: .reject)
+            }
+            .padding(.top, 4)
         }
-        .font(.caption.weight(.black))
-        .foregroundStyle(NinaTheme.sky)
-        .buttonStyle(.plain)
+    }
+
+    private var shareWarning: String {
+        let others = store.familyGroup.members.filter {
+            $0.role == .adult && $0.id != store.currentFamilyMember?.id
+        }
+        if others.count == 1, let other = others.first, !other.name.firstWord.isEmpty {
+            return "Compartilhar não tem volta. \(other.name.firstWord) vai poder ler, e tirar depois não desfaz a leitura."
+        }
+        if others.isEmpty {
+            return "Compartilhar não tem volta. Quem entrar na casa depois vai poder ler."
+        }
+        return "Compartilhar não tem volta. Os outros adultos da casa vão poder ler, e tirar depois não desfaz a leitura."
+    }
+
+    private var resolvedLine: some View {
+        HStack(spacing: 8) {
+            Image(systemName: proposal.state == .accepted ? "checkmark" : "xmark")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(proposal.state == .accepted ? NinaTheme.moss : NinaTheme.muted)
+
+            Text(resolvedText)
+                .ninaText(
+                    .caption,
+                    proposal.state == .accepted ? NinaTheme.moss : NinaTheme.muted,
+                    weight: .semibold
+                )
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var resolvedText: String {
+        guard proposal.state == .accepted else { return "Você disse que não." }
+        return proposal.kind == .memory ? "Você guardou." : "Você confirmou."
     }
 
     private func proposalField(_ title: String, text: Binding<String>) -> some View {
         TextField(title, text: text)
-            .font(.caption.weight(.semibold))
+            .font(.system(size: 15, weight: .regular))
+            .foregroundStyle(NinaTheme.ink)
+            .tint(NinaTheme.cobalt)
             .textFieldStyle(.plain)
-            .padding(.horizontal, 10)
-            .frame(minHeight: 38)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
             .background(
-                NinaTheme.card,
-                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                NinaTheme.grout,
+                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
             )
-    }
-
-    private func proposalButton(
-        _ title: String,
-        systemName: String,
-        visibility: NinaMemoryVisibility
-    ) -> some View {
-        Button {
-            resolve(decision: .accept, memoryVisibility: visibility)
-        } label: {
-            Label(title, systemImage: systemName)
-                .font(.caption.weight(.black))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .background(
-                    visibility == .shared ? NinaTheme.sky : NinaTheme.mint,
-                    in: Capsule()
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var rejectButton: some View {
-        Button {
-            resolve(decision: .reject)
-        } label: {
-            Text("Ignorar")
-                .font(.caption.weight(.black))
-                .foregroundStyle(NinaTheme.muted)
-        }
-        .buttonStyle(.plain)
     }
 
     private func resolve(
@@ -1554,27 +1712,22 @@ private struct NinaProposalCard: View {
 
 private struct WithheldProposalsCard: View {
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            IconBubble(systemName: "hourglass", tone: .sky, size: 36)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Confirmação ainda fechada")
-                    .font(.subheadline.weight(.black))
-                    .foregroundStyle(NinaTheme.ink)
-
-                Text(
-                    "Entendi algo para organizar, mas nesta versão ainda não dá para você confirmar. Não criei nada na casa."
-                )
-                    .font(.caption)
-                    .foregroundStyle(NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "hourglass")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(NinaTheme.faint)
+                Eyebrow(text: "Confirmação ainda fechada")
+                Spacer(minLength: 0)
             }
+
+            Text("Entendi algo para organizar, mas nesta versão a confirmação ainda não abre. Nada entra na casa até ela abrir.")
+                .ninaText(.caption, NinaTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
-        .background(
-            NinaTheme.cream.opacity(0.86),
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-        )
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
         .accessibilityElement(children: .combine)
     }
 }
@@ -1585,50 +1738,45 @@ private struct SuggestionMiniCard: View {
     var suggestion: NinaSuggestion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                IconBubble(systemName: suggestion.symbolName, tone: suggestion.category.tone, size: 36)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                NinaCheckbox(isOn: false, size: 22)
+                    .padding(.top, 1)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(suggestion.title)
-                        .font(.subheadline.weight(.black))
+                        .font(.system(size: 17, weight: .semibold))
+                        .tracking(-0.1)
                         .foregroundStyle(NinaTheme.ink)
 
                     Text(suggestion.detail)
-                        .font(.caption)
-                        .foregroundStyle(NinaTheme.muted)
+                        .ninaText(.caption, NinaTheme.muted)
                         .lineLimit(2)
                 }
+
+                Spacer(minLength: 8)
+
+                CategoryGlyph(
+                    systemName: suggestion.category.symbolName,
+                    size: 14,
+                    tint: NinaTheme.muted
+                )
+                .padding(.top, 2)
             }
 
-            HStack(spacing: 8) {
-                Button {
-                    Haptics.success()
-                    store.applySuggestion(suggestion)
-                } label: {
-                    Label(suggestion.actionTitle, systemImage: "plus.circle.fill")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
-                        .background(NinaTheme.mint, in: Capsule())
-                }
-                .buttonStyle(.plain)
+            NinaButton(title: suggestion.actionTitle, fillsWidth: true) {
+                Haptics.success()
+                store.applySuggestion(suggestion)
+            }
 
-                Button {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .suggestion(suggestion)
-                } label: {
-                    Image(systemName: "info.circle.fill")
-                        .font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(NinaTheme.sky)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Detalhes da sugestão")
+            NinaButton(title: "Ver os detalhes", kind: .quiet, fillsWidth: true) {
+                Haptics.lightImpact()
+                router.presentedSheet = .suggestion(suggestion)
             }
         }
-        .padding(12)
-        .background(NinaTheme.cream.opacity(0.86), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard()
     }
 }
 
@@ -1657,10 +1805,8 @@ private extension Int {
 }
 
 #Preview {
-    NavigationStack {
-        NinaChatView()
-            .environment(AppStore())
-            .environment(RouterPath())
-            .environment(TabSwipeLock())
-    }
+    NinaChatView()
+        .environment(AppStore())
+        .environment(RouterPath())
+        .environment(TabSwipeLock())
 }

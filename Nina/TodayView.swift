@@ -1,746 +1,404 @@
 import SwiftUI
 
+private enum TodayFilter: String, CaseIterable, Identifiable {
+    case all
+    case mine
+    case unowned
+    case seeds
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "Tudo"
+        case .mine: "Minhas"
+        case .unowned: "Sem dono"
+        case .seeds: "Sementes"
+        }
+    }
+}
+
 struct TodayView: View {
     @Environment(AppStore.self) private var store
-    @Environment(PremiumSubscriptionStore.self) private var premiumStore
     @Environment(RouterPath.self) private var router
-    @State private var taskPendingDeletion: TaskItem?
+
+    @State private var filter: TodayFilter = .all
+
+    private var now: Date { .now }
+
+    private var agenda: [TaskItem] {
+        store.tasks
+            .filter { $0.kind == .task && !$0.isDone && $0.belongsOnAgenda(for: now) }
+    }
+
+    private var overdue: [TaskItem] {
+        agenda.filter { $0.isOverdue(relativeTo: now) }
+    }
+
+    private var dueToday: [TaskItem] {
+        agenda.filter { !$0.isOverdue(relativeTo: now) }
+    }
+
+    private var mineCount: Int {
+        guard let me = store.currentFamilyMember else { return 0 }
+        return agenda.count { $0.ownerMemberID == me.id }
+    }
+
+    private var unownedCount: Int {
+        agenda.count { HouseholdWorkload.isSharedOwner($0.owner) }
+    }
+
+    private var filtered: [TaskItem] {
+        switch filter {
+        case .all:
+            return agenda
+        case .mine:
+            guard let me = store.currentFamilyMember else { return [] }
+            return agenda.filter { $0.ownerMemberID == me.id }
+        case .unowned:
+            return agenda.filter { HouseholdWorkload.isSharedOwner($0.owner) }
+        case .seeds:
+            return store.openSeeds
+        }
+    }
+
+    // A household that has never captured anything is a different screen from one
+    // that has cleared its day: the first promises, the second congratulates.
+    private var hasEverCaptured: Bool {
+        !store.tasks.isEmpty || !store.shoppingItems.isEmpty
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                greetingCard
-                overloadCard
-                priorityTasksSection
-                seedsSection
-                premiumInsightCard
+        ZStack(alignment: .bottomTrailing) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    header
+
+                    if !hasEverCaptured {
+                        firstDay
+                    } else if agenda.isEmpty && filter == .all {
+                        dayCleared
+                    } else {
+                        stats
+                        filters
+                        list
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 104)
             }
-            .padding(18)
-            .padding(.bottom, 104)
+
+            if hasEverCaptured {
+                fab
+            }
         }
         .ninaScreenBackground()
-        .navigationTitle("Hoje")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+    }
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 3) {
+                Eyebrow(text: now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "pt_BR"))))
+                Text(greeting).ninaText(.screen)
+            }
+
+            Spacer()
+
+            if let me = store.currentFamilyMember {
                 Button {
                     Haptics.lightImpact()
-                    router.presentedSheet = .addTask
+                    router.presentedSheet = .settings
                 } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title3.weight(.bold))
+                    MemberAvatar(initials: me.name.ninaInitials, tone: me.tone, size: 36)
                 }
-                .accessibilityLabel("Adicionar tarefa")
+                .buttonStyle(.plain)
+                .accessibilityLabel("Abrir ajustes")
+                .padding(.top, 6)
             }
         }
-        .alert(
-            "Apagar esta tarefa?",
-            isPresented: Binding(
-                get: { taskPendingDeletion != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        taskPendingDeletion = nil
+    }
+
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: now)
+        let name = store.currentFamilyMember?.name.firstWord ?? ""
+        let salute = hour < 12 ? "Bom dia" : (hour < 18 ? "Boa tarde" : "Boa noite")
+        return name.isEmpty ? salute : "\(salute), \(name)"
+    }
+
+    private var stats: some View {
+        HStack(spacing: 10) {
+            statTile(value: mineCount, label: "na sua mão", style: .primary)
+            statTile(value: overdue.count, label: "atrasadas", style: .late)
+            statTile(value: unownedCount, label: "sem dono", style: .quiet)
+        }
+    }
+
+    private enum StatStyle { case primary, late, quiet }
+
+    private func statTile(value: Int, label: String, style: StatStyle) -> some View {
+        let fill: Color = switch style {
+        case .primary: NinaTheme.ink
+        case .late: NinaTheme.terracottaWash
+        case .quiet: NinaTheme.grout
+        }
+        let valueColor: Color = switch style {
+        case .primary: NinaTheme.ground
+        case .late: NinaTheme.terracotta
+        case .quiet: NinaTheme.ink
+        }
+        // On the ink tile the palette has no legible muted value, so the label is
+        // the ground colour held back rather than a second token.
+        let labelColor: Color = switch style {
+        case .primary: NinaTheme.ground.opacity(0.72)
+        case .late: NinaTheme.terracotta.opacity(0.85)
+        case .quiet: NinaTheme.muted
+        }
+
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("\(value)").ninaText(.display, valueColor)
+            Text(label)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(labelColor)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(fill, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.card, style: .continuous))
+    }
+
+    private var filters: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(TodayFilter.allCases) { option in
+                    Button {
+                        Haptics.selection()
+                        filter = option
+                    } label: {
+                        NinaChip(text: chipTitle(option), isSet: filter == option)
                     }
-                }
-            ),
-            presenting: taskPendingDeletion
-        ) { task in
-            Button("Cancelar", role: .cancel) {
-                taskPendingDeletion = nil
-            }
-            Button("Apagar", role: .destructive) {
-                store.deleteTask(task.id)
-                taskPendingDeletion = nil
-            }
-        } message: { _ in
-            Text("A tarefa e o aviso agendado serão removidos.")
-        }
-    }
-
-    private var greetingCard: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            SoftCard(padding: 18) {
-                HStack(alignment: .center, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("\(greeting(at: context.date)), \(store.familyGroup.name)")
-                            .font(.title2.weight(.black))
-                            .foregroundStyle(NinaTheme.ink)
-
-                        Text("Hoje a Nina está de olho no que vence até o fim do dia.")
-                            .font(.subheadline)
-                            .foregroundStyle(NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer()
-
-                    NinaAvatarView(size: 70)
-                }
-
-                HStack(spacing: 10) {
-                    TodayStat(
-                        title: "Para hoje",
-                        value: "\(todayTasks(relativeTo: context.date).count)",
-                        tone: .mint
-                    )
-                    TodayStat(
-                        title: "Atrasadas",
-                        value: "\(overdueTodayCount(relativeTo: context.date))",
-                        tone: .amber
-                    )
-                    TodayStat(
-                        title: "Compras",
-                        value: "\(store.pendingShoppingItems.count)",
-                        tone: .sky
-                    )
+                    .buttonStyle(.plain)
                 }
             }
+            .padding(.vertical, 1)
         }
+        .scrollClipDisabled()
     }
 
-    private func greeting(at referenceDate: Date) -> String {
-        switch Calendar.current.component(.hour, from: referenceDate) {
-        case ..<12: "Bom dia"
-        case ..<18: "Boa tarde"
-        default: "Boa noite"
+    private func chipTitle(_ option: TodayFilter) -> String {
+        let count = switch option {
+        case .all: agenda.count
+        case .mine: mineCount
+        case .unowned: unownedCount
+        case .seeds: store.openSeeds.count
         }
-    }
-
-    private func todayTasks(relativeTo referenceDate: Date) -> [TaskItem] {
-        let calendar = Calendar.current
-        return store.openTasks.filter {
-            $0.isDue(on: referenceDate, calendar: calendar)
-        }
-    }
-
-    private func agendaTasks(relativeTo referenceDate: Date) -> [TaskItem] {
-        let calendar = Calendar.current
-        return store.openTasks.filter {
-            $0.belongsOnAgenda(for: referenceDate, calendar: calendar)
-        }
-    }
-
-    private func overdueTodayCount(relativeTo referenceDate: Date) -> Int {
-        let calendar = Calendar.current
-        return agendaTasks(relativeTo: referenceDate).count {
-            $0.isOverdue(relativeTo: referenceDate, calendar: calendar)
-        }
+        return count > 0 ? "\(option.title) \(count)" : option.title
     }
 
     @ViewBuilder
-    private var premiumInsightCard: some View {
-        if !store.householdPremium.isActive {
-            PremiumTeaserCard(
-                style: .featured,
-                entitlement: premiumStore.entitlement,
-                priceLabel: premiumStore.primaryPriceLabel
-            ) {
-                router.presentedSheet = .premium
+    private var list: some View {
+        if filter == .seeds {
+            section(title: "Sementes", count: store.openSeeds.count, tasks: store.openSeeds)
+        } else if filter == .all {
+            if !overdue.isEmpty {
+                section(title: "Atrasadas", count: overdue.count, tasks: overdue, isLate: true)
             }
+            if !dueToday.isEmpty {
+                section(title: "Hoje", count: dueToday.count, tasks: dueToday)
+            }
+        } else if filtered.isEmpty {
+            // A filter that finds nothing educates; it never offers to create.
+            ZeroState(
+                headline: "Nada com esse filtro.",
+                body_: "Isso é uma boa notícia, não um vazio para preencher.",
+                showsMark: false
+            )
+            .padding(.top, 26)
+        } else {
+            section(title: filter.title, count: filtered.count, tasks: filtered)
         }
     }
 
-    @ViewBuilder
-    private var overloadCard: some View {
-        let snapshot = store.workloadSnapshot
+    private func section(title: String, count: Int, tasks: [TaskItem], isLate: Bool = false) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("\(title.uppercased()) · \(count)")
+                    .ninaText(.eyebrow, isLate ? NinaTheme.terracotta : NinaTheme.faint, weight: .bold)
 
-        if snapshot.hasAnyLoad {
-            SoftCard {
-                HStack(alignment: .top, spacing: 12) {
-                    IconBubble(
-                        systemName: snapshot.isConclusive && !snapshot.isBalanced
-                            ? "heart.text.square.fill"
-                            : "chart.bar.fill",
-                        tone: snapshot.isConclusive && !snapshot.isBalanced ? .coral : .mint
-                    )
+                Spacer()
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(snapshot.headline)
-                            .font(.headline.weight(.black))
-                            .foregroundStyle(NinaTheme.ink)
-
-                        Text(snapshot.message)
-                            .font(.subheadline)
-                            .foregroundStyle(NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if snapshot.isConclusive {
-                            Text("Um retrato para conversar, não para cobrar.")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(NinaTheme.muted.opacity(0.8))
-                        }
-                    }
-                }
-
-                // A split the snapshot refused to conclude must not be drawn anyway.
-                if snapshot.isConclusive {
-                    WorkloadBars(snapshot: snapshot)
-                }
-            }
-        }
-    }
-
-    private var priorityTasksSection: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .bottom) {
-                    SectionTitle(
-                        title: "Para resolver",
-                        subtitle: "Tarefas, horários e lembretes em um só lugar."
-                    )
-
-                    Spacer(minLength: 12)
-
+                if isLate, count > 1 {
                     Button {
                         Haptics.lightImpact()
-                        router.presentedSheet = .addTask
+                        rescheduleOverdue()
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.caption.weight(.black))
-                            .foregroundStyle(NinaTheme.mint)
-                            .frame(width: 32, height: 32)
-                            .background(NinaTheme.mint.opacity(0.13), in: Circle())
+                        Text("Remarcar as \(count)")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(NinaTheme.terracotta)
+                            .padding(.horizontal, 12)
+                            .frame(height: 30)
+                            .overlay(Capsule().strokeBorder(NinaTheme.terracotta, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Adicionar tarefa")
-                }
-
-                if tasksForDisplay(relativeTo: context.date).isEmpty {
-                    UnifiedTaskEmptyState {
-                        router.presentedSheet = .addTask
-                    }
-                } else {
-                    ForEach(tasksForDisplay(relativeTo: context.date)) { task in
-                        let isCompleting = store.pendingPriorityTaskIDs.contains(task.id)
-
-                        UnifiedTaskCard(
-                            task: task,
-                            referenceDate: context.date,
-                            isMarkedComplete: isCompleting,
-                            toggle: togglePriorityTask,
-                            edit: {
-                                Haptics.lightImpact()
-                                router.presentedSheet = .editTask(task.id)
-                            },
-                            snooze: { date in
-                                Haptics.selection()
-                                store.snoozeTask(task.id, until: date)
-                            },
-                            delete: {
-                                Haptics.warning()
-                                taskPendingDeletion = task
-                            }
-                        )
-                        .scaleEffect(isCompleting ? 0.985 : 1)
-                        .opacity(isCompleting ? 0.72 : 1)
-                        .animation(.spring(response: 0.32, dampingFraction: 0.76), value: isCompleting)
-                        .transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .scale(scale: 0.98))))
-                    }
                 }
             }
+            .padding(.bottom, 8)
+
+            ForEach(tasks) { task in
+                TaskRowView(task: task)
+                if task.id != tasks.last?.id {
+                    NinaDivider(inset: 36)
+                }
+            }
+        }
+        .padding(.top, 6)
+    }
+
+    private func rescheduleOverdue() {
+        let target = Calendar.current.date(
+            bySettingHour: 9, minute: 0, second: 0,
+            of: Calendar.current.date(byAdding: .day, value: 1, to: now) ?? now
+        ) ?? now
+        for task in overdue {
+            store.snoozeTask(task.id, until: target)
         }
     }
 
-    private func tasksForDisplay(relativeTo referenceDate: Date) -> [TaskItem] {
-        let calendar = Calendar.current
-        let visibleTasks = store.tasks.enumerated().filter { _, task in
-            if store.pendingPriorityTaskIDs.contains(task.id) { return true }
-            return task.belongsOnAgenda(for: referenceDate, calendar: calendar)
-        }
-
-        return visibleTasks.sorted { left, right in
-                let leftOverdue = left.element.isOverdue(relativeTo: referenceDate, calendar: calendar)
-                let rightOverdue = right.element.isOverdue(relativeTo: referenceDate, calendar: calendar)
-                if leftOverdue != rightOverdue {
-                    return leftOverdue
+    private var firstDay: some View {
+        ZeroState(
+            headline: "A casa começa vazia.",
+            body_: "Você não precisa organizar nada agora. Conta pra Nina o que está pesando na cabeça, do jeito que vier. Ela monta e você confirma."
+        ) {
+            VStack(spacing: 6) {
+                NinaButton(title: "Falar com a Nina", systemName: "bubble.left") {
+                    Haptics.lightImpact()
+                    router.presentedSheet = nil
+                    NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
                 }
-
-                if left.element.priority.sortRank != right.element.priority.sortRank {
-                    return left.element.priority.sortRank > right.element.priority.sortRank
+                NinaButton(title: "Escrever a primeira sem a Nina", kind: .quiet) {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .addTask
                 }
-
-                let leftDate = left.element.displayDate(
-                    relativeTo: referenceDate,
-                    calendar: calendar
-                ) ?? .distantFuture
-                let rightDate = right.element.displayDate(
-                    relativeTo: referenceDate,
-                    calendar: calendar
-                ) ?? .distantFuture
-                if leftDate != rightDate {
-                    return leftDate < rightDate
-                }
-
-                return left.offset < right.offset
             }
-            .map(\.element)
+        }
+        .padding(.top, 40)
     }
 
-    private func togglePriorityTask(_ task: TaskItem) {
-        if store.pendingPriorityTaskIDs.contains(task.id) {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                store.clearPriorityTaskPending(task.id)
-            }
-            return
+    private var dayCleared: some View {
+        // Credit goes to the house, never to a person: a two-name completion count
+        // is a scoreboard on the one screen whose job is relief.
+        ZeroState(
+            headline: "Acabou o dia da casa.",
+            body_: closedTodayCount > 0
+                ? "A casa fechou \(closedTodayCount) hoje. Não tem mais nada te esperando até amanhã de manhã."
+                : "Não tem nada te esperando até amanhã de manhã.",
+            presence: .stored
+        ) {
+            Text("Pode largar o celular.").ninaText(.label, NinaTheme.ink, weight: .semibold)
         }
+        .padding(.top, 40)
+    }
 
-        guard !task.isDone else { return }
-
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.76)) {
-            store.markPriorityTaskPending(task.id)
+    private var closedTodayCount: Int {
+        store.tasks.count { task in
+            guard let completedAt = task.completedAt else { return false }
+            return Calendar.current.isDate(completedAt, inSameDayAs: now)
         }
+    }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            guard store.pendingPriorityTaskIDs.contains(task.id) else { return }
+    private var fab: some View {
+        Button {
+            Haptics.lightImpact()
+            router.presentedSheet = .addTask
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(NinaTheme.onCobalt)
+                .frame(width: 56, height: 56)
+                .background(NinaTheme.cobalt, in: Circle())
+                .cardShadow()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Adicionar tarefa")
+        .padding(.trailing, 20)
+        .padding(.bottom, 96)
+    }
+}
 
-            withAnimation(.easeInOut(duration: 0.24)) {
+extension Notification.Name {
+    static let ninaSelectChatTab = Notification.Name("nina.selectChatTab")
+}
+
+// One row drawing, shared by Hoje and Tarefas, so the two lists cannot drift.
+struct TaskRowView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(RouterPath.self) private var router
+
+    let task: TaskItem
+
+    @State private var isShowingQuickActions = false
+
+    private var isOverdue: Bool { task.isOverdue() }
+
+    private var owner: HouseholdMember? {
+        store.familyGroup.members.first { $0.id == task.ownerMemberID }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                task.isDone ? Haptics.selection() : Haptics.success()
                 store.toggleTask(task)
-                store.clearPriorityTaskPending(task.id)
+            } label: {
+                NinaCheckbox(isOn: task.isDone, isOverdue: isOverdue)
             }
-        }
-    }
+            .buttonStyle(.plain)
+            .accessibilityLabel(task.isDone ? "Marcar como não feita" : "Marcar como feita")
 
-    @ViewBuilder
-    private var seedsSection: some View {
-        let seeds = store.openSeeds
+            Button {
+                Haptics.selection()
+                router.navigate(to: .task(task.id))
+            } label: {
+                HStack(spacing: 10) {
+                    Text(task.title)
+                        .font(.system(size: 17, weight: .medium))
+                        .tracking(-0.1)
+                        .foregroundStyle(task.isDone ? NinaTheme.muted : NinaTheme.ink)
+                        .strikethrough(task.isDone, color: NinaTheme.muted)
+                        .lineLimit(1)
 
-        if !seeds.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionTitle(
-                    title: "Sementes",
-                    subtitle: "Ideias guardadas sem pressão de data. Plante quando chegar a hora."
-                )
+                    Spacer(minLength: 8)
 
-                ForEach(seeds) { seed in
-                    SeedTodayCard(
-                        seed: seed,
-                        complete: {
-                            Haptics.success()
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                                store.toggleTask(seed)
-                            }
-                        },
-                        plant: {
-                            Haptics.lightImpact()
-                            router.presentedSheet = .plantSeed(seed.id)
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-private struct SeedTodayCard: View {
-    var seed: TaskItem
-    var complete: () -> Void
-    var plant: () -> Void
-
-    var body: some View {
-        SoftCard(padding: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                Button(action: complete) {
-                    Image(systemName: "circle")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(NinaTheme.muted.opacity(0.45))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Concluir semente \(seed.title)")
-
-                IconBubble(systemName: "leaf.fill", tone: .mint, size: 40)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(seed.title)
-                        .font(.headline.weight(.heavy))
-                        .foregroundStyle(NinaTheme.ink)
-
-                    if !seed.subtitle.isEmpty {
-                        Text(seed.subtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(NinaTheme.muted)
-                            .lineLimit(2)
+                    if task.kind == .task {
+                        Text(task.dueLabel)
+                            .font(.system(size: 13, weight: isOverdue ? .semibold : .regular))
+                            .foregroundStyle(isOverdue ? NinaTheme.terracotta : NinaTheme.muted)
+                            .lineLimit(1)
                     }
 
-                    Label(seed.owner, systemImage: "person.fill")
-                        .font(.caption2.weight(.black))
-                        .foregroundStyle(seed.category.tone.color)
-                }
+                    CategoryGlyph(systemName: task.category.symbolName, size: 15, tint: NinaTheme.muted)
 
-                Spacer(minLength: 8)
-
-                Button(action: plant) {
-                    Label("Plantar", systemImage: "calendar.badge.plus")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(NinaTheme.mint)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(NinaTheme.mint.opacity(0.12), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Abre a semente para transformá-la em tarefa e escolher uma data.")
-            }
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(NinaTheme.mint.opacity(0.16), lineWidth: 1)
-        )
-    }
-}
-
-private struct UnifiedTaskEmptyState: View {
-    var addTask: () -> Void
-
-    var body: some View {
-        SoftCard(padding: 16) {
-            HStack(spacing: 12) {
-                IconBubble(systemName: "checklist", tone: .mint, size: 42)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Nada para resolver")
-                        .font(.headline.weight(.heavy))
-                        .foregroundStyle(NinaTheme.ink)
-
-                    Text("Crie uma tarefa simples ou com data, hora e repetição.")
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
-                }
-
-                Spacer()
-
-                Button("Criar", action: addTask)
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(NinaTheme.mint)
-                    .buttonStyle(.plain)
-            }
-        }
-    }
-}
-
-private struct UnifiedTaskCard: View {
-    var task: TaskItem
-    var referenceDate: Date
-    var isMarkedComplete: Bool
-    var toggle: (TaskItem) -> Void
-    var edit: () -> Void
-    var snooze: (Date) -> Void
-    var delete: () -> Void
-
-    private var isOverdue: Bool {
-        task.isOverdue(relativeTo: referenceDate)
-    }
-
-    private var isSnoozed: Bool {
-        guard let snoozedUntil = task.snoozedUntil else { return false }
-        return snoozedUntil > referenceDate
-    }
-
-    private var displayDate: Date? {
-        task.displayDate(relativeTo: referenceDate)
-    }
-
-    var body: some View {
-        SoftCard(padding: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                Button {
-                    if isMarkedComplete {
-                        Haptics.selection()
+                    if let owner {
+                        MemberAvatar(initials: owner.name.ninaInitials, tone: owner.tone, size: 24)
                     } else {
-                        Haptics.success()
+                        Color.clear.frame(width: 24, height: 24)
                     }
-                    toggle(task)
-                } label: {
-                    Image(systemName: isMarkedComplete ? "checkmark.circle.fill" : "circle")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(isMarkedComplete ? NinaTheme.mint : NinaTheme.muted.opacity(0.45))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isMarkedComplete ? "Desfazer conclusão" : "Concluir tarefa")
-
-                Button(action: edit) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .top, spacing: 12) {
-                            IconBubble(
-                                systemName: task.category.symbolName,
-                                tone: isOverdue ? .coral : task.category.tone,
-                                size: 42
-                            )
-
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(task.title)
-                                    .font(.headline.weight(.heavy))
-                                    .foregroundStyle(NinaTheme.ink)
-                                    .lineLimit(2)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                                if !task.subtitle.isEmpty {
-                                    Text(task.subtitle)
-                                        .font(.subheadline)
-                                        .foregroundStyle(NinaTheme.muted)
-                                        .lineLimit(2)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                        }
-
-                        metadataBadges
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .layoutPriority(1)
-
-                Menu {
-                    Button(action: edit) {
-                        Label("Editar", systemImage: "pencil")
-                    }
-
-                    Menu {
-                        Button("10 minutos") {
-                            snooze(referenceDate.addingTimeInterval(10 * 60))
-                        }
-                        Button("1 hora") {
-                            snooze(referenceDate.addingTimeInterval(60 * 60))
-                        }
-                        Button("Amanhã às 9:00") {
-                            snooze(tomorrowAtNine)
-                        }
-                    } label: {
-                        Label("Adiar", systemImage: "clock.arrow.circlepath")
-                    }
-
-                    Divider()
-
-                    Button(role: .destructive, action: delete) {
-                        Label("Apagar", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.subheadline.weight(.black))
-                        .foregroundStyle(NinaTheme.muted)
-                        .frame(width: 30, height: 30)
-                        .background(NinaTheme.field, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Opções da tarefa")
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
         }
-    }
-
-    private var statusLabel: String {
-        if isOverdue {
-            return "Atrasado · \(baseDateLabel)"
+        .frame(minHeight: 48)
+        // Nina has no swipe actions by architectural necessity: the horizontal
+        // drag belongs to the custom tab pager. Long-press is the substitute.
+        .onLongPressGesture(minimumDuration: 0.4) {
+            Haptics.lightImpact()
+            isShowingQuickActions = true
         }
-        if isSnoozed {
-            return "Adiado · \(baseDateLabel)"
+        .sheet(isPresented: $isShowingQuickActions) {
+            TaskQuickActionsSheet(task: task)
+                .presentationDetents([.height(300)])
+                .presentationDragIndicator(.visible)
         }
-        return baseDateLabel
-    }
-
-    private var baseDateLabel: String {
-        guard let displayDate else { return task.dueLabel }
-        return TaskEditorSheet.dateLabel(for: displayDate, relativeTo: referenceDate)
-    }
-
-    private var statusTone: MemberTone {
-        if isOverdue {
-            return .coral
-        }
-        if isSnoozed {
-            return .lavender
-        }
-        return task.category.tone
-    }
-
-    private var statusSymbolName: String {
-        if isOverdue {
-            return "exclamationmark.circle.fill"
-        }
-        if isSnoozed {
-            return "clock.arrow.circlepath"
-        }
-        return "clock.fill"
-    }
-
-    private var metadataBadges: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 7) {
-                statusBadge
-                secondaryBadges
-            }
-
-            VStack(alignment: .leading, spacing: 7) {
-                statusBadge
-                secondaryBadges
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var statusBadge: some View {
-        UnifiedTaskMetadataBadge(
-            title: statusLabel,
-            systemName: statusSymbolName,
-            tone: statusTone
-        )
-    }
-
-    @ViewBuilder
-    private var secondaryBadges: some View {
-        HStack(spacing: 7) {
-            if task.recurrence != .none {
-                UnifiedTaskMetadataBadge(
-                    title: task.recurrence.explicitTitle,
-                    systemName: "repeat",
-                    tone: .lavender
-                )
-            }
-
-            if task.priority != .normal {
-                UnifiedTaskMetadataBadge(
-                    title: task.priority.title,
-                    systemName: task.priority.symbolName,
-                    tone: task.priority.tone
-                )
-            }
-        }
-    }
-
-    private var tomorrowAtNine: Date {
-        let calendar = Calendar.current
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: referenceDate) ?? referenceDate
-        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
-    }
-}
-
-private struct UnifiedTaskMetadataBadge: View {
-    var title: String
-    var systemName: String
-    var tone: MemberTone
-
-    var body: some View {
-        Label(title, systemImage: systemName)
-            .font(.caption2.weight(.black))
-            .foregroundStyle(tone.color)
-            .lineLimit(1)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .background(tone.softColor, in: Capsule())
-            .fixedSize(horizontal: true, vertical: false)
-    }
-}
-
-private struct TodayStat: View {
-    var title: String
-    var value: String
-    var tone: MemberTone
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.title3.weight(.black))
-                .foregroundStyle(tone.color)
-
-            Text(title)
-                .font(.caption.weight(.heavy))
-                .foregroundStyle(NinaTheme.muted)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(tone.softColor, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
-
-struct WorkloadBars: View {
-    var snapshot: HouseholdWorkloadSnapshot
-
-    var body: some View {
-        VStack(spacing: 10) {
-            ForEach(snapshot.entries) { entry in
-                WorkloadBar(
-                    name: entry.name,
-                    count: entry.openCount,
-                    progress: barProgress(for: entry),
-                    tone: entry.tone
-                )
-            }
-
-            if snapshot.sharedCount > 0 {
-                WorkloadBar(
-                    name: "Casa",
-                    count: snapshot.sharedCount,
-                    progress: progress(for: snapshot.sharedCount),
-                    tone: .mint,
-                    isShared: true
-                )
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private func barProgress(for entry: HouseholdWorkloadEntry) -> CGFloat {
-        progress(for: entry.openCount)
-    }
-
-    private func progress(for count: Int) -> CGFloat {
-        let scale = max(snapshot.maxOpenCount, snapshot.sharedCount)
-        guard scale > 0 else { return 0 }
-        return CGFloat(count) / CGFloat(scale)
-    }
-
-    private var accessibilityLabel: String {
-        var parts = snapshot.entries.map { "\($0.name): \($0.openCount) tarefas abertas" }
-        if snapshot.sharedCount > 0 {
-            parts.append("Casa, sem responsável: \(snapshot.sharedCount) tarefas abertas")
-        }
-        return parts.joined(separator: ". ")
-    }
-}
-
-private struct WorkloadBar: View {
-    var name: String
-    var count: Int
-    var progress: CGFloat
-    var tone: MemberTone
-    var isShared = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(isShared ? "Casa · sem responsável" : name)
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(NinaTheme.ink)
-
-                Spacer()
-
-                Text(count == 1 ? "1 tarefa" : "\(count) tarefas")
-                    .font(.caption.weight(.heavy))
-                    .foregroundStyle(NinaTheme.muted)
-            }
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(NinaTheme.line.opacity(0.8))
-
-                    Capsule()
-                        .fill(isShared ? NinaTheme.muted.opacity(0.42) : tone.color)
-                        .frame(width: proxy.size.width * min(progress, 1))
-                }
-            }
-            .frame(height: 10)
-        }
-    }
-}
-
-#Preview {
-    NavigationStack {
-        TodayView()
-            .environment(AppStore())
-            .environment(RouterPath())
-            .environment(TabSwipeLock())
     }
 }

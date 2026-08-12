@@ -26,7 +26,7 @@ final class HouseholdWorkloadTests: XCTestCase {
         XCTAssertEqual(snapshot.assignedCount, 9)
     }
 
-    func testAClearlyUnevenSplitIsReportedWithRealCounts() {
+    func testAClearlyUnevenSplitNamesThePersonButNeverACount() {
         let tasks = (0..<8).map { _ in openTask(owner: "Mirna") } + [openTask(owner: "Heitor")]
         let snapshot = HouseholdWorkload.snapshot(
             tasks: tasks,
@@ -38,7 +38,25 @@ final class HouseholdWorkloadTests: XCTestCase {
         XCTAssertEqual(snapshot.leadName, "Mirna")
         XCTAssertEqual(snapshot.assignedCount, 9)
         XCTAssertEqual(snapshot.headline, "Sinal de sobrecarga")
-        XCTAssertTrue(snapshot.message.contains("8 das 9 tarefas abertas"))
+        XCTAssertTrue(snapshot.message.contains("Mirna"))
+        XCTAssertFalse(
+            snapshot.message.contains(where: \.isNumber),
+            "A quantified comparison between two people is a scoreboard whatever the caption says."
+        )
+    }
+
+    func testTheBandsAreQualitativeAndTheHeavierCarrierIsNotFirstInTheList() {
+        let tasks = (0..<8).map { _ in openTask(owner: "Heitor") } + [openTask(owner: "Mirna")]
+        let snapshot = HouseholdWorkload.snapshot(
+            tasks: tasks,
+            members: [member(named: "Mirna", tone: .coral), member(named: "Heitor", tone: .sky)]
+        )
+
+        XCTAssertEqual(snapshot.entries.first { $0.name == "Heitor" }?.band, .heavier)
+        XCTAssertEqual(snapshot.entries.first { $0.name == "Mirna" }?.band, .light)
+        // Household order, never ranked: sorting by load is the ranking the
+        // caption disclaims, so the heavier carrier must not float to the top.
+        XCTAssertEqual(snapshot.entries.first?.name, "Mirna")
     }
 
     func testANarrowLeadStaysBalancedRatherThanAccusing() {
@@ -51,7 +69,7 @@ final class HouseholdWorkloadTests: XCTestCase {
 
         XCTAssertTrue(snapshot.isConclusive)
         XCTAssertTrue(snapshot.isBalanced)
-        XCTAssertEqual(snapshot.headline, "Divisão equilibrada")
+        XCTAssertEqual(snapshot.headline, "A casa está parecida")
     }
 
     func testHouseOwnedTasksAreCountedAsSharedAndNeverAttributedToAPerson() {
@@ -65,7 +83,15 @@ final class HouseholdWorkloadTests: XCTestCase {
 
         XCTAssertEqual(snapshot.sharedCount, 4)
         XCTAssertEqual(snapshot.assignedCount, 8)
-        XCTAssertFalse(snapshot.entries.contains { $0.name == "Casa" })
+
+        // The house gets its own band so the portrait can show unassigned work,
+        // but it is never a person: no member id, and flagged shared so the view
+        // draws it as a different weight rather than another face.
+        let houseEntry = snapshot.entries.first { $0.isShared }
+        XCTAssertEqual(houseEntry?.name, "Casa")
+        XCTAssertNil(houseEntry?.memberID)
+        XCTAssertFalse(snapshot.entries.contains { !$0.isShared && $0.name == "Casa" })
+        XCTAssertEqual(snapshot.entries.filter { !$0.isShared }.count, 2)
     }
 
     func testSeedsAreExcludedSoUndatedIntentionsNeverCountAsLoad() {
@@ -218,8 +244,14 @@ final class HouseholdWorkloadTests: XCTestCase {
         let snapshot = HouseholdWorkload.snapshot(tasks: tasks, members: [heitor])
 
         XCTAssertEqual(snapshot.sharedCount, 5)
-        XCTAssertEqual(snapshot.entries.count, 1)
-        XCTAssertEqual(snapshot.entries.first?.memberID, heitor.id)
+
+        let people = snapshot.entries.filter { !$0.isShared }
+        XCTAssertEqual(people.count, 1)
+        XCTAssertEqual(people.first?.memberID, heitor.id)
+        // The departed member's load lands on the house band, which carries no
+        // member id — it is never re-attributed to whoever is still here.
+        XCTAssertEqual(snapshot.entries.filter(\.isShared).count, 1)
+        XCTAssertNil(snapshot.entries.first(where: \.isShared)?.memberID)
     }
 
     private func openTask(owner: String, ownerMemberID: UUID? = nil, kind: TaskKind = .task) -> TaskItem {

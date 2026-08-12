@@ -17,6 +17,7 @@ struct ProfileEditorView: View {
     @State private var pendingPhotoData: Data?
     @State private var photoError: String?
     @State private var isShowingCoreMemories = false
+    @FocusState private var isNameFocused: Bool
 
     init(user: AuthUser) {
         self.user = user
@@ -31,107 +32,129 @@ struct ProfileEditorView: View {
         !draft.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var hasPhoto: Bool {
+        draft.avatar.kind == .photo || pendingPhotoData != nil
+    }
+
+    private var initialsPreview: String {
+        let initials = draft.displayName.ninaInitials
+        return initials.isEmpty ? user.displayName.ninaInitials : initials
+    }
+
+    private var tonePresets: [ProfileAvatarPreset] {
+        var seen: Set<MemberTone> = []
+        return ProfileAvatarPreset.all.filter { seen.insert($0.tone).inserted }
+    }
+
     private var coreMemories: [ProfileCoreMemory] {
         appStore.ninaMemories.map { memory in
             ProfileCoreMemory(
                 id: memory.id.uuidString,
                 title: memory.title,
                 detail: memory.body,
-                systemName: memory.visibility == .shared ? "house.fill" : "person.fill",
-                tone: memory.visibility == .shared ? .mint : .sky
+                systemName: memory.visibility == .shared ? "house" : "lock",
+                scopeLabel: memory.visibility == .shared ? "Casa" : "Só sua"
             )
+        }
+    }
+
+    private var memoryPreview: String {
+        coreMemories.first?.detail ?? "A Nina só guarda o que você confirma."
+    }
+
+    private var photoLimitNote: String {
+        "A foto vira JPEG e cabe em \(ProfilePhotoPolicy.limitDescription) antes de sair daqui."
+    }
+
+    private var memoryCountLabel: String {
+        switch coreMemories.count {
+        case 0: "Nada guardado ainda"
+        case 1: "1 memória guardada"
+        default: "\(coreMemories.count) memórias guardadas"
         }
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                identitySection
-                avatarSection
-                contactSection
-                routineSection
-                ninaSection
+        VStack(spacing: 0) {
+            header
 
-                PrimaryCapsuleButton(title: "Salvar perfil", systemName: "checkmark") {
-                    saveProfile()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 26) {
+                    intro
+                    nameField
+                    classification
+                    faceSection
+                    contactSection
+                    routineSection
+                    ninaSection
                 }
-                .disabled(!canSave)
-                .opacity(canSave ? 1 : 0.5)
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 28)
             }
-            .padding(18)
-            .padding(.bottom, 24)
+            .scrollDismissesKeyboard(.interactively)
+
+            footer
         }
-        .scrollDismissesKeyboard(.interactively)
         .ninaScreenBackground()
-        .navigationTitle("Meu perfil")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Cancelar") {
-                    Haptics.selection()
-                    dismiss()
-                }
-            }
-
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Salvar") {
-                    saveProfile()
-                }
-                .disabled(!canSave)
-            }
-        }
         .onAppear(perform: loadProfileIfNeeded)
+        .task {
+            await Task.yield()
+            isNameFocused = draft.displayName.isEmpty
+        }
         .onChange(of: selectedPhotoItem) { _, newItem in
             loadPhoto(from: newItem)
         }
         .sheet(isPresented: $isShowingCoreMemories) {
-            NavigationStack {
-                ProfileCoreMemoriesSheet(memories: coreMemories)
-            }
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
+            ProfileCoreMemoriesSheet(memories: coreMemories)
+                .presentationDetents([.large])
         }
     }
 
     private var header: some View {
-        SoftCard(padding: 18) {
-            HStack(spacing: 16) {
-                ProfileAvatarView(profile: draft, photoData: activePhotoData, size: 76)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(draft.displayName.isEmpty ? "Seu perfil" : draft.displayName)
-                        .font(.title2.weight(.black))
-                        .foregroundStyle(NinaTheme.ink)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.82)
-
-                    Text("A Nina usa isso para falar com você do jeito certo.")
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        HStack {
+            Button {
+                Haptics.selection()
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(NinaTheme.ink)
+                    .frame(width: 40, height: 40, alignment: .leading)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Voltar")
+
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+    }
+
+    private var intro: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Meu perfil").ninaText(.screen)
+            Text("A Nina usa isto para falar com você do jeito certo.")
+                .ninaText(.label, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var identitySection: some View {
-        ProfileEditorGroup(title: "Identidade") {
-            ProfileTextFieldRow(
-                title: "Nome",
-                systemName: "person.fill",
-                tone: .mint,
-                placeholder: "Seu nome",
-                text: $draft.displayName
-            )
+    private var nameField: some View {
+        ProfileField(label: "Nome") {
+            TextField("Como a Nina chama você", text: $draft.displayName)
+                .textContentType(.name)
+                .submitLabel(.done)
+                .focused($isNameFocused)
+        }
+    }
 
-            ProfileDivider()
-
-            ProfileMenuChoiceRow(
-                title: "Sexo",
-                selectedTitle: draft.sex.title,
-                systemName: "person.crop.circle.fill",
-                tone: .lavender
+    private var classification: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ProfileChoiceField(
+                label: "Sexo",
+                value: draft.sex.title,
+                systemName: "person"
             ) {
                 ForEach(ProfileSex.allCases) { sex in
                     Button {
@@ -143,13 +166,10 @@ struct ProfileEditorView: View {
                 }
             }
 
-            ProfileDivider()
-
-            ProfileMenuChoiceRow(
-                title: "Papel na casa",
-                selectedTitle: draft.householdRole.title,
-                systemName: draft.householdRole.symbolName,
-                tone: .sky
+            ProfileChoiceField(
+                label: "Papel na casa",
+                value: draft.householdRole.title,
+                systemName: "house"
             ) {
                 ForEach(ProfileHouseholdRole.allCases) { role in
                     Button {
@@ -163,138 +183,132 @@ struct ProfileEditorView: View {
         }
     }
 
-    private var avatarSection: some View {
-        ProfileEditorGroup(title: "Foto e avatar") {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 14) {
-                    ProfileAvatarView(profile: draft, photoData: activePhotoData, size: 82)
+    private var faceSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Eyebrow(text: "Como você aparece")
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                            Label("Escolher foto", systemImage: "photo.on.rectangle.angled")
-                                .font(.headline.weight(.heavy))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(NinaTheme.sky, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
+            HStack(alignment: .top, spacing: 14) {
+                ProfileAvatarView(profile: draft, photoData: activePhotoData, size: 64)
 
-                        if draft.avatar.kind == .photo || pendingPhotoData != nil {
-                            Button {
-                                removePhoto()
-                            } label: {
-                                Label("Remover foto", systemImage: "trash.fill")
-                                    .font(.subheadline.weight(.heavy))
-                                    .foregroundStyle(NinaTheme.coral)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                if let photoError {
-                    Label(photoError, systemImage: "exclamationmark.circle.fill")
-                        .font(.caption.weight(.heavy))
-                        .foregroundStyle(NinaTheme.coral)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Text("A foto é convertida para JPEG e reduzida para \(ProfilePhotoPolicy.limitDescription) antes do envio.")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text("Ou escolha uma base visual para o perfil.")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(NinaTheme.muted)
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 74), spacing: 10)], spacing: 10) {
-                    ForEach(ProfileAvatarPreset.all) { preset in
-                        Button {
-                            selectPreset(preset)
-                        } label: {
-                            VStack(spacing: 8) {
-                                ProfileAvatarGlyph(variantID: preset.symbolName, tone: preset.tone, size: 46)
-
-                                Text(preset.title)
-                                    .font(.caption2.weight(.black))
-                                    .foregroundStyle(NinaTheme.ink)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.72)
-                            }
+                VStack(alignment: .leading, spacing: 8) {
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        Text(hasPhoto ? "Trocar foto" : "Escolher foto")
+                            .font(.system(size: 16, weight: .semibold))
+                            .tracking(-0.1)
+                            .foregroundStyle(NinaTheme.ink)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 76)
-                            .background(
-                                preset.id == draft.avatar.presetID && draft.avatar.kind == .preset ? preset.tone.softColor : NinaTheme.field,
-                                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            )
+                            .frame(height: 50)
+                            .contentShape(Rectangle())
                             .overlay(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .stroke(preset.id == draft.avatar.presetID && draft.avatar.kind == .preset ? preset.tone.color : NinaTheme.line, lineWidth: 1)
+                                RoundedRectangle(
+                                    cornerRadius: NinaTheme.Radius.field,
+                                    style: .continuous
+                                )
+                                .strokeBorder(NinaTheme.line, lineWidth: 1)
                             )
+                    }
+                    .buttonStyle(.plain)
+
+                    if hasPhoto {
+                        NinaButton(title: "Remover foto", kind: .quiet) {
+                            removePhoto()
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
-            .padding(14)
+
+            if let photoError {
+                HStack(alignment: .top, spacing: 8) {
+                    CategoryGlyph(systemName: "exclamationmark.circle", size: 15)
+                    Text(photoError)
+                        .ninaText(.caption, NinaTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Text(photoLimitNote)
+                .ninaText(.meta, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            tonePicker
+        }
+    }
+
+    private var tonePicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Sem foto, você aparece pelas iniciais. O tom só diferencia na lista.")
+                .ninaText(.meta, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 14) {
+                ForEach(Array(tonePresets.enumerated()), id: \.element.id) { index, preset in
+                    Button {
+                        selectPreset(preset)
+                    } label: {
+                        MemberAvatar(initials: initialsPreview, tone: preset.tone, size: 44)
+                            .padding(3)
+                            .overlay(
+                                Circle().strokeBorder(
+                                    isToneSelected(preset) ? NinaTheme.cobalt : Color.clear,
+                                    lineWidth: 2
+                                )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Tom \(index + 1) de \(tonePresets.count)")
+                    .accessibilityAddTraits(isToneSelected(preset) ? [.isSelected] : [])
+                }
+
+                Spacer(minLength: 0)
+            }
         }
     }
 
     private var contactSection: some View {
-        ProfileEditorGroup(title: "Contato") {
-            ProfileReadOnlyRow(
-                title: "Email",
+        VStack(alignment: .leading, spacing: 14) {
+            Eyebrow(text: "Contato")
+
+            ProfileReadOnlyField(
+                label: "E-mail",
                 value: user.email ?? "Email não vinculado",
-                systemName: user.provider.systemImage,
-                tone: user.provider == .apple ? .lavender : .mint
+                note: user.provider.title
             )
 
-            ProfileDivider()
-
-            ProfileTextFieldRow(
-                title: "Telefone",
-                systemName: "phone.fill",
-                tone: .sky,
-                placeholder: "(00) 00000-0000",
-                text: $draft.phone,
-                keyboardType: .phonePad
-            )
+            ProfileField(label: "Telefone") {
+                TextField("(00) 00000-0000", text: $draft.phone)
+                    .keyboardType(.phonePad)
+                    .textContentType(.telephoneNumber)
+            }
         }
     }
 
     private var routineSection: some View {
-        ProfileEditorGroup(title: "Rotina da casa") {
-            ProfileTextFieldRow(
-                title: "Aniversário",
-                systemName: "birthday.cake.fill",
-                tone: .amber,
-                placeholder: "Ex.: 12 de maio",
-                text: $draft.birthdayLabel
-            )
+        VStack(alignment: .leading, spacing: 14) {
+            Eyebrow(text: "Rotina da casa")
 
-            ProfileDivider()
+            ProfileField(label: "Aniversário") {
+                TextField("Ex.: 12 de maio", text: $draft.birthdayLabel)
+            }
 
-            ProfileTextFieldRow(
-                title: "Disponibilidade",
-                systemName: "clock.fill",
-                tone: .mint,
-                placeholder: "Quando costuma resolver coisas da casa?",
-                text: $draft.availabilityNote,
-                axis: .vertical
-            )
+            ProfileField(label: "Disponibilidade") {
+                TextField(
+                    "Quando você costuma resolver coisas da casa",
+                    text: $draft.availabilityNote,
+                    axis: .vertical
+                )
+                .lineLimit(2...4)
+            }
         }
     }
 
     private var ninaSection: some View {
-        ProfileEditorGroup(title: "Como a Nina ajuda") {
-            ProfileMenuChoiceRow(
-                title: "Tom das sugestões",
-                selectedTitle: draft.communicationPreference.title,
-                detail: draft.communicationPreference.detail,
-                systemName: "quote.bubble.fill",
-                tone: .lavender
+        VStack(alignment: .leading, spacing: 14) {
+            Eyebrow(text: "Como a Nina fala com você")
+
+            ProfileChoiceField(
+                label: "Tom das sugestões",
+                value: draft.communicationPreference.title,
+                systemName: "text.bubble"
             ) {
                 ForEach(ProfileCommunicationPreference.allCases) { preference in
                     Button {
@@ -306,14 +320,49 @@ struct ProfileEditorView: View {
                 }
             }
 
-            ProfileDivider()
+            Text(draft.communicationPreference.detail)
+                .ninaText(.meta, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
 
-            ProfileMemorySummaryRow(
-                count: coreMemories.count,
-                preview: coreMemories.first?.detail ?? "A Nina ainda não registrou memórias principais.",
-                action: showCoreMemories
+            NinaDivider(inset: 0)
+
+            Button(action: showCoreMemories) {
+                NinaRow(
+                    title: memoryCountLabel,
+                    subtitle: memoryPreview
+                ) {
+                    CategoryGlyph(systemName: "bookmark")
+                } trailing: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(NinaTheme.muted)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Abre a lista de memórias que a Nina guardou")
+        }
+    }
+
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Só o nome é obrigatório.")
+                .ninaText(.meta, NinaTheme.muted)
+
+            NinaButton(
+                title: "Salvar perfil",
+                fillsWidth: true,
+                isEnabled: canSave,
+                action: saveProfile
             )
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+    }
+
+    private func isToneSelected(_ preset: ProfileAvatarPreset) -> Bool {
+        draft.avatar.kind == .preset && draft.avatar.tone == preset.tone
     }
 
     private func loadProfileIfNeeded() {
@@ -335,6 +384,8 @@ struct ProfileEditorView: View {
         profile.availabilityNote = profile.availabilityNote.trimmingCharacters(in: .whitespacesAndNewlines)
         profile.memoryNote = profile.memoryNote.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // The photo is written first: a profile that points at a photo the disk
+        // does not hold would render a face that cannot be loaded.
         if let pendingPhotoData {
             do {
                 try profileStore.savePhotoData(pendingPhotoData, for: profile.userID)
@@ -354,7 +405,7 @@ struct ProfileEditorView: View {
     }
 
     private func showCoreMemories() {
-        Haptics.selection()
+        Haptics.lightImpact()
         isShowingCoreMemories = true
     }
 
@@ -366,7 +417,7 @@ struct ProfileEditorView: View {
     }
 
     private func removePhoto() {
-        Haptics.warning()
+        Haptics.selection()
         pendingPhotoData = nil
         photoError = nil
         draft.avatar = ProfileAvatar.defaultPreset
@@ -398,13 +449,15 @@ struct ProfileEditorView: View {
     }
 }
 
+// A face is a photo or initials, never a drawn character: the household tells
+// people apart by the letters of their names, and colour is spent on lateness.
 struct ProfileAvatarView: View {
     var profile: UserProfile
     var photoData: Data?
     var size: CGFloat = 48
 
     var body: some View {
-        ZStack {
+        Group {
             if let photoData,
                profile.avatar.kind == .photo,
                let image = platformImage(from: photoData) {
@@ -413,16 +466,16 @@ struct ProfileAvatarView: View {
                     .scaledToFill()
                     .frame(width: size, height: size)
                     .clipShape(Circle())
+                    .overlay(Circle().strokeBorder(NinaTheme.line, lineWidth: 1))
             } else {
-                ProfileAvatarGlyph(variantID: profile.avatar.symbolName, tone: profile.avatar.tone, size: size)
+                MemberAvatar(
+                    initials: profile.displayName.ninaInitials,
+                    tone: profile.avatar.tone,
+                    size: size
+                )
             }
         }
         .frame(width: size, height: size)
-        .overlay(
-            Circle()
-                .stroke(NinaTheme.cardStroke, lineWidth: 1)
-        )
-        .shadow(color: profile.avatar.tone.color.opacity(0.18), radius: 12, x: 0, y: 7)
         .accessibilityLabel("Foto de perfil de \(profile.displayName)")
     }
 
@@ -435,333 +488,77 @@ struct ProfileAvatarView: View {
     }
 }
 
-private enum ProfileAvatarFeature: Equatable {
-    case base
-    case shortHair
-    case longHair
-    case bangs
-    case glasses
-    case smile
-    case collar
-    case soft
-
-    static func from(_ variantID: String) -> ProfileAvatarFeature {
-        switch variantID {
-        case "avatar.shortHair": .shortHair
-        case "avatar.longHair": .longHair
-        case "avatar.bangs": .bangs
-        case "avatar.glasses": .glasses
-        case "avatar.smile": .smile
-        case "avatar.collar": .collar
-        case "avatar.soft": .soft
-        default: .base
-        }
-    }
-}
-
-private struct ProfileAvatarGlyph: View {
-    var variantID: String
-    var tone: MemberTone
-    var size: CGFloat
-
-    private var feature: ProfileAvatarFeature {
-        ProfileAvatarFeature.from(variantID)
-    }
+private struct ProfileField<Field: View>: View {
+    var label: String
+    @ViewBuilder var field: Field
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(tone.softColor)
-
-            if feature == .longHair {
-                RoundedRectangle(cornerRadius: size * 0.16, style: .continuous)
-                    .fill(tone.color.opacity(0.24))
-                    .frame(width: size * 0.34, height: size * 0.42)
-                    .offset(y: size * 0.02)
-            }
-
-            Circle()
-                .fill(tone.color.opacity(feature == .soft ? 0.72 : 0.9))
-                .frame(width: size * 0.25, height: size * 0.25)
-                .offset(y: -size * 0.12)
-
-            Capsule()
-                .fill(tone.color.opacity(feature == .soft ? 0.72 : 0.9))
-                .frame(width: size * 0.52, height: size * 0.28)
-                .offset(y: size * 0.19)
-
-            avatarAccessory
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).ninaText(.meta, NinaTheme.muted)
+            field
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(NinaTheme.ink)
+                .tint(NinaTheme.cobalt)
         }
-        .frame(width: size, height: size)
-    }
-
-    @ViewBuilder
-    private var avatarAccessory: some View {
-        switch feature {
-        case .base:
-            EmptyView()
-        case .shortHair:
-            Capsule()
-                .fill(tone.color)
-                .frame(width: size * 0.23, height: size * 0.08)
-                .offset(y: -size * 0.24)
-        case .longHair:
-            Circle()
-                .trim(from: 0.0, to: 0.5)
-                .stroke(tone.color.opacity(0.8), style: StrokeStyle(lineWidth: size * 0.04, lineCap: .round))
-                .frame(width: size * 0.34, height: size * 0.30)
-                .rotationEffect(.degrees(180))
-                .offset(y: -size * 0.13)
-        case .bangs:
-            HStack(spacing: size * 0.015) {
-                ForEach(0..<3, id: \.self) { _ in
-                    Capsule()
-                        .fill(tone.color)
-                        .frame(width: size * 0.055, height: size * 0.12)
-                }
-            }
-            .rotationEffect(.degrees(-8))
-            .offset(y: -size * 0.22)
-        case .glasses:
-            HStack(spacing: size * 0.03) {
-                Circle()
-                    .stroke(NinaTheme.field, lineWidth: max(1.4, size * 0.035))
-                    .frame(width: size * 0.11, height: size * 0.11)
-
-                Circle()
-                    .stroke(NinaTheme.field, lineWidth: max(1.4, size * 0.035))
-                    .frame(width: size * 0.11, height: size * 0.11)
-            }
-            .overlay(
-                Capsule()
-                    .fill(NinaTheme.field)
-                    .frame(width: size * 0.06, height: max(1.2, size * 0.025))
-            )
-            .offset(y: -size * 0.12)
-        case .smile:
-            Capsule()
-                .fill(NinaTheme.field)
-                .frame(width: size * 0.13, height: max(1.6, size * 0.035))
-                .offset(y: -size * 0.05)
-        case .collar:
-            HStack(spacing: size * 0.04) {
-                Capsule()
-                    .fill(NinaTheme.field.opacity(0.9))
-                    .frame(width: size * 0.08, height: size * 0.18)
-                    .rotationEffect(.degrees(-28))
-
-                Capsule()
-                    .fill(NinaTheme.field.opacity(0.9))
-                    .frame(width: size * 0.08, height: size * 0.18)
-                    .rotationEffect(.degrees(28))
-            }
-            .offset(y: size * 0.11)
-        case .soft:
-            HStack(spacing: size * 0.20) {
-                Circle()
-                    .fill(NinaTheme.card.opacity(0.75))
-                    .frame(width: size * 0.05, height: size * 0.05)
-
-                Circle()
-                    .fill(NinaTheme.card.opacity(0.75))
-                    .frame(width: size * 0.05, height: size * 0.05)
-            }
-            .offset(y: -size * 0.08)
-        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            NinaTheme.grout,
+            in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+        )
     }
 }
 
-private struct ProfileEditorGroup<Content: View>: View {
-    var title: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.subheadline.weight(.black))
-                .foregroundStyle(NinaTheme.muted)
-                .padding(.horizontal, 2)
-
-            SoftCard(padding: 0) {
-                VStack(spacing: 0) {
-                    content
-                }
-            }
-        }
-    }
-}
-
-private struct ProfileTextFieldRow: View {
-    var title: String
-    var systemName: String
-    var tone: MemberTone
-    var placeholder: String
-    @Binding var text: String
-    var axis: Axis = .horizontal
-    var keyboardType: UIKeyboardType = .default
-
-    var body: some View {
-        HStack(alignment: axis == .vertical ? .top : .center, spacing: 12) {
-            IconBubble(systemName: systemName, tone: tone, size: 40)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(NinaTheme.muted)
-
-                TextField(placeholder, text: $text, axis: axis)
-                    .lineLimit(axis == .vertical ? 2...4 : 1...1)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(NinaTheme.ink)
-                    .keyboardType(keyboardType)
-                    .textFieldStyle(.plain)
-            }
-        }
-        .padding(14)
-    }
-}
-
-private struct ProfileReadOnlyRow: View {
-    var title: String
+private struct ProfileReadOnlyField: View {
+    var label: String
     var value: String
-    var systemName: String
-    var tone: MemberTone
+    var note: String
 
     var body: some View {
         HStack(spacing: 12) {
-            IconBubble(systemName: systemName, tone: tone, size: 40)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(NinaTheme.muted)
-
+            VStack(alignment: .leading, spacing: 4) {
+                Text(label).ninaText(.meta, NinaTheme.muted)
                 Text(value)
-                    .font(.headline.weight(.semibold))
+                    .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(NinaTheme.ink)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.78)
+                    .minimumScaleFactor(0.8)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 8)
 
-            Text("login")
-                .font(.caption.weight(.black))
-                .foregroundStyle(NinaTheme.muted)
+            Text(note).ninaText(.meta, NinaTheme.muted)
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            NinaTheme.grout,
+            in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+        )
     }
 }
 
-private struct ProfileMenuChoiceRow<MenuContent: View>: View {
-    var title: String
-    var selectedTitle: String
-    var detail: String?
+private struct ProfileChoiceField<MenuContent: View>: View {
+    var label: String
+    var value: String
     var systemName: String
-    var tone: MemberTone
     @ViewBuilder var menuContent: MenuContent
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            IconBubble(systemName: systemName, tone: tone, size: 40)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label).ninaText(.meta, NinaTheme.muted)
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(title)
-                        .font(.headline.weight(.heavy))
-                        .foregroundStyle(NinaTheme.ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.76)
-                        .layoutPriority(1)
-
-                    Spacer(minLength: 6)
-
-                    Menu {
-                        menuContent
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(selectedTitle)
-                                .font(.subheadline.weight(.heavy))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.72)
-
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 12, weight: .black))
-                        }
-                        .foregroundStyle(tone.color)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(tone.softColor, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .layoutPriority(2)
-                    .accessibilityLabel(title)
-                    .accessibilityValue(selectedTitle)
-                }
-
-                if let detail {
-                    Text(detail)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            Menu {
+                menuContent
+            } label: {
+                NinaChip(text: value, isSet: true, systemName: systemName)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+            .accessibilityValue(value)
         }
-        .padding(14)
-    }
-}
-
-private struct ProfileMemorySummaryRow: View {
-    var count: Int
-    var preview: String
-    var action: () -> Void
-
-    private var countLabel: String {
-        count == 1 ? "1 memória principal" : "\(count) memórias principais"
-    }
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 12) {
-                IconBubble(systemName: "brain.head.profile", tone: .sky, size: 40)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Memória pessoal")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(NinaTheme.muted)
-
-                    Text(countLabel)
-                        .font(.headline.weight(.heavy))
-                        .foregroundStyle(NinaTheme.ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-
-                    Text(preview)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(NinaTheme.muted)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 8)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(NinaTheme.sky)
-                    .padding(.top, 22)
-            }
-            .contentShape(Rectangle())
-            .padding(14)
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Abre a lista completa de memórias da Nina")
-    }
-}
-
-private struct ProfileDivider: View {
-    var body: some View {
-        Divider()
-            .padding(.leading, 66)
     }
 }
 
@@ -770,7 +567,7 @@ private struct ProfileCoreMemory: Identifiable, Hashable {
     var title: String
     var detail: String
     var systemName: String
-    var tone: MemberTone
+    var scopeLabel: String
 }
 
 private struct ProfileCoreMemoriesSheet: View {
@@ -779,64 +576,93 @@ private struct ProfileCoreMemoriesSheet: View {
     var memories: [ProfileCoreMemory]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionTitle(
-                    title: "Memórias da Nina",
-                    subtitle: "Somente memórias confirmadas. Você pode editar, apagar e mudar a privacidade na tela Casa."
-                )
-                .padding(.bottom, 2)
+        VStack(spacing: 0) {
+            header
 
-                ForEach(memories) { memory in
-                    ProfileCoreMemoryRow(memory: memory)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    intro
+                    list
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 6)
+                .padding(.bottom, 28)
             }
-            .padding(18)
-            .padding(.bottom, 20)
         }
         .ninaSheetBackground()
-        .navigationTitle("Memórias")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Fechar") {
-                    Haptics.selection()
-                    dismiss()
+    }
+
+    private var intro: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("O que a Nina guardou").ninaText(.title)
+            Text("Só entra aqui o que você confirmou. Dá para editar e apagar na tela Casa.")
+                .ninaText(.label, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var list: some View {
+        if memories.isEmpty {
+            ZeroState(
+                headline: "Nada guardado ainda",
+                body_: "Quando você confirmar uma memória na conversa, ela aparece aqui."
+            )
+            .padding(.top, 28)
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(memories.enumerated()), id: \.element.id) { index, memory in
+                    if index > 0 {
+                        NinaDivider()
+                    }
+
+                    NinaRow(title: memory.title, subtitle: memory.detail) {
+                        CategoryGlyph(systemName: memory.systemName)
+                    } trailing: {
+                        Text(memory.scopeLabel).ninaText(.meta, NinaTheme.muted)
+                    }
                 }
             }
         }
     }
-}
 
-private struct ProfileCoreMemoryRow: View {
-    var memory: ProfileCoreMemory
-
-    var body: some View {
-        SoftCard(padding: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                IconBubble(systemName: memory.systemName, tone: memory.tone, size: 40)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(memory.title)
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(NinaTheme.muted)
-
-                    Text(memory.detail)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(NinaTheme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+    private var header: some View {
+        HStack {
+            Button {
+                Haptics.selection()
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(NinaTheme.ink)
+                    .frame(width: 34, height: 34)
+                    .background(NinaTheme.grout, in: Circle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Fechar")
+
+            Spacer()
+
+            Eyebrow(text: "Memórias")
+
+            Spacer()
+
+            Color.clear.frame(width: 34, height: 34)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
     }
 }
 
 #Preview("Profile editor") {
-    let authUser = AuthUser(id: "preview", displayName: "Mirna", email: "mirna@ninai.app", provider: .email)
-
-    return NavigationStack {
-        ProfileEditorView(user: authUser)
-            .environment(AppStore())
-            .environment(ProfileStore())
-    }
+    ProfileEditorView(
+        user: AuthUser(
+            id: "preview",
+            displayName: "Mirna",
+            email: "mirna@ninai.app",
+            provider: .email
+        )
+    )
+    .environment(AppStore())
+    .environment(ProfileStore())
 }

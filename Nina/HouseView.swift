@@ -2,727 +2,381 @@ import SwiftUI
 
 struct HouseView: View {
     @Environment(AppStore.self) private var store
-    @Environment(AuthSessionStore.self) private var authSession
     @Environment(RouterPath.self) private var router
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var isEditingHouse = false
-    @State private var draftHouseName = ""
-    @State private var isHouseDraftValid = true
+
+    @State private var isConfirmingRotation = false
     @State private var isRotatingInvite = false
-    @State private var isShowingRotationAlert = false
-    @State private var isShowingDeleteChatAlert = false
+
+    private var people: [HouseholdMember] {
+        store.familyGroup.members.filter { $0.role != .assistant }
+    }
+
+    private var assistant: HouseholdMember? {
+        store.familyGroup.members.first { $0.role == .assistant }
+    }
+
+    private var isAloneInHouse: Bool {
+        people.count <= 1
+    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                houseHeader
-                if let error = store.syncErrorMessage {
-                    syncErrorBanner(error)
+            VStack(alignment: .leading, spacing: 20) {
+                header
+
+                if let message = store.syncErrorMessage {
+                    banner(message)
                 }
-                if isEditingHouse {
-                    houseEditSection
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+
+                members
+
+                if isAloneInHouse {
+                    dormantPortrait
+                    aloneReassurance
+                } else {
+                    portraitStrip
                 }
-                if store.canManageFamily {
-                    inviteSecuritySection
-                    pendingRequestsSection
+
+                if store.canManageFamily, !store.joinRequests.isEmpty {
+                    pendingRequests
                 }
-                membersSection
-                memorySection
-                insightsSection
+
+                // While the house is one person the dormant-portrait card already
+                // carries the invite, and a second copy would put two cobalt
+                // controls on one screen for the same action.
+                if !isAloneInHouse {
+                    inviteCard
+                }
+                memoriesEntry
             }
-            .padding(18)
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
             .padding(.bottom, 104)
         }
-        .scrollDismissesKeyboard(.interactively)
-        .refreshable {
-            await store.refreshHomeFromRemote(for: authSession.currentUser)
-        }
         .ninaScreenBackground()
-        .navigationTitle("Casa")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: syncHouseDrafts)
-        .task {
-            await store.refreshHomeFromRemote(for: authSession.currentUser)
-        }
-        .onChange(of: draftHouseName) { _, _ in
-            validateDrafts()
-        }
-        .alert("Gerar um novo convite?", isPresented: $isShowingRotationAlert) {
-            Button("Cancelar", role: .cancel) {}
-            Button("Gerar novo", role: .destructive) {
-                rotateInvite()
+    }
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(store.familyGroup.name).ninaText(.screen)
+                // The singular branch is load-bearing: the counter used to read
+                // "1 pessoas" on the one screen a solo household sees most.
+                Text(slotLine).ninaText(.label, NinaTheme.muted)
             }
-        } message: {
-            Text("O link atual deixará de funcionar imediatamente.")
-        }
-        .alert("Apagar seu histórico com a Nina?", isPresented: $isShowingDeleteChatAlert) {
-            Button("Cancelar", role: .cancel) {}
-            Button("Apagar histórico", role: .destructive) {
-                Task {
-                    _ = await store.deleteNinaChatHistory()
-                }
+
+            Spacer()
+
+            Button {
+                Haptics.lightImpact()
+                router.presentedSheet = .settings
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(NinaTheme.ink)
+                    .frame(width: 36, height: 36)
             }
-        } message: {
-            Text("Isso apaga somente a sua conversa privada. Tarefas e memórias já confirmadas continuam na casa.")
+            .buttonStyle(.plain)
+            .accessibilityLabel("Abrir ajustes")
+            .padding(.top, 4)
         }
     }
 
-    private var houseHeader: some View {
-        SoftCard(padding: 18) {
-            HStack(alignment: .center, spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(NinaTheme.mint.opacity(0.16))
-                        .frame(width: 82, height: 82)
-
-                    Image(systemName: "house.and.flag.fill")
-                        .font(.system(size: 36, weight: .bold))
-                        .foregroundStyle(NinaTheme.mint)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(store.familyGroup.name)
-                        .font(.title2.weight(.black))
-                        .foregroundStyle(NinaTheme.ink)
-
-                    Text(store.familyLimitLabel)
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
-                }
-            }
-
-            HStack(spacing: 10) {
-                if store.canManageFamily {
-                    PrimaryCapsuleButton(title: "Convidar família", systemName: "link") {
-                        Haptics.lightImpact()
-                        router.presentedSheet = .inviteFamily
-                    }
-
-                    CircleEditButton(isActive: isEditingHouse) {
-                        toggleHouseEditor()
-                    }
-                } else {
-                    Label(store.currentPermissionRole.summary, systemImage: store.currentPermissionRole.symbolName)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
+    private var slotLine: String {
+        let count = store.familyPeopleCount
+        let remaining = store.remainingFamilySlots
+        let peoplePart = count == 1 ? "1 pessoa" : "\(count) pessoas"
+        guard remaining > 0 else { return "\(peoplePart). A casa está cheia." }
+        return remaining == 1
+            ? "\(peoplePart). Cabe mais 1."
+            : "\(peoplePart). Cabem mais \(remaining)."
     }
 
-    private func syncErrorBanner(_ message: String) -> some View {
-        SoftCard(padding: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                IconBubble(systemName: "exclamationmark.triangle.fill", tone: .coral, size: 40)
+    private func banner(_ message: String) -> some View {
+        // Losing the connection is not lateness, so it never takes terracotta.
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(NinaTheme.ink)
+            Text(message).ninaText(.caption, NinaTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+    }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Não foi possível concluir")
-                        .font(.subheadline.weight(.black))
-                        .foregroundStyle(NinaTheme.ink)
-
-                    Text(message)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer()
-
+    private var members: some View {
+        VStack(spacing: 0) {
+            ForEach(people) { member in
                 Button {
-                    Task {
-                        await store.refreshHomeFromRemote(for: authSession.currentUser)
-                    }
+                    Haptics.selection()
+                    router.navigate(to: .member(member.id))
                 } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.subheadline.weight(.black))
-                        .foregroundStyle(NinaTheme.coral)
+                    NinaRow(
+                        title: member.name,
+                        subtitle: memberSubtitle(member)
+                    ) {
+                        MemberAvatar(initials: member.name.ninaInitials, tone: member.tone)
+                    } trailing: {
+                        if member.permissionRole == .owner {
+                            Image(systemName: "crown.fill")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundStyle(NinaTheme.ink)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Atualizar casa")
-                .disabled(store.isSyncingHome)
+
+                NinaDivider()
+            }
+
+            if let assistant {
+                NinaRow(
+                    title: assistant.name,
+                    subtitle: "IA da casa · não ocupa vaga"
+                ) {
+                    NinaMark(size: 40)
+                } trailing: {
+                    EmptyView()
+                }
             }
         }
     }
 
-    private var houseEditSection: some View {
-        SoftCard(padding: 18) {
-            SectionTitle(title: "Editar casa", subtitle: "Ajuste o nome que aparece para sua família.")
+    private func memberSubtitle(_ member: HouseholdMember) -> String {
+        var parts: [String] = []
+        if member.id == store.currentFamilyMember?.id {
+            parts.append("Você")
+        } else {
+            parts.append(member.role.title)
+        }
+        if member.role == .child { parts.append("não usa o app") }
+        else if member.permissionRole == .admin { parts.append("pode editar") }
+        return parts.joined(separator: " · ")
+    }
 
-            VStack(spacing: 10) {
-                HouseEditField(
-                    title: "Nome",
-                    systemName: "house.fill",
-                    placeholder: "Nome da casa",
-                    text: $draftHouseName
-                )
-            }
-            .padding(14)
-            .background(NinaTheme.field, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-            HStack {
-                Label(store.familyLimitLabel, systemImage: "person.2.fill")
-                    .font(.caption.weight(.heavy))
-                    .foregroundStyle(NinaTheme.muted)
-
-                Spacer()
-
-                Text(store.canInviteMorePeople ? "\(store.remainingFamilySlots) vagas" : "limite cheio")
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(store.canInviteMorePeople ? NinaTheme.mint : NinaTheme.coral)
-            }
-
-            HStack(spacing: 10) {
-                HouseEditorActionButton(title: "Cancelar", systemName: "xmark", style: .secondary) {
-                    cancelHouseEditing()
+    private var portraitStrip: some View {
+        Button {
+            Haptics.lightImpact()
+            router.navigate(to: .workload)
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Eyebrow(text: "Sinal de sobrecarga")
+                HStack {
+                    Text(store.workloadSnapshot.isConclusive
+                        ? store.workloadSnapshot.headline
+                        : "Ainda sem retrato da casa")
+                        .ninaText(.title)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(NinaTheme.faint)
                 }
-
-                HouseEditorActionButton(title: "Salvar", systemName: "checkmark", style: .primary) {
-                    saveHouseChanges()
-                }
-                .disabled(!isHouseDraftValid)
-                .opacity(isHouseDraftValid ? 1 : 0.5)
             }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .ninaCard()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var dormantPortrait: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Eyebrow(text: "Sinal de sobrecarga")
+            Text("O retrato dorme até chegar mais gente.")
+                .ninaText(.title)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("O sinal de sobrecarga é uma comparação. Com um adulto só na casa, não tem o que comparar — e a Nina prefere não desenhar nada a chutar.")
+                .ninaText(.label, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if store.canInviteMorePeople {
+                NinaButton(title: "Chamar o outro adulto", fillsWidth: true) {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .inviteFamily
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard()
+    }
+
+    private var aloneReassurance: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(NinaTheme.faint)
+            Text("Nada disso trava o resto. A Nina continua montando as tarefas, as compras e as sementes de uma casa de uma pessoa só.")
+                .ninaText(.caption, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var inviteSecuritySection: some View {
-        SoftCard(padding: 18) {
-            SectionTitle(
-                title: "Convite seguro",
-                subtitle: "Compartilhe o link com quem participa da casa."
-            )
-
-            HStack(spacing: 12) {
-                IconBubble(systemName: "link", tone: .sky, size: 42)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(store.inviteStatus?.code ?? store.familyGroup.inviteCode)
-                        .font(.subheadline.weight(.black))
-                        .foregroundStyle(NinaTheme.ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                        .textSelection(.enabled)
-
-                    Text(inviteStatusSummary)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(NinaTheme.muted)
+    private var pendingRequests: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Eyebrow(text: "Pedindo para entrar")
+            ForEach(store.joinRequests) { request in
+                HStack(spacing: 12) {
+                    MemberAvatar(initials: request.requesterName.ninaInitials, tone: .sky, size: 36)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(request.requesterName)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(NinaTheme.ink)
+                        Text("Ainda não vê nada da casa").ninaText(.meta, NinaTheme.muted)
+                    }
+                    Spacer()
                 }
+                NinaButton(title: "Abrir pedido", kind: .outline, fillsWidth: true) {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .inviteFamily
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard()
+    }
+
+    private var inviteCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Eyebrow(text: "Chamar alguém")
+            // Possessing the link grants nothing: it opens a request an owner or
+            // admin approves. Saying so is the whole point of this card.
+            Text("O link não dá acesso. Ele pede entrada, e alguém da casa aprova.")
+                .ninaText(.label, NinaTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if store.canInviteMorePeople {
+                NinaButton(title: "Enviar convite", fillsWidth: true) {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .inviteFamily
+                }
+            } else {
+                Text("A casa chegou no limite de 8 pessoas. A Nina não ocupa vaga.")
+                    .ninaText(.caption, NinaTheme.muted)
             }
 
             if store.canManageFamily {
-                Button {
-                    isShowingRotationAlert = true
-                } label: {
-                    Label(
-                        isRotatingInvite ? "Gerando..." : "Gerar novo convite",
-                        systemImage: "arrow.triangle.2.circlepath"
-                    )
-                    .font(.subheadline.weight(.black))
-                    .foregroundStyle(NinaTheme.coral)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(NinaTheme.coral.opacity(0.12), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .disabled(isRotatingInvite || store.isSyncingHome)
-            }
-        }
-    }
-
-    private var membersSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                SectionTitle(title: "Participantes", subtitle: "Limite: 8 pessoas na casa. A Nina não ocupa vaga.")
-
-                Spacer()
-
-                if store.canManageFamily, store.canInviteMorePeople {
-                    Button {
-                        Haptics.lightImpact()
-                        router.presentedSheet = .addMemberProfile
-                    } label: {
-                        Image(systemName: "person.crop.circle.badge.plus")
-                            .font(.title3.weight(.black))
-                            .foregroundStyle(NinaTheme.mint)
-                            .frame(width: 42, height: 42)
-                            .background(NinaTheme.mint.opacity(0.12), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Adicionar perfil de criança ou pet")
-                }
-            }
-
-            LazyVGrid(columns: memberColumns, spacing: 12) {
-                ForEach(store.familyGroup.members) { member in
-                    Button {
-                        Haptics.lightImpact()
-                        router.presentedSheet = .member(member.id)
-                    } label: {
-                        SoftCard(padding: 14) {
-                            HStack(spacing: 10) {
-                                MemberAvatar(member: member, size: 46)
-
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(member.name)
-                                        .font(.headline.weight(.black))
-                                        .foregroundStyle(NinaTheme.ink)
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.8)
-
-                                    Text(member.relationship)
-                                        .font(.caption.weight(.heavy))
-                                        .foregroundStyle(member.tone.color)
-                                        .lineLimit(1)
-                                }
-                            }
-
-                            Text(memberTaskSummary(for: member))
-                                .font(.caption.weight(.heavy))
-                                .foregroundStyle(NinaTheme.muted)
-
-                            MemberPermissionBadge(member: member)
-                        }
-                    }
-                    .buttonStyle(.plain)
+                NinaButton(title: "Renovar o link", kind: .quiet, isEnabled: !isRotatingInvite) {
+                    Haptics.warning()
+                    isConfirmingRotation = true
                 }
             }
         }
-    }
-
-    private var memberColumns: [GridItem] {
-        if dynamicTypeSize.isAccessibilitySize {
-            return [GridItem(.flexible())]
-        }
-
-        return [GridItem(.adaptive(minimum: 150), spacing: 12)]
-    }
-
-    @ViewBuilder
-    private var pendingRequestsSection: some View {
-        if !store.joinRequests.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionTitle(
-                    title: "Pedidos de entrada",
-                    subtitle: "\(store.joinRequests.count) aguardando sua decisão."
-                )
-
-                ForEach(store.joinRequests) { request in
-                    PendingJoinRequestCard(request: request)
-                }
-            }
-        }
-    }
-
-    private var inviteStatusSummary: String {
-        guard let invite = store.inviteStatus else {
-            return "Só quem recebe este link consegue pedir entrada."
-        }
-
-        let expiration = invite.expiresAt.formatted(date: .abbreviated, time: .omitted)
-        return "\(invite.status.title) · \(invite.usesRemaining) usos restantes · expira em \(expiration)"
-    }
-
-    private var memorySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionTitle(
-                title: "Memórias da Nina",
-                subtitle: "Somente memórias confirmadas por uma pessoa da casa."
-            )
-
-            if store.ninaMemories.isEmpty {
-                Text("Nenhuma memória confirmada ainda.")
-                    .font(.subheadline)
-                    .foregroundStyle(NinaTheme.muted)
-                    .padding(.horizontal, 4)
-            } else {
-                ForEach(store.ninaMemories) { memory in
-                    NinaMemoryCard(memory: memory)
-                }
-            }
-
-            Button(role: .destructive) {
-                isShowingDeleteChatAlert = true
-            } label: {
-                Label("Apagar meu histórico com a Nina", systemImage: "trash")
-                    .font(.caption.weight(.black))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(NinaTheme.coral)
-            .padding(.top, 2)
-        }
-    }
-}
-
-private struct NinaMemoryCard: View {
-    @Environment(AppStore.self) private var store
-    var memory: NinaMemory
-
-    @State private var title: String
-    @State private var draftBody: String
-    @State private var visibility: NinaMemoryVisibility
-    @State private var isEditing = false
-    @State private var isSaving = false
-    @State private var isShowingDeleteAlert = false
-
-    init(memory: NinaMemory) {
-        self.memory = memory
-        _title = State(initialValue: memory.title)
-        _draftBody = State(initialValue: memory.body)
-        _visibility = State(initialValue: memory.visibility)
-    }
-
-    var body: some View {
-        SoftCard(padding: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                IconBubble(
-                    systemName: visibility == .shared ? "house.fill" : "lock.fill",
-                    tone: visibility == .shared ? .sky : .mint,
-                    size: 40
-                )
-
-                VStack(alignment: .leading, spacing: 5) {
-                    if isEditing {
-                        TextField("Título", text: $title)
-                            .font(.subheadline.weight(.black))
-                        TextField("Memória", text: $draftBody, axis: .vertical)
-                            .font(.caption)
-                            .lineLimit(2...5)
-                    } else {
-                        Text(memory.title)
-                            .font(.subheadline.weight(.black))
-                            .foregroundStyle(NinaTheme.ink)
-
-                        Text(memory.body)
-                            .font(.caption)
-                            .foregroundStyle(NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Label(visibility.title, systemImage: visibility == .shared ? "person.2.fill" : "person.fill")
-                        .font(.caption2.weight(.black))
-                        .foregroundStyle(visibility == .shared ? NinaTheme.sky : NinaTheme.mint)
-                }
-            }
-
-            if store.canEditMemory(memory) {
-                HStack(spacing: 12) {
-                    if isEditing {
-                        Picker("Privacidade", selection: $visibility) {
-                            ForEach(NinaMemoryVisibility.allCases, id: \.self) { option in
-                                Text(option.title).tag(option)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        Button("Salvar") {
-                            save()
-                        }
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(NinaTheme.mint)
-                    } else {
-                        Button("Editar") {
-                            isEditing = true
-                        }
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(NinaTheme.sky)
-                    }
-
-                    Spacer()
-
-                    Button(role: .destructive) {
-                        isShowingDeleteAlert = true
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(NinaTheme.coral)
-                    .accessibilityLabel("Apagar memória")
-                }
-            }
-        }
-        .disabled(isSaving)
-        .alert("Apagar esta memória?", isPresented: $isShowingDeleteAlert) {
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard()
+        .alert("Renovar o link?", isPresented: $isConfirmingRotation) {
+            Button("Renovar", role: .destructive) { rotateInvite() }
             Button("Cancelar", role: .cancel) {}
-            Button("Apagar", role: .destructive) {
-                Task {
-                    _ = await store.deleteMemory(memory)
-                }
-            }
         } message: {
-            Text("A Nina não usará mais esta memória em conversas futuras.")
-        }
-    }
-
-    private func save() {
-        isSaving = true
-        var updated = memory
-        updated.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        updated.body = draftBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        updated.visibility = visibility
-
-        Task {
-            if await store.updateMemory(updated) {
-                isEditing = false
-            }
-            isSaving = false
-        }
-    }
-}
-
-private extension HouseView {
-    var insightsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionTitle(title: "Insights familiares", subtitle: "Dados simples para conversas melhores.")
-
-            workloadCard
-
-            ForEach(store.insights) { insight in
-                InsightCard(insight: insight)
-            }
-        }
-    }
-
-    @ViewBuilder
-    var workloadCard: some View {
-        let snapshot = store.workloadSnapshot
-
-        if snapshot.hasAnyLoad {
-            SoftCard {
-                HStack(alignment: .top, spacing: 12) {
-                    IconBubble(
-                        systemName: "chart.bar.fill",
-                        tone: snapshot.isConclusive && !snapshot.isBalanced ? .coral : .mint
-                    )
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(snapshot.headline)
-                            .font(.headline.weight(.black))
-                            .foregroundStyle(NinaTheme.ink)
-
-                        Text(snapshot.message)
-                            .font(.subheadline)
-                            .foregroundStyle(NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if snapshot.isConclusive {
-                            Text("Um retrato para conversar, não para cobrar.")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(NinaTheme.muted.opacity(0.8))
-                        }
-                    }
-                }
-
-                if snapshot.isConclusive {
-                    WorkloadBars(snapshot: snapshot)
-                }
-            }
-        }
-    }
-
-    func memberTaskSummary(for member: HouseholdMember) -> String {
-        guard member.role != .assistant else { return "Sempre por perto" }
-        let count = store.openTaskCount(for: member)
-        return count == 1 ? "1 tarefa aberta" : "\(count) tarefas abertas"
-    }
-
-    private func validateDrafts() {
-        isHouseDraftValid = !draftHouseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private func toggleHouseEditor() {
-        if isEditingHouse {
-            cancelHouseEditing()
-        } else {
-            Haptics.selection()
-            syncHouseDrafts()
-            withAnimation(.interactiveSpring(response: 0.34, dampingFraction: 0.88)) {
-                isEditingHouse = true
-            }
-        }
-    }
-
-    private func syncHouseDrafts() {
-        draftHouseName = store.familyGroup.name
-        validateDrafts()
-    }
-
-    private func cancelHouseEditing() {
-        Haptics.selection()
-        syncHouseDrafts()
-        withAnimation(.interactiveSpring(response: 0.34, dampingFraction: 0.88)) {
-            isEditingHouse = false
-        }
-    }
-
-    private func saveHouseChanges() {
-        guard isHouseDraftValid else { return }
-
-        Task {
-            if await store.updateFamilyGroup(name: draftHouseName) {
-                Haptics.success()
-                syncHouseDrafts()
-                withAnimation(.interactiveSpring(response: 0.34, dampingFraction: 0.88)) {
-                    isEditingHouse = false
-                }
-            }
+            Text("O link antigo para de funcionar na hora. Quem ainda não entrou vai precisar do novo.")
         }
     }
 
     private func rotateInvite() {
-        guard !isRotatingInvite else { return }
         isRotatingInvite = true
-
         Task {
-            let didRotate = await store.rotateFamilyInvite()
+            let rotated = await store.rotateFamilyInvite()
             isRotatingInvite = false
+            rotated ? Haptics.success() : Haptics.error()
+        }
+    }
 
-            if didRotate {
-                Haptics.success()
+    private var memoriesEntry: some View {
+        Button {
+            Haptics.selection()
+            router.navigate(to: .memories)
+        } label: {
+            NinaRow(
+                title: "Memórias",
+                subtitle: store.ninaMemories.isEmpty
+                    ? "Nada guardado ainda"
+                    : "\(store.ninaMemories.count) guardadas"
+            ) {
+                CategoryGlyph(systemName: "bookmark", size: 19, tint: NinaTheme.ink)
+            } trailing: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(NinaTheme.faint)
+            }
+            .padding(.horizontal, 18)
+            .ninaCard()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// Memories start private. Sharing is always a separate, explicit tap — never a
+// side effect of accepting one.
+struct MemoriesView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                Haptics.selection()
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(NinaTheme.ink)
+                    .frame(width: 40, height: 40, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Voltar")
+            .padding(.leading, 20)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Memórias").ninaText(.screen)
+
+                    if store.ninaMemories.isEmpty {
+                        ZeroState(
+                            headline: "Nada guardado ainda.",
+                            body_: "Memórias pessoais começam privadas. Compartilhar com a casa é sempre uma escolha explícita."
+                        )
+                        .padding(.top, 30)
+                    } else {
+                        ForEach(store.ninaMemories) { memory in
+                            memoryCard(memory)
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 40)
             }
         }
-    }
-}
-
-private struct CircleEditButton: View {
-    var isActive: Bool
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: isActive ? "xmark" : "pencil")
-                .font(.system(size: 18, weight: .black))
-                .foregroundStyle(isActive ? .white : NinaTheme.mint)
-                .frame(width: 52, height: 52)
-                .background(isActive ? NinaTheme.mint : NinaTheme.field, in: Circle())
-                .overlay(
-                    Circle()
-                        .stroke(isActive ? NinaTheme.mint.opacity(0.4) : NinaTheme.line.opacity(0.8), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(isActive ? "Fechar edição da casa" : "Editar casa")
-    }
-}
-
-private struct HouseEditField: View {
-    var title: String
-    var systemName: String
-    var placeholder: String
-    @Binding var text: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Label(title, systemImage: systemName)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(NinaTheme.muted)
-
-            TextField(placeholder, text: $text)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(NinaTheme.ink)
-                .multilineTextAlignment(.trailing)
-                .textFieldStyle(.plain)
-                .lineLimit(1)
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-private enum HouseEditorActionStyle {
-    case primary
-    case secondary
-}
-
-private struct HouseEditorActionButton: View {
-    var title: String
-    var systemName: String
-    var style: HouseEditorActionStyle
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: systemName)
-                .font(.headline.weight(.heavy))
-                .foregroundStyle(foregroundColor)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .background(backgroundColor, in: Capsule())
-        }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaScreenBackground()
     }
 
-    private var foregroundColor: Color {
-        switch style {
-        case .primary: .white
-        case .secondary: NinaTheme.muted
-        }
-    }
-
-    private var backgroundColor: Color {
-        switch style {
-        case .primary: NinaTheme.mint
-        case .secondary: NinaTheme.line.opacity(0.35)
-        }
-    }
-}
-
-private struct MemoryLine: View {
-    var symbolName: String
-    var text: String
-    var tone: MemberTone
-
-    var body: some View {
-        SoftCard(padding: 14) {
-            HStack(spacing: 12) {
-                IconBubble(systemName: symbolName, tone: tone, size: 40)
-
-                Text(text)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(NinaTheme.ink)
+    private func memoryCard(_ memory: NinaMemory) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: memory.visibility == .shared ? "person.2" : "lock")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(NinaTheme.faint)
+                Text(memory.visibility == .shared ? "A casa vê" : "Só você vê")
+                    .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+            }
+            Text(memory.title).ninaText(.section)
+            if !memory.body.isEmpty {
+                Text(memory.body)
+                    .ninaText(.label, NinaTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-    }
-}
-
-private struct InsightCard: View {
-    var insight: HouseholdInsight
-
-    var body: some View {
-        SoftCard {
-            HStack(alignment: .top, spacing: 12) {
-                IconBubble(systemName: insight.symbolName, tone: insight.tone)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(insight.title)
-                            .font(.headline.weight(.black))
-                            .foregroundStyle(NinaTheme.ink)
-
-                        Spacer()
-
-                        Text(insight.metric)
-                            .font(.headline.weight(.black))
-                            .foregroundStyle(insight.tone.color)
-                    }
-
-                    Text(insight.message)
-                        .font(.subheadline)
-                        .foregroundStyle(NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
-}
-
-#Preview {
-    NavigationStack {
-        HouseView()
-            .environment(AppStore())
-            .environment(RouterPath())
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard()
     }
 }
