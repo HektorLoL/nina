@@ -153,7 +153,7 @@ struct LoginView: View {
 
         #if DEBUG
         Text("Debug local: teste1@ninai.test ou teste2@ninai.test")
-            .ninaText(.meta, NinaTheme.faint)
+            .ninaText(.meta, NinaTheme.muted)
         #endif
 
         NinaButton(

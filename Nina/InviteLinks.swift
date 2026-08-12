@@ -107,6 +107,11 @@ struct InviteAcceptanceView: View {
                 loadingHeader
             } else if preview?.isValid == true {
                 validHeader
+            } else if preview == nil {
+                // The preview RPC answers {valid:false} for a genuinely dead code,
+                // so a nil can only mean we could not reach it. Saying the link is
+                // dead would be asserting a fact we do not have.
+                unverifiedHeader
             } else {
                 invalidHeader
             }
@@ -160,6 +165,18 @@ struct InviteAcceptanceView: View {
         }
     }
 
+    private var unverifiedHeader: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Não deu para conferir o link agora.")
+                .ninaText(.display)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Pode ser a conexão. Você ainda pode pedir entrada — quem cuida da casa decide, e é esse pedido que vale, não o link.")
+                .ninaText(.label, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var invalidHeader: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Este link não vale mais.")
@@ -177,7 +194,9 @@ struct InviteAcceptanceView: View {
     @ViewBuilder
     private var actions: some View {
         VStack(spacing: 10) {
-            if preview?.isValid == true {
+            // request_family_join is the real authority, so an unverified link
+            // keeps the button: the server decides, not the preview.
+            if preview?.isValid == true || preview == nil {
                 NinaButton(
                     title: isJoining ? "Enviando..." : "Pedir para entrar",
                     fillsWidth: true,
@@ -207,7 +226,7 @@ struct InviteAcceptanceView: View {
     }
 
     private func acceptInvite() {
-        guard preview?.isValid == true, !isJoining else { return }
+        guard preview?.isValid != false, !isJoining else { return }
         isJoining = true
         errorMessage = nil
 

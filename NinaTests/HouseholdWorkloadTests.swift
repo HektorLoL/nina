@@ -254,6 +254,28 @@ final class HouseholdWorkloadTests: XCTestCase {
         XCTAssertNil(snapshot.entries.first(where: \.isShared)?.memberID)
     }
 
+    func testTheHouseBandIsWeighedOnTheSameScaleAndNotPinnedToTheMiddle() {
+        let light = HouseholdWorkload.snapshot(
+            tasks: (0..<8).map { _ in openTask(owner: "Mirna") }
+                + (0..<6).map { _ in openTask(owner: "Heitor") }
+                + [openTask(owner: "Casa")],
+            members: [member(named: "Mirna", tone: .coral), member(named: "Heitor", tone: .sky)]
+        )
+
+        // Position under a labelled axis is the only quantity this screen
+        // publishes, so a fixed slot for the house would be a claim, not a label.
+        XCTAssertEqual(light.entries.first(where: \.isShared)?.band, .light)
+
+        let heavy = HouseholdWorkload.snapshot(
+            tasks: (0..<3).map { _ in openTask(owner: "Mirna") }
+                + (0..<3).map { _ in openTask(owner: "Heitor") }
+                + (0..<9).map { _ in openTask(owner: "Casa") },
+            members: [member(named: "Mirna", tone: .coral), member(named: "Heitor", tone: .sky)]
+        )
+
+        XCTAssertEqual(heavy.entries.first(where: \.isShared)?.band, .heavier)
+    }
+
     private func openTask(owner: String, ownerMemberID: UUID? = nil, kind: TaskKind = .task) -> TaskItem {
         TaskItem(
             kind: kind,

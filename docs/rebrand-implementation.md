@@ -186,6 +186,21 @@ every case the choice was to omit rather than ship something inert.
 
 ---
 
+## 6b. What round 5 changed
+
+`design-qa-azulejo.md` records the full pass: 82 findings judged, 54 confirmed.
+Its systemic finding matters more than any single item — **the rebuild deleted
+three working features and left the copy that promises them**: memory
+edit/delete, chat-history deletion, and the weekly digest surface the paywall
+sells. All three are restored. A rewrite that drops the last call site to a live
+store method is deleting a feature, and has to be recorded as one.
+
+Three items in §6 above were resolved by that round and are no longer brittle:
+the workload house band is computed rather than pinned, the type system's two
+halves now scale together, and rows derive their date label and their lateness
+colour from the same source. The premium-denial string-equality routing and the
+proposal card's fixed "Não repete" row remain exactly as described.
+
 ## 7. Verified
 
 - `xcodebuild build` — succeeds.

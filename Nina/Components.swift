@@ -39,7 +39,7 @@ struct MemberAvatar: View {
                 .frame(width: size, height: size)
                 .overlay(
                     Text(initials)
-                        .font(.system(size: size * 0.32, weight: .bold))
+                        .font(.system(size: size * 0.42, weight: .bold))
                         .tracking(0.4)
                         .foregroundStyle(tone.onFill)
                 )
@@ -55,22 +55,28 @@ struct NinaCheckbox: View {
     var size: CGFloat = 24
 
     private var stroke: Color {
-        isOverdue ? NinaTheme.terracotta : NinaTheme.line
+        isOverdue ? NinaTheme.terracotta : NinaTheme.control
     }
 
     var body: some View {
         ZStack {
             if isSquare {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(isOn ? NinaTheme.moss : stroke, lineWidth: 1.6)
+                    .fill(isOn ? NinaTheme.moss : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(isOn ? NinaTheme.moss : stroke, lineWidth: 1.6)
+                    )
             } else {
-                Circle().strokeBorder(isOn ? NinaTheme.moss : stroke, lineWidth: 1.6)
+                Circle()
+                    .fill(isOn ? NinaTheme.moss : Color.clear)
+                    .overlay(Circle().strokeBorder(isOn ? NinaTheme.moss : stroke, lineWidth: 1.6))
             }
 
             if isOn {
                 Image(systemName: "checkmark")
                     .font(.system(size: size * 0.46, weight: .bold))
-                    .foregroundStyle(NinaTheme.moss)
+                    .foregroundStyle(NinaTheme.ground)
             }
         }
         .frame(width: size, height: size)
@@ -244,7 +250,7 @@ struct NinaDivider: View {
 // separate string rather than the selling copy with a badge on it.
 enum PremiumTeaserCopy {
     static let title = "Nina Premium"
-    static let subtitle = "Documento por foto, mais conversa por dia e o retrato de domingo."
+    static let subtitle = "Documento por foto, mais conversa por dia e o resumo semanal da casa."
     static let activeTitle = "Premium ativo para a casa inteira."
     static let activeSubtitle = "Vale para todo mundo daqui, sem cada um assinar o seu."
 }

@@ -266,10 +266,10 @@ struct MockNinaEngine: NinaEngine {
 
         if normalized.contains("cansad") || normalized.contains("sobrecarreg") || normalized.contains("estresse") {
             return NinaEngineResponse(
-                reply: "Percebi sinais de sobrecarga. Posso ajudar transformando isso em dados e sugerindo uma divisão mais justa das tarefas.",
+                reply: "Isso parece pesado. Se quiser, eu monto uma conversa sobre a divisão da casa — você decide se vale.",
                 suggestion: NinaSuggestion(
                     title: "Revisar divisão da casa",
-                    detail: "Mirna concentrou 82 tarefas nos últimos 30 dias, enquanto Heitor criou 8.",
+                    detail: "Uma conversa sobre quem está pegando o quê, sem números e sem placar.",
                     actionTitle: "Ver sugestão",
                     kind: .redistribution,
                     payloadTitle: "Revisar divisão doméstica",

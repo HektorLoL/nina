@@ -396,7 +396,7 @@ final class AppStore {
     }
 
     var familyLimitLabel: String {
-        "\(familyPeopleCount) pessoas + Nina"
+        familyPeopleCount == 1 ? "1 pessoa + Nina" : "\(familyPeopleCount) pessoas + Nina"
     }
 
     func canEditFamilyMember(_ member: HouseholdMember) -> Bool {
@@ -1335,7 +1335,7 @@ final class AppStore {
 
         let confirmation = ChatMessage(
             sender: .nina,
-            text: "Pronto. Deixei isso organizado na casa.",
+            text: "Você confirmou. Está na casa agora.",
             timestamp: .now
         )
         messages.append(confirmation)

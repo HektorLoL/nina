@@ -41,6 +41,12 @@ struct HouseView: View {
                     pendingRequests
                 }
 
+                // The weekly digest is one of the three ceilings the paywall sells.
+                // Without a surface here, the app charges for something it never shows.
+                if !store.insights.isEmpty {
+                    weeklyDigest
+                }
+
                 // While the house is one person the dormant-portrait card already
                 // carries the invite, and a second copy would put two cobalt
                 // controls on one screen for the same action.
@@ -206,6 +212,32 @@ struct HouseView: View {
         .ninaCard()
     }
 
+    private var weeklyDigest: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Eyebrow(text: "Resumo semanal")
+
+            ForEach(store.insights) { insight in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(insight.title).ninaText(.section)
+                    Text(insight.message)
+                        .ninaText(.label, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !insight.metric.isEmpty {
+                        Text(insight.metric).ninaText(.meta, NinaTheme.muted)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if insight.id != store.insights.last?.id {
+                    NinaDivider(inset: 0)
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard()
+    }
+
     private var aloneReassurance: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "info.circle")
@@ -346,7 +378,7 @@ struct MemoriesView: View {
                         .padding(.top, 30)
                     } else {
                         ForEach(store.ninaMemories) { memory in
-                            memoryCard(memory)
+                            MemoryCard(memory: memory)
                         }
                     }
                 }
@@ -359,24 +391,147 @@ struct MemoriesView: View {
         .ninaScreenBackground()
     }
 
-    private func memoryCard(_ memory: NinaMemory) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+}
+
+// Memories are the one object the app calls unrecoverable once shared, so the
+// screen that lists them must actually offer the delete its own copy promises.
+private struct MemoryCard: View {
+    @Environment(AppStore.self) private var store
+
+    let memory: NinaMemory
+
+    @State private var isEditing = false
+    @State private var draftTitle = ""
+    @State private var draftBody = ""
+    @State private var isConfirmingDelete = false
+    @State private var isConfirmingShare = false
+    @State private var isSaving = false
+
+    private var canEdit: Bool { store.canEditMemory(memory) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: memory.visibility == .shared ? "person.2" : "lock")
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(NinaTheme.faint)
                 Text(memory.visibility == .shared ? "A casa vê" : "Só você vê")
                     .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+                Spacer()
             }
-            Text(memory.title).ninaText(.section)
-            if !memory.body.isEmpty {
-                Text(memory.body)
-                    .ninaText(.label, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+
+            if isEditing {
+                TextField("Título", text: $draftTitle)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(NinaTheme.ink)
+                    .padding(.horizontal, 12)
+                    .frame(height: 44)
+                    .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
+
+                TextField("O que a Nina deve lembrar", text: $draftBody, axis: .vertical)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(NinaTheme.ink)
+                    .lineLimit(2...6)
+                    .padding(12)
+                    .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
+
+                HStack(spacing: 10) {
+                    NinaButton(title: isSaving ? "Salvando..." : "Salvar", isEnabled: !isSaving && !draftTitle.trimmingCharacters(in: .whitespaces).isEmpty) {
+                        save()
+                    }
+                    NinaButton(title: "Cancelar", kind: .quiet) {
+                        Haptics.selection()
+                        isEditing = false
+                    }
+                }
+            } else {
+                Text(memory.title).ninaText(.section)
+                if !memory.body.isEmpty {
+                    Text(memory.body)
+                        .ninaText(.label, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if canEdit {
+                    HStack(spacing: 8) {
+                        Button {
+                            Haptics.lightImpact()
+                            draftTitle = memory.title
+                            draftBody = memory.body
+                            isEditing = true
+                        } label: {
+                            NinaChip(text: "Editar")
+                        }
+                        .buttonStyle(.plain)
+
+                        if memory.visibility == .privateMemory {
+                            Button {
+                                Haptics.warning()
+                                isConfirmingShare = true
+                            } label: {
+                                NinaChip(text: "Compartilhar com a casa")
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Spacer()
+
+                        Button {
+                            Haptics.warning()
+                            isConfirmingDelete = true
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 15, weight: .regular))
+                                .foregroundStyle(NinaTheme.muted)
+                                .frame(width: 36, height: 36)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Apagar memória")
+                    }
+                    .padding(.top, 2)
+                }
             }
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .ninaCard()
+        .alert("Apagar esta memória?", isPresented: $isConfirmingDelete) {
+            Button("Apagar", role: .destructive) {
+                Task { _ = await store.deleteMemory(memory) }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("A Nina esquece isso na próxima conversa. Não dá para voltar.")
+        }
+        .alert("Compartilhar com a casa?", isPresented: $isConfirmingShare) {
+            Button("Compartilhar", role: .destructive) { share() }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            // Sharing a private memory is the most irreversible act in the product.
+            Text("O outro adulto vai poder ler isto. Não dá para voltar a ser só sua.")
+        }
+    }
+
+    private func save() {
+        var edited = memory
+        edited.title = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        edited.body = draftBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        isSaving = true
+        Task {
+            let saved = await store.updateMemory(edited)
+            isSaving = false
+            if saved {
+                Haptics.success()
+                isEditing = false
+            }
+        }
+    }
+
+    private func share() {
+        var edited = memory
+        edited.visibility = .shared
+        Task {
+            if await store.updateMemory(edited) { Haptics.success() }
+        }
     }
 }

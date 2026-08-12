@@ -314,7 +314,7 @@ struct SettingsSheet: View {
         } else {
             PremiumGateCard(
                 title: premiumPriceTitle,
-                detail: "Documento por foto, mais conversa por dia e o retrato de domingo."
+                detail: "Documento por foto, mais conversa por dia e o resumo semanal da casa."
             ) {
                 Haptics.lightImpact()
                 router.presentedSheet = .premium
@@ -410,14 +410,14 @@ struct SettingsSheet: View {
     private var weeklyDigestRow: some View {
         if store.canManageFamily {
             SettingsToggleRow(
-                title: "Retrato de domingo",
+                title: "Resumo semanal",
                 subtitle: weeklyDigestSubtitle,
                 systemName: "calendar",
                 isOn: weeklyDigestBinding
             )
         } else {
             SettingsValueRow(
-                title: "Retrato de domingo",
+                title: "Resumo semanal",
                 subtitle: weeklyDigestSubtitle,
                 value: store.isWeeklyDigestEnabled ? "ligado" : "desligado",
                 systemName: "calendar"
@@ -860,6 +860,8 @@ private struct PrivacyAndDataView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
+    @State private var isConfirmingHistoryDeletion = false
+
     private var acceptedLabel: String {
         guard let acceptedAt = store.aiMemoryConsent?.acceptedAt else {
             return "Ainda não ligado"
@@ -892,7 +894,7 @@ private struct PrivacyAndDataView: View {
 
                     consentCard
 
-                    Text("Desligar aqui vale só para você. A conversa de outro adulto da casa continua, e o retrato de domingo para de sair enquanto alguém estiver desligado.")
+                    Text("Desligar aqui vale só para você. A conversa de outro adulto da casa continua, e o resumo semanal continua saindo se outro adulto ainda tiver aceitado.")
                         .ninaText(.caption, NinaTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -955,11 +957,27 @@ private struct PrivacyAndDataView: View {
             NinaDivider()
 
             SettingsValueRow(
-                title: "O que apaga sozinho",
-                subtitle: "Conclusões somem depois de \(CompletedTaskRetention.visibleDays) dias.",
+                title: "O que some com o tempo",
+                subtitle: "A conversa com a Nina apaga depois de 30 dias. Conclusões saem da lista depois de \(CompletedTaskRetention.visibleDays) dias, mas seguem guardadas.",
                 value: nil,
                 systemName: "clock.arrow.circlepath"
             )
+
+            NinaDivider()
+
+            // The thread is per-adult, so erasing it is a decision only you can
+            // make about your own conversation — separate from deleting the account.
+            Button {
+                Haptics.warning()
+                isConfirmingHistoryDeletion = true
+            } label: {
+                SettingsLinkRow(
+                    title: "Apagar a minha conversa com a Nina",
+                    subtitle: "Só a sua. A conversa do outro adulto continua.",
+                    systemName: "bubble.left.and.exclamationmark.bubble.right"
+                )
+            }
+            .buttonStyle(.plain)
 
             NinaDivider()
 
@@ -973,6 +991,14 @@ private struct PrivacyAndDataView: View {
                 )
             }
             .buttonStyle(.plain)
+        }
+        .alert("Apagar a sua conversa?", isPresented: $isConfirmingHistoryDeletion) {
+            Button("Apagar", role: .destructive) {
+                Task { _ = await store.deleteNinaChatHistory() }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Some tudo o que você já escreveu para a Nina. As tarefas e as memórias que você confirmou ficam.")
         }
     }
 }
@@ -1567,7 +1593,7 @@ struct PremiumBenefitsSheet: View {
             NinaDivider(inset: 0)
             comparisonRow("Conversa com a Nina", free: "10/dia", premium: "30/hora")
             NinaDivider(inset: 0)
-            comparisonRow("Retrato de domingo", free: nil, premium: nil)
+            comparisonRow("Resumo semanal", free: nil, premium: nil)
         }
         .ninaCard()
     }
@@ -3083,7 +3109,7 @@ struct TaskQuickActionsSheet: View {
             Spacer(minLength: 8)
 
             if task.kind == .task {
-                Text(task.dueLabel)
+                Text(task.effectiveDueLabel())
                     .font(.system(size: 13, weight: isOverdue ? .semibold : .regular))
                     .foregroundStyle(isOverdue ? NinaTheme.terracotta : NinaTheme.muted)
                     .lineLimit(1)
@@ -3110,7 +3136,7 @@ struct TaskQuickActionsSheet: View {
     }
 
     private func pushToTomorrow() {
-        let base = task.dueAt ?? .now
+        let base = max(task.dueAt ?? .now, .now)
         let target = Calendar.current.date(byAdding: .day, value: 1, to: base) ?? base
         store.updateTask(
             id: task.id,
@@ -3223,7 +3249,7 @@ struct TaskEditConflictSheet: View {
                 .foregroundStyle(NinaTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("\(task.kind == .seed ? "Sem data" : task.dueLabel) · dono: \(task.owner)")
+            Text("\(task.kind == .seed ? "Sem data" : task.effectiveDueLabel()) · dono: \(task.owner)")
                 .ninaText(.caption, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }

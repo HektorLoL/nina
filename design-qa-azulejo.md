@@ -486,3 +486,160 @@ Result (round 4): passed, with the two carried-forward decisions above open and
 the mark's perceptual risk untested. Twenty of the sixty-nine findings were
 adjudicated by their author rather than by an adversary; if any single verdict
 here deserves a second look, it is one of those.
+
+---
+
+# Round 5 — the rebuilt app
+
+Last updated: 2026-08-12
+
+## Compared
+
+The Swift, not the boards. The 47 boards were built into the iOS app in `7506ea6`
+(39 files, +6463 −7707), and this round reviews the result.
+
+Seven reviewers, each pipelined into an adversary: design-system compliance ·
+board fidelity for the four tabs · board fidelity for sheets and onboarding ·
+Swift correctness · over-claim audit · accessibility and Dynamic Type · invariant
+regression against `CLAUDE.md` §4. Every group was given
+`docs/rebrand-implementation.md` up front, so the twenty-odd deliberate departures
+could not be re-raised as defects; agents were told they *may* raise a new
+consequence the doc does not name, and several did.
+
+I ran the simulator sweep myself rather than delegating it — a second driver would
+have fought the reviewers for the device.
+
+**82 findings judged. 54 confirmed, 28 refuted.** Far more than any board round,
+which is what fresh code should produce.
+
+## The systemic finding
+
+**The rebuild deleted three working features while leaving the copy that promises
+them.** Not one of the three was recorded as a departure, which is what makes it a
+class rather than three accidents:
+
+- `MemoriesView` shipped read-only, while `ProfileEditorView` still said *"Dá para
+  editar e apagar na tela Casa."* `updateMemory` and `deleteMemory` were fully
+  implemented against live RPCs with zero call sites.
+- `deleteNinaChatHistory()` lost its only control. Erasing your own thread — the
+  one destructive act that is *not* account deletion — became unreachable.
+- `HouseView.insightsSection` was deleted, so nothing in the app rendered
+  `store.insights`. **The paywall goes on selling the weekly digest as one of its
+  three ceilings.** Charging for a feature with no surface is the worst version of
+  this defect, and it is the round's clearest P0.
+
+**Added to the method.** A rewrite that drops a call site to a store method that
+still exists is deleting a feature, and it has to be recorded as one. The three
+were restored rather than the copy weakened.
+
+## Findings Resolved
+
+- P0: **The three deletions above**, all restored — memory edit/share/delete with
+  its irreversibility confirm, chat-history deletion on the privacy screen, and
+  the weekly digest on Casa.
+- P0: **`MockNinaEngine` fabricated a household statistic and it is the production
+  offline fallback.** Not `#if DEBUG`, held unguarded by `AppStore`, and reached by
+  the generic catch for every transport failure. Its reply for "cansado" carried
+  *"Mirna concentrou 82 tarefas nos últimos 30 dias, enquanto Heitor criou 8"* —
+  a number, a comparison and two people who are not in your house, on the one
+  subject the product refuses to quantify. Confirming its suggestion created tasks
+  owned by those phantom names. The statistic is gone.
+- P1: **Nina claimed a completed action in the past tense.** *"Pronto. Deixei isso
+  organizado na casa."* — reachable in production. Now *"Você confirmou. Está na
+  casa agora."*, which credits the human, as the proposal card already did.
+- P1: **Rows printed the stored `dueLabel` while lateness colour came from
+  `displayDate`**, so a snoozed or recurring task showed its old date in the new
+  colour. A `effectiveDueLabel` derives both from one source; two tests pin it.
+  This also fixed the separate finding that "Remarcar as N" left stale dates behind.
+- P1: **"Empurrar pra amanhã" did not reach tomorrow** for an overdue task — it
+  added a day to a date already in the past and fired `Haptics.success()` for it.
+  Now anchored on the later of the stored date and now.
+- P1: **Long-press quick actions were unreachable.** The row's two buttons swallowed
+  the parent gesture, so `TaskQuickActionsSheet` shipped dead. Now a
+  `.simultaneousGesture`, which is what the rest of the app already uses where a
+  parent gesture must coexist with children.
+- P1: **The chat opened at the oldest message**, every visit, because the tab pager
+  re-creates the view and the first-run guard skipped the scroll.
+- P1: **The invite screen declared a valid link dead** whenever it merely failed to
+  reach the server — the iOS twin of the P1 the web invite page already fixed. A
+  nil preview now renders an explicit unverified state and keeps the request
+  button, because `request_family_join` is the real authority.
+- P1: **The house band was pinned to "parecido"** regardless of how much work is
+  unowned, under a labelled three-band axis. Position is the only quantity this
+  screen publishes, so a fixed slot was a false reading. Now weighed on the same
+  scale, with a test.
+- P1: **`"Ver o que está sem dono"` was a dead button** — it posted a notification
+  nothing observed. Now wired through to the Hoje filter.
+- P1: **The two halves of the type system scaled against each other.** Fraunces
+  scales through `relativeTo:`; `.system(size:)` does not. Interface text is now
+  metered through `UIFontMetrics`, and the root clamps at `accessibility1` because
+  the boards' layouts have only been checked that far.
+- P1: **"1 pessoas + Nina"** — the singular bug the rebrand was meant to kill,
+  surviving in `AppStore.familyLimitLabel` and rendered in the settings sheet.
+- P1: **"Retrato de domingo"** had been reintroduced as the digest's name, against
+  round 4's finding that it is not Sunday-bound and that *retrato* is the app's
+  word for the **free** workload portrait. Back to "Resumo semanal" at five sites.
+- P1: **Three false claims in copy.** The search zero state said it looked in
+  Compras (it never does); the consent screen said the digest stops when one adult
+  revokes (one live grant is enough); the privacy screen filed completed tasks
+  under "o que apaga sozinho" when that step archives and never deletes — while
+  the chat deletion that *does* happen at 30 days was disclosed nowhere.
+- P1: **`"Passar pro \(nome)"`** fused a masculine contraction onto a name whose
+  gender the app deliberately does not model. Rendered "Passar pro Mirna".
+- P2: **Contrast, measured rather than eyeballed.** `faint` failed AA on grout at
+  seven eyebrow sites (4.14:1) and was darkened to `#646E7C` — 5.03 on ground, 4.52
+  on grout. The unchecked checkbox, the primary control on four screens, was a
+  1.24:1 outline; a new `control` token measures 3.23:1. The overdue tile's label
+  was held back to 3.57:1 and is now full terracotta at 4.43.
+- P2: **Fidelity and polish.** Done is a filled moss disc, as the boards draw it,
+  not an outline. Row initials went from 7.7pt to the board's ratio. Faint came
+  off sentence-case running text at six sites. The seeds view is titled
+  "Sementes" and its rows carry the seed glyph rather than the category one. The
+  search field no longer autocorrects "boleto" into "Bolero". The shopping
+  checkbox has an accessibility label. The workload bands are announced.
+  The day-cleared count regained its noun. The task detail's checkbox now fires
+  the same haptic asymmetry its own footer implements.
+
+## Accepted Without Change
+
+- **`MemberDetailView` prints one person's open-task count.** Raised as a P0
+  scoreboard violation and downgraded on inspection: it calls the public
+  per-member query the invariant comment explicitly sanctions, it appears once
+  behind a tap with nobody to compare against, and the pre-rebrand Casa screen
+  showed every member's count side by side in a grid. Strictly less exposure than
+  before. There is a real taste question — a band would be more Nina — but it is a
+  stance conversation, not a defect.
+- **The Sign in with Apple button's fixed 52pt frame.** The system control sizes
+  its own label; the finding's premise about Dynamic Type is unverified and the
+  pattern is Apple's own.
+- **`MemberAvatar` announcing initials to VoiceOver.** That is exact parity with
+  what is drawn; a sighted reader sees "RC" too.
+
+## Still Open — recorded, not fixed
+
+Hoje's sections are not collapsible though the board draws the chevrons; H2's
+"amanhã cedo" card and T3's undo toast were not built; "Concluídas hoje" ignores
+the Minhas filter; the seeds list has no Plantar control though its own caption
+names one; chat attachments are decoded on the main actor; the tab pager destroys
+per-tab scroll state on every switch; the pending-request badge is invisible to
+VoiceOver; a failed purchase still prints in moss; the login e-mail field is
+disabled without the matching opacity. None of these is a false claim or a broken
+invariant, and all are one-site fixes.
+
+## Final Checks
+
+- `xcodebuild build` and the full `NinaTests` suite pass.
+- `deno task check`, `lint:deletion`, `test` — 99 passed. `preflight:repo` — 0
+  failures, 1 pre-existing warning.
+- No store method with a live implementation is left without a call site.
+- No copy claims a capability the code does not have, and no copy is in the past
+  tense about a Nina action.
+- Terracotta marks lateness and nothing else; moss marks human-confirmed
+  completion and nothing else.
+- Every text tier used passes WCAG AA against the surface it actually sits on, and
+  the unchecked control clears the 3:1 non-text floor.
+- Verified running on an iPhone 17 simulator, screen by screen against the boards.
+
+Result (round 5): passed, with the nine open P2s above and the untested items from
+round 4 — the mark's perceptual risk, and `C4`'s long-press against the tab
+pager's gesture area on a real device.

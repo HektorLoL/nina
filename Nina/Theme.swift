@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // The palette is light-only by construction: the azulejo direction is a fired tin
 // glaze, and no dark counterpart has been designed or reviewed.
@@ -8,13 +9,16 @@ enum NinaTheme {
     static let line = Color(hex: 0xDFE4EB)
     static let ink = Color(hex: 0x131A24)
     static let muted = Color(hex: 0x5C6675)
-    static let faint = Color(hex: 0x6A7482)
+    static let faint = Color(hex: 0x646E7C)
     static let cobalt = Color(hex: 0x1B4FD8)
     static let cobaltDeep = Color(hex: 0x153CA6)
     static let cobaltWash = Color(hex: 0xE6EDFC)
     static let terracotta = Color(hex: 0xC2410C)
     static let terracottaWash = Color(hex: 0xFBEAE1)
     static let moss = Color(hex: 0x3F6B4A)
+    /// Stroke for unfilled controls. Lighter than muted, but above the 3:1
+    /// non-text contrast floor that `line` fails at 1.24:1.
+    static let control = Color(hex: 0x848E9D)
     static let onCobalt = Color.white
 
     enum Radius {
@@ -104,6 +108,47 @@ enum NinaText {
         default: -0.1
         }
     }
+
+    // Both halves of the type system scale against the same anchors. Fraunces
+    // scales on its own through `relativeTo:`; the interface face does not unless
+    // it is metered, so without this the serif grew and the sans did not.
+    fileprivate var textStyle: Font.TextStyle {
+        switch self {
+        case .hero, .display: .largeTitle
+        case .screen, .zero: .title
+        case .title: .title2
+        case .section: .title3
+        case .body: .body
+        case .label, .caption: .subheadline
+        case .meta: .footnote
+        case .micro, .eyebrow: .caption
+        }
+    }
+
+    fileprivate var uiTextStyle: UIFont.TextStyle {
+        switch self {
+        case .hero, .display: .largeTitle
+        case .screen, .zero: .title1
+        case .title: .title2
+        case .section: .title3
+        case .body: .body
+        case .label, .caption: .subheadline
+        case .meta: .footnote
+        case .micro, .eyebrow: .caption1
+        }
+    }
+}
+
+private extension Font.Weight {
+    var uiWeight: UIFont.Weight {
+        switch self {
+        case .bold: .bold
+        case .semibold: .semibold
+        case .medium: .medium
+        case .light: .light
+        default: .regular
+        }
+    }
 }
 
 private struct NinaTextModifier: ViewModifier {
@@ -115,8 +160,12 @@ private struct NinaTextModifier: ViewModifier {
         content
             .font(
                 style.isDisplay
-                    ? .custom("Fraunces", size: style.size)
-                    : .system(size: style.size, weight: weight)
+                    ? .custom("Fraunces", size: style.size, relativeTo: style.textStyle)
+                    : Font(
+                        UIFontMetrics(forTextStyle: style.uiTextStyle).scaledFont(
+                            for: UIFont.systemFont(ofSize: style.size, weight: weight.uiWeight)
+                        )
+                    )
             )
             .tracking(style.tracking)
             .lineSpacing(style.leading - style.size)

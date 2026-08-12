@@ -341,6 +341,9 @@ struct AppRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .ninaSelectChatTab)) { _ in
             selectTab(.nina)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
+            selectTab(.today)
+        }
     }
 
     @ViewBuilder

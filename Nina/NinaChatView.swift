@@ -67,14 +67,19 @@ struct NinaChatView: View {
                     .padding(.bottom, 18)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                // The newest turn is the one being read, and a pending proposal
+                // card sits under it. Opening at the top of the thread hides both.
                 .task(id: store.messages.last?.id) {
                     await Task.yield()
-                    guard didLoadInitialMessages else {
-                        didLoadInitialMessages = true
-                        return
-                    }
                     guard let lastID = store.messages.last?.id else { return }
-                    proxy.scrollTo(lastID, anchor: .bottom)
+                    if didLoadInitialMessages {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo(lastID, anchor: .bottom)
+                        }
+                    } else {
+                        didLoadInitialMessages = true
+                        proxy.scrollTo(lastID, anchor: .bottom)
+                    }
                 }
             }
         }
@@ -316,7 +321,7 @@ private struct AIMemoryConsentCard: View {
             }
 
             Text("Sem aceitar, tudo o mais continua funcionando: tarefas, compras, casa. Só a conversa fica desligada.")
-                .ninaText(.meta, NinaTheme.faint)
+                .ninaText(.meta, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
 
             NinaButton(title: "Ler a política de privacidade", kind: .quiet) {

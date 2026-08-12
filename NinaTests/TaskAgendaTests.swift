@@ -135,6 +135,31 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertFalse(CompletedTaskRetention.disclosureNote.contains("!"))
     }
 
+    func testASnoozedTaskShowsTheDateItWasMovedToAndNotTheOneItWasWrittenWith() {
+        let due = date(year: 2026, month: 8, day: 8, hour: 9, minute: 0)
+        let snoozedTo = date(year: 2026, month: 8, day: 20, hour: 9, minute: 0)
+        var moved = task(dueAt: due)
+        moved.dueLabel = "hoje"
+        moved.snoozedUntil = snoozedTo
+
+        let reference = date(year: 2026, month: 8, day: 12, hour: 10, minute: 0)
+        let label = moved.effectiveDueLabel(relativeTo: reference, calendar: calendar)
+
+        // dueLabel is stamped at write time and never recomputed, while lateness
+        // colour is derived from displayDate. Rendering the stored string made the
+        // two disagree: a rescheduled task came back wearing its old late date.
+        XCTAssertNotEqual(label, "hoje")
+        XCTAssertFalse(moved.isOverdue(relativeTo: reference, calendar: calendar))
+    }
+
+    func testASeedKeepsItsWrittenLabelBecauseItHasNoDateToDeriveOneFrom() {
+        var seed = task(dueAt: nil)
+        seed.kind = .seed
+        seed.dueLabel = "Sem data"
+
+        XCTAssertEqual(seed.effectiveDueLabel(), "Sem data")
+    }
+
     private func task(dueAt: Date?) -> TaskItem {
         TaskItem(
             title: "Pagar a conta de luz",

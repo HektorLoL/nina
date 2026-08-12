@@ -94,6 +94,9 @@ struct TodayView: View {
             }
         }
         .ninaScreenBackground()
+        .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
+            filter = .unowned
+        }
     }
 
     private var header: some View {
@@ -151,7 +154,7 @@ struct TodayView: View {
         // the ground colour held back rather than a second token.
         let labelColor: Color = switch style {
         case .primary: NinaTheme.ground.opacity(0.72)
-        case .late: NinaTheme.terracotta.opacity(0.85)
+        case .late: NinaTheme.terracotta
         case .quiet: NinaTheme.muted
         }
 
@@ -290,7 +293,7 @@ struct TodayView: View {
         ZeroState(
             headline: "Acabou o dia da casa.",
             body_: closedTodayCount > 0
-                ? "A casa fechou \(closedTodayCount) hoje. Não tem mais nada te esperando até amanhã de manhã."
+                ? "A casa fechou \(closedTodayCount) \(closedTodayCount == 1 ? "coisa" : "coisas") hoje. Não tem mais nada te esperando até amanhã de manhã."
                 : "Não tem nada te esperando até amanhã de manhã.",
             presence: .stored
         ) {
@@ -370,13 +373,19 @@ struct TaskRowView: View {
                     Spacer(minLength: 8)
 
                     if task.kind == .task {
-                        Text(task.dueLabel)
+                        Text(task.effectiveDueLabel())
                             .font(.system(size: 13, weight: isOverdue ? .semibold : .regular))
                             .foregroundStyle(isOverdue ? NinaTheme.terracotta : NinaTheme.muted)
                             .lineLimit(1)
                     }
 
-                    CategoryGlyph(systemName: task.category.symbolName, size: 15, tint: NinaTheme.muted)
+                    // A semente's defining property is that it is a semente, so
+                    // the kind glyph outranks the category one on its rows.
+                    CategoryGlyph(
+                        systemName: task.kind == .seed ? "leaf" : task.category.symbolName,
+                        size: 15,
+                        tint: NinaTheme.muted
+                    )
 
                     if let owner {
                         MemberAvatar(initials: owner.name.ninaInitials, tone: owner.tone, size: 24)
@@ -390,14 +399,17 @@ struct TaskRowView: View {
         }
         .frame(minHeight: 48)
         // Nina has no swipe actions by architectural necessity: the horizontal
-        // drag belongs to the custom tab pager. Long-press is the substitute.
-        .onLongPressGesture(minimumDuration: 0.4) {
-            Haptics.lightImpact()
-            isShowingQuickActions = true
-        }
+        // drag belongs to the custom tab pager. Long-press is the substitute, and
+        // it must be simultaneous or the row's own buttons swallow it.
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.4).onEnded { _ in
+                Haptics.lightImpact()
+                isShowingQuickActions = true
+            }
+        )
         .sheet(isPresented: $isShowingQuickActions) {
             TaskQuickActionsSheet(task: task)
-                .presentationDetents([.height(300)])
                 .presentationDragIndicator(.visible)
         }
     }

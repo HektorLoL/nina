@@ -78,7 +78,7 @@ struct TasksView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(filter == .shopping ? "Compras" : "Tarefas").ninaText(.screen)
+                Text(screenTitle).ninaText(.screen)
                 Text(subtitle).ninaText(.label, NinaTheme.muted)
             }
 
@@ -97,6 +97,14 @@ struct TasksView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Buscar")
             .padding(.top, 4)
+        }
+    }
+
+    private var screenTitle: String {
+        switch filter {
+        case .shopping: "Compras"
+        case .seeds: "Sementes"
+        default: "Tarefas"
         }
     }
 
@@ -200,7 +208,7 @@ struct TasksView: View {
                         .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
                     Spacer()
                     if isCollapsed {
-                        Text("recolhida").ninaText(.meta, NinaTheme.faint)
+                        Text("recolhida").ninaText(.meta, NinaTheme.muted)
                     }
                 }
                 .contentShape(Rectangle())
@@ -247,7 +255,7 @@ struct TasksView: View {
                 }
 
                 Text(CompletedTaskRetention.disclosureNote)
-                    .ninaText(.meta, NinaTheme.faint)
+                    .ninaText(.meta, NinaTheme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 10)
             }
@@ -293,7 +301,7 @@ struct TasksView: View {
                             .font(.system(size: 17, weight: .medium))
                             .foregroundStyle(NinaTheme.ink)
                         Spacer()
-                        Text("Plante depois").ninaText(.meta, NinaTheme.faint)
+                        Text("Plante depois").ninaText(.meta, NinaTheme.muted)
                     }
                 }
                 .padding(16)
@@ -382,6 +390,7 @@ struct TasksView: View {
                 NinaCheckbox(isOn: item.isChecked, isSquare: true)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(item.isChecked ? "Desmarcar \(item.title)" : "Marcar \(item.title) como comprado")
 
             Button {
                 Haptics.lightImpact()
@@ -435,11 +444,15 @@ struct TasksView: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(NinaTheme.muted)
+                    // Autocorrect turns a household's own words into other words:
+                    // "boleto" became "Bolero" the first time this ran.
                     TextField("Procurar na casa", text: $searchQuery)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(NinaTheme.ink)
                         .focused($isSearchFocused)
                         .submitLabel(.search)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 40)
@@ -465,7 +478,7 @@ struct TasksView: View {
                 // the thing, they want to find it.
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Nada com esse nome.").ninaText(.screen)
-                    Text("Procurei em tarefas, sementes e compras, abertas e concluídas. Pode estar guardado com outra palavra.")
+                    Text("Procurei em tarefas e sementes, abertas e concluídas. Pode estar guardado com outra palavra.")
                         .ninaText(.label, NinaTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
 

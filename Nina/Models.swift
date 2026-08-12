@@ -686,6 +686,20 @@ struct TaskItem: Identifiable, Codable, Hashable {
         return calendar.isDate(displayDate, inSameDayAs: date)
     }
 
+    /// The label to draw. `dueLabel` is stored at write time and never recomputed,
+    /// so a snoozed or recurring task keeps showing the date it used to have —
+    /// while lateness colour is computed from `displayDate`. Both must agree.
+    func effectiveDueLabel(
+        relativeTo referenceDate: Date = .now,
+        calendar: Calendar = .current
+    ) -> String {
+        guard kind == .task,
+              let date = displayDate(relativeTo: referenceDate, calendar: calendar) else {
+            return dueLabel
+        }
+        return AppStore.taskDueLabel(for: date, relativeTo: referenceDate, calendar: calendar)
+    }
+
     func isOverdue(
         relativeTo referenceDate: Date = .now,
         calendar: Calendar = .current

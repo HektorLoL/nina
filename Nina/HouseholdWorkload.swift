@@ -122,14 +122,16 @@ enum HouseholdWorkload {
         let carriers = entries.count { $0.openCount > 0 }
         let isConclusive = assignedCount >= minimumAssignedSample && carriers >= minimumCarriers
 
+        let average = carriers > 0 ? Double(assignedCount) / Double(carriers) : 0
         if carriers > 0 {
-            let average = Double(assignedCount) / Double(carriers)
             for index in entries.indices {
                 entries[index].band = band(for: entries[index].openCount, average: average)
             }
         }
 
-        // Unassigned work is credited to the house and never to a person.
+        // Unassigned work is credited to the house and never to a person — but it
+        // is weighed on the same scale, because position under a labelled axis is
+        // the only quantity this screen publishes and a fixed slot would be a lie.
         if sharedCount > 0 {
             entries.append(
                 HouseholdWorkloadEntry(
@@ -137,7 +139,7 @@ enum HouseholdWorkload {
                     name: sharedOwnerLabel,
                     tone: .lavender,
                     openCount: sharedCount,
-                    band: .similar,
+                    band: band(for: sharedCount, average: average),
                     isShared: true
                 )
             )

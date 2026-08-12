@@ -46,6 +46,9 @@ struct NinaApp: App {
                 // light. Rendering it against a dark system setting would ship a
                 // palette nobody designed or reviewed.
                 .preferredColorScheme(.light)
+                // Type scales, but bounded: the boards' layouts have only been
+                // checked to one step into the accessibility range.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .environment(store)
                 .environment(authSession)
                 .environment(onboardingStore)

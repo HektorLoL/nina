@@ -86,7 +86,7 @@ struct TaskDetailView: View {
     private var titleBlock: some View {
         HStack(alignment: .top, spacing: 14) {
             Button {
-                Haptics.selection()
+                task.isDone ? Haptics.selection() : Haptics.success()
                 store.toggleTask(task)
             } label: {
                 NinaCheckbox(isOn: task.isDone, isOverdue: isOverdue, size: 26)
@@ -106,7 +106,7 @@ struct TaskDetailView: View {
     private var metadata: some View {
         VStack(spacing: 0) {
             metaRow("Quando") {
-                Text(task.kind == .seed ? "Sem data — plante quando quiser" : task.dueLabel)
+                Text(task.kind == .seed ? "Sem data — plante quando quiser" : task.effectiveDueLabel())
                     .ninaText(.label, isOverdue ? NinaTheme.terracotta : NinaTheme.ink, weight: isOverdue ? .semibold : .regular)
             }
             NinaDivider(inset: 0)
@@ -181,7 +181,7 @@ struct TaskDetailView: View {
                 }
 
                 if let otherAdult {
-                    actionChip("Passar pro \(otherAdult.name.firstWord)") {
+                    actionChip("Passar para \(otherAdult.name.firstWord)") {
                         store.updateTask(
                             id: task.id,
                             title: task.title,

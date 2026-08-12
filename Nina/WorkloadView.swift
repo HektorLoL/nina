@@ -102,6 +102,14 @@ struct WorkloadView: View {
                         }
                     }
                 }
+                // The finding is drawn as a position under a labelled axis, which
+                // a screen reader cannot see. It has to be said as well.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    entry.isShared
+                        ? "A casa, sem dono: \(entry.band.title)"
+                        : "\(entry.name): \(entry.band.title)"
+                )
             }
         }
     }
