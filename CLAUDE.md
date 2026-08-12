@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-08-10
+Last updated: 2026-08-12
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -100,7 +100,8 @@ Four surfaces, one product.
 | Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app` | `web/src/worker.ts` |
 
-**Only third-party iOS dependency: `supabase-swift` 2.46.0.** No analytics SDK,
+**Only third-party iOS dependency: `supabase-swift` 2.46.0.** One bundled font
+(Fraunces, OFL, subset to 45 KB) and no other asset dependency. No analytics SDK,
 no crash reporter, no ad SDK — that absence is the mechanical proof behind the
 App Store "Data Used to Track You: No" label. Do not add one without revisiting
 `docs/privacy/app-store-privacy-labels.md`.
@@ -287,38 +288,52 @@ lives on the model (`scheduledOccurrence(after:)`).
 
 ### Design system
 
-**`Nina/Theme.swift` is the only source of color.** There is not a single
-literal `Color(red:…)` outside it (except the Nina avatar's hair). Light/dark
-goes through `dynamic(light:dark:)` wrapping a `UIColor` trait closure — there
-is no asset catalog color set and no `@Environment(\.colorScheme)` branching.
+The design system is **azulejo**, built from the 47 Paper boards on 2026-08-12.
+The direction is in `docs/rebrand-azulejo.md`, the QA in `design-qa-azulejo.md`,
+and **every departure the build makes from the boards is in
+`docs/rebrand-implementation.md`** — read that before assuming a screen is wrong.
 
-- **Accents:** `mint` (brand, `#38C2B8`), `coral` (destructive/overdue), `sky`
-  (informational), `amber` (attention/shopping), `gold` (premium only),
-  `lavender` (snoozed/recurrence/pet).
-- **Surfaces:** `ink`, `muted`, `cream`, `line`, `card`, `field`, `sheet`,
-  `cardStroke`, `shadow`. (`paper` is defined and unused; `taskCard`/`taskCardStroke`
-  are currently byte-identical to `card`/`cardStroke`.)
-- **Components take `tone: MemberTone`, never `Color`.** If a new concept needs
-  a color, give its model a `var tone: MemberTone`.
+**`Nina/Theme.swift` is the only source of color, and the palette is light-only.**
+`NinaApp` pins `.preferredColorScheme(.light)`: the glaze has no designed dark
+counterpart, so there is no `dynamic(light:dark:)` layer and no colorScheme
+branching anywhere.
 
-**Typography:** no custom fonts, no scale constants — semantic `Font` styles with
-an explicit heavy weight. Distribution is the convention: `.black` ×132,
-`.bold` ×67, `.heavy` ×58. `design: .rounded` appears only at the two display
-sizes (34pt, 31pt).
+- `ground #FBFCFD` every screen · `grout #EDF0F4` fields and inactive chips ·
+  `line #DFE4EB` hairlines and card strokes · `ink` · `muted` · `faint`
+  (uppercase letterspaced labels only, 12px floor).
+- `cobalt #1B4FD8` is brand, Nina and commit — **one cobalt control per screen**.
+- `terracotta #C2410C` is **lateness only**. Never destruction, never offline,
+  never a category. Destruction is carried by weight and friction (ink fill,
+  terminal position, a typed gate); negative-but-not-late states use grout + ink.
+- `moss #3F6B4A` marks confirmed/done, and only for something a *human* confirmed.
+- **Category is a monochrome outline glyph, never a colour.** `MemberTone`'s case
+  names are wire values that outlived their hues; they render as neutral ink tints.
+
+**Typography:** Fraunces (bundled, `Nina/Fraunces-Regular.ttf`, 45 KB, OFL) for
+brand voice — screen titles, Nina's own speech, the one big number, **never a list
+row**. SF Pro for interface. Always through the modifier:
+`.ninaText(.screen)` / `.ninaText(.label, NinaTheme.muted, weight: .semibold)`.
+Raw `.font()` on user-facing copy is off-convention.
+
+**The mark.** `NinaMark(size:presence:)` — an open cup holding a disc it never
+closes over. Two masters (64 and 24) that differ by measurement, not by scale;
+below 18pt the cup retires and the disc ships alone. It never rotates, never
+closes, never sits inside a badge, and never takes terracotta. Presence is a
+position, never an expression — she has no face because a face watching a
+household is what this product refuses.
 
 **Layout rules that hold everywhere:**
 
-- Screen: `ScrollView { VStack(alignment: .leading, spacing: 18) { … }.padding(18)
-  .padding(.bottom, 104) }.ninaScreenBackground()`. Sheets swap in
-  `.ninaSheetBackground()` and `.padding(.bottom, 24)`.
-- Radii: **24** = card, **18** = field, **28** = chat input / premium hero,
-  **30** = tab bar. Always `style: .continuous`. Pills use `Capsule()`.
-- One shadow token: `.cardShadow()`.
-- Backgrounds use the `in:` shape parameter, not `.background { } + .clipShape`.
+- Screen: `ScrollView { VStack(alignment: .leading, spacing: …) { … }
+  .padding(.horizontal, 20).padding(.bottom, 104) }.ninaScreenBackground()`.
+  Screens draw their **own header**; the navigation bar is hidden app-wide and a
+  pushed screen hides the tab bar too.
+- Radii: `NinaTheme.Radius` — chip 999, field 14, card 20, sheet 28.
+- Cards are **stroked on the glaze** (`.ninaCard()`), not filled boxes with shadows.
 - Every custom-styled button carries `.buttonStyle(.plain)`. Universal.
 - Disabled states are expressed twice: `.disabled(cond)` **and** `.opacity(…)`.
-- Rows: `IconBubble(40)` + 12pt + title/subtitle VStack + trailing, in
-  `.padding(14)`; matching divider is `Divider().padding(.leading, 66)`.
+- Rows: 40pt fixed leading slot + 12pt + title/subtitle + trailing (`NinaRow`);
+  matching divider is `NinaDivider()` at inset 52.
 - Capture sheets put the **title field first and focus it on appear** in `.add`
   mode (`@FocusState` + `.task { await Task.yield(); isTitleFocused = true }` —
   the yield is required or the assignment lands before the field exists).
@@ -665,15 +680,17 @@ states *are* reachable for real users and must be designed.
 **`toggleTask` on a recurring task does not complete it** — it rolls `dueAt`
 forward. Only `.none`-recurrence tasks flip `isDone`.
 
-**There is no task detail screen, and two detail views ship unreachable.**
-`RouterPath.navigate(to:)` has **zero call sites**, so `Route.task` and
-`Route.member` — and with them `TaskDetailCard` and `MemberRouteDetail` — are
-dead. `MemberDetailSheet` is defined and never constructed;
-`SheetDestination.member(id)` routes to `MemberEditorSheet(mode: .edit(id))`, so
-every member tap lands in an edit form even for a viewer who cannot edit. Two
-consequences: `task.createdBy` is captured on every task and rendered nowhere
-reachable, and tapping a task opens the editor sheet rather than a detail view.
-Do not "fix" a bug by editing `TaskDetailCard` — nobody can see it.
+**`Route` now has four cases and all of them are reachable** — `task`, `member`,
+`workload`, `memories`. This was fixed in the rebrand: `RouterPath.navigate(to:)`
+used to have zero call sites, so `task.createdBy` was captured on every task and
+rendered nowhere, and every member tap landed in an edit form even for a viewer
+who cannot edit. `TaskDetailView` and `MemberDetailView` are the live screens;
+`TaskDetailCard` and `MemberDetailContent` are gone.
+
+**Custom task sections are no longer reachable from the UI.** `TaskSection`
+survives in the model and on the wire, but Tarefas groups by *category*, per board
+`T1`. This is a deliberate feature removal recorded in
+`docs/rebrand-implementation.md` §2.
 
 **`enqueueRemoteMutation` silently no-ops** when there is no active user, no
 backend, a DEBUG account, or no active home. The mutation persists locally and
@@ -700,9 +717,12 @@ and `interruptionLevel = .passive`, delivery time unchanged, because the app mus
 never show one time and deliver another. `UNCalendarNotificationTrigger` carries
 no timezone — travel silently reschedules everything to the same wall-clock time.
 Notifications carry no `userInfo`, category, or actions, and there is no
-`UNUserNotificationCenterDelegate`. The delivered body is
-`"\(task.owner) - \(task.dueLabel)"` — a field dump, not Nina's voice, and
-`task.subtitle` reaches the lock screen verbatim.
+`UNUserNotificationCenterDelegate`. **The body never contains `task.subtitle`** —
+it used to, which put a photographed boleto's reading on the lock screen verbatim.
+Nina speaks a sentence and names only who is holding the task;
+`NotificationTargetingTests.testTheTaskDetailNeverReachesTheLockScreen` fails if
+the detail ever returns. There is still no preview-redaction control, so the
+*title* the person typed does reach the lock screen: never claim otherwise in copy.
 
 **`dueLabel` and `dueAt` can drift.** `inferredDueAt(from:)` parses only a narrow
 set of pt-BR forms; anything else yields `nil` and the task shows a due label but
