@@ -664,4 +664,32 @@ present-tense product copy, and the distinction is easy to lose when moving
 between the two. It now carries the quiet-hours rule instead, which the build
 genuinely keeps.
 
-Bands 11–13 have not been through a QA pass.
+Round 4 covered bands 11–13 and is recorded in `design-qa-azulejo.md`: 69 raised,
+28 refuted, 21 confirmed by an adversary, 20 adjudicated by me because two
+refuters died mid-run. Its systemic finding is that **round 3's over-claim fix
+was applied to the advertising page and never swept across the product boards** —
+`D3` still carried the residency claim `A3` had already been corrected for, and
+it surfaced only because `Z7` links to `D3`. A confirmed over-claim is now a
+search across every surface, not an edit to the board it was found on.
+
+Two things round 4 leaves open, both decisions rather than edits:
+
+- **The aisle taxonomy contradicts itself across two docs.** §5 above lists a
+  shopping `category` column as an assumed server change and §2c's `Z4` promised
+  aisle grouping. `docs/product-depth-backlog.md:515` lists aisles under "which
+  wishlist items I would deliberately NOT build", and its argument is better than
+  this document's: aisle layout is per-store and per-city, so it becomes manual
+  categorisation — the mental load Nina exists to absorb. `Z4`'s promise is
+  removed. **`G1` is still drawn aisle-grouped, and that needs settling before
+  either board is built.**
+- **The retention claim in `Nina/NinaChatView.swift:244`** tells users the model
+  provider "não os guarda". The repository supports `store: false` and nothing
+  more — no DPA, and no legal entity yet to sign one. The boards now claim only
+  what is enforced; the shipping string does not.
+
+Round 4 also corrected two rules asserted in §2b when the boards were built. The
+Guardado state closed the floor gap to 4.5% against the 8.0% invariant, so it now
+returns the disc to rest rather than settling below it. And the avatar divergence
+was a P0, not the P2 I graded it during the build: `S3` and `N1` were still
+drawing the pre-rebrand cobalt puck, which is an iris and is also the sub-18px
+retired form used at double its ceiling. All three surfaces now draw the mark.

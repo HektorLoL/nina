@@ -311,3 +311,178 @@ Result (round 3): passed. Two known gaps remain deliberate and are recorded in
 `docs/rebrand-azulejo.md` §5b — the boards advertise the proposal flow while
 `NINA_AI_V2_ENABLED` is `NO`, and no board carries a legal entity, because there
 is not yet one to carry.
+
+---
+
+# Round 4 — the mark and the eight built zero states
+
+Last updated: 2026-08-11
+
+## Compared
+
+`M1` and `M2` (the mark and its presence states, 1440 wide), `Z1`–`Z8` (the zero
+states at 390×844), and a regression check on the one `V1` card rewritten when
+they were built.
+
+Same reviewer-plus-refuter structure, seven groups, with the over-claim auditor
+from round 3 retained — the zero states make privacy, premium and delivery
+claims, which is the class of copy that produced every P0 last round.
+
+**69 findings raised. 28 refuted, 21 confirmed by an adversary, and 20 decided by
+me** — the two mark groups' refuters died mid-run on a usage limit, so those
+findings were never adversarially tested. I adjudicated them against the boards
+myself and have marked below which ones that applies to, because a finding I both
+raised and upheld is weaker evidence than one that survived an adversary. Two of
+the twenty I rejected.
+
+## The systemic finding
+
+**Round 3's fix was applied to the advertising page and never swept across the
+product boards.** `D3 · Privacidade e dados` still read *"A casa, as tarefas e as
+memórias nunca saem do Brasil. Só o texto da conversa vai para um serviço de IA"* —
+the same unqualified residency claim, on the same three nouns, that round 3
+identified as false and corrected on `A3`. `search_tasks` and `search_memories`
+return their rows as tool outputs fed to OpenAI every turn, and
+`buildUserContent()` pushes attachments as `data:` URIs, so images and documents
+cross too.
+
+It surfaced only because `Z7` links to `D3`: a user told on `Z7` that a
+photographed boleto goes abroad, who taps through to check, was reading that only
+text does. A new board exposed a false claim on an old one.
+
+**Added to the method.** A confirmed over-claim is now a search across every
+surface, not an edit to the board it was found on. The claim's *wording* varies;
+the underlying assertion is what has to be swept.
+
+## Findings Resolved
+
+- P0: **Nina's avatar shipped as two different marks.** `S3` and `N1` still drew
+  the pre-rebrand cobalt puck — a filled disc with a light dot — while `Z6` drew
+  the mark. The reviewer's phrasing is the right one: the puck is "the one shape
+  M1 refuses twice", because a filled circle with a concentric dot is an iris,
+  and it is also the sub-18px retired form used at double its ceiling. All three
+  now draw the mark. I had graded this P2 when I fixed it on `Z6` during the
+  build and was wrong: it is the identity rendering as an eye on the two surfaces
+  where Nina speaks most.
+- P1: **A residency claim on `D3` that round 3 had already killed elsewhere.**
+  Rewritten to name what actually crosses — text *and* imagery — and to claim only
+  what `store: false` buys.
+- P1: **`Z8`'s footnote was design rationale drawn back inside a phone frame.**
+  Near-verbatim pt-BR of two sentences from `docs/rebrand-azulejo.md`, including
+  *"porque mostrar uma hora e entregar em outra seria mentira"*. Fifth occurrence
+  of defect V5, and on the board where I had already removed one instance of
+  design-intent-as-present-tense during the build and left another in the same
+  sentence. Deleted rather than rewritten: the rationale already has a home.
+- P1: **`Z7` promised "o retrato de domingo".** Three defects in three words. The
+  cron is daily at 06:15 UTC and eligibility rolls in 7-day steps from whenever a
+  household first crossed the threshold, so no weekday is guaranteed. The shipped
+  name is "Resumo semanal". And *retrato* is the app's own word for the workload
+  portrait, which is free and client-side — so a reader who saw `Z6` then `Z7`
+  would conclude the sinal de sobrecarga is behind the paywall. Putting the
+  emotional heart of the product behind a price in the reader's head is a
+  positioning error, not a wording preference.
+- P1: **`Z7` claimed the model "não guarda nada do que recebe".** The only
+  evidence in the repository is `store: false`, which stops retrieval storage and
+  is not a zero-retention agreement; there is no DPA, and no entity yet to sign
+  one. Cut to the crossing itself. The board's other line — the original is not
+  kept server-side — is enforced by construction and stays.
+- P1: **`Z7` claimed Premium buys "a conversa sem limite diário".**
+  `begin_nina_chat_run` applies an unconditional family cap of 100 turns per
+  86 400s on top of the per-user window. Now names what Premium actually removes.
+- P1: **`Z2` taught a rule the product breaks.** *"Tarefa é coisa combinada: tem
+  dono e tem dia"* — but `T1` shows a task labelled "sem data", `H1` carries a
+  "Sem dono 1" filter chip, and `O2`, the first proposal Nina ever makes, renders
+  "Dono: A casa, por enquanto". Undated and unowned tasks are first-class in the
+  model (`ownerMemberID: UUID?`, `dueAt: Date?`).
+- P1: **`Z4` promised aisles that the backlog records a decision not to build.**
+  See below — this one is not fully resolved.
+- P1: **`Z1`'s Hoje header was a redrawn approximation of a shared component**,
+  with its date eyebrow at 11px faint, under the 12px floor settled in round 1.
+  Normalised to `H2`'s values, and the board's mark, padding and CTA brought onto
+  the Z-family metrics it had drifted 8% off.
+- P1 (self-adjudicated): **`M2` printed three false or unscoped claims about its
+  own contents.** "Só duas variáveis mudam" was contradicted by three of the five
+  cards beneath it; "cada estado tem um sinal geométrico" was untrue of the two
+  states whose signal is 2.2/64, invisible at avatar size; and the failure-state
+  rule forbade a mark on permission failures while `Z8` drew one. All three
+  rewritten to say what is actually true, including the Nina-is-the-subject
+  exception.
+- P1 (self-adjudicated): **`M2`'s Guardado state closed the floor gap by 43%.**
+  The disc settled to cy 30, leaving 4.5% clearance against the 8.0% that `M1`
+  prints in cobalt as the mark's critical dimension — the rule whose whole content
+  is that holding requires not gripping. Guardado now returns the disc to rest,
+  which is also a better reading of the word.
+- P1 (self-adjudicated): **`M2`'s five-state row was 24px wider than its column**
+  (5×248 + 4×24 = 1336 against 1312) with nothing able to shrink.
+- P2: **Four labels assumed the reader is a woman** — "eu mesma" twice, "você
+  mesma", "sozinha" — in a two-adult product with no gender field, in a file that
+  elsewhere deliberately writes "Moro sozinho ou sozinha".
+- P2: **A second seed glyph.** `Z3` drew a stem-and-leaves sprout where `T2` draws
+  two splayed leaves, at a darker weight that competed with its own row title. In
+  a system where the monochrome glyph is the only kind signal, the primitive has
+  to be one drawing. Swapped to `T2`'s.
+- P2: `V1`'s waiting-room card promised *"Você vai receber um aviso"* with no push
+  path anywhere in the repository — no APNs key, no token table, no server send.
+  Rewritten to promise only what realtime already delivers.
+- P2: `Z7` carried three cobalt elements under a cobalt mark; the privacy link is
+  now muted, matching every other board's secondary. `Z3`'s specimen said "Plantar
+  depois" where the app draws "Plante depois". `Z3`'s teaching paragraph and its
+  example card had zero px between them. `Z6`'s eyebrow was 11px faint. `V1`'s
+  rewritten card stopped quoting the screen it documents.
+- P2 (self-adjudicated): `M1` asserted "dois desenhos, não uma escala" and then
+  specified only the 64 master; the 24 construction is now printed. Its three
+  full-width rows had three different right edges (656 / 608 / 544). The size
+  ladder's fifth rung was a threshold drawn at an arbitrary size among four rungs
+  drawn at their literal labels.
+
+## Accepted Without Change
+
+- **The "Esperando você" silhouette.** The raised disc breaks 1.9 units above the
+  cup's own ceiling and sits between two upturned arms, which is the standard
+  head-between-raised-arms figure. I could not settle this by measurement — it is
+  a perceptual question, and it is the same class of question as the receptacle
+  read in `docs/rebrand-azulejo.md` §2b. It goes into that user test rather than
+  being tuned on my own judgement.
+- **`M1`'s 64px H1 against `M2`'s 52px.** Same role, two sizes, but the boards are
+  not siblings: `M1` is the identity statement and `M2` is its specification. Now
+  stated rather than left to be inferred.
+- **The app icon draws the 64 master at every size.** iOS scales one asset, so the
+  29pt tile renders a mark whose floor gap is proportionally tighter than the 24
+  master would give. Recorded as a build note for the icon set rather than
+  redrawn: the fix belongs in the asset catalogue, not on the board.
+
+## Carried Forward — needs a decision, not an edit
+
+- **The aisle taxonomy contradicts itself across two docs.**
+  `docs/rebrand-azulejo.md` designs shopping grouped by aisle and lists the
+  `category` column under the server changes it assumes.
+  `docs/product-depth-backlog.md:515` lists aisles under *"which wishlist items I
+  would deliberately NOT build"*, and its reasoning is the stronger one: aisle
+  layout is per-store and per-city, so it degenerates into manual categorisation —
+  the exact mental load Nina exists to absorb. `Z4`'s promise has been removed
+  because a zero state must not teach a rule the first added item breaks, but
+  **`G1`'s entire structure is aisle-grouped** and that is a product decision, not
+  a QA fix.
+- **The unsubstantiated retention claim is also live in the shipping app.**
+  `Nina/NinaChatView.swift:244` tells users the provider "não os guarda". The
+  boards have been corrected to what `store: false` supports; the Swift string has
+  not, because the honest fix is either a written agreement or a reword, and the
+  first needs a legal entity that does not exist yet.
+
+## Final Checks
+
+- No unresolved P0 findings.
+- One drawing of the mark across all 47 boards; one drawing of the seed glyph.
+- Nina's avatar is the mark on every surface that renders her.
+- No residency or retention claim on any board exceeds what the repository
+  enforces, and the sweep was run across the whole file rather than the boards
+  under review.
+- No design rationale is rendered inside any phone frame.
+- Every uppercase faint label is 12px or above; `Z1`'s date eyebrow matches `H2`.
+- The mark's floor gap is 8.0% at 64 and 8.3% at 24 in every state that ships.
+- No board addresses the reader with a gendered form.
+
+Result (round 4): passed, with the two carried-forward decisions above open and
+the mark's perceptual risk untested. Twenty of the sixty-nine findings were
+adjudicated by their author rather than by an adversary; if any single verdict
+here deserves a second look, it is one of those.
