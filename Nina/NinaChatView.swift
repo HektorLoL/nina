@@ -42,7 +42,10 @@ struct NinaChatView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         connectionNotice
 
-                        if store.messages.isEmpty {
+                        // A seeded greeting means `messages` is never empty, so
+                        // gating on that hid the capture prompt from every new
+                        // household — the one screen it was written for.
+                        if !store.messages.contains(where: { $0.sender == .user }) {
                             capturePrompt
                         }
 
@@ -1742,7 +1745,17 @@ private struct SuggestionMiniCard: View {
     @Environment(RouterPath.self) private var router
     var suggestion: NinaSuggestion
 
+    @State private var isRefused = false
+
     var body: some View {
+        if isRefused {
+            EmptyView()
+        } else {
+            card
+        }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 NinaCheckbox(isOn: false, size: 22)
@@ -1774,9 +1787,18 @@ private struct SuggestionMiniCard: View {
                 store.applySuggestion(suggestion)
             }
 
-            NinaButton(title: "Ver os detalhes", kind: .quiet, fillsWidth: true) {
-                Haptics.lightImpact()
-                router.presentedSheet = .suggestion(suggestion)
+            // Three exits, never two: disagreement is a first-class button, and a
+            // card you can only accept or inspect is a card you cannot refuse.
+            HStack(spacing: 10) {
+                NinaButton(title: "Ver os detalhes", kind: .outline, fillsWidth: true) {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .suggestion(suggestion)
+                }
+
+                NinaButton(title: "Não", kind: .outline, fillsWidth: true) {
+                    Haptics.selection()
+                    isRefused = true
+                }
             }
         }
         .padding(16)

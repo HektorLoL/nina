@@ -1,6 +1,7 @@
 import XCTest
 @testable import Nina
 
+@MainActor
 final class TaskAgendaTests: XCTestCase {
     private var calendar: Calendar!
     private var now: Date!
@@ -158,6 +159,25 @@ final class TaskAgendaTests: XCTestCase {
         seed.dueLabel = "Sem data"
 
         XCTAssertEqual(seed.effectiveDueLabel(), "Sem data")
+    }
+
+    func testClosingATaskStampsWhenItClosedAndReopeningClearsIt() {
+        let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
+        guard let open = store.tasks.first(where: { !$0.isDone && $0.recurrence == .none }) else {
+            return XCTFail("PreviewData should seed at least one open non-recurring task.")
+        }
+
+        store.toggleTask(open)
+        let closed = store.tasks.first { $0.id == open.id }
+        // Nothing else in the app knows when a task closed: the completed list and
+        // the day-cleared count both read this field.
+        XCTAssertNotNil(closed?.completedAt)
+        XCTAssertEqual(closed?.isDone, true)
+
+        if let closed { store.toggleTask(closed) }
+        let reopened = store.tasks.first { $0.id == open.id }
+        XCTAssertNil(reopened?.completedAt)
+        XCTAssertEqual(reopened?.isDone, false)
     }
 
     private func task(dueAt: Date?) -> TaskItem {

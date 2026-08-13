@@ -1333,6 +1333,12 @@ final class AppStore {
             )
         }
 
+        // A confirmed suggestion stops being confirmable. Leaving the card live
+        // let every extra tap create another copy of the same thing.
+        for index in messages.indices where messages[index].suggestion == suggestion {
+            messages[index].suggestion = nil
+        }
+
         let confirmation = ChatMessage(
             sender: .nina,
             text: "Você confirmou. Está na casa agora.",
@@ -1836,6 +1842,10 @@ final class AppStore {
             proposedTask.snoozedUntil = nil
         } else {
             proposedTask.isDone.toggle()
+            // Stamped here, not only on the way back from the server: without it
+            // nothing local knows when a task closed, so "concluídas hoje" and the
+            // day-cleared count stay empty forever on a device that is offline.
+            proposedTask.completedAt = proposedTask.isDone ? .now : nil
         }
         submitTaskUpdate(proposedTask, basedOn: currentTask)
     }

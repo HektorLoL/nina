@@ -1971,6 +1971,22 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(store.tasks.count, taskCountAfterTurn + 1)
     }
 
+    @MainActor
+    func testConfirmingASuggestionTwiceCreatesOneThingAndNotTwo() async throws {
+        let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
+        await store.sendMessage("Marcar veterinário do Thor")
+        let suggestion = try XCTUnwrap(store.messages.last?.suggestion)
+        let taskCountAfterTurn = store.tasks.count
+
+        store.applySuggestion(suggestion)
+        store.applySuggestion(suggestion)
+
+        // The card stayed live after being confirmed, so every extra tap made
+        // another copy of the same thing.
+        XCTAssertEqual(store.tasks.count, taskCountAfterTurn + 1)
+        XCTAssertFalse(store.messages.contains { $0.suggestion == suggestion })
+    }
+
     func testProposalsAreDiscardedWhileTheAIFlagIsOff() {
         let pending = makeProposal(kind: .task)
 

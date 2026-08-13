@@ -165,9 +165,15 @@ struct TaskDetailView: View {
     // human's act, and crediting her would be a past-tense claim she cannot make.
     private var provenanceLine: String {
         let assistant = store.familyGroup.members.first { $0.role == .assistant }?.name ?? "Nina"
-        guard task.createdBy.caseInsensitiveCompare(assistant) != .orderedSame else {
+        if task.createdBy.caseInsensitiveCompare(assistant) == .orderedSame {
             return "Veio de uma conversa com a Nina."
         }
+        // "Manual" is the sentinel addTask stamps when nobody is named. It is not
+        // a person, and rendering it as one invents a housemate.
+        let isPerson = store.familyGroup.members.contains {
+            $0.name.caseInsensitiveCompare(task.createdBy) == .orderedSame
+        }
+        guard isPerson else { return "Escrita à mão, aqui no app." }
         return "\(task.createdBy) colocou isto aqui."
     }
 

@@ -129,8 +129,11 @@ struct NinaWordmark: View {
     var size: CGFloat = 28
 
     var body: some View {
+        // The lockup never shows the retired disc. Below the floor the mark is
+        // unresolvable on its own, but beside the word it still reads — and a
+        // brand signature that degrades to a dot is not a signature.
         HStack(spacing: size * 0.42) {
-            NinaMark(size: size * 1.15)
+            NinaMark(size: max(size * 1.15, 20))
             Text("Nina").ninaText(.title)
         }
     }

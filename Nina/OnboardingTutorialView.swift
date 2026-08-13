@@ -268,10 +268,15 @@ struct OnboardingTutorialView: View {
                     reading.when = $0
                 }
 
-                NinaDivider(inset: 0)
+                // A semente has no date, so it cannot repeat. Correcting Quando to
+                // "sem data" and leaving "todo mês" on the card teaches a
+                // contradiction on the screen that teaches the whole grammar.
+                if reading.when != TutorialReading.noDate {
+                    NinaDivider(inset: 0)
 
-                decisiveRow("Repete", value: reading.repeats, options: reading.repeatOptions) {
-                    reading.repeats = $0
+                    decisiveRow("Repete", value: reading.repeats, options: reading.repeatOptions) {
+                        reading.repeats = $0
+                    }
                 }
 
                 NinaDivider(inset: 0)

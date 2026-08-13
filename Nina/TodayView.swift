@@ -340,6 +340,7 @@ struct TaskRowView: View {
     let task: TaskItem
 
     @State private var isShowingQuickActions = false
+    @State private var didLongPress = false
 
     private var isOverdue: Bool { task.isOverdue() }
 
@@ -359,6 +360,9 @@ struct TaskRowView: View {
             .accessibilityLabel(task.isDone ? "Marcar como não feita" : "Marcar como feita")
 
             Button {
+                // The long press fires first and the tap follows on lift, so
+                // without this the row opens the sheet and pushes the detail.
+                guard !didLongPress else { didLongPress = false; return }
                 Haptics.selection()
                 router.navigate(to: .task(task.id))
             } label: {
@@ -404,6 +408,7 @@ struct TaskRowView: View {
         .contentShape(Rectangle())
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.4).onEnded { _ in
+                didLongPress = true
                 Haptics.lightImpact()
                 isShowingQuickActions = true
             }

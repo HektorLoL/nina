@@ -643,3 +643,77 @@ invariant, and all are one-site fixes.
 Result (round 5): passed, with the nine open P2s above and the untested items from
 round 4 — the mark's perceptual risk, and `C4`'s long-press against the tab
 pager's gesture area on a real device.
+
+---
+
+# Round 6 — driving the app
+
+Last updated: 2026-08-12
+
+## Compared
+
+Not the code and not the boards — the running app. Rounds 1–5 read source and
+compared drawings; none of them ever used Nina. This pass is a clean install on
+an iPhone 17 simulator, walked end to end: tutorial, house creation, chat turn,
+proposal correction and confirmation, capture sheet, completion, long-press quick
+actions, task detail, search, shopping, settings.
+
+**Eight defects, and the two worst were invisible to every static reviewer**
+because they only appear once state changes.
+
+## The systemic finding
+
+**A screen can pass every review and still be dead on arrival.** Three of the
+eight were surfaces that render correctly and are simply unreachable, or
+reachable and wrong on the second tap. Reading the file proves the branch exists;
+only running it proves the branch is entered.
+
+## Findings Resolved
+
+- **Confirming a suggestion twice created two of the same thing.** The card stayed
+  live after being confirmed, so each extra tap ran `applySuggestion` again —
+  Sementes went 2 → 3 → 4 on repeated taps. `applySuggestion` now clears the
+  suggestion from the message that carries it, which also survives a tab switch
+  in a way view-local state would not. Pinned by
+  `testConfirmingASuggestionTwiceCreatesOneThingAndNotTwo`.
+- **`completedAt` was never set on the device.** `toggleTask` flipped `isDone` and
+  nothing else; the field was only ever *decoded* from the server. So
+  "Concluídas hoje" never appeared, the day-cleared count was permanently zero,
+  and an offline device could not tell when anything closed. Now stamped on
+  completion and cleared on reopen, with a test.
+- **The chat's capture prompt was unreachable.** It gated on `messages.isEmpty`,
+  but every household is seeded with Nina's greeting, so the best capture copy in
+  the app never rendered for anyone. Now gates on the absence of a *user* message.
+- **Long-press fired the sheet and the navigation.** Round 5 made the gesture
+  reachable with `.simultaneousGesture`; using it showed the tap still followed on
+  lift, so the row pushed the detail *behind* the quick-actions sheet. Guarded.
+- **The legacy suggestion card had two exits.** Accept and inspect, no refusal —
+  on a card reachable in production, since the mock engine is the offline
+  fallback. Three exits now, per the grammar.
+- **`NinaWordmark` degraded to a bare dot.** At `size: 15` the lockup drove the
+  mark under its own 18pt retirement floor, so the tutorial header showed a plain
+  cobalt circle where the brand signature belongs. The lockup now clamps.
+- **The tutorial taught a contradiction.** Correcting Quando to "sem data" left
+  "Repete · todo mês" on the card — an undated thing that repeats monthly, on the
+  screen whose entire job is teaching the grammar.
+- **`createdBy: "Manual"` rendered as a person.** The task detail read "Manual
+  colocou isto aqui." `Manual` is the sentinel `addTask` stamps when nobody is
+  named; the provenance line now only names a real member.
+
+## Verified working
+
+The confirmation ritual end to end, including the part that matters most:
+correcting Quando to "sem data" flips the CTA from "Confirmar e criar 1 tarefa"
+to "**criar 1 semente**", so the correction binds to what gets made. Capture
+creates and files by category. Completion moves the row and now populates the
+completed section. `effectiveDueLabel` renders computed dates, not stale stored
+ones. The invite, house creation, search, shopping and settings paths all work.
+
+## Final Checks
+
+- Full `NinaTests` suite passes, with three new regression tests.
+- `deno task test` 99 passed; `preflight:repo` 0 failures.
+- Every flow above exercised on a clean install, not a warm one.
+
+Result (round 6): passed. The nine open P2s from round 5 remain open; none was
+reached by this sweep.
