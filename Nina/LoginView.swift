@@ -125,6 +125,7 @@ struct LoginView: View {
                 .submitLabel(isWaitingForCode ? .next : .send)
                 .focused($focusedField, equals: .email)
                 .disabled(isWaitingForCode)
+                .opacity(isWaitingForCode ? 0.5 : 1)
                 .onSubmit {
                     if isWaitingForCode {
                         focusedField = .code

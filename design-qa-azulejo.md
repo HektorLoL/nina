@@ -617,14 +617,16 @@ were restored rather than the copy weakened.
 
 ## Still Open — recorded, not fixed
 
+*(All ten were closed in round 7. Kept here for the record of what round 5 chose
+to defer and why: none was a false claim or a broken invariant.)*
+
 Hoje's sections are not collapsible though the board draws the chevrons; H2's
 "amanhã cedo" card and T3's undo toast were not built; "Concluídas hoje" ignores
 the Minhas filter; the seeds list has no Plantar control though its own caption
 names one; chat attachments are decoded on the main actor; the tab pager destroys
 per-tab scroll state on every switch; the pending-request badge is invisible to
 VoiceOver; a failed purchase still prints in moss; the login e-mail field is
-disabled without the matching opacity. None of these is a false claim or a broken
-invariant, and all are one-site fixes.
+disabled without the matching opacity.
 
 ## Final Checks
 
@@ -717,3 +719,54 @@ ones. The invite, house creation, search, shopping and settings paths all work.
 
 Result (round 6): passed. The nine open P2s from round 5 remain open; none was
 reached by this sweep.
+
+---
+
+# Round 7 — closing the deferred list
+
+Last updated: 2026-08-12
+
+All ten items round 5 recorded as open are now fixed, and each was verified on a
+simulator rather than declared done.
+
+- **Hoje's sections collapse**, as the board's chevrons promised, with the same
+  interaction Tarefas already had.
+- **H2 has its "amanhã cedo" card.** The day being clear does not mean nothing is
+  coming, and the screen now says which thing is next.
+- **Completion is reversible.** `AppStore` offers a four-second undo, rendered as
+  an ink capsule above the tab bar with a single "Desfazer". Closing something is
+  the one action people take by accident on a list, and an undo is cheaper than a
+  confirm. Two tests pin it; verified live, including that undoing restores the
+  row and corrects every count.
+- **"Concluídas hoje" obeys the filter above it.** Under "Minhas" it was showing
+  the whole household's closings.
+- **A semente's row says "Plante depois"** where a task shows its date, so the
+  caption's instruction has something to point at.
+- **Photo normalisation left the main actor.** Decoding, resizing and re-encoding
+  an 1800px image is tens of milliseconds of CPU; on the main actor that is a
+  visible stall with the composer open.
+- **Tabs stay alive across a switch.** The pager rendered only the selected tab
+  behind an `.id()`, so scroll position, filter chips and collapsed sections were
+  destroyed on every switch — and the chat re-ran its scroll-to-bottom every time.
+  All four are now held and offset. `TabRouter` also stopped filling its
+  dictionary from inside `body`, which was mutating observed state mid-update.
+- **The pending-request badge is spoken.** The tab's own accessibility label
+  replaced it; it now names the count.
+- **A failed purchase is no longer moss.** `PremiumSubscriptionStore` carries a
+  `statusIsConfirmation` flag, because the view cannot tell a confirmation from a
+  non-event by matching the string. "Nenhuma assinatura ativa foi encontrada" was
+  printing in the confirmed-green.
+- **The disabled e-mail field dims**, matching its own twin in the e-mail-change
+  sheet and the convention the manual states.
+
+## Final Checks
+
+- Full `NinaTests` suite passes; `deno task test` 99 passed; `preflight:repo` 0
+  failures.
+- Zero `MARK:`, `TODO`, `FIXME`, `fatalError` or `try!` in `Nina/`.
+- Undo, collapse, the amanhã card, the completed count and tab switching all
+  exercised on a clean install.
+
+Result (round 7): passed, with nothing deferred. What remains untested is what
+has always remained untested: the mark's perceptual risk with real users, and
+`C4`'s long-press against the tab pager on a physical device.

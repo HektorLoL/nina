@@ -23,6 +23,7 @@ struct TodayView: View {
     @Environment(RouterPath.self) private var router
 
     @State private var filter: TodayFilter = .all
+    @State private var collapsed: Set<String> = []
 
     private var now: Date { .now }
 
@@ -223,10 +224,23 @@ struct TodayView: View {
     }
 
     private func section(title: String, count: Int, tasks: [TaskItem], isLate: Bool = false) -> some View {
-        VStack(spacing: 0) {
+        let isCollapsed = collapsed.contains(title)
+        return VStack(spacing: 0) {
             HStack {
-                Text("\(title.uppercased()) · \(count)")
-                    .ninaText(.eyebrow, isLate ? NinaTheme.terracotta : NinaTheme.faint, weight: .bold)
+                Button {
+                    Haptics.selection()
+                    if isCollapsed { collapsed.remove(title) } else { collapsed.insert(title) }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(isLate ? NinaTheme.terracotta : NinaTheme.faint)
+                        Text("\(title.uppercased()) · \(count)")
+                            .ninaText(.eyebrow, isLate ? NinaTheme.terracotta : NinaTheme.faint, weight: .bold)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
 
                 Spacer()
 
@@ -245,12 +259,14 @@ struct TodayView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.bottom, 8)
+            .padding(.bottom, isCollapsed ? 0 : 8)
 
-            ForEach(tasks) { task in
-                TaskRowView(task: task)
-                if task.id != tasks.last?.id {
-                    NinaDivider(inset: 36)
+            if !isCollapsed {
+                ForEach(tasks) { task in
+                    TaskRowView(task: task)
+                    if task.id != tasks.last?.id {
+                        NinaDivider(inset: 36)
+                    }
                 }
             }
         }
@@ -297,9 +313,41 @@ struct TodayView: View {
                 : "Não tem nada te esperando até amanhã de manhã.",
             presence: .stored
         ) {
-            Text("Pode largar o celular.").ninaText(.label, NinaTheme.ink, weight: .semibold)
+            VStack(spacing: 18) {
+                Text("Pode largar o celular.").ninaText(.label, NinaTheme.ink, weight: .semibold)
+
+                if let next = nextUp {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Eyebrow(text: "Amanhã cedo")
+                        HStack(spacing: 12) {
+                            NinaCheckbox(isOn: false, size: 22)
+                            Text(next.title)
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(NinaTheme.ink)
+                                .lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text(next.effectiveDueLabel()).ninaText(.meta, NinaTheme.muted)
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .ninaCard()
+                }
+            }
         }
         .padding(.top, 40)
+    }
+
+    // What the day being clear does not mean: that nothing is coming.
+    private var nextUp: TaskItem? {
+        store.tasks
+            .filter { $0.kind == .task && !$0.isDone }
+            .compactMap { task -> (TaskItem, Date)? in
+                guard let date = task.displayDate(relativeTo: now), date > now else { return nil }
+                return (task, date)
+            }
+            .min { $0.1 < $1.1 }?
+            .0
     }
 
     private var closedTodayCount: Int {
@@ -381,6 +429,8 @@ struct TaskRowView: View {
                             .font(.system(size: 13, weight: isOverdue ? .semibold : .regular))
                             .foregroundStyle(isOverdue ? NinaTheme.terracotta : NinaTheme.muted)
                             .lineLimit(1)
+                    } else {
+                        Text("Plante depois").ninaText(.meta, NinaTheme.muted)
                     }
 
                     // A semente's defining property is that it is a semente, so

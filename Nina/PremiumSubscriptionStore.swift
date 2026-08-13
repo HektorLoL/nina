@@ -258,6 +258,9 @@ final class PremiumSubscriptionStore {
     var isSyncingBackend = false
     var productLoadMessage: String?
     var statusMessage: String?
+    /// Whether `statusMessage` reports something that actually completed. Moss is
+    /// reserved for confirmed states, and "nothing was found" is not one.
+    var statusIsConfirmation = false
     var errorMessage: String?
 
     @ObservationIgnored private let backend: (any PremiumSubscriptionBackend)?
@@ -348,6 +351,7 @@ final class PremiumSubscriptionStore {
         isPurchasing = true
         errorMessage = nil
         statusMessage = nil
+        statusIsConfirmation = false
         defer { isPurchasing = false }
 
         do {
@@ -364,6 +368,7 @@ final class PremiumSubscriptionStore {
 
                 guard backend != nil else {
                     statusMessage = "Premium ativado."
+                    statusIsConfirmation = true
                     return
                 }
 
@@ -374,15 +379,19 @@ final class PremiumSubscriptionStore {
                 if didRecord {
                     await transaction.finish()
                     statusMessage = "Premium ativado."
+                    statusIsConfirmation = true
                 } else {
                     statusMessage = PremiumReconciliationCopy.purchaseRecorded
+                    statusIsConfirmation = true
                 }
             case .pending:
                 statusMessage = "A compra está pendente de aprovação."
+                statusIsConfirmation = false
             case .userCancelled:
                 break
             @unknown default:
                 statusMessage = "A compra não foi concluída."
+                statusIsConfirmation = false
             }
         } catch {
             errorMessage = userMessage(for: error)
@@ -394,6 +403,7 @@ final class PremiumSubscriptionStore {
         isRestoring = true
         errorMessage = nil
         statusMessage = nil
+        statusIsConfirmation = false
         defer { isRestoring = false }
 
         do {
@@ -401,10 +411,13 @@ final class PremiumSubscriptionStore {
             await refreshEntitlement(forcingTransactionSync: true)
             if entitlement.isActive {
                 statusMessage = "Premium restaurado."
+                statusIsConfirmation = true
             } else if entitlement.isReconciling {
                 statusMessage = PremiumReconciliationCopy.purchaseRecorded
+                statusIsConfirmation = true
             } else {
                 statusMessage = "Nenhuma assinatura Premium ativa foi encontrada."
+                statusIsConfirmation = false
             }
         } catch {
             errorMessage = userMessage(for: error)

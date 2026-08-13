@@ -232,6 +232,8 @@ final class AppStore {
     @ObservationIgnored private var realtimeRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var notificationSyncTask: Task<Void, Never>?
 
+    var undoableCompletionID: TaskItem.ID?
+    @ObservationIgnored private var undoExpiryTask: Task<Void, Never>?
     var isSyncingHome = false
     var syncErrorMessage: String?
 
@@ -1848,6 +1850,37 @@ final class AppStore {
             proposedTask.completedAt = proposedTask.isDone ? .now : nil
         }
         submitTaskUpdate(proposedTask, basedOn: currentTask)
+
+        if proposedTask.isDone, !currentTask.isDone {
+            offerUndo(for: proposedTask.id)
+        } else {
+            clearUndo()
+        }
+    }
+
+    // Completing is reversible for a moment. Closing something is the one action
+    // people take by accident on a list, and an undo is cheaper than a confirm.
+    func undoLastCompletion() {
+        guard let id = undoableCompletionID,
+              let task = tasks.first(where: { $0.id == id }) else { return }
+        clearUndo()
+        toggleTask(task)
+    }
+
+    private func offerUndo(for id: TaskItem.ID) {
+        undoExpiryTask?.cancel()
+        undoableCompletionID = id
+        undoExpiryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.undoableCompletionID = nil }
+        }
+    }
+
+    private func clearUndo() {
+        undoExpiryTask?.cancel()
+        undoExpiryTask = nil
+        undoableCompletionID = nil
     }
 
     func snoozeTask(_ id: TaskItem.ID, until date: Date) {

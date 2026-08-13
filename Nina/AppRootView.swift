@@ -92,16 +92,14 @@ final class RouterPath {
 @MainActor
 @Observable
 final class TabRouter {
-    private var routers: [AppTab: RouterPath] = [:]
+    // Created up front, never lazily: filling this dictionary from inside `body`
+    // mutates observed state during a view update.
+    private var routers: [AppTab: RouterPath] = Dictionary(
+        uniqueKeysWithValues: AppTab.allCases.map { ($0, RouterPath()) }
+    )
 
     func router(for tab: AppTab) -> RouterPath {
-        if let router = routers[tab] {
-            return router
-        }
-
-        let router = RouterPath()
-        routers[tab] = router
-        return router
+        routers[tab] ?? RouterPath()
     }
 
     func binding(for tab: AppTab) -> Binding<[Route]> {
@@ -131,25 +129,6 @@ private enum AppEntryPhase: Hashable {
     case app
 }
 
-private enum TabTransitionDirection {
-    case forward
-    case backward
-
-    var insertionEdge: Edge {
-        switch self {
-        case .forward: .trailing
-        case .backward: .leading
-        }
-    }
-
-    var removalEdge: Edge {
-        switch self {
-        case .forward: .leading
-        case .backward: .trailing
-        }
-    }
-}
-
 struct AppRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppStore.self) private var store
@@ -167,7 +146,6 @@ struct AppRootView: View {
     @State private var didFinishInitialLoad = false
     @State private var shouldRefreshWhenActive = false
     @State private var didDismissKeyboardForCurrentSwipe = false
-    @State private var tabTransitionDirection: TabTransitionDirection = .forward
 
     var body: some View {
         ZStack {
@@ -330,6 +308,14 @@ struct AppRootView: View {
             tabPager
                 .ignoresSafeArea()
 
+            if let id = store.undoableCompletionID,
+               let task = store.tasks.first(where: { $0.id == id }) {
+                UndoCompletionToast(title: task.title)
+                    .padding(.bottom, tabRouter.router(for: selectedTab).path.isEmpty ? 164 : 16)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .zIndex(2)
+            }
+
             // A pushed screen owns the whole viewport: it has its own back
             // affordance and a footer that would otherwise sit under the bar.
             if tabRouter.router(for: selectedTab).path.isEmpty {
@@ -338,6 +324,7 @@ struct AppRootView: View {
             }
         }
         .background(NinaTheme.ground.ignoresSafeArea())
+        .animation(.easeInOut(duration: 0.2), value: store.undoableCompletionID)
         .onReceive(NotificationCenter.default.publisher(for: .ninaSelectChatTab)) { _ in
             selectTab(.nina)
         }
@@ -352,14 +339,13 @@ struct AppRootView: View {
             let width = max(proxy.size.width, 1)
 
             ZStack {
-                tabContent(for: selectedTab)
-                    .id(selectedTab)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: tabTransitionDirection.insertionEdge).combined(with: .opacity),
-                            removal: .move(edge: tabTransitionDirection.removalEdge).combined(with: .opacity)
-                        )
-                    )
+                ForEach(AppTab.allCases) { tab in
+                    tabContent(for: tab)
+                        .frame(width: width, height: proxy.size.height)
+                        .offset(x: CGFloat(tab.index - selectedTab.index) * width)
+                        .allowsHitTesting(tab == selectedTab)
+                        .accessibilityHidden(tab != selectedTab)
+                }
             }
             .frame(width: width, height: proxy.size.height)
             .clipped()
@@ -394,7 +380,6 @@ struct AppRootView: View {
         guard tab != selectedTab else { return }
 
         Haptics.selection()
-        tabTransitionDirection = tab.index > selectedTab.index ? .forward : .backward
         withAnimation(.interactiveSpring(response: 0.44, dampingFraction: 0.86, blendDuration: 0.12)) {
             selectedTab = tab
         }
@@ -683,6 +668,41 @@ private extension View {
     }
 }
 
+// Ink and weight, never a hue: this is a neutral confirmation, not a state.
+private struct UndoCompletionToast: View {
+    @Environment(AppStore.self) private var store
+    var title: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(NinaTheme.ground)
+
+            Text(title)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(NinaTheme.ground)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Button {
+                Haptics.selection()
+                store.undoLastCompletion()
+            } label: {
+                Text("Desfazer")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(NinaTheme.ground)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 50)
+        .background(NinaTheme.ink, in: Capsule())
+        .padding(.horizontal, 20)
+    }
+}
+
 private struct KeyboardAwareBottomTabBar: View {
     var selectedTab: AppTab
     var select: (AppTab) -> Void
@@ -758,7 +778,11 @@ private struct BottomTabBar: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(tab.title)
+                .accessibilityLabel(
+                    tab == .house && store.pendingJoinRequestCount > 0
+                        ? "\(tab.title), \(store.pendingJoinRequestCount) pedindo para entrar"
+                        : tab.title
+                )
                 .accessibilityAddTraits(tab == selectedTab ? [.isSelected] : [])
             }
         }

@@ -40,10 +40,14 @@ struct TasksView: View {
     }
 
     private var completedToday: [TaskItem] {
-        store.tasks.filter { task in
+        let closed = store.tasks.filter { task in
             guard let completedAt = task.completedAt else { return false }
             return Calendar.current.isDateInToday(completedAt)
         }
+        // The completed list sits under the filter chips and has to obey them,
+        // or "Minhas" quietly shows the whole household's closings.
+        guard filter == .mine, let me = store.currentFamilyMember else { return closed }
+        return closed.filter { $0.ownerMemberID == me.id }
     }
 
     var body: some View {

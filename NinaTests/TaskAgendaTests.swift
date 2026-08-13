@@ -180,6 +180,35 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertEqual(reopened?.isDone, false)
     }
 
+    func testCompletingOffersAnUndoAndUndoingReopensTheTask() {
+        let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
+        guard let open = store.tasks.first(where: { !$0.isDone && $0.recurrence == .none }) else {
+            return XCTFail("PreviewData should seed at least one open non-recurring task.")
+        }
+
+        store.toggleTask(open)
+        XCTAssertEqual(store.undoableCompletionID, open.id)
+
+        store.undoLastCompletion()
+
+        // Closing something is the action people take by accident on a list.
+        XCTAssertEqual(store.tasks.first { $0.id == open.id }?.isDone, false)
+        XCTAssertNil(store.undoableCompletionID)
+    }
+
+    func testReopeningATaskOffersNoUndoBecauseNothingWasClosed() {
+        let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
+        guard let open = store.tasks.first(where: { !$0.isDone && $0.recurrence == .none }) else {
+            return XCTFail("PreviewData should seed at least one open non-recurring task.")
+        }
+
+        store.toggleTask(open)
+        guard let closed = store.tasks.first(where: { $0.id == open.id }) else { return XCTFail() }
+        store.toggleTask(closed)
+
+        XCTAssertNil(store.undoableCompletionID)
+    }
+
     private func task(dueAt: Date?) -> TaskItem {
         TaskItem(
             title: "Pagar a conta de luz",

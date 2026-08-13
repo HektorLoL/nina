@@ -1659,7 +1659,11 @@ struct PremiumBenefitsSheet: View {
 
             if let statusMessage = premiumStore.statusMessage, !statusMessage.isEmpty {
                 Text(statusMessage)
-                    .ninaText(.caption, NinaTheme.moss, weight: .semibold)
+                    .ninaText(
+                        .caption,
+                        premiumStore.statusIsConfirmation ? NinaTheme.moss : NinaTheme.ink,
+                        weight: .semibold
+                    )
                     .fixedSize(horizontal: false, vertical: true)
             }
 

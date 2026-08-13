@@ -667,7 +667,9 @@ private struct ChatInputBar: View {
                         throw ChatAttachmentLoadError.unreadable
                     }
 
-                    let imageData = try normalizedImageData(sourceData)
+                    let imageData = try await Task.detached(priority: .userInitiated) {
+                        try Self.normalizedImageData(sourceData)
+                    }.value
                     let metadata = ChatAttachment(
                         kind: .image,
                         filename: "foto-\(startingIndex + index + 1).jpg",
@@ -758,7 +760,9 @@ private struct ChatInputBar: View {
         }
     }
 
-    private func normalizedImageData(_ data: Data) throws -> (full: Data, thumbnail: Data?) {
+    // Decoding, resizing and re-encoding an 1800px photo is tens of milliseconds
+    // of CPU. On the main actor that is a visible stall while the composer is open.
+    private static func normalizedImageData(_ data: Data) throws -> (full: Data, thumbnail: Data?) {
         #if canImport(UIKit)
         guard let sourceImage = UIImage(data: data) else {
             throw ChatAttachmentLoadError.unreadable
