@@ -200,7 +200,58 @@ device is 209 px, which puts body text at 8 px and the section labels at under
 The household screen came off rather than shrink the other two; the same three
 people are drawn immediately below in the workload portrait.
 
-## 6. Still open
+## 6. What the critique changed
+
+A dual-agent design critique on 2026-08-14 scored the page 25/40 and found two
+P0s. Both are fixed, along with the two P1s.
+
+- **Focus was invisible on all five conversion controls.** `:focus-visible` on
+  the filled buttons set `outline-color: var(--ground)` at a 3px offset — a
+  `#FBFCFD` ring drawn outside the button on the page's own `#FBFCFD` ground,
+  measured at **1.00:1**. The comment above it said "a cobalt ring on a cobalt
+  button is not a ring", which was true; the fix had moved the invisibility from
+  inside the button to outside it. Ink at the same offset measures 17.02:1.
+- **The page promised an app that does not exist.** Availability appeared nowhere
+  except the fifth collapsed FAQ item, while the closing headline read *"A Nina
+  já está esperando a sua mensagem."* The manual makes copy claiming Nina *acted*
+  a defect; claiming she *is waiting for you* is the same defect one tense over.
+  The hero footnote now leads with `Em preparação para iPhone`, the four CTAs
+  name the outcome rather than the intent, and the closing headline is true in
+  the tense the product is actually in.
+- **The waitlist bundled marketing consent with policy acknowledgement** in one
+  required checkbox. The server records `consent: true` as the email consent —
+  that *is* the list — so the fix was to make that consent specific to the one
+  thing it authorises and lift the policy acknowledgement out into a plain line
+  beneath the form. The dialog also gained the reassurance it never had:
+  frequency and residency, under the email field.
+- **The thesis sentence was the smallest type on the page.** `ISTO AINDA NÃO
+  EXISTE` renders at 7.4px inside the drawn screen, correct for the device and
+  useless as an argument. It is now also a caption at interface size under the
+  phone, where a reader can have it. The drawn card was left alone.
+
+### The hero is confirmable
+
+The critique's sharpest observation was that the product's one idea is that a
+human confirms, and the only thing a visitor could do on this page was type an
+email — the `Confirmar` button was a drawing.
+
+It is a real control now. Tapping it settles the disc out of the waiting lift
+back to rest, holds moss for 600 ms, turns the proposal into a confirmed row and
+changes Nina's line to *"Você confirmou. Está na casa agora."* — the app's own
+string. **This is the only thing on the site permitted to spend moss**, because
+moss is licensed by a person confirming something and this is the one place a
+person does. The caption underneath says so out loud, the way the app's own
+onboarding does: *"Isto foi um ensaio — nada saiu daqui."*
+
+Three constraints it has to keep. The figure can no longer be `role="img"`,
+because an image role cannot contain a button — the decorative parts are
+individually `aria-hidden` and a visually hidden `figcaption` carries the
+description. The two captions share one grid cell so the swap does not shove the
+page down 44 px. And the control is drawn at the device's scale, with its hit
+area extended by a pseudo-element to 45 px against a 27 px visual, so the screen
+still reads as a screenshot.
+
+## 7. Still open
 
 - **The three-step promise is written for the flag-on product.**
   `NINA_AI_V2_ENABLED = NO` is the shipping default, so on the current build

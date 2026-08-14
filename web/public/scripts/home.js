@@ -121,7 +121,7 @@ waitlistForm?.addEventListener("submit", async (event) => {
     } else if (result.error === "invalid_email") {
       setWaitlistStatus("Confira o email e tente novamente.", "error");
     } else if (result.error === "consent_required") {
-      setWaitlistStatus("Marque o consentimento para entrar na lista.", "error");
+      setWaitlistStatus("Marque a caixa para receber o aviso por email.", "error");
     } else {
       setWaitlistStatus("A lista está temporariamente indisponível. Tente de novo mais tarde.", "error");
     }
@@ -176,3 +176,32 @@ const onScroll = () => {
 onScroll();
 window.addEventListener("scroll", onScroll, { passive: true });
 window.addEventListener("resize", armSequences, { passive: true });
+
+// The one real confirmation on the page. The hero sequence deliberately ends in
+// waiting because the settled/moss state is licensed by a person confirming
+// something, and nobody on a marketing page has — so this is the only thing that
+// can spend it. The caption says out loud that it was a rehearsal.
+const ritual = document.querySelector("[data-ritual]");
+const confirmButton = document.querySelector("[data-confirm]");
+const replayButton = document.querySelector("[data-replay]");
+let mossTimer;
+
+confirmButton?.addEventListener("click", () => {
+  if (!ritual) return;
+  window.clearTimeout(mossTimer);
+  ritual.classList.remove("is-playing");
+  ritual.classList.add("is-confirmed");
+  if (prefersReducedMotion.matches) return;
+  ritual.classList.add("is-storing");
+  mossTimer = window.setTimeout(() => ritual.classList.remove("is-storing"), 600);
+});
+
+replayButton?.addEventListener("click", () => {
+  if (!ritual) return;
+  window.clearTimeout(mossTimer);
+  ritual.classList.remove("is-confirmed", "is-storing", "is-playing");
+  confirmButton?.focus();
+  if (prefersReducedMotion.matches) return;
+  void ritual.offsetWidth;
+  ritual.classList.add("is-playing");
+});

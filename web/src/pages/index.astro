@@ -83,7 +83,7 @@ const faq = [
   {
     question: "A Nina funciona no iPhone e Android?",
     answer:
-      "A primeira versão está sendo preparada para iPhone. A expansão para outras plataformas será comunicada depois.",
+      "Ainda não. A primeira versão está sendo preparada para iPhone, e quem entra na lista recebe um aviso quando ela chegar. A expansão para outras plataformas será comunicada depois.",
   },
 ];
 ---
@@ -107,7 +107,7 @@ const faq = [
         data-open-waitlist
         data-waitlist-source="header"
       >
-        Quero conhecer
+        Entrar na lista
       </button>
       <button
         class="menu-button"
@@ -131,7 +131,7 @@ const faq = [
         data-open-waitlist
         data-waitlist-source="mobile_menu"
       >
-        Quero conhecer
+        Entrar na lista
       </button>
     </nav>
   </header>
@@ -153,7 +153,7 @@ const faq = [
             data-open-waitlist
             data-waitlist-source="hero"
           >
-            Quero conhecer a Nina
+            Entrar na lista de espera
             <Glyph name="arrow-right" size={19} />
           </button>
           <a class="button button-secondary button-large" href="#como-funciona">
@@ -161,41 +161,67 @@ const faq = [
           </a>
         </div>
         <p class="hero-footnote">
-          iPhone · em português · sua casa e suas tarefas ficam em São Paulo
+          Em preparação para iPhone · em português · seus dados ficam em São Paulo
         </p>
       </div>
 
       <div class="hero-product" data-ritual>
-        <figure class="phone" role="img" aria-label="Na conversa, você escreve que o boleto do condomínio vence dia 10. A Nina responde que leu assim e pede que você corrija antes de confirmar, e mostra uma proposta ainda inexistente: pagar o condomínio, segunda 10 de agosto, todo mês, dono a casa, com os botões confirmar, corrigir e ignorar.">
+        <figure class="phone">
           <div class="phone-screen">
-            <span class="phone-island"></span>
-            <div class="phone-head">
+            <span class="phone-island" aria-hidden="true"></span>
+            <div class="phone-head" aria-hidden="true">
               <NinaMark size={26} />
               <strong>Nina</strong>
             </div>
-            <p class="bubble bubble-you">o boleto do condomínio vence dia 10</p>
-            <div class="bubble-row">
+            <p class="bubble bubble-you" aria-hidden="true">o boleto do condomínio vence dia 10</p>
+            <div class="bubble-row" aria-hidden="true">
               <NinaMark size={22} />
               <p class="bubble bubble-nina">Li assim. Corrija antes de confirmar.</p>
             </div>
             <div class="proposal">
-              <p class="proposal-tag">Isto ainda não existe</p>
-              <p class="proposal-title"><i></i>Pagar o condomínio</p>
-              <p class="proposal-row"><span>Quando</span><strong>segunda, 10 de agosto</strong></p>
-              <p class="proposal-row"><span>Repete</span><strong>todo mês</strong></p>
-              <p class="proposal-row"><span>Dono</span><strong>A casa, por enquanto</strong></p>
+              <p class="proposal-tag" aria-hidden="true">Isto ainda não existe</p>
+              <p class="proposal-title" aria-hidden="true"><i></i>Pagar o condomínio</p>
+              <p class="proposal-row" aria-hidden="true"><span>Quando</span><strong>segunda, 10 de agosto</strong></p>
+              <p class="proposal-row" aria-hidden="true"><span>Repete</span><strong>todo mês</strong></p>
+              <p class="proposal-row" aria-hidden="true"><span>Dono</span><strong>A casa, por enquanto</strong></p>
               <div class="proposal-actions">
-                <b>Confirmar e criar 1 tarefa</b>
-                <div><em>Corrigir</em><em>Ignorar</em></div>
+                <button
+                  type="button"
+                  class="proposal-confirm"
+                  data-confirm
+                  aria-label="Confirmar a proposta de exemplo e criar a tarefa Pagar o condomínio"
+                >
+                  Confirmar e criar 1 tarefa
+                </button>
+                <div aria-hidden="true"><em>Corrigir</em><em>Ignorar</em></div>
               </div>
+              <p class="proposal-stored" aria-hidden="true">
+                <Glyph name="check" size={13} />Na casa agora
+              </p>
             </div>
-            <p class="phone-waiting">A Nina está esperando você.</p>
-            <div class="phone-composer">
+            <p class="phone-waiting" aria-hidden="true">A Nina está esperando você.</p>
+            <p class="phone-waiting phone-stored" aria-hidden="true">Você confirmou. Está na casa agora.</p>
+            <div class="phone-composer" aria-hidden="true">
               <span>Escreve pra Nina</span>
               <i><Glyph name="arrow-up" size={17} /></i>
             </div>
           </div>
+          <figcaption class="sr-only">
+            Uma conversa de exemplo. Você escreve que o boleto do condomínio vence dia 10. A
+            Nina responde que leu assim e pede que você corrija antes de confirmar, e monta uma
+            proposta que ainda não existe: pagar o condomínio, segunda, 10 de agosto, todo mês,
+            dono a casa. O botão abaixo confirma essa proposta de exemplo.
+          </figcaption>
         </figure>
+
+        <div class="phone-captions" aria-live="polite">
+          <p class="phone-caption">Nada existe até você tocar em confirmar.</p>
+          <p class="phone-caption phone-caption-stored">
+            Isto foi um ensaio — nada saiu daqui. Na Nina, o que você confirma passa a existir
+            para a casa inteira.
+            <button type="button" class="text-button" data-replay>Ver de novo</button>
+          </p>
+        </div>
 
         <article class="floating-note note-one">
           <Glyph name="chat" size={20} />
@@ -316,13 +342,18 @@ const faq = [
           {balancePoints.map((point) => <li><Glyph name="check" size={20} />{point}</li>)}
         </ul>
       </div>
-      <div class="workload-card" data-bands aria-label="Exemplo do retrato de carga da casa">
+      <div class="workload-card" data-bands>
         <p class="eyebrow eyebrow-faint">Sinal de sobrecarga · domingo</p>
         <h3>A casa está pesando mais de um lado.</h3>
-        <div class="band-axis">
-          <span>leve</span><span>parecido</span><span>mais pesado</span>
-        </div>
-        <div class="band-rows">
+        <div
+          class="band-chart"
+          role="img"
+          aria-label="Retrato da casa em três faixas: leve, parecido e mais pesado. A Mirna está em mais pesado, o Rafa em parecido, e a casa, o que não tem dono, em leve. Não há número nenhum no gráfico."
+        >
+          <div class="band-axis">
+            <span>leve</span><span>parecido</span><span>mais pesado</span>
+          </div>
+          <div class="band-rows">
           <div>
             <p class="band-head"><i>MI</i>Mirna</p>
             <div class="band-track"><i></i><i></i><i class="is-on"></i></div>
@@ -336,6 +367,7 @@ const faq = [
               <span class="glyph-slot"><Glyph name="house" size={21} /></span>A casa — sem dono
             </p>
             <div class="band-track"><i class="is-house"></i><i></i><i></i></div>
+          </div>
           </div>
         </div>
         <p class="workload-caption">Um retrato para conversar, não para cobrar.</p>
@@ -387,7 +419,7 @@ const faq = [
       <NinaMark size={72} />
       <div class="final-copy">
         <p class="speech">Quer uma casa mais leve?</p>
-        <h2>A Nina já está esperando a sua mensagem.</h2>
+        <h2>A Nina está quase pronta para a sua casa.</h2>
       </div>
       <ul class="check-list compact">
         <li><Glyph name="check" size={18} />Do seu jeito, no seu ritmo</li>
@@ -400,7 +432,7 @@ const faq = [
         data-open-waitlist
         data-waitlist-source="footer"
       >
-        Quero conhecer a Nina
+        Entrar na lista de espera
       </button>
     </section>
   </main>
@@ -461,7 +493,11 @@ const faq = [
             maxlength="254"
             placeholder="voce@exemplo.com"
             required
+            aria-describedby="waitlist-email-hint"
           />
+          <small id="waitlist-email-hint" class="waitlist-hint">
+            Um email só, quando a Nina chegar. Seus dados ficam em servidores em São Paulo.
+          </small>
         </label>
 
         <div class="waitlist-honeypot" aria-hidden="true">
@@ -478,8 +514,8 @@ const faq = [
         <label class="waitlist-consent">
           <input name="consent" type="checkbox" required />
           <span>
-            Quero receber novidades da Nina por email. Posso cancelar quando quiser e li a
-            <a href="/privacidade">Política de Privacidade</a>.
+            Quero receber um aviso por email quando a Nina estiver pronta. Posso cancelar
+            quando quiser.
           </span>
         </label>
 
@@ -488,6 +524,9 @@ const faq = [
           <Glyph name="arrow-right" size={19} />
         </button>
         <p class="waitlist-status" data-waitlist-status role="status" aria-live="polite"></p>
+        <p class="waitlist-terms">
+          Ao entrar na lista você aceita a <a href="/privacidade">Política de Privacidade</a>.
+        </p>
       </form>
     </div>
 

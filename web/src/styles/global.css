@@ -287,10 +287,11 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
-/* A cobalt ring on a cobalt button is not a ring. */
+/* A ring has to read on the control it rings *and* on the ground behind it.
+   Drawn in the ground colour it was invisible on both; ink at a wider offset
+   reads against the glaze on every filled control. */
 .button-primary:focus-visible,
 .button-ink:focus-visible {
-  outline-color: var(--ground);
   outline-offset: 3px;
 }
 
@@ -390,8 +391,30 @@ a:focus-visible {
 
 .hero-product {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+/* The product's whole claim, lifted out of the drawn screen where it renders at
+   7px, and set at interface size where a reader can actually have it. */
+/* The two captions share one grid cell so the block always reserves the taller
+   of them; swapping them must not shove the rest of the page down 44px. */
+.phone-captions {
   display: grid;
-  justify-items: start;
+  max-width: 320px;
+}
+
+.phone-captions .phone-caption {
+  grid-area: 1 / 1;
+}
+
+.phone-caption {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.45;
 }
 
 /* A phone is a drawing, not a screenshot: it stays crisp, it can be read at
@@ -609,16 +632,129 @@ a:focus-visible {
   background: var(--grout);
 }
 
-.proposal-actions b {
+/* Drawn at the device's scale so the screen still reads as a screenshot, with
+   the hit area extended to a real target. The rows it reaches over are not
+   interactive, so nothing is stolen. */
+.proposal-confirm {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   height: 2.6em;
+  border: 0;
   border-radius: 0.65em;
   color: #fff;
   background: var(--cobalt);
+  font-family: inherit;
   font-size: 0.824em;
   font-weight: 600;
+  transition: background 160ms ease, transform 100ms var(--ease-out);
+}
+
+.proposal-confirm::after {
+  content: "";
+  position: absolute;
+  inset: -9px -4px;
+}
+
+.proposal-confirm:hover {
+  background: var(--cobalt-deep);
+}
+
+.proposal-confirm:active {
+  transform: scale(0.985);
+}
+
+.proposal-confirm:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Moss touches the mark and this row for one reason only: a person confirmed
+   something. A visitor tapping this button is that person, which is why the
+   caption underneath says out loud that it was a rehearsal. */
+.proposal-stored {
+  display: none;
+  align-items: center;
+  gap: 0.4em;
+  border-top: 1px solid var(--line);
+  padding: 0.65em 0.76em;
+  margin-top: 0.29em;
+  color: var(--moss);
+  background: var(--grout);
+  font-size: 0.824em;
+  font-weight: 600;
+}
+
+.phone-stored {
+  display: none;
+}
+
+.phone-caption-stored {
+  visibility: hidden;
+}
+
+[data-ritual].is-confirmed .proposal-actions,
+[data-ritual].is-confirmed .phone-waiting:not(.phone-stored) {
+  display: none;
+}
+
+[data-ritual].is-confirmed .phone-caption:not(.phone-caption-stored) {
+  visibility: hidden;
+}
+
+[data-ritual].is-confirmed .proposal-stored {
+  display: flex;
+}
+
+[data-ritual].is-confirmed .phone-stored {
+  display: flex;
+  color: var(--moss);
+}
+
+[data-ritual].is-confirmed .phone-stored::before {
+  background: var(--moss);
+}
+
+[data-ritual].is-confirmed .phone-caption-stored {
+  visibility: visible;
+}
+
+/* Guardado: the disc settles out of the waiting lift back to rest, and holds
+   moss for 600ms. It is the one state the page cannot reach on its own. */
+[data-ritual].is-confirmed .phone-head .nina-disc {
+  transform: none;
+  transition: transform 320ms var(--ease-out), fill 200ms ease;
+}
+
+[data-ritual].is-storing .phone-head .nina-disc {
+  fill: var(--moss);
+}
+
+.text-button {
+  border: 0;
+  padding: 0;
+  color: var(--cobalt);
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.text-button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .proposal-actions div {
@@ -1521,17 +1657,51 @@ details p {
 
 /* Terracotta is lateness and nothing else, so a failed submit is carried by
    weight rather than by hue. */
+.waitlist-hint {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.waitlist-terms {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.waitlist-terms a {
+  color: var(--cobalt);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Two lines are reserved so a wrapping error does not shove the form down. */
 .waitlist-status {
-  min-height: 1.4em;
+  min-height: 2.6em;
   margin: -2px 0 0;
   color: var(--muted);
   font-size: 0.875rem;
   text-align: center;
 }
 
+/* Terracotta is lateness only, so a failure is carried by weight and by the
+   same ink dot the invite page uses — never by a second red. */
 .waitlist-status[data-tone="error"] {
   color: var(--ink);
   font-weight: 600;
+}
+
+.waitlist-status[data-tone="error"]::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+  vertical-align: baseline;
 }
 
 .waitlist-success {
@@ -2045,6 +2215,10 @@ details p {
   animation: nina-fade 320ms ease 2760ms backwards;
 }
 
+[data-ritual].is-playing .phone-captions {
+  animation: nina-rise 320ms var(--ease-out) 2900ms backwards;
+}
+
 /* The three loose notes settle after the phone has finished speaking. */
 [data-ritual].is-playing .floating-note {
   animation: nina-rise 320ms var(--ease-out) backwards;
@@ -2148,10 +2322,6 @@ details p {
   }
 
   .hero-product {
-    display: flex;
-    justify-content: center;
-    /* Without this the phone is stretched on the cross axis and its aspect
-       ratio derives the width from that height, shrinking the device. */
     align-items: center;
   }
 
