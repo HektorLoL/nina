@@ -151,7 +151,34 @@ percentages resolved against the view box, so the same two numbers — 2.2/64 an
 10.2/64 of the box — drive both of the mark's masters, exactly as
 `NinaMark.swift` computes them.
 
-## 5. Still open
+## 5. The device
+
+The phones were a rounded rectangle with a guessed radius and no Dynamic Island.
+They are now an iPhone 15 at its published dimensions — 71.6 × 147.6 mm, a
+uniform 3.25 mm bezel, a 12.36 mm outer radius, a 55 pt display radius, and a
+125 × 37.33 pt Dynamic Island 11 pt below the top of the display, with the
+front camera inside it.
+
+**Everything is a percentage of the device, so the proportions survive every
+size the phone is drawn at** — 320 px in the hero, about 209 px in the gallery,
+210 px in the mobile scroller. Three details are worth knowing before touching
+it:
+
+- The bezel is set as a share of the display's width *and* height on
+  `.phone-screen` rather than as `padding` on `.phone`. Percentage padding
+  resolves against the parent, so in a wider column the bezel silently grew.
+- The screen's top and bottom padding are the real 59 pt and 34 pt safe areas,
+  converted through the display's own aspect ratio, because padding percentages
+  resolve against width and those insets are fractions of height.
+- The rows are paragraphs. Their UA bottom margin has to be zeroed or the flex
+  `gap` is not the spacing you are reading, and the screens overflow while every
+  box measurement says they fit.
+
+Fixing the frame shortened it — a correctly proportioned iPhone is far less tall
+than the content-driven boxes were — so all four screens were re-fitted to what
+actually lands inside a real display. Nothing is clipped and nothing wraps.
+
+## 6. Still open
 
 - **The three-step promise is written for the flag-on product.**
   `NINA_AI_V2_ENABLED = NO` is the shipping default, so on the current build

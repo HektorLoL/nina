@@ -390,27 +390,107 @@ a:focus-visible {
 }
 
 /* A phone is a drawing, not a screenshot: it stays crisp, it can be read at
-   this size, and it cannot go stale against the app it is quoting. */
+   this size, and it cannot go stale against the app it is quoting.
+
+   The frame is an iPhone 15 at its published dimensions — 71.6 x 147.6 mm, a
+   uniform 3.25 mm bezel, a 12.36 mm outer radius, a 55 pt display radius, and a
+   125 x 37.33 pt Dynamic Island sitting 11 pt below the top of the display.
+   Every value below is a percentage of those measurements, so the device keeps
+   its real proportions at whatever width it is drawn. */
 .phone {
   position: relative;
   z-index: 2;
   width: 320px;
   max-width: 100%;
-  border-radius: 46px;
-  padding: 11px;
-  background: var(--ink);
+  aspect-ratio: 71.6 / 147.6;
+  border-radius: 17.263% / 8.374%;
+  /* A brushed rail catches light at the two edges where it curves away, and is
+     flat and near-black across the face. A diagonal sweep would read as plastic. */
+  background: linear-gradient(
+    90deg,
+    #39424f 0%,
+    #171e29 3.5%,
+    #0f141c 50%,
+    #171e29 96.5%,
+    #39424f 100%
+  );
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%);
+}
+
+/* The side rails. Three nubs on the left — action, volume up, volume down —
+   drawn as hard stops in one gradient, and the side button on the right. */
+.phone::before,
+.phone::after {
+  content: "";
+  position: absolute;
+  width: 1.15%;
+  border-radius: 1px;
+}
+
+.phone::before {
+  top: 19.5%;
+  bottom: 59%;
+  left: -0.55%;
+  background: linear-gradient(
+    to bottom,
+    #39424f 0 19.5%,
+    transparent 19.5% 29.3%,
+    #39424f 29.3% 60.9%,
+    transparent 60.9% 68.4%,
+    #39424f 68.4% 100%
+  );
+}
+
+.phone::after {
+  top: 26.5%;
+  bottom: 63%;
+  right: -0.55%;
+  background: #39424f;
 }
 
 .phone-screen {
+  /* The 3.25 mm bezel is uniform, so it is set as a share of the device on both
+     axes rather than as padding, which would resolve against the phone's parent
+     and grow wider in a wider column. */
+  position: absolute;
+  inset: 0;
+  width: 90.922%;
+  height: 95.596%;
+  margin: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 9px;
   overflow: hidden;
-  border-radius: 36px;
-  padding: 20px 16px;
+  border-radius: 13.994% / 6.456%;
+  /* The real safe areas: 59 pt of it above, 34 pt below. Padding percentages
+     resolve against width, so both are converted through the display's own
+     aspect ratio. */
+  padding: 15.009% 5.4% 8.649%;
   background: var(--ground);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   line-height: 1.4;
+}
+
+.phone-island {
+  position: absolute;
+  top: 1.291%;
+  left: 50%;
+  width: 31.807%;
+  aspect-ratio: 125 / 37.33;
+  transform: translateX(-50%);
+  border-radius: var(--radius-chip);
+  background: #05070b;
+}
+
+.phone-island::after {
+  content: "";
+  position: absolute;
+  top: 33%;
+  right: 9%;
+  height: 34%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #101a2e;
 }
 
 .phone-head {
@@ -432,7 +512,7 @@ a:focus-visible {
 .bubble {
   max-width: 82%;
   width: fit-content;
-  padding: 10px 14px;
+  padding: 9px 13px;
   border-radius: 16px;
 }
 
@@ -468,7 +548,7 @@ a:focus-visible {
 }
 
 .proposal-tag {
-  padding: 9px 13px;
+  padding: 8px 13px;
   color: var(--muted);
   background: var(--grout);
   font-size: 0.625rem;
@@ -481,7 +561,7 @@ a:focus-visible {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 12px 13px 8px;
+  padding: 11px 13px 8px;
   font-weight: 600;
 }
 
@@ -495,13 +575,13 @@ a:focus-visible {
 
 .proposal-row {
   display: flex;
-  gap: 10px;
-  padding: 0 13px 6px;
-  font-size: 0.8125rem;
+  gap: 8px;
+  padding: 0 13px 5px;
+  font-size: 0.75rem;
 }
 
 .proposal-row span {
-  flex: 0 0 62px;
+  flex: 0 0 46px;
   color: var(--muted);
 }
 
@@ -511,10 +591,10 @@ a:focus-visible {
 
 .proposal-actions {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   border-top: 1px solid var(--line);
-  padding: 11px 13px 12px;
-  margin-top: 6px;
+  padding: 10px 13px 11px;
+  margin-top: 5px;
   background: var(--grout);
 }
 
@@ -576,7 +656,7 @@ a:focus-visible {
   align-items: center;
   gap: 9px;
   margin-top: auto;
-  padding-top: 12px;
+  padding-top: 10px;
 }
 
 .phone-composer span {
@@ -780,23 +860,40 @@ a:focus-visible {
 }
 
 .phone-gallery .phone {
-  display: flex;
   width: 100%;
-  border-radius: 34px;
-  padding: 7px;
 }
 
 .phone-gallery .phone-screen {
-  flex: 1;
-}
-
-.phone-gallery .phone-screen {
-  gap: 7px;
-  border-radius: 27px;
-  padding: 13px 9px;
+  gap: 5px;
   font-size: 0.6875rem;
   line-height: 1.35;
-  min-height: 360px;
+}
+
+/* A real screen does not squash its own rows to fit; if something no longer
+   belongs on it, it comes off. The rows are paragraphs, so the UA bottom margin
+   has to go or the flex gap is not the spacing you are reading. */
+.phone-screen > * {
+  flex-shrink: 0;
+}
+
+.phone-screen p {
+  margin: 0;
+}
+
+.phone-gallery .mini-counts div {
+  padding: 6px 7px;
+}
+
+.phone-gallery .mini-counts strong {
+  font-size: 1.125rem;
+}
+
+.phone-gallery .mini-row {
+  padding: 5px 0;
+}
+
+.phone-gallery .mini-person {
+  padding: 6px 0;
 }
 
 .phone-gallery .phone-center {
@@ -2052,9 +2149,13 @@ details p {
   .hero-product {
     display: flex;
     justify-content: center;
+    /* Without this the phone is stretched on the cross axis and its aspect
+       ratio derives the width from that height, shrinking the device. */
+    align-items: center;
   }
 
   .hero-product .phone {
+    flex: 0 0 auto;
     width: min(320px, 100%);
   }
 
@@ -2169,10 +2270,6 @@ details p {
     padding-block: 28px 44px;
   }
 
-  .hero-product .phone {
-    width: min(300px, 100%);
-  }
-
   .steps-grid {
     grid-template-columns: 1fr;
     gap: 34px;
@@ -2201,13 +2298,6 @@ details p {
   .phone-gallery .phone {
     flex: 0 0 min(210px, 62vw);
     scroll-snap-align: center;
-    border-radius: 26px;
-    padding: 5px;
-  }
-
-  .phone-gallery .phone-screen {
-    border-radius: 21px;
-    min-height: 320px;
   }
 
   .phone-gallery .phone-center {
