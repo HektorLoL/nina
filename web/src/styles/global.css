@@ -54,6 +54,11 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 96px;
+  /* Without this, mobile font boosting inflates small text inside narrow blocks
+     to whatever it considers readable — which silently overrode every size on
+     the drawn phone screens and made their labels outgrow their own titles. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -404,6 +409,7 @@ a:focus-visible {
   max-width: 100%;
   aspect-ratio: 71.6 / 147.6;
   border-radius: 17.263% / 8.374%;
+  container-type: inline-size;
   /* A brushed rail catches light at the two edges where it curves away, and is
      flat and near-black across the face. A diagonal sweep would read as plastic. */
   background: linear-gradient(
@@ -459,7 +465,7 @@ a:focus-visible {
   margin: auto;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 0.7em;
   overflow: hidden;
   border-radius: 13.994% / 6.456%;
   /* The real safe areas: 59 pt of it above, 34 pt below. Padding percentages
@@ -467,7 +473,12 @@ a:focus-visible {
      aspect ratio. */
   padding: 15.009% 5.4% 8.649%;
   background: var(--ground);
-  font-size: 0.8125rem;
+  /* Everything on the screen is sized from here in `em`, and this is sized from
+     the device: 17 pt of body text on a 393 pt display, which is 3.933% of the
+     device's width. Absolute type on a fluid device is only ever right at the
+     one width it was tuned for — at any other size the content stops being a
+     screenshot and starts wrapping. */
+  font-size: 3.933cqw;
   line-height: 1.4;
 }
 
@@ -496,14 +507,14 @@ a:focus-visible {
 .phone-head {
   display: flex;
   align-items: center;
-  gap: 9px;
-  margin-bottom: 6px;
+  gap: 0.53em;
+  margin-bottom: 0.35em;
   color: var(--cobalt);
 }
 
 .phone-head strong {
   font-family: var(--display);
-  font-size: 1.1875rem;
+  font-size: 1.294em;
   font-weight: 400;
   letter-spacing: -0.02em;
   color: var(--ink);
@@ -512,27 +523,27 @@ a:focus-visible {
 .bubble {
   max-width: 82%;
   width: fit-content;
-  padding: 9px 13px;
-  border-radius: 16px;
+  padding: 0.59em 0.82em;
+  border-radius: 1.06em;
 }
 
 .bubble-you {
   margin-left: auto;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 0.24em;
   color: #fff;
   background: var(--ink);
 }
 
 .bubble-nina {
-  margin-left: 30px;
-  border-top-left-radius: 4px;
+  margin-left: 1.76em;
+  border-top-left-radius: 0.24em;
   background: var(--cobalt-wash);
 }
 
 .bubble-row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 0.47em;
   color: var(--cobalt);
 }
 
@@ -541,17 +552,17 @@ a:focus-visible {
 }
 
 .proposal {
-  margin-left: 30px;
+  margin-left: 1.76em;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 1.06em;
 }
 
 .proposal-tag {
-  padding: 8px 13px;
+  padding: 0.47em 0.76em;
   color: var(--muted);
   background: var(--grout);
-  font-size: 0.625rem;
+  font-size: 0.588em;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -560,28 +571,28 @@ a:focus-visible {
 .proposal-title {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 11px 13px 8px;
+  gap: 0.53em;
+  padding: 0.65em 0.76em 0.47em;
   font-weight: 600;
 }
 
 .proposal-title i {
   flex: 0 0 auto;
-  width: 17px;
-  height: 17px;
-  border: 1.6px solid var(--control);
+  width: 1.294em;
+  height: 1.294em;
+  border: 0.1em solid var(--control);
   border-radius: 50%;
 }
 
 .proposal-row {
   display: flex;
-  gap: 8px;
-  padding: 0 13px 5px;
-  font-size: 0.75rem;
+  gap: 0.47em;
+  padding: 0 0.76em 0.29em;
+  font-size: 0.824em;
 }
 
 .proposal-row span {
-  flex: 0 0 46px;
+  flex: 0 0 3.6em;
   color: var(--muted);
 }
 
@@ -591,10 +602,10 @@ a:focus-visible {
 
 .proposal-actions {
   display: grid;
-  gap: 6px;
+  gap: 0.35em;
   border-top: 1px solid var(--line);
-  padding: 10px 13px 11px;
-  margin-top: 5px;
+  padding: 0.59em 0.76em 0.65em;
+  margin-top: 0.29em;
   background: var(--grout);
 }
 
@@ -602,17 +613,17 @@ a:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 38px;
-  border-radius: 11px;
+  height: 2.6em;
+  border-radius: 0.65em;
   color: #fff;
   background: var(--cobalt);
-  font-size: 0.875rem;
+  font-size: 0.824em;
   font-weight: 600;
 }
 
 .proposal-actions div {
   display: flex;
-  gap: 7px;
+  gap: 0.41em;
 }
 
 .proposal-actions em {
@@ -620,11 +631,11 @@ a:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 34px;
+  height: 2em;
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: 0.65em;
   background: var(--ground);
-  font-size: 0.8125rem;
+  font-size: 0.765em;
   font-style: normal;
   font-weight: 500;
 }
@@ -636,17 +647,17 @@ a:focus-visible {
 .phone-waiting {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-left: 30px;
+  gap: 0.41em;
+  margin-left: 1.76em;
   color: var(--cobalt);
-  font-size: 0.75rem;
+  font-size: 0.706em;
   font-weight: 500;
 }
 
 .phone-waiting::before {
   content: "";
-  width: 5px;
-  height: 5px;
+  width: 0.42em;
+  height: 0.42em;
   border-radius: 50%;
   background: currentColor;
 }
@@ -654,15 +665,15 @@ a:focus-visible {
 .phone-composer {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 0.53em;
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 0.59em;
 }
 
 .phone-composer span {
   flex: 1;
-  padding: 11px 14px;
-  border-radius: var(--radius-card);
+  padding: 0.65em 0.82em;
+  border-radius: 1.2em;
   color: var(--muted);
   background: var(--grout);
 }
@@ -671,8 +682,8 @@ a:focus-visible {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 2.24em;
+  height: 2.24em;
   border-radius: 50%;
   color: #fff;
   background: var(--cobalt);
@@ -803,7 +814,9 @@ a:focus-visible {
   min-width: 0;
 }
 
-.split p:not(.eyebrow) {
+/* Scoped to a class, never `.split p`: a descendant paragraph rule out-specifies
+   every class inside the drawn phone screens and silently resets their type. */
+.split-lede {
   color: var(--muted);
   font-size: 1.0625rem;
 }
@@ -854,9 +867,9 @@ a:focus-visible {
 .phone-gallery {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
-  gap: 12px;
+  gap: 14px;
 }
 
 .phone-gallery .phone {
@@ -864,9 +877,7 @@ a:focus-visible {
 }
 
 .phone-gallery .phone-screen {
-  gap: 5px;
-  font-size: 0.6875rem;
-  line-height: 1.35;
+  gap: 0.5em;
 }
 
 /* A real screen does not squash its own rows to fit; if something no longer
@@ -880,35 +891,15 @@ a:focus-visible {
   margin: 0;
 }
 
-.phone-gallery .mini-counts div {
-  padding: 6px 7px;
-}
-
-.phone-gallery .mini-counts strong {
-  font-size: 1.125rem;
-}
-
-.phone-gallery .mini-row {
-  padding: 5px 0;
-}
-
-.phone-gallery .mini-person {
-  padding: 6px 0;
-}
-
-.phone-gallery .phone-center {
-  transform: translateY(-26px);
-}
-
 .mini-title {
   font-family: var(--display);
-  font-size: 1.125rem;
+  font-size: 1.588em;
   letter-spacing: -0.02em;
 }
 
 .mini-eyebrow {
   color: var(--faint);
-  font-size: 0.625rem;
+  font-size: 0.706em;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -917,8 +908,8 @@ a:focus-visible {
 .mini-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 0;
+  gap: 0.41em;
+  padding: 0.35em 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -928,9 +919,9 @@ a:focus-visible {
 
 .mini-row i {
   flex: 0 0 auto;
-  width: 13px;
-  height: 13px;
-  border: 1.4px solid var(--control);
+  width: 1.294em;
+  height: 1.294em;
+  border: 0.1em solid var(--control);
   border-radius: 50%;
 }
 
@@ -938,7 +929,6 @@ a:focus-visible {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-size: 0.95em;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -947,13 +937,24 @@ a:focus-visible {
 .mini-row em {
   flex: 0 0 auto;
   color: var(--muted);
-  font-size: 0.5625rem;
+  font-size: 0.765em;
   font-style: normal;
   letter-spacing: 0;
 }
 
 .mini-row.late em {
   color: var(--terracotta);
+}
+
+/* Moss marks the one thing it is allowed to mark: something a person confirmed. */
+.mini-row.is-done i {
+  border-color: var(--moss);
+  background: var(--moss);
+}
+
+.mini-row.is-done b {
+  color: var(--muted);
+  text-decoration: line-through;
 }
 
 /* A semente shows "Plante depois" under its title, exactly where a task shows a
@@ -971,26 +972,26 @@ a:focus-visible {
 .mini-counts {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  gap: 0.35em;
 }
 
 .mini-counts div {
-  border-radius: 12px;
-  padding: 8px 9px;
+  border-radius: 0.7em;
+  padding: 0.47em 0.53em;
   background: var(--grout);
 }
 
 .mini-counts strong {
   display: block;
   font-family: var(--display);
-  font-size: 1.375rem;
+  font-size: 1.706em;
   font-weight: 400;
   line-height: 1.1;
 }
 
 .mini-counts span {
   color: var(--muted);
-  font-size: 0.625rem;
+  font-size: 0.706em;
 }
 
 .mini-counts .is-yours {
@@ -1013,15 +1014,15 @@ a:focus-visible {
 
 .mini-chips {
   display: flex;
-  gap: 5px;
+  gap: 0.29em;
 }
 
 .mini-chips span {
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
-  padding: 4px 9px;
+  padding: 0.24em 0.53em;
   color: var(--muted);
-  font-size: 0.625rem;
+  font-size: 0.765em;
 }
 
 .mini-chips .is-on {
@@ -1034,20 +1035,20 @@ a:focus-visible {
 .mini-person {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 0;
+  gap: 0.53em;
+  padding: 0.47em 0;
 }
 
 .mini-person i {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 1.647em;
+  height: 1.647em;
   border-radius: 50%;
   color: var(--ground);
   background: var(--ink);
-  font-size: 0.5625rem;
+  font-size: 0.647em;
   font-style: normal;
   font-weight: 700;
 }
@@ -1068,15 +1069,15 @@ a:focus-visible {
 .mini-person em {
   display: block;
   color: var(--muted);
-  font-size: 0.625rem;
+  font-size: 0.765em;
   font-style: normal;
 }
 
 .mini-person .mark-slot {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 1.647em;
+  height: 1.647em;
   color: var(--cobalt);
   background: none;
 }
@@ -2296,12 +2297,8 @@ details p {
   }
 
   .phone-gallery .phone {
-    flex: 0 0 min(210px, 62vw);
+    flex: 0 0 min(260px, 74vw);
     scroll-snap-align: center;
-  }
-
-  .phone-gallery .phone-center {
-    transform: none;
   }
 
   .policy-grid {

@@ -240,18 +240,18 @@ const faq = [
       <div>
         <p class="eyebrow">Organização que se adapta à sua casa</p>
         <h2>Da bagunça mental para a rotina leve.</h2>
-        <p>
+        <p class="split-lede">
           A Nina entende o contexto da casa e monta um plano prático que funciona de verdade.
         </p>
         <ul class="check-list">
           {features.map((feature) => <li><Glyph name="check" size={20} />{feature}</li>)}
         </ul>
       </div>
-      <div class="phone-gallery" role="img" aria-label="As telas Hoje, Tarefas e Casa do aplicativo Nina: a agenda do dia com atrasadas e sem dono, as tarefas agrupadas por categoria com uma semente, e a casa com três pessoas mais a Nina.">
+      <div class="phone-gallery" role="img" aria-label="As telas Hoje e Tarefas do aplicativo Nina: a agenda do dia com as atrasadas, as que estão na sua mão e uma sem dono, e as tarefas agrupadas por categoria com uma semente sem data.">
         <figure class="phone">
           <div class="phone-screen">
             <span class="phone-island"></span>
-            <p class="mini-eyebrow">14 de agosto</p>
+            <p class="mini-eyebrow">Quinta, 14 de agosto</p>
             <p class="mini-title">Boa tarde, Mirna</p>
             <div class="mini-counts">
               <div class="is-yours"><strong>6</strong><span>na sua mão</span></div>
@@ -267,46 +267,37 @@ const faq = [
             <p class="mini-eyebrow">Hoje · 3</p>
             <p class="mini-row"><i></i><b>Reunião de pais</b><em>19h</em></p>
             <p class="mini-row"><i></i><b>Ração do Bidu</b><em>Hoje</em></p>
-          </div>
-        </figure>
-        <figure class="phone phone-center">
-          <div class="phone-screen">
-            <span class="phone-island"></span>
-            <p class="mini-title">Tarefas</p>
-            <p class="mini-eyebrow">9 abertas</p>
-            <p class="mini-eyebrow">Contas · 3</p>
-            <p class="mini-row"><i></i><b>Conta de luz</b><em>Sexta</em></p>
-            <p class="mini-row"><i></i><b>IPVA</b><em>Dia 20</em></p>
-            <p class="mini-eyebrow">Escola · 2</p>
-            <p class="mini-row"><i></i><b>Autorização</b><em>Sexta</em></p>
-            <p class="mini-eyebrow">Cuidado · 2</p>
-            <p class="mini-row"><i></i><b>Pediatra do Téo</b><em>—</em></p>
-            <p class="mini-eyebrow">Sementes · 3</p>
-            <p class="mini-row is-seed"><i></i><span><b>Pintar a sala</b><em>Plante depois</em></span></p>
+            <p class="mini-row"><i></i><b>Remédio do Téo</b><em>21h</em></p>
+            <p class="mini-eyebrow">Sem dono · 1</p>
+            <p class="mini-row"><i></i><b>Trocar o gás</b><em>Amanhã</em></p>
+            <p class="mini-eyebrow">Concluídas hoje · 4</p>
+            <p class="mini-row is-done"><i></i><b>Levar o Téo à escola</b></p>
+            <p class="mini-row is-done"><i></i><b>Pagar a internet</b></p>
+            <p class="mini-row is-done"><i></i><b>Buscar a receita</b></p>
+            <p class="mini-row is-done"><i></i><b>Estender a roupa</b></p>
           </div>
         </figure>
         <figure class="phone">
           <div class="phone-screen">
             <span class="phone-island"></span>
-            <p class="mini-title">Casa Castello</p>
-            <p class="mini-eyebrow">3 pessoas + Nina</p>
-            <div class="mini-person">
-              <i>MI</i><span><b>Mirna</b><em>Mãe · dona da casa</em></span>
-            </div>
-            <div class="mini-person">
-              <i class="tone-2">RA</i><span><b>Rafa</b><em>Pai</em></span>
-            </div>
-            <div class="mini-person">
-              <i class="tone-3">TE</i><span><b>Téo</b><em>Filho</em></span>
-            </div>
-            <div class="mini-person">
-              <span class="mark-slot"><NinaMark size={24} /></span>
-              <span><b>Nina</b><em>IA da casa · não ocupa vaga</em></span>
-            </div>
-            <p class="mini-eyebrow">Sobrecarga</p>
-            <div class="band-track band-track-mini">
-              <i></i><i></i><i class="is-on"></i>
-            </div>
+            <p class="mini-title">Tarefas</p>
+            <p class="mini-eyebrow">9 abertas · 3 sementes</p>
+            <p class="mini-eyebrow">Contas · 3</p>
+            <p class="mini-row"><i></i><b>Conta de luz</b><em>Sexta</em></p>
+            <p class="mini-row"><i></i><b>IPVA do carro</b><em>Dia 20</em></p>
+            <p class="mini-row"><i></i><b>Internet</b><em>Dia 25</em></p>
+            <p class="mini-eyebrow">Escola · 2</p>
+            <p class="mini-row"><i></i><b>Autorização</b><em>Sexta</em></p>
+            <p class="mini-row"><i></i><b>Reunião de pais</b><em>19h</em></p>
+            <p class="mini-eyebrow">Cuidado · 2</p>
+            <p class="mini-row"><i></i><b>Pediatra do Téo</b><em>—</em></p>
+            <p class="mini-row"><i></i><b>Remarcar o dentista</b><em>—</em></p>
+            <p class="mini-eyebrow">Casa · 2</p>
+            <p class="mini-row"><i></i><b>Trocar o filtro</b><em>Sábado</em></p>
+            <p class="mini-row"><i></i><b>Lavar as cortinas</b><em>Domingo</em></p>
+            <p class="mini-eyebrow">Sementes · 3</p>
+            <p class="mini-row is-seed"><i></i><span><b>Pintar a sala</b><em>Plante depois</em></span></p>
+            <p class="mini-row is-seed"><i></i><span><b>Arrumar o quintal</b><em>Plante depois</em></span></p>
           </div>
         </figure>
       </div>
@@ -316,7 +307,7 @@ const faq = [
       <div>
         <p class="eyebrow">Sinal de sobrecarga</p>
         <h2>Sem porcentagem. Sem placar. Sem ganhador.</h2>
-        <p>
+        <p class="split-lede">
           Quando a casa teve movimento suficiente, a Nina desenha como ela está dividida — em
           três faixas, sem número nenhum. Você não pode comparar duas pessoas com uma faixa, e é
           exatamente por isso que ela é uma faixa.

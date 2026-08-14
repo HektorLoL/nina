@@ -175,8 +175,30 @@ it:
   box measurement says they fit.
 
 Fixing the frame shortened it — a correctly proportioned iPhone is far less tall
-than the content-driven boxes were — so all four screens were re-fitted to what
+than the content-driven boxes were — so every screen was re-fitted to what
 actually lands inside a real display. Nothing is clipped and nothing wraps.
+
+**The type is sized from the device, not from the root.** `.phone-screen` sets
+`font-size: 3.933cqw` — 17 pt of body text on a 393 pt display, as a share of the
+device — and everything on the screen is `em` from there, on the app's own scale.
+Absolute type on a fluid device is only ever right at the one width it was tuned
+for; at any other size the content stops being a screenshot and starts wrapping.
+
+Two things this exposed, both of which had been silently corrupting the screens:
+
+- **`.split p:not(.eyebrow)` was resetting every paragraph inside the phones to
+  17 px.** At (0,2,1) it out-specifies `.mini-eyebrow` at (0,1,0), so the section
+  labels rendered larger than the titles they sit above and everything wrapped.
+  A descendant paragraph rule cannot be allowed near the drawn screens; the lede
+  is a class now.
+- **Mobile font boosting** does the same thing for its own reasons, so `html`
+  carries `text-size-adjust: 100%`.
+
+The gallery went from three phones to two. At three-up in a half-width column the
+device is 209 px, which puts body text at 8 px and the section labels at under
+6 px — legible only as texture. Two phones sit at the same 320 px as the hero.
+The household screen came off rather than shrink the other two; the same three
+people are drawn immediately below in the workload portrait.
 
 ## 6. Still open
 
