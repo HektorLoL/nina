@@ -134,20 +134,45 @@ waitlistForm?.addEventListener("submit", async (event) => {
   }
 });
 
-const updateHeader = () => header?.classList.toggle("is-scrolled", window.scrollY > 16);
-updateHeader();
-window.addEventListener("scroll", updateHeader, { passive: true });
+// Motion is opt-in: the resting page is already the finished frame, so a reader
+// who has asked for less movement is never handed an empty one.
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-const observer = new IntersectionObserver(
-  (entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("is-visible");
-        observer.unobserve(entry.target);
-      }
+// Measured against the viewport rather than through IntersectionObserver, which
+// is silently absent in some embedded webviews and reports a ratio no element
+// taller than the viewport can ever reach.
+const sequences = [
+  { selector: "[data-ritual]", className: "is-playing", shown: 0.2, nodes: null },
+  { selector: "[data-bands]", className: "is-landing", shown: 0.4, nodes: null },
+];
+
+const armSequences = () => {
+  if (prefersReducedMotion.matches) return true;
+
+  let pending = 0;
+  sequences.forEach((sequence) => {
+    if (!sequence.nodes) {
+      sequence.nodes = Array.from(document.querySelectorAll(sequence.selector));
+    }
+    sequence.nodes = sequence.nodes.filter((node) => {
+      const rect = node.getBoundingClientRect();
+      const reach = Math.min(rect.height, window.innerHeight);
+      const shown = Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0);
+      if (reach <= 0 || shown / reach < sequence.shown) return true;
+      node.classList.add(sequence.className);
+      return false;
     });
-  },
-  { threshold: 0.12 },
-);
+    pending += sequence.nodes.length;
+  });
 
-document.querySelectorAll(".reveal").forEach((element) => observer.observe(element));
+  return pending === 0;
+};
+
+const onScroll = () => {
+  header?.classList.toggle("is-scrolled", window.scrollY > 16);
+  if (armSequences()) window.removeEventListener("scroll", onScroll);
+};
+
+onScroll();
+window.addEventListener("scroll", onScroll, { passive: true });
+window.addEventListener("resize", armSequences, { passive: true });

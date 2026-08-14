@@ -15,16 +15,18 @@ const large = {
   box: 64,
   d: "M53.14 16.1A22.5 22.5 0 1 1 10.86 16.1",
   band: 10,
-  cx: 32,
-  cy: 27.8,
+  x: 23.6,
+  y: 19.4,
+  side: 16.8,
   r: 8.4,
 };
 const small = {
   box: 24,
   d: "M19.71 6.2A8.2 8.2 0 1 1 4.29 6.2",
   band: 4,
-  cx: 12,
-  cy: 10.5,
+  x: 9.3,
+  y: 7.8,
+  side: 5.4,
   r: 2.7,
 };
 
@@ -32,7 +34,7 @@ const m = size < 34 ? small : large;
 ---
 
 <svg
-  class={className}
+  class:list={["nina-mark", className]}
   width={size}
   height={size}
   viewBox={`0 0 ${m.box} ${m.box}`}
@@ -47,5 +49,16 @@ const m = size < 34 ? small : large;
     stroke-width={m.band}
     stroke-linecap="round"
   />
-  <circle cx={m.cx} cy={m.cy} r={m.r} fill="currentColor" />
+  {/* The disc is a rounded square rather than a circle only so `Lendo` can
+      stretch it into a bar. It must never be trimmed, dashed or rotated: the
+      mark is a mass, and a stroked arc that moves is a spinner. */}
+  <rect
+    class="nina-disc"
+    x={m.x}
+    y={m.y}
+    width={m.side}
+    height={m.side}
+    rx={m.r}
+    fill="currentColor"
+  />
 </svg>

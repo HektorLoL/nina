@@ -260,7 +260,15 @@ h3 {
   padding: 0 24px;
   font-size: 1rem;
   font-weight: 600;
-  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease,
+    transform 100ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.button:active,
+.menu-button:active,
+.dialog-close:active,
+.invite-code button:active {
+  transform: scale(0.985);
 }
 
 .button:focus-visible,
@@ -1174,6 +1182,7 @@ details {
 
 summary {
   min-height: 52px;
+  transition: background 160ms ease;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1197,6 +1206,28 @@ summary svg {
 
 details[open] summary svg {
   transform: rotate(45deg);
+}
+
+summary:hover {
+  background: var(--grout);
+}
+
+/* The disclosure opens by growing rather than by appearing. Browsers without
+   `interpolate-size` simply open instantly, which is the same end state. */
+@supports (interpolate-size: allow-keywords) {
+  :root {
+    interpolate-size: allow-keywords;
+  }
+
+  details::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition: block-size 260ms cubic-bezier(0.16, 1, 0.3, 1), content-visibility 260ms allow-discrete;
+  }
+
+  details[open]::details-content {
+    block-size: auto;
+  }
 }
 
 details p {
@@ -1438,17 +1469,6 @@ details p {
   border-radius: 50%;
   color: var(--ink);
   background: var(--ground);
-}
-
-.reveal {
-  opacity: 0;
-  transform: translateY(20px);
-  transition: opacity 600ms ease, transform 600ms ease;
-}
-
-.reveal.is-visible {
-  opacity: 1;
-  transform: none;
 }
 
 .invite-header {
@@ -1789,6 +1809,228 @@ details p {
   text-underline-offset: 0.18em;
 }
 
+/* ---------------------------------------------------------------------------
+   Motion. One authored sequence, one teaching moment, and feedback.
+
+   Every animated element is already in its final state by default: motion is
+   opt-in through a class the observer adds, so a failed script, an old browser
+   and a reduced-motion reader all get the finished frame rather than an empty
+   one. `backwards` fill is what lets an entrance start from hidden without the
+   element ever being hidden in the resting document.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The disc is the only part of the mark that ever moves, and it only ever
+   changes position or width. Percentages resolve against the view box, so the
+   same numbers drive both masters: 2.2/64 and 10.2/64 of the box, exactly the
+   offsets `NinaMark.swift` uses. The cup never moves, never closes, never
+   rotates. */
+.nina-disc {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+
+@keyframes nina-ritual {
+  0%,
+  5% {
+    transform: none;
+  }
+  /* Ouvindo — the disc lifts and breathes while you are still writing. */
+  11% {
+    transform: translateY(-3.4375%);
+  }
+  16% {
+    transform: translateY(-4.6%);
+  }
+  21% {
+    transform: translateY(-3.4375%);
+  }
+  /* Lendo — it becomes a bar and the width oscillates. Never a spin. */
+  27% {
+    transform: translateY(0) scaleX(1.29);
+  }
+  33% {
+    transform: translateY(0) scaleX(1.06);
+  }
+  39% {
+    transform: translateY(0) scaleX(1.29);
+  }
+  45%,
+  80% {
+    transform: none;
+  }
+  /* Esperando você — it lifts clear of the rim and stops there. There is no
+     next state: Guardado belongs to the instant a person confirms, and nobody
+     on this page has. */
+  94%,
+  100% {
+    transform: translateY(-15.9375%);
+  }
+}
+
+@keyframes nina-rise {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+}
+
+@keyframes nina-lay {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0 round 16px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 16px);
+  }
+}
+
+@keyframes nina-land {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes nina-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* --- the hero ritual, ~3.2s, played once ---------------------------------- */
+
+[data-ritual] .phone-head .nina-disc {
+  transform: translateY(-15.9375%);
+}
+
+[data-ritual].is-playing .phone-head .nina-disc {
+  animation: nina-ritual 3200ms linear backwards;
+}
+
+[data-ritual].is-playing .bubble-you {
+  animation: nina-rise 240ms var(--ease-out) 420ms backwards;
+}
+
+[data-ritual].is-playing .bubble-row {
+  animation: nina-rise 240ms var(--ease-out) 1180ms backwards;
+}
+
+[data-ritual].is-playing .proposal {
+  animation: nina-lay 420ms var(--ease-out) 1520ms backwards;
+}
+
+[data-ritual].is-playing .proposal-row {
+  animation: nina-rise 200ms var(--ease-out) backwards;
+}
+
+[data-ritual].is-playing .proposal-row:nth-child(3) {
+  animation-delay: 1900ms;
+}
+
+[data-ritual].is-playing .proposal-row:nth-child(4) {
+  animation-delay: 1970ms;
+}
+
+[data-ritual].is-playing .proposal-row:nth-child(5) {
+  animation-delay: 2040ms;
+}
+
+[data-ritual].is-playing .proposal-actions {
+  animation: nina-rise 240ms var(--ease-out) 2150ms backwards;
+}
+
+[data-ritual].is-playing .phone-waiting {
+  animation: nina-fade 320ms ease 2760ms backwards;
+}
+
+/* The three loose notes settle after the phone has finished speaking. */
+[data-ritual].is-playing .floating-note {
+  animation: nina-rise 320ms var(--ease-out) backwards;
+}
+
+[data-ritual].is-playing .note-one {
+  animation-delay: 2900ms;
+}
+
+[data-ritual].is-playing .note-two {
+  animation-delay: 2980ms;
+}
+
+[data-ritual].is-playing .note-three {
+  animation-delay: 3060ms;
+}
+
+/* --- the portrait, played once ------------------------------------------- */
+
+/* The bands land in household order, never in rank order: the stagger follows
+   the document, so it can never become the ranking the caption disclaims. */
+[data-bands].is-landing .band-track i.is-on,
+[data-bands].is-landing .band-track i.is-house {
+  transform-origin: left center;
+  animation: nina-land 420ms var(--ease-out) backwards;
+}
+
+[data-bands].is-landing .band-rows > div:nth-child(1) i {
+  animation-delay: 60ms;
+}
+
+[data-bands].is-landing .band-rows > div:nth-child(2) i {
+  animation-delay: 150ms;
+}
+
+[data-bands].is-landing .band-rows > div:nth-child(3) i {
+  animation-delay: 240ms;
+}
+
+/* --- feedback ------------------------------------------------------------- */
+
+.waitlist-dialog {
+  opacity: 1;
+  transition: opacity 200ms ease, transform 200ms var(--ease-out),
+    overlay 200ms allow-discrete, display 200ms allow-discrete;
+}
+
+.waitlist-dialog:not([open]) {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+}
+
+@starting-style {
+  .waitlist-dialog[open] {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.waitlist-dialog::backdrop {
+  opacity: 1;
+  transition: opacity 200ms ease, overlay 200ms allow-discrete,
+    display 200ms allow-discrete;
+}
+
+.waitlist-dialog:not([open])::backdrop {
+  opacity: 0;
+}
+
+@starting-style {
+  .waitlist-dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/* Both of these are swapped in by script, so the animation runs on insert. */
+.waitlist-success:not([hidden]) {
+  animation: nina-rise 260ms var(--ease-out);
+}
+
+.invite-status .status-dot {
+  animation: nina-fade 240ms ease;
+}
+
 [hidden] {
   display: none !important;
 }
@@ -2029,8 +2271,12 @@ details p {
     animation-iteration-count: infinite !important;
   }
 
-  .reveal {
-    opacity: 1;
-    transform: none;
+  /* Ambient motion is disabled, not shortened: a state that only exists in
+     movement does not exist for someone who has asked movement to stop. Both
+     sequences already end where the resting page starts, so nothing is lost.
+     The script also refuses to arm them, and this is the second lock. */
+  [data-ritual].is-playing *,
+  [data-bands].is-landing * {
+    animation: none !important;
   }
 }

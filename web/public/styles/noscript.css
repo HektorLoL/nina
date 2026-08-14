@@ -1,7 +1,0 @@
-/* Without JavaScript the IntersectionObserver never runs, so every `.reveal`
-   section would stay at opacity 0 and the page would render blank. Loaded from
-   a <noscript> link because the CSP has no 'unsafe-inline' for styles. */
-.reveal {
-  opacity: 1;
-  transform: none;
-}

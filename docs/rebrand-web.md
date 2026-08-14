@@ -105,7 +105,53 @@ there, in that order. What changed is what they are made of.
   because `--line` is 1.24:1 and can decorate a card but must never be the only
   boundary of an input.
 
-## 4. Still open
+## 4. Motion
+
+Added 2026-08-14, after the palette pass.
+
+**One authored sequence, one teaching moment, and feedback.** The eight identical
+section fade-and-rises were deleted: a wall does not assemble itself while you
+look at it, and a repeated entrance is not a thesis.
+
+- **The hero phone performs the ritual once**, about 3.2 seconds. Your message
+  arrives, the mark goes to `Ouvindo` and breathes, then to `Lendo` — the disc
+  stretches into a bar, which is why the disc is authored as a rounded square
+  rather than a circle. The proposal is laid down with a clip reveal, because a
+  tile is laid rather than faded. Its rows stagger, because they are a list. Then
+  the mark lifts to `Esperando você` and stops.
+- **It cannot resolve, and that is the point.** `Guardado` — the disc settling
+  and taking moss — is licensed by exactly one event: a person confirmed
+  something. Nobody on a marketing page has. So the site's one authored sequence
+  ends in waiting and holds there. The product's grammar is enforced by its own
+  motion vocabulary rather than by a caption.
+- **The resting document already draws the waiting pose.** The disc's default
+  transform is the `Esperando você` lift, and the sequence arrives at it. A state
+  that exists only in movement does not exist in a screenshot.
+- **The portrait's bands land once** when the chart is seen, in document order,
+  which is household order. The stagger follows the DOM precisely so it can never
+  become the ranking the caption disclaims.
+- **Everything else is feedback**: a press scale on controls, a disclosure that
+  grows via `::details-content`, a dialog that arrives with `@starting-style` and
+  leaves faster than it came, and the two script-swapped states — waitlist
+  success and the invite verdict — animating on insert.
+
+**Motion is opt-in, and the resting page is the finished frame.** The old
+`.reveal` pattern hid content and asked JavaScript to reveal it, which is why it
+needed a `<noscript>` stylesheet to stop the page rendering blank. That is
+inverted now: everything is in its final state, and a class adds the animation.
+No script, an old browser, or `prefers-reduced-motion` all get the complete page,
+so `public/styles/noscript.css` was deleted rather than maintained.
+
+Two implementation notes worth keeping. The sequences are armed by a measured
+`getBoundingClientRect` check on the existing scroll listener, not by
+`IntersectionObserver`: the observer is silently absent in some embedded
+webviews, and its ratio can never reach a threshold for an element taller than
+the viewport, which the hero phone is on a phone. And the disc's offsets are
+percentages resolved against the view box, so the same two numbers — 2.2/64 and
+10.2/64 of the box — drive both of the mark's masters, exactly as
+`NinaMark.swift` computes them.
+
+## 5. Still open
 
 - **The three-step promise is written for the flag-on product.**
   `NINA_AI_V2_ENABLED = NO` is the shipping default, so on the current build
