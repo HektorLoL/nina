@@ -89,10 +89,10 @@ there, in that order. What changed is what they are made of.
 - **Documents were sold as free.** Attachments are gated by
   `nina_attachments_require_premium` inside `begin_nina_chat_run`, so the feature
   list says so, the way `A2` says it about the portrait.
-- **Without JavaScript the page rendered blank.** Every section carries
-  `.reveal { opacity: 0 }` and the IntersectionObserver that clears it never
-  runs. A `<noscript>` stylesheet restores them; it has to be a linked file
-  because the CSP has no `'unsafe-inline'` for styles.
+- **Without JavaScript the page rendered blank.** Every section carried
+  `.reveal { opacity: 0 }` and the observer that clears it never ran. Patched
+  here with a `<noscript>` stylesheet, then removed entirely by the motion pass
+  below, which inverted the pattern so the resting page is already complete.
 - **`prefers-reduced-motion` froze the invite spinner**, turning the one
   animation that reports state into a decoration that reports nothing.
 - **The closed mobile menu still held keyboard focus** (`opacity: 0` alone), the
