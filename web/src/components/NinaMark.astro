@@ -1,0 +1,51 @@
+---
+interface Props {
+  size?: number;
+  class?: string;
+  title?: string;
+}
+
+const { size = 32, class: className, title } = Astro.props;
+
+// Two masters, differing by measurement rather than by scale, transcribed from
+// `Nina/NinaMark.swift`. The floor gap between the disc and the inside of the cup
+// is the mark's critical dimension and it grows as the mark shrinks: 8.0% of the
+// box at 64, 8.3% at 24. Holding requires not gripping.
+const large = {
+  box: 64,
+  d: "M53.14 16.1A22.5 22.5 0 1 1 10.86 16.1",
+  band: 10,
+  cx: 32,
+  cy: 27.8,
+  r: 8.4,
+};
+const small = {
+  box: 24,
+  d: "M19.71 6.2A8.2 8.2 0 1 1 4.29 6.2",
+  band: 4,
+  cx: 12,
+  cy: 10.5,
+  r: 2.7,
+};
+
+const m = size < 34 ? small : large;
+---
+
+<svg
+  class={className}
+  width={size}
+  height={size}
+  viewBox={`0 0 ${m.box} ${m.box}`}
+  fill="none"
+  role={title ? "img" : "presentation"}
+  aria-hidden={title ? undefined : "true"}
+>
+  {title && <title>{title}</title>}
+  <path
+    d={m.d}
+    stroke="currentColor"
+    stroke-width={m.band}
+    stroke-linecap="round"
+  />
+  <circle cx={m.cx} cy={m.cy} r={m.r} fill="currentColor" />
+</svg>

@@ -1,10 +1,8 @@
 ---
-import "@fontsource/fraunces/700.css";
-import "@fontsource/fraunces/800.css";
-import "@fontsource/nunito-sans/400.css";
-import "@fontsource/nunito-sans/600.css";
-import "@fontsource/nunito-sans/700.css";
-import "@fontsource/nunito-sans/800.css";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
 import "../styles/global.css";
 
 interface Props {
@@ -32,21 +30,20 @@ const imageURL = new URL(image, Astro.site);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="theme-color"
-      content="#fffaf0"
-      media="(prefers-color-scheme: light)"
-    />
-    <meta
-      name="theme-color"
-      content="#101719"
-      media="(prefers-color-scheme: dark)"
-    />
+    <meta name="theme-color" content="#FBFCFD" />
     <meta name="description" content={description} />
     {noindex && <meta name="robots" content="noindex, nofollow" />}
     <link rel="canonical" href={canonicalURL} />
-    <link rel="icon" href="/images/nina-app-icon.png" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/images/nina-app-icon.png" sizes="1024x1024" />
     <link rel="apple-touch-icon" href="/images/nina-app-icon.png" />
+    <link
+      rel="preload"
+      href="/fonts/Fraunces-Regular.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
     <link rel="manifest" href="/site.webmanifest" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="pt_BR" />
@@ -59,9 +56,11 @@ const imageURL = new URL(image, Astro.site);
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={imageURL} />
+    <noscript><link rel="stylesheet" href="/styles/noscript.css" /></noscript>
     <title>{title}</title>
   </head>
   <body>
+    <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
     <slot />
   </body>
 </html>

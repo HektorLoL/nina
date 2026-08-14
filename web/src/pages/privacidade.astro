@@ -1,7 +1,7 @@
 ---
-import { Icon } from "astro-icon/components";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Brand from "../components/Brand.astro";
+import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
 
 const updatedAt = "2 de agosto de 2026";
@@ -16,7 +16,7 @@ const dpoMailto = legalIdentity.dpoContactEmail
   description="Como a Nina coleta, usa, protege, exporta e apaga dados pessoais no app de organização doméstica."
   canonical="/privacidade/"
 >
-  <header class="site-header is-scrolled">
+  <header class="site-header legal-header is-scrolled">
     <div class="header-inner page-shell">
       <Brand />
       <nav class="desktop-nav" aria-label="Navegação principal">
@@ -27,9 +27,9 @@ const dpoMailto = legalIdentity.dpoContactEmail
     </div>
   </header>
 
-  <main class="policy-page page-shell">
+  <main id="conteudo" class="policy-page page-shell">
     <section class="policy-hero">
-      <p class="eyebrow lavender">Privacidade</p>
+      <p class="eyebrow">Privacidade</p>
       <h1>Política de Privacidade</h1>
       <p>
         A Nina organiza rotinas domésticas, tarefas, lembretes, compras, documentos e memórias
@@ -41,17 +41,17 @@ const dpoMailto = legalIdentity.dpoContactEmail
 
     <section class="policy-grid" aria-label="Resumo de privacidade">
       <article>
-        <Icon name="ph:shield-check-fill" size={28} />
+        <Glyph name="shield" size={28} />
         <h2>Sem venda de dados</h2>
         <p>Não vendemos dados pessoais e não usamos dados da casa para publicidade comportamental.</p>
       </article>
       <article>
-        <Icon name="ph:sparkle-fill" size={28} />
+        <Glyph name="lock" size={28} />
         <h2>IA com consentimento</h2>
         <p>A conversa online com a Nina exige consentimento claro para processamento de IA e memória.</p>
       </article>
       <article>
-        <Icon name="ph:download-simple-fill" size={28} />
+        <Glyph name="document" size={28} />
         <h2>Exportação e exclusão</h2>
         <p>O app permite exportar dados em JSON, apagar histórico privado e iniciar exclusão da conta.</p>
       </article>

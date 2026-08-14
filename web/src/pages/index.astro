@@ -1,40 +1,63 @@
 ---
-import { Icon } from "astro-icon/components";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Brand from "../components/Brand.astro";
-import PhoneShot from "../components/PhoneShot.astro";
+import Glyph from "../components/Glyph.astro";
+import NinaMark from "../components/NinaMark.astro";
 import { waitlistConsentVersion } from "../waitlist";
 
 const steps = [
   {
     number: "1",
-    icon: "ph:chat-circle-dots",
+    glyph: "chat",
     title: "Você fala",
-    text: "Conte o que precisa, por voz ou texto. Pode ser uma coisa só ou várias de uma vez.",
-    tone: "mint",
+    text: "Conte o que precisa, do jeito que veio na cabeça. Pode ser uma coisa só ou várias de uma vez.",
   },
   {
     number: "2",
-    icon: "ph:sparkle",
+    glyph: "nina",
     title: "A Nina entende",
-    text: "Ela organiza, prioriza e junta com o que já existe na casa e na agenda de cada um.",
-    tone: "sky",
+    text: "Ela lê, mostra o que entendeu e espera. Nada entra na casa sozinho.",
   },
   {
     number: "3",
-    icon: "ph:users-three",
-    title: "Todo mundo resolve",
-    text: "Tarefas, lembretes e compras vão para as pessoas certas. Clareza para todos.",
-    tone: "coral",
+    glyph: "people",
+    title: "Você confirma",
+    text: "O que você confirma vira tarefa, lembrete ou semente, com dono e prazo, para a casa inteira.",
   },
-];
+] as const;
 
 const features = [
   "Entende prioridades e prazos",
-  "Distribui tarefas de forma justa",
+  "Sugere quem fica com o quê — quem decide é você",
   "Lembra no momento certo",
   "Se ajusta quando a vida muda",
+  "Lê boleto, receita e comunicado por foto, no Nina Premium",
 ];
+
+const balancePoints = [
+  "Se não der para desenhar sem chutar, ela não desenha. E diz por quê.",
+  "Tarefa sem dono fica com a casa. Nunca sobra no nome de alguém.",
+  "Ninguém recebe aviso de que o outro terminou alguma coisa.",
+  "O retrato faz parte do Nina Premium.",
+];
+
+const privacyCards = [
+  {
+    glyph: "lock",
+    title: "A foto não fica guardada",
+    text: "Nenhum servidor guarda o seu documento. O que sobra é o que a Nina leu e uma miniatura no seu aparelho.",
+  },
+  {
+    glyph: "close",
+    title: "Ela não copia a linha digitável",
+    text: "Para pagar você abre o boleto no banco. A Nina lembra do vencimento, ela não movimenta dinheiro.",
+  },
+  {
+    glyph: "server",
+    title: "Onde ficam os seus dados",
+    text: "Os seus registros ficam em servidores em São Paulo. Para ler o que você escreve, a Nina usa um modelo fora do Brasil, e pede que ele não guarde o que recebe.",
+  },
+] as const;
 
 const faq = [
   {
@@ -45,17 +68,17 @@ const faq = [
   {
     question: "Posso usar se moro sozinho?",
     answer:
-      "Sim. A Nina também funciona como uma memória prática para tarefas, compras, documentos e lembretes pessoais.",
+      "Pode. O retrato da casa fica dormindo, porque com um adulto só não tem o que comparar, mas as tarefas, as compras, os lembretes e as sementes funcionam igual.",
   },
   {
     question: "Como a Nina ajuda a dividir as tarefas?",
     answer:
-      "Ela reúne o que está pendente, mostra quem está concentrando mais demandas e sugere ajustes para a família decidir.",
+      "Ela desenha como a casa está dividida em três faixas — leve, parecido, mais pesado — sem número e sem ranking. É um retrato para conversar, não para cobrar.",
   },
   {
-    question: "Posso editar ou cancelar algo que a Nina criou?",
+    question: "Posso editar ou apagar o que eu confirmei?",
     answer:
-      "Pode. Você mantém o controle e consegue editar, concluir ou excluir tarefas e itens organizados pela Nina.",
+      "Pode. Quem cria, muda ou apaga é você. A Nina só propõe, e nada existe até você tocar em confirmar.",
   },
   {
     question: "A Nina funciona no iPhone e Android?",
@@ -67,7 +90,7 @@ const faq = [
 
 <BaseLayout
   title="Nina — menos coisas na cabeça, mais casa acontecendo junto"
-  description="Fale do seu jeito. A Nina transforma lembranças soltas em tarefas, lembretes e uma rotina mais leve para toda a casa."
+  description="Fale do seu jeito. A Nina lê, monta a proposta e espera você confirmar: tarefas, lembretes e uma rotina mais leve para toda a casa."
 >
   <header class="site-header" data-header>
     <div class="header-inner page-shell">
@@ -79,7 +102,7 @@ const faq = [
         <a href="#duvidas">Dúvidas</a>
       </nav>
       <button
-        class="button button-primary header-cta"
+        class="button button-ink header-cta"
         type="button"
         data-open-waitlist
         data-waitlist-source="header"
@@ -94,7 +117,7 @@ const faq = [
         aria-controls="mobile-menu"
         data-menu-button
       >
-        <Icon name="ph:list-bold" size={24} />
+        <Glyph name="menu" size={24} />
       </button>
     </div>
     <nav id="mobile-menu" class="mobile-nav" aria-label="Navegação móvel" data-mobile-menu>
@@ -103,7 +126,7 @@ const faq = [
       <a href="#privacidade">Privacidade</a>
       <a href="#duvidas">Dúvidas</a>
       <button
-        class="button button-primary"
+        class="button button-ink"
         type="button"
         data-open-waitlist
         data-waitlist-source="mobile_menu"
@@ -113,71 +136,98 @@ const faq = [
     </nav>
   </header>
 
-  <main>
+  <main id="conteudo">
     <section class="hero page-shell" aria-labelledby="hero-title">
       <div class="hero-copy reveal">
-        <p class="eyebrow coral">Conversa que vira alívio</p>
-        <h1 id="hero-title">
-          <span class="title-line">Jogue as coisas</span>
-          <span class="title-line">da casa aqui.</span>
-          <span class="title-line title-accent">A Nina organiza.</span>
-        </h1>
-        <p class="hero-lede">
-          Você fala. A Nina transforma bagunça mental em tarefas, lembretes e clareza para todo
-          mundo da casa. Menos cobrança, mais vida junto.
+        <p class="eyebrow">Conversa que vira alívio</p>
+        <h1 id="hero-title">Tira da sua cabeça. Ela cuida do resto.</h1>
+        <p class="lede hero-lede">
+          A Nina é uma amiga que mora no seu celular. Você conta o que precisa ser feito, do
+          jeito que veio na cabeça. Ela transforma em tarefa, lembrete, compra — e espera você
+          confirmar.
         </p>
-        <button
-          class="button button-primary button-large"
-          type="button"
-          data-open-waitlist
-          data-waitlist-source="hero"
-        >
-          Quero conhecer a Nina
-          <Icon name="ph:arrow-right-bold" size={19} />
-        </button>
-        <p class="hand-note" aria-hidden="true">É rápido, é leve, é da casa.</p>
+        <div class="hero-actions">
+          <button
+            class="button button-primary button-large"
+            type="button"
+            data-open-waitlist
+            data-waitlist-source="hero"
+          >
+            Quero conhecer a Nina
+            <Glyph name="arrow-right" size={19} />
+          </button>
+          <a class="button button-secondary button-large" href="#como-funciona">
+            Ver como funciona
+          </a>
+        </div>
+        <p class="hero-footnote">
+          iPhone · em português · sua casa e suas tarefas ficam em São Paulo
+        </p>
       </div>
 
-      <div class="hero-product reveal" aria-label="Prévia do aplicativo Nina">
-        <div class="hero-glow" aria-hidden="true"></div>
-        <PhoneShot
-          src="/images/nina-chat.jpg"
-          alt="Tela de conversa do aplicativo Nina"
-          class="hero-phone"
-          eager
-        />
-        <article class="floating-note note-mint note-one">
-          <Icon name="ph:check-circle-fill" size={20} />
-          <p><strong>Ideia solta</strong>Comprar presente da professora até sexta</p>
+      <div class="hero-product reveal">
+        <figure class="phone" role="img" aria-label="Na conversa, você escreve que o boleto do condomínio vence dia 10. A Nina responde que leu assim e pede que você corrija antes de confirmar, e mostra uma proposta ainda inexistente: pagar o condomínio, segunda 10 de agosto, todo mês, dono a casa, com os botões confirmar, corrigir e ignorar.">
+          <div class="phone-screen">
+            <div class="phone-head">
+              <NinaMark size={26} />
+              <strong>Nina</strong>
+            </div>
+            <p class="bubble bubble-you">o boleto do condomínio vence dia 10</p>
+            <div class="bubble-row">
+              <NinaMark size={22} />
+              <p class="bubble bubble-nina">Li assim. Corrija antes de confirmar.</p>
+            </div>
+            <div class="proposal">
+              <p class="proposal-tag">Isto ainda não existe</p>
+              <p class="proposal-title"><i></i>Pagar o condomínio</p>
+              <p class="proposal-row"><span>Quando</span><strong>segunda, 10 de agosto</strong></p>
+              <p class="proposal-row"><span>Repete</span><strong>todo mês</strong></p>
+              <p class="proposal-row"><span>Dono</span><strong>A casa, por enquanto</strong></p>
+              <div class="proposal-actions">
+                <b>Confirmar e criar 1 tarefa</b>
+                <div><em>Corrigir</em><em>Ignorar</em></div>
+              </div>
+            </div>
+            <p class="phone-waiting">A Nina está esperando você.</p>
+            <div class="phone-composer">
+              <span>Escreve pra Nina</span>
+              <i><Glyph name="arrow-up" size={17} /></i>
+            </div>
+          </div>
+        </figure>
+
+        <article class="floating-note note-one">
+          <Glyph name="chat" size={20} />
+          <p><strong>Ideia solta</strong>Comprar o presente da professora até sexta</p>
         </article>
-        <article class="floating-note note-amber note-two">
-          <Icon name="ph:bell-fill" size={20} />
-          <p><strong>Lembrete</strong>Renovar plano de internet</p>
+        <article class="floating-note note-two">
+          <Glyph name="bell" size={20} />
+          <p><strong>Lembrete</strong>Renovar o plano de internet</p>
         </article>
-        <article class="floating-note note-sky note-three">
-          <Icon name="ph:check-square-fill" size={20} />
-          <p><strong>Tarefa criada</strong>Levar roupas para doação</p>
+        <article class="floating-note note-three">
+          <Glyph name="seed" size={20} />
+          <p><strong>Semente</strong>Um dia, pintar o corredor</p>
         </article>
       </div>
     </section>
 
-    <section id="como-funciona" class="steps-section page-shell reveal">
+    <section id="como-funciona" class="section panel page-shell reveal">
       <div class="section-heading centered">
-        <p class="eyebrow mint">Sem precisar aprender um sistema</p>
+        <p class="eyebrow">Sem precisar aprender um sistema</p>
         <h2>Da conversa à ação, em 3 passos</h2>
       </div>
       <div class="steps-grid">
         {
           steps.map((step, index) => (
-            <article class={`step step-${step.tone}`}>
+            <article class="step">
               <div class="step-top">
                 <span class="step-number">{step.number}</span>
-                <span class="step-icon"><Icon name={step.icon} size={28} /></span>
+                {step.glyph === "nina" ? <NinaMark size={30} /> : <Glyph name={step.glyph} size={28} />}
               </div>
               <h3>{step.title}</h3>
               <p>{step.text}</p>
               {index < steps.length - 1 && (
-                <Icon class="step-arrow" name="ph:arrow-right" size={28} aria-hidden="true" />
+                <Glyph name="arrow-right" size={26} class="step-arrow" />
               )}
             </article>
           ))
@@ -185,94 +235,142 @@ const faq = [
       </div>
     </section>
 
-    <section id="recursos" class="product-section page-shell reveal">
-      <div class="product-copy">
-        <p class="eyebrow mint">Organização que se adapta à sua casa</p>
+    <section id="recursos" class="section panel panel-grout page-shell split reveal">
+      <div>
+        <p class="eyebrow">Organização que se adapta à sua casa</p>
         <h2>Da bagunça mental para a rotina leve.</h2>
         <p>
-          A Nina entende o contexto da casa e cria um plano prático que funciona de verdade.
+          A Nina entende o contexto da casa e monta um plano prático que funciona de verdade.
         </p>
         <ul class="check-list">
+          {features.map((feature) => <li><Glyph name="check" size={20} />{feature}</li>)}
+        </ul>
+      </div>
+      <div class="phone-gallery" role="img" aria-label="As telas Hoje, Tarefas e Casa do aplicativo Nina: a agenda do dia com atrasadas e sem dono, as tarefas agrupadas por categoria com uma semente, e a casa com três pessoas mais a Nina.">
+        <figure class="phone">
+          <div class="phone-screen">
+            <p class="mini-eyebrow">Quinta, 14 de agosto</p>
+            <p class="mini-title">Boa tarde, Mirna</p>
+            <div class="mini-counts">
+              <div class="is-yours"><strong>6</strong><span>na sua mão</span></div>
+              <div class="is-late"><strong>2</strong><span>atrasadas</span></div>
+              <div><strong>1</strong><span>sem dono</span></div>
+            </div>
+            <div class="mini-chips">
+              <span class="is-on">Tudo 9</span><span>Minhas</span><span>Sementes</span>
+            </div>
+            <p class="mini-eyebrow">Atrasadas · 2</p>
+            <p class="mini-row late"><i></i><b>Condomínio</b><em>Ontem</em></p>
+            <p class="mini-row late"><i></i><b>Vacina do Bidu</b><em>Terça</em></p>
+            <p class="mini-eyebrow">Hoje · 3</p>
+            <p class="mini-row"><i></i><b>Reunião de pais</b><em>19h</em></p>
+            <p class="mini-row"><i></i><b>Ração do Bidu</b><em>Hoje</em></p>
+          </div>
+        </figure>
+        <figure class="phone phone-center">
+          <div class="phone-screen">
+            <p class="mini-title">Tarefas</p>
+            <p class="mini-eyebrow">9 abertas · 3 sementes</p>
+            <p class="mini-eyebrow">Contas · 3</p>
+            <p class="mini-row"><i></i><b>Conta de luz</b><em>Sexta</em></p>
+            <p class="mini-row"><i></i><b>IPVA</b><em>Dia 20</em></p>
+            <p class="mini-eyebrow">Escola · 2</p>
+            <p class="mini-row"><i></i><b>Autorização</b><em>Sexta</em></p>
+            <p class="mini-eyebrow">Cuidado · 2</p>
+            <p class="mini-row"><i></i><b>Pediatra do Téo</b><em>—</em></p>
+            <p class="mini-eyebrow">Sementes · 3</p>
+            <p class="mini-row is-seed"><i></i><span><b>Pintar a sala</b><em>Plante depois</em></span></p>
+          </div>
+        </figure>
+        <figure class="phone">
+          <div class="phone-screen">
+            <p class="mini-title">Casa Castello</p>
+            <p class="mini-eyebrow">3 pessoas · 5 vagas livres</p>
+            <div class="mini-person">
+              <i>MI</i><span><b>Mirna</b><em>Mãe · dona da casa</em></span>
+            </div>
+            <div class="mini-person">
+              <i class="tone-2">RA</i><span><b>Rafa</b><em>Pai</em></span>
+            </div>
+            <div class="mini-person">
+              <i class="tone-3">TE</i><span><b>Téo</b><em>Filho</em></span>
+            </div>
+            <div class="mini-person">
+              <span class="mark-slot"><NinaMark size={24} /></span>
+              <span><b>Nina</b><em>IA da casa · não ocupa vaga</em></span>
+            </div>
+            <p class="mini-eyebrow">Sinal de sobrecarga</p>
+            <div class="band-track band-track-mini">
+              <i></i><i></i><i class="is-on"></i>
+            </div>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section panel page-shell split reveal">
+      <div>
+        <p class="eyebrow">Sinal de sobrecarga</p>
+        <h2>Sem porcentagem. Sem placar. Sem ganhador.</h2>
+        <p>
+          Quando a casa teve movimento suficiente, a Nina desenha como ela está dividida — em
+          três faixas, sem número nenhum. Você não pode comparar duas pessoas com uma faixa, e é
+          exatamente por isso que ela é uma faixa.
+        </p>
+        <ul class="check-list">
+          {balancePoints.map((point) => <li><Glyph name="check" size={20} />{point}</li>)}
+        </ul>
+      </div>
+      <div class="workload-card" aria-label="Exemplo do retrato de carga da casa">
+        <p class="eyebrow eyebrow-faint">Sinal de sobrecarga · domingo</p>
+        <h3>A casa está pesando mais de um lado.</h3>
+        <div class="band-axis">
+          <span>leve</span><span>parecido</span><span>mais pesado</span>
+        </div>
+        <div class="band-rows">
+          <div>
+            <p class="band-head"><i>MI</i>Mirna</p>
+            <div class="band-track"><i></i><i></i><i class="is-on"></i></div>
+          </div>
+          <div>
+            <p class="band-head"><i class="tone-2">RA</i>Rafa</p>
+            <div class="band-track"><i></i><i class="is-on"></i><i></i></div>
+          </div>
+          <div>
+            <p class="band-head is-house">
+              <span class="glyph-slot"><Glyph name="house" size={21} /></span>A casa — sem dono
+            </p>
+            <div class="band-track"><i class="is-house"></i><i></i><i></i></div>
+          </div>
+        </div>
+        <p class="workload-caption">Um retrato para conversar, não para cobrar.</p>
+      </div>
+    </section>
+
+    <div class="support-grid page-shell">
+      <section id="privacidade" class="section panel panel-ink privacy-panel reveal">
+        <p class="eyebrow">Boleto, receita, comunicado</p>
+        <h2>O que ela lê, e o que ela não guarda.</h2>
+        <p>
+          O boleto da escola, a receita do pediatra, o comunicado que veio na mochila. Você tira
+          a foto, a Nina lê o que dá para ler e monta a proposta. Você confere e confirma.
+        </p>
+        <ul class="privacy-cards">
           {
-            features.map((feature) => (
-              <li><Icon name="ph:check-circle-fill" size={21} />{feature}</li>
+            privacyCards.map((card) => (
+              <li>
+                <Glyph name={card.glyph} size={24} />
+                <strong>{card.title}</strong>
+                <span>{card.text}</span>
+              </li>
             ))
           }
         </ul>
-      </div>
-      <div class="phone-gallery" aria-label="Telas reais do aplicativo Nina">
-        <PhoneShot src="/images/nina-tasks.jpg" alt="Tela de tarefas do aplicativo Nina" class="phone-left" />
-        <PhoneShot src="/images/nina-today.jpg" alt="Tela Hoje do aplicativo Nina" class="phone-center" />
-        <PhoneShot src="/images/nina-house.jpg" alt="Tela Casa do aplicativo Nina" class="phone-right" />
-      </div>
-    </section>
+        <a class="text-link" href="/privacidade">Ler política de privacidade</a>
+      </section>
 
-    <section class="balance-section page-shell reveal">
-      <div class="balance-copy">
-        <p class="eyebrow coral">Equilíbrio que todo mundo sente</p>
-        <h2>Menos sobrecarga, mais parceria.</h2>
-        <p>
-          A Nina mostra como está a carga de cada um e ajuda a encontrar um equilíbrio possível
-          para a realidade da sua família.
-        </p>
-        <div class="gentle-callout">
-          <Icon name="ph:scales-fill" size={27} />
-          <span>Pequenos ajustes hoje, uma casa mais leve sempre.</span>
-        </div>
-      </div>
-      <div class="workload-card" aria-label="Exemplo de carga doméstica">
-        <div class="workload-header">
-          <div>
-            <h3>Carga da casa esta semana</h3>
-            <p>Um retrato para conversar, não para cobrar.</p>
-          </div>
-          <Icon name="ph:heart-straight-fill" size={26} />
-        </div>
-        <div class="workload-row">
-          <span>Mirna</span>
-          <div class="bar"><i class="progress-mirna"></i></div>
-          <strong>82%</strong>
-        </div>
-        <div class="workload-row">
-          <span>Heitor</span>
-          <div class="bar"><i class="progress-heitor"></i></div>
-          <strong>48%</strong>
-        </div>
-        <div class="workload-row">
-          <span>Casa</span>
-          <div class="bar"><i class="progress-house"></i></div>
-          <strong>64%</strong>
-        </div>
-        <div class="nina-suggestion">
-          <img src="/images/nina-app-icon.png" alt="" width="42" height="42" />
-          <p><strong>Sugestão da Nina</strong>Que tal dividir a rotina da cozinha nesta semana?</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="support-grid page-shell">
-      <article id="privacidade" class="privacy-panel reveal">
-        <div class="privacy-icon">
-          <Icon name="ph:shield-check-fill" size={58} />
-        </div>
-        <div>
-          <p class="eyebrow lavender">Privacidade de verdade</p>
-          <h2>Seus dados ficam só com você.</h2>
-          <p>
-            A Nina usa acesso autenticado e regras de segurança para proteger cada casa. Nada de
-            anúncios ou venda de informações.
-          </p>
-          <ul class="check-list compact">
-            <li><Icon name="ph:lock-key-fill" size={18} />Acesso protegido</li>
-            <li><Icon name="ph:database-fill" size={18} />Dados isolados por casa</li>
-            <li><Icon name="ph:user-circle-check-fill" size={18} />Você mantém o controle</li>
-          </ul>
-          <a class="text-link privacy-policy-link" href="/privacidade">Ler política de privacidade</a>
-        </div>
-      </article>
-
-      <section id="duvidas" class="faq-panel reveal" aria-labelledby="faq-title">
-        <p class="eyebrow sky">Direto ao ponto</p>
+      <section id="duvidas" class="section panel faq-panel reveal" aria-labelledby="faq-title">
+        <p class="eyebrow">Direto ao ponto</p>
         <h2 id="faq-title">Dúvidas frequentes</h2>
         <div class="faq-list">
           {
@@ -280,7 +378,7 @@ const faq = [
               <details>
                 <summary>
                   {item.question}
-                  <Icon name="ph:plus-bold" size={17} />
+                  <Glyph name="plus" size={17} />
                 </summary>
                 <p>{item.answer}</p>
               </details>
@@ -288,18 +386,18 @@ const faq = [
           }
         </div>
       </section>
-    </section>
+    </div>
 
-    <section class="final-cta page-shell reveal">
-      <img src="/images/nina-app-icon.png" alt="Nina sorrindo" width="124" height="124" />
+    <section class="section panel panel-wash final-cta page-shell reveal">
+      <NinaMark size={72} />
       <div class="final-copy">
-        <p class="speech">Pronta para ter uma casa mais leve?</p>
+        <p class="speech">Quer uma casa mais leve?</p>
         <h2>A Nina já está esperando a sua mensagem.</h2>
       </div>
       <ul class="check-list compact">
-        <li><Icon name="ph:check-circle-fill" size={18} />Organiza sua casa do seu jeito</li>
-        <li><Icon name="ph:check-circle-fill" size={18} />Reduz a carga mental do dia a dia</li>
-        <li><Icon name="ph:check-circle-fill" size={18} />Mais conexão e tempo juntos</li>
+        <li><Glyph name="check" size={18} />Do seu jeito, no seu ritmo</li>
+        <li><Glyph name="check" size={18} />Menos carga mental no dia a dia</li>
+        <li><Glyph name="check" size={18} />Mais tempo junto, menos cobrança</li>
       </ul>
       <button
         class="button button-primary button-large"
@@ -329,11 +427,11 @@ const faq = [
     aria-describedby="waitlist-description"
   >
     <button class="dialog-close" type="button" aria-label="Fechar" data-close-waitlist>
-      <Icon name="ph:x-bold" size={20} />
+      <Glyph name="close" size={20} />
     </button>
-    <img src="/images/nina-app-icon.png" alt="" width="82" height="82" />
+    <NinaMark size={56} />
     <div data-waitlist-entry>
-      <p class="eyebrow mint">Primeiros convites</p>
+      <p class="eyebrow">Primeiros convites</p>
       <h2 id="waitlist-title">Entre na lista da Nina.</h2>
       <p id="waitlist-description">
         Deixe seu email para receber um aviso quando a primeira versão estiver pronta.
@@ -392,14 +490,14 @@ const faq = [
 
         <button class="button button-primary button-large waitlist-submit" type="submit">
           <span data-waitlist-submit-label>Entrar na lista</span>
-          <Icon name="ph:paper-plane-tilt-fill" size={19} />
+          <Glyph name="arrow-right" size={19} />
         </button>
         <p class="waitlist-status" data-waitlist-status role="status" aria-live="polite"></p>
       </form>
     </div>
 
     <div class="waitlist-success" data-waitlist-success hidden>
-      <span class="waitlist-success-icon"><Icon name="ph:check-bold" size={28} /></span>
+      <span class="waitlist-success-icon"><Glyph name="check" size={26} /></span>
       <h2>Pronto, você está na lista.</h2>
       <p>Quando a Nina estiver pronta para chegar à sua casa, avisaremos por email.</p>
       <button class="button button-secondary" type="button" data-close-waitlist>Fechar</button>

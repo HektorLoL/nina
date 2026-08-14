@@ -98,10 +98,11 @@ Four surfaces, one product.
 | iOS app | SwiftUI, iOS 17+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
 | Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (34 files) |
 | Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
-| Web | Astro 7 static + Cloudflare Worker at `ninai.app` | `web/src/worker.ts` |
+| Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
 **Only third-party iOS dependency: `supabase-swift` 2.46.0.** One bundled font
-(Fraunces, OFL, subset to 45 KB) and no other asset dependency. No analytics SDK,
+(Fraunces, OFL, subset to 45 KB — the web serves a byte-identical copy) and no
+other asset dependency. No analytics SDK,
 no crash reporter, no ad SDK — that absence is the mechanical proof behind the
 App Store "Data Used to Track You: No" label. Do not add one without revisiting
 `docs/privacy/app-store-privacy-labels.md`.
@@ -463,8 +464,20 @@ and pin it with a source-text assertion so a reword cannot quietly drop it.
 ## 8. Web
 
 Astro 7 static build served by a **Cloudflare Worker** (not Pages). Zero UI
-framework; three hand-written vanilla scripts in `web/public/scripts/` loaded
-`is:inline` so CSP can stay `script-src 'self'`. One global stylesheet.
+framework and, since 2026-08-14, zero icon library; three hand-written vanilla
+scripts in `web/public/scripts/` loaded `is:inline` so CSP can stay
+`script-src 'self'`. One global stylesheet.
+
+**The site is on the same azulejo system as the app, and light-only for the same
+reason.** `web/src/styles/global.css` carries the palette from `Nina/Theme.swift`
+verbatim, `NinaMark.astro` transcribes both masters from `Nina/NinaMark.swift`
+including the floor gap, and `web/public/fonts/Fraunces-Regular.ttf` is a copy of
+the exact cut the app bundles, so the two surfaces render identical letterforms.
+Interface type is Inter via `@fontsource`. `Glyph.astro` holds ~20 hand-authored
+outline glyphs on the boards' 24 grid: `astro-icon` was removed because
+`@iconify/tools` → `extract-zip` carries a high-severity advisory that fails
+CI's `npm audit --audit-level=high`. Every deviation from the Paper boards is in
+`docs/rebrand-web.md`.
 
 - `wrangler.toml`'s `run_worker_first = ["/api/*", "/invite/*"]` is load-bearing.
   Remove it and the assets layer answers first — the API and the invite rewrite
@@ -472,7 +485,13 @@ framework; three hand-written vanilla scripts in `web/public/scripts/` loaded
 - `/invite/<code>` is a **200 rewrite** onto the `/join/` shell so the browser
   URL stays put and `invite.js` can read the code off `location.pathname`.
 - **Never add an inline `<script>` or `<style>`** — including an Astro component
-  `<style>` block. CSP blocks it at runtime and `astro check` cannot catch it.
+  `<style>` block, and including a `style="…"` attribute. `style-src 'self'` has
+  no `'unsafe-inline'`, so all three are blocked at runtime and `astro check`
+  catches none of them.
+- **`.reveal` starts at `opacity: 0` and only JavaScript clears it**, so the page
+  renders blank without it. `web/public/styles/noscript.css` is linked from a
+  `<noscript>` in `BaseLayout` to restore it — a linked file rather than an
+  inline rule for the reason above.
   CSP is specified in two places that must stay in sync: `web/public/_headers`
   (static assets) and `securityHeaders` in `web/src/worker.ts` (dynamic).
 - Client behavior is bound by `data-*` attribute contracts

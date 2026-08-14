@@ -1,7 +1,8 @@
 ---
-import { Icon } from "astro-icon/components";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Brand from "../../components/Brand.astro";
+import Glyph from "../../components/Glyph.astro";
+import NinaMark from "../../components/NinaMark.astro";
 import { appStoreListing } from "../../appStore";
 ---
 
@@ -16,13 +17,12 @@ import { appStoreListing } from "../../appStore";
     <a class="text-link" href="/">Conhecer a Nina</a>
   </header>
 
-  <main class="invite-page">
+  <main id="conteudo" class="invite-page">
     <section class="invite-card" data-invite-card data-invite-state="checking">
-      <div class="invite-avatar-wrap">
-        <img src="/images/nina-app-icon.png" alt="Nina" width="104" height="104" />
-        <span><Icon name="ph:house-fill" size={25} /></span>
+      <div class="invite-mark">
+        <NinaMark size={64} />
       </div>
-      <p class="eyebrow mint">Convite da Nina</p>
+      <p class="eyebrow">Convite da Nina</p>
       <h1 data-invite-title>Você foi convidado para uma casa.</h1>
       <p class="invite-description" data-invite-description>
         Estou verificando o convite para preparar seu pedido de entrada.
@@ -31,7 +31,7 @@ import { appStoreListing } from "../../appStore";
         <span>Código</span>
         <strong></strong>
         <button type="button" aria-label="Copiar código" data-copy-code>
-          <Icon name="ph:copy-bold" size={19} />
+          <Glyph name="copy" size={19} />
         </button>
       </div>
       <div class="invite-status" data-invite-status>
@@ -41,7 +41,7 @@ import { appStoreListing } from "../../appStore";
       <div class="invite-actions" data-invite-actions hidden>
         <a class="button button-primary button-large" href="#" data-open-app>
           Abrir no app Nina
-          <Icon name="ph:arrow-square-out-bold" size={19} />
+          <Glyph name="external" size={19} />
         </a>
         <button class="button button-secondary" type="button" data-copy-code>
           Copiar código

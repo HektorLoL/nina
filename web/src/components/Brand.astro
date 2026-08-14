@@ -1,4 +1,6 @@
 ---
+import NinaMark from "./NinaMark.astro";
+
 interface Props {
   compact?: boolean;
 }
@@ -7,6 +9,6 @@ const { compact = false } = Astro.props;
 ---
 
 <a class:list={["brand", { compact }]} href="/" aria-label="Nina, início">
-  <img src="/images/nina-app-icon.png" alt="" width="52" height="52" />
-  <span>nina</span>
+  <NinaMark size={compact ? 26 : 30} class="brand-mark" />
+  <span>Nina</span>
 </a>

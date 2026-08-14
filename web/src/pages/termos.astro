@@ -1,7 +1,7 @@
 ---
-import { Icon } from "astro-icon/components";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Brand from "../components/Brand.astro";
+import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
 
 const updatedAt = "9 de agosto de 2026";
@@ -13,7 +13,7 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
   description="Regras de uso da Nina e condições da assinatura Nina Premium: preço por período, renovação automática, cancelamento pelo App Store e direito de arrependimento."
   canonical="/termos/"
 >
-  <header class="site-header is-scrolled">
+  <header class="site-header legal-header is-scrolled">
     <div class="header-inner page-shell">
       <Brand />
       <nav class="desktop-nav" aria-label="Navegação principal">
@@ -24,9 +24,9 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
     </div>
   </header>
 
-  <main class="policy-page page-shell">
+  <main id="conteudo" class="policy-page page-shell">
     <section class="policy-hero">
-      <p class="eyebrow mint">Termos</p>
+      <p class="eyebrow">Termos</p>
       <h1>Termos de uso</h1>
       <p>
         Estas são as regras de uso da Nina e as condições da assinatura Nina Premium: o que você
@@ -38,17 +38,17 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
 
     <section class="policy-grid" aria-label="Resumo dos termos">
       <article>
-        <Icon name="ph:arrows-clockwise-fill" size={28} />
+        <Glyph name="clock" size={28} />
         <h2>Renova até você cancelar</h2>
         <p>A assinatura é mensal ou anual e renova sozinha. O cancelamento é feito na sua conta Apple.</p>
       </article>
       <article>
-        <Icon name="ph:house-line-fill" size={28} />
+        <Glyph name="house" size={28} />
         <h2>Uma assinatura por casa</h2>
         <p>Uma assinatura ativa libera o Premium para as até 8 pessoas da casa. A Nina não ocupa vaga.</p>
       </article>
       <article>
-        <Icon name="ph:arrow-u-up-left-fill" size={28} />
+        <Glyph name="undo" size={28} />
         <h2>Sete dias para desistir</h2>
         <p>O Código de Defesa do Consumidor garante arrependimento em até 7 dias da contratação.</p>
       </article>

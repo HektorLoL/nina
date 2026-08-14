@@ -1,0 +1,118 @@
+---
+// Category and meaning are carried by a monochrome outline glyph, never by a
+// colour. The set is hand-authored on the same 24 grid and stroke weight the
+// Paper boards use, so the site draws the same shapes the app does.
+interface Props {
+  name: keyof typeof glyphs;
+  size?: number;
+  class?: string;
+  label?: string;
+}
+
+const glyphs = {
+  check: { w: 2.2, d: ["M20 6 9 17l-5-5"] },
+  chat: { d: ["M20 15a2 2 0 0 1-2 2H8.6L4 20.6V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"] },
+  people: {
+    d: [
+      "M15 20v-1.4a3.6 3.6 0 0 0-3.6-3.6H6.6A3.6 3.6 0 0 0 3 18.6V20",
+      "M9 11.6a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6z",
+      "M21 20v-1.4a3.6 3.6 0 0 0-2.7-3.5",
+      "M15.4 5.2a3.3 3.3 0 0 1 0 6.4",
+    ],
+  },
+  house: { d: ["M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"] },
+  bell: {
+    d: [
+      "M18.5 9.4a6.5 6.5 0 0 0-13 0c0 5.6-2 7.1-2 7.1h17s-2-1.5-2-7.1z",
+      "M10.3 19.6a2 2 0 0 0 3.4 0",
+    ],
+  },
+  "bell-off": {
+    d: [
+      "M18.5 9.4a6.5 6.5 0 0 0-9.4-5.8M5.7 7.4a6.5 6.5 0 0 0-.2 2c0 5.6-2 7.1-2 7.1h13",
+      "M10.3 19.6a2 2 0 0 0 3.4 0",
+      "M3.6 3.6l16.8 16.8",
+    ],
+  },
+  seed: {
+    d: [
+      "M12 21v-6.6",
+      "M12 14.4c0-3.4 2.8-6.2 6.2-6.2 0 3.4-2.8 6.2-6.2 6.2z",
+      "M12 14.4c0-2.6-2.1-4.7-4.7-4.7 0 2.6 2.1 4.7 4.7 4.7z",
+    ],
+  },
+  document: {
+    d: [
+      "M14 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z",
+      "M14 3.5V8h4.5",
+    ],
+  },
+  lock: {
+    d: [
+      "M8 11V8a4 4 0 0 1 8 0v3",
+      "M6.8 11h10.4a1.8 1.8 0 0 1 1.8 1.8v5.4a1.8 1.8 0 0 1-1.8 1.8H6.8A1.8 1.8 0 0 1 5 18.2v-5.4A1.8 1.8 0 0 1 6.8 11z",
+    ],
+  },
+  shield: {
+    d: [
+      "M12 3.2 20 6.1v5.4c0 4.8-3.3 7.8-8 9.3-4.7-1.5-8-4.5-8-9.3V6.1z",
+      "m8.7 11.9 2.4 2.4 4.2-4.5",
+    ],
+  },
+  server: {
+    d: [
+      "M4.8 4h14.4A1.8 1.8 0 0 1 21 5.8v3.4A1.8 1.8 0 0 1 19.2 11H4.8A1.8 1.8 0 0 1 3 9.2V5.8A1.8 1.8 0 0 1 4.8 4z",
+      "M4.8 13h14.4a1.8 1.8 0 0 1 1.8 1.8v3.4a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 18.2v-3.4A1.8 1.8 0 0 1 4.8 13z",
+      "M6.9 7.5h.01M6.9 16.5h.01",
+    ],
+  },
+  scales: {
+    d: [
+      "M12 4.4v15.2M6.6 6.6l10.8-1.8M5.2 19.6h13.6",
+      "M6.6 6.6 3.4 13.4h6.4z",
+      "M17.4 4.8l-3.2 6.8h6.4z",
+    ],
+  },
+  clock: { d: ["M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17z", "M12 7.4V12l3.2 1.9"] },
+  plus: { w: 2, d: ["M12 5v14M5 12h14"] },
+  close: { w: 1.9, d: ["M6 6l12 12M18 6 6 18"] },
+  menu: { w: 1.9, d: ["M4 7h16M4 12h16M4 17h16"] },
+  "arrow-right": { d: ["M4.5 12h14", "m13 6.5 5.5 5.5-5.5 5.5"] },
+  "arrow-up": { w: 2.2, d: ["M12 19V5M6 11l6-6 6 6"] },
+  undo: { d: ["M9 14 4.4 9.4 9 4.8", "M4.4 9.4h9.9a5.9 5.9 0 0 1 0 11.8h-3.1"] },
+  copy: {
+    d: [
+      "M10.8 8h8.4A1.8 1.8 0 0 1 21 9.8v8.4a1.8 1.8 0 0 1-1.8 1.8h-8.4A1.8 1.8 0 0 1 9 18.2V9.8A1.8 1.8 0 0 1 10.8 8z",
+      "M5.6 15.4A1.6 1.6 0 0 1 4 13.8V5.6A1.6 1.6 0 0 1 5.6 4h8.2A1.6 1.6 0 0 1 15.4 5.6",
+    ],
+  },
+  external: {
+    d: [
+      "M14 4h6v6M20 4l-8.4 8.4",
+      "M18 14.4V19a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 19V8.2a1.6 1.6 0 0 1 1.6-1.6H10",
+    ],
+  },
+  alert: { d: ["M12 4.4 21 19.6H3z", "M12 10v4.2M12 17.3h.01"] },
+} as const;
+
+const { name, size = 22, class: className, label } = Astro.props;
+const glyph = glyphs[name];
+const weight = "w" in glyph ? glyph.w : 1.7;
+---
+
+<svg
+  class={className}
+  width={size}
+  height={size}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width={weight}
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  role={label ? "img" : "presentation"}
+  aria-hidden={label ? undefined : "true"}
+>
+  {label && <title>{label}</title>}
+  {glyph.d.map((d) => <path d={d} />)}
+</svg>

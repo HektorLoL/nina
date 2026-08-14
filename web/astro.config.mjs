@@ -1,6 +1,5 @@
 import { defineConfig } from "astro/config";
 import sitemap from "@astrojs/sitemap";
-import icon from "astro-icon";
 
 export default defineConfig({
   site: "https://ninai.app",
@@ -9,7 +8,6 @@ export default defineConfig({
       filter: (page) =>
         !page.includes("/join/") && !page.includes("/unsubscribe/"),
     }),
-    icon(),
   ],
   output: "static",
   build: {

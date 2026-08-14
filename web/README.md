@@ -12,6 +12,24 @@ npm run dev
 Use `npm run preview` depois de `npm run build` para executar o resultado com
 Cloudflare Workers.
 
+## Design
+
+O site usa o mesmo sistema azulejo do app e é claro por construção: a paleta em
+`src/styles/global.css` vem de `Nina/Theme.swift`, a marca em
+`src/components/NinaMark.astro` vem de `Nina/NinaMark.swift` (dois desenhos, um
+acima e outro abaixo de 34px) e `public/fonts/Fraunces-Regular.ttf` é uma cópia
+byte a byte da fonte que o app empacota. Não existe modo escuro porque não existe
+paleta escura desenhada.
+
+Não há biblioteca de ícones. `src/components/Glyph.astro` guarda os desenhos de
+contorno usados no site; `astro-icon` foi removido porque uma dependência dele
+reprova o `npm audit --audit-level=high` que a CI executa.
+
+Os telefones das seções são desenhados em HTML, não são capturas de tela: as
+capturas antigas mostravam o app anterior ao redesenho e uma captura fica velha
+sozinha. As diferenças em relação às pranchas do Paper estão em
+`docs/rebrand-web.md`.
+
 ## Cloudflare Workers
 
 - Build command: `npm run build`

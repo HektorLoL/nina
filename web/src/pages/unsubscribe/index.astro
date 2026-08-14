@@ -1,7 +1,7 @@
 ---
-import { Icon } from "astro-icon/components";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Brand from "../../components/Brand.astro";
+import Glyph from "../../components/Glyph.astro";
 ---
 
 <BaseLayout
@@ -15,7 +15,7 @@ import Brand from "../../components/Brand.astro";
     <a class="text-link" href="/">Voltar para a Nina</a>
   </header>
 
-  <main class="unsubscribe-page">
+  <main id="conteudo" class="unsubscribe-page">
     <section
       class="unsubscribe-card"
       data-unsubscribe-card
@@ -23,22 +23,21 @@ import Brand from "../../components/Brand.astro";
       aria-busy="true"
     >
       <div class="unsubscribe-visual" aria-hidden="true">
-        <img src="/images/nina-app-icon.png" alt="" width="104" height="104" />
         <span class="unsubscribe-badge" data-state-icon="loading">
           <span class="spinner"></span>
         </span>
         <span class="unsubscribe-badge" data-state-icon="confirm">
-          <Icon name="ph:bell-slash-bold" size={24} />
+          <Glyph name="bell-off" size={26} />
         </span>
         <span class="unsubscribe-badge" data-state-icon="success">
-          <Icon name="ph:check-bold" size={25} />
+          <Glyph name="check" size={26} />
         </span>
         <span class="unsubscribe-badge" data-state-icon="error">
-          <Icon name="ph:warning-bold" size={24} />
+          <Glyph name="alert" size={26} />
         </span>
       </div>
 
-      <p class="eyebrow mint">Preferências de email</p>
+      <p class="eyebrow">Preferências de email</p>
       <h1 data-unsubscribe-title>Abrindo suas preferências...</h1>
       <p
         class="unsubscribe-description"
@@ -55,7 +54,7 @@ import Brand from "../../components/Brand.astro";
           data-unsubscribe-submit
           disabled
         >
-          <Icon name="ph:bell-slash-bold" size={19} />
+          <Glyph name="bell-off" size={19} />
           <span>Cancelar novidades</span>
         </button>
         <a class="button button-secondary" href="/" data-unsubscribe-home>
