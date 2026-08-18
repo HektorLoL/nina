@@ -7,6 +7,11 @@ twelve independent auditors reading the working tree. Each gap states the user-v
 where the fix lands, whether it needs a migration or an Edge Function change, and how much a
 paying Brazilian family would care.
 
+Closing an item means adding a fifth field to it in place — `- **Closed:**
+YYYY-MM-DD — one line on what changed` — rather than moving it to the section
+below. The item keeps its rank, so `deno task panel` can count what is done
+without diffing git history.
+
 The audit was taken against the tree as of 2026-08-08. The section below records what has since
 been closed; everything else in this document is still open.
 

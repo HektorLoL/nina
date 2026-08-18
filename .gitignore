@@ -18,3 +18,4 @@ output/playwright/
 
 # macOS/iCloud sync duplicates. A stray `git add -A` must never commit these.
 *\ 2.*
+panel/index.html
