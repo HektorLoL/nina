@@ -2,9 +2,14 @@
 
 Last updated: 2026-08-18
 
-A private, locally generated readiness cockpit. It answers one question — *what
-is blocking launch, and am I moving* — and it is deliberately not an ops
-console, because there is no production traffic to observe yet.
+A private, locally generated readiness cockpit: one screen, no scrolling, read
+as a pattern rather than as prose. Every piece of work is one glazed tile, laid
+in a grid, coloured by state — an azulejo wall pointed at the project. It
+answers one question, *what is blocking launch and am I moving*, and it is
+deliberately not an ops console, because there is no production traffic yet.
+
+Hovering or tabbing a tile writes one line into the readout strip at the foot of
+the screen, so the detail exists without any of it being on screen by default.
 
 ```sh
 deno task panel
@@ -55,6 +60,12 @@ its rank, so the panel can count what is done without diffing git.
 **The trend refuses to draw below three runs.** This is the same refusal
 `HouseholdWorkload` makes below six assigned tasks: a line through two points is
 decoration pretending to be information.
+
+**Never put `transform` or `filter` on a tile.** Both make the tile a containing
+block for `position: fixed`, which silently re-anchors the readout slip from the
+viewport to the tile itself — the hover then appears to do nothing at all. The
+hover affordance is a `box-shadow` ring for exactly this reason, and
+`Tools/panel_render.test.ts` fails if either property reappears on `.t:hover`.
 
 **`panel/index.html` is ignored; `panel/history.jsonl` is committed.** The page is
 regenerated output and would make a 150 KB diff on every run. The history is the
