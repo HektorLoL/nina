@@ -30,6 +30,7 @@ import {
 } from "../_shared/nina-chat-request.ts";
 import { ninaSystemPrompt } from "../_shared/nina-chat-policy.ts";
 import { houseWorkloadKey, summarizeWorkload } from "../_shared/nina-workload.ts";
+import { minimizeMembersForModel } from "../_shared/nina-member-context.ts";
 
 type NinaChatStart = {
   idempotent: boolean;
@@ -749,7 +750,7 @@ Deno.serve(async (request: Request) => {
     }),
     family: familyResult.data,
     current_user: profileResult.data,
-    members: membersResult.data ?? [],
+    members: minimizeMembersForModel(membersResult.data ?? []),
     confirmed_visible_memories: state.memories ?? [],
     recent_private_messages: recentMessages,
     new_message: body.message.trim(),

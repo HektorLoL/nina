@@ -41,6 +41,8 @@
 	<string>$(NINA_SUPABASE_URL)</string>
 	<key>NINA_AI_V2_ENABLED</key>
 	<string>$(NINA_AI_V2_ENABLED)</string>
+	<key>NINA_ATTACHMENTS_ENABLED</key>
+	<string>$(NINA_ATTACHMENTS_ENABLED)</string>
 	<key>NINA_PREMIUM_PRODUCT_IDS</key>
 	<string>$(NINA_PREMIUM_PRODUCT_IDS)</string>
 	<key>UIApplicationSceneManifest</key>

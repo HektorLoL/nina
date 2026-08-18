@@ -53,6 +53,7 @@ function validEnvironment(): PreflightEnvironment {
     NINA_APP_STORE_ENVIRONMENT: "production",
     NINA_APP_STORE_ONLINE_CHECKS: "true",
     NINA_AI_V2_ENABLED: "NO",
+    NINA_ATTACHMENTS_ENABLED: "NO",
     PUBLIC_NINA_LEGAL_ENTITY_NAME: "Nina Tecnologia Ltda.",
     PUBLIC_NINA_LEGAL_ENTITY_DOCUMENT: "12.345.678/0001-90",
     PUBLIC_NINA_PRIVACY_CONTACT_EMAIL: "privacidade@ninai.app",
@@ -73,6 +74,7 @@ function validArtifact(): IOSArtifactSnapshot {
       NINA_SUPABASE_PUBLISHABLE_KEY: environment.NINA_SUPABASE_PUBLISHABLE_KEY,
       NINA_PREMIUM_PRODUCT_IDS: environment.NINA_PREMIUM_PRODUCT_IDS,
       NINA_AI_V2_ENABLED: environment.NINA_AI_V2_ENABLED,
+      NINA_ATTACHMENTS_ENABLED: environment.NINA_ATTACHMENTS_ENABLED,
     },
     archiveInfo: {
       ApplicationProperties: {
@@ -144,6 +146,29 @@ Deno.test("production environment rejects swapped keys and launch placeholders",
   assert(failedIDs.includes("environment.apple-id"));
   assert(failedIDs.includes("environment.legal-identity"));
   assert(failedIDs.includes("environment.privacy-contacts"));
+});
+
+Deno.test("shipping household documents abroad must be an explicit release decision", () => {
+  const environment = validEnvironment();
+  delete environment.NINA_ATTACHMENTS_ENABLED;
+
+  const failedIDs = productionEnvironmentChecks(environment, facts)
+    .filter((result) => result.status === "failure")
+    .map((result) => result.id);
+
+  assert(failedIDs.includes("environment.attachment-release-decision"));
+});
+
+Deno.test("a build that ships documents against an inventory that withholds them fails", () => {
+  const artifact = validArtifact();
+  artifact.info.NINA_ATTACHMENTS_ENABLED = "YES";
+
+  const failedIDs = iosArtifactChecks(artifact, validEnvironment(), facts)
+    .filter((result) => result.status === "failure")
+    .map((result) => result.id);
+
+  assert(failedIDs.includes("artifact.attachment-release-decision"));
+  assertFalse(failedIDs.includes("artifact.ai-release-decision"));
 });
 
 Deno.test("the website install link must name the same app the server verifies", () => {

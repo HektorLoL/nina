@@ -1213,6 +1213,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
     @MainActor
     func testAttachmentOnlyMessageIsAcceptedAndStoredInConversation() async {
         let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
+        store.attachmentGate = NinaAttachmentGate(isEnabled: true)
         let initialMessageCount = store.messages.count
         let metadata = ChatAttachment(
             kind: .document,
@@ -1231,6 +1232,51 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(store.messages[initialMessageCount].text, "")
         XCTAssertEqual(store.messages[initialMessageCount].attachments, [metadata])
         XCTAssertEqual(store.messages[initialMessageCount + 1].sender, .nina)
+    }
+
+    @MainActor
+    func testAnAttachmentOnlyMessageSendsNothingWhileTheAttachmentFlagIsOff() async {
+        let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
+        store.attachmentGate = NinaAttachmentGate(isEnabled: false)
+        let initialMessageCount = store.messages.count
+        let metadata = ChatAttachment(
+            kind: .image,
+            filename: "receita.jpg",
+            mimeType: "image/jpeg",
+            byteCount: 4
+        )
+
+        await store.sendMessage(
+            "",
+            attachments: [NinaAttachmentInput(metadata: metadata, data: Data("test".utf8))]
+        )
+
+        // Nothing was left to send, so the turn never happened rather than
+        // reaching the model as an empty message.
+        XCTAssertEqual(store.messages.count, initialMessageCount)
+    }
+
+    @MainActor
+    func testATypedMessageStillSendsButLeavesItsDocumentBehindWhenTheFlagIsOff() async {
+        let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
+        store.attachmentGate = NinaAttachmentGate(isEnabled: false)
+        let initialMessageCount = store.messages.count
+        let metadata = ChatAttachment(
+            kind: .image,
+            filename: "boleto.jpg",
+            mimeType: "image/jpeg",
+            byteCount: 4
+        )
+
+        await store.sendMessage(
+            "Segue o boleto",
+            attachments: [NinaAttachmentInput(metadata: metadata, data: Data("test".utf8))]
+        )
+
+        let sent = store.messages[initialMessageCount]
+        XCTAssertEqual(sent.sender, .user)
+        XCTAssertEqual(sent.text, "Segue o boleto")
+        XCTAssertTrue(sent.attachments.isEmpty)
     }
 
     func testChatMessageDecodesLegacyPayloadWithoutAttachments() throws {
@@ -1994,6 +2040,27 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(NinaProposalGate(isV2Enabled: true).visibleProposals([pending]), [pending])
     }
 
+    func testHouseholdDocumentsDoNotLeaveTheDeviceWhileTheAttachmentFlagIsOff() {
+        let boleto = NinaAttachmentInput(
+            metadata: ChatAttachment(
+                kind: .image,
+                filename: "boleto.jpg",
+                mimeType: "image/jpeg",
+                byteCount: 412_000,
+                thumbnailData: nil
+            ),
+            data: Data("boleto".utf8)
+        )
+
+        XCTAssertTrue(
+            NinaAttachmentGate(isEnabled: false).permittedAttachments([boleto]).isEmpty
+        )
+        XCTAssertEqual(
+            NinaAttachmentGate(isEnabled: true).permittedAttachments([boleto]),
+            [boleto]
+        )
+    }
+
     func testATurnWhosePendingProposalsWereDiscardedSaysSoInsteadOfLookingEmpty() {
         let pending = makeProposal(kind: .task)
         var resolved = makeProposal(kind: .task)
@@ -2530,6 +2597,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
             remoteHomeBackend: backend,
             ninaEngine: PersistedNinaEngine(assistantMessageID: UUID())
         )
+        store.attachmentGate = NinaAttachmentGate(isEnabled: true)
         await store.activateHomeContext(for: user)
         await store.grantAIMemoryConsent()
 

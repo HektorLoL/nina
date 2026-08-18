@@ -159,8 +159,18 @@ final class PremiumSubscriptionTests: XCTestCase {
 
     func testThePaywallOnlyMarketsBenefitsTheAppCanDeliverToday() {
         let titles = PremiumPlan.mock.benefits.map(\.title)
+        let readsDocuments = NinaAttachmentGate.current.isEnabled
+        let deliverable = readsDocuments
+            ? ["Leitura de documentos", "Resumo semanal", "Prioridade da Nina"]
+            : ["Resumo semanal", "Prioridade da Nina"]
 
-        XCTAssertEqual(titles, ["Leitura de documentos", "Resumo semanal", "Prioridade da Nina"])
+        // Document reading is a release decision, so the sheet has to follow the
+        // build rather than a fixed list a disabled flag would turn into a lie.
+        XCTAssertEqual(titles, deliverable)
+        XCTAssertEqual(
+            PremiumPlan.mock.heroSubtitle.contains("Leitura de documentos"),
+            readsDocuments
+        )
         XCTAssertFalse(titles.contains("Rotinas inteligentes"))
         XCTAssertFalse(titles.contains("Divisão mais justa"))
     }

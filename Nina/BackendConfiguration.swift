@@ -236,9 +236,17 @@ struct SupabaseConfiguration: Equatable {
 
 enum NinaAIConfiguration {
     static var isV2Enabled: Bool {
-        let rawValue = Bundle.main.object(
-            forInfoDictionaryKey: "NINA_AI_V2_ENABLED"
-        )
+        isFlagEnabled("NINA_AI_V2_ENABLED")
+    }
+
+    static var areAttachmentsEnabled: Bool {
+        isFlagEnabled("NINA_ATTACHMENTS_ENABLED")
+    }
+
+    // An absent or unreadable key reads as off, so a build assembled without the
+    // release xcconfig cannot ship a feature the release decision left disabled.
+    private static func isFlagEnabled(_ key: String) -> Bool {
+        let rawValue = Bundle.main.object(forInfoDictionaryKey: key)
 
         if let value = rawValue as? Bool {
             return value
@@ -262,6 +270,22 @@ struct NinaProposalGate {
 
     func withholdsProposals(_ proposals: [NinaProposal]) -> Bool {
         !isV2Enabled && proposals.contains { $0.state == .pending }
+    }
+}
+
+// Household documents leave Brazil for a US model provider, so whether they may
+// be sent at all is a release decision and not a preference the user can flip.
+struct NinaAttachmentGate {
+    var isEnabled: Bool
+
+    static var current: NinaAttachmentGate {
+        NinaAttachmentGate(isEnabled: NinaAIConfiguration.areAttachmentsEnabled)
+    }
+
+    func permittedAttachments(
+        _ attachments: [NinaAttachmentInput]
+    ) -> [NinaAttachmentInput] {
+        isEnabled ? attachments : []
     }
 }
 

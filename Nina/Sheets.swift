@@ -314,7 +314,9 @@ struct SettingsSheet: View {
         } else {
             PremiumGateCard(
                 title: premiumPriceTitle,
-                detail: "Documento por foto, mais conversa por dia e o resumo semanal da casa."
+                detail: NinaAttachmentGate.current.isEnabled
+                    ? "Documento por foto, mais conversa por dia e o resumo semanal da casa."
+                    : "Mais conversa por dia e o resumo semanal da casa."
             ) {
                 Haptics.lightImpact()
                 router.presentedSheet = .premium
@@ -1589,8 +1591,10 @@ struct PremiumBenefitsSheet: View {
 
             NinaDivider(inset: 0)
 
-            comparisonRow("Ler documento por foto", free: nil, premium: nil)
-            NinaDivider(inset: 0)
+            if NinaAttachmentGate.current.isEnabled {
+                comparisonRow("Ler documento por foto", free: nil, premium: nil)
+                NinaDivider(inset: 0)
+            }
             comparisonRow("Conversa com a Nina", free: "10/dia", premium: "30/hora")
             NinaDivider(inset: 0)
             comparisonRow("Resumo semanal", free: nil, premium: nil)

@@ -221,6 +221,7 @@ final class AppStore {
     @ObservationIgnored private let privateDataStore: any PrivateLocalDataStoring
     @ObservationIgnored private let remoteHomeBackend: (any RemoteHomeBackend)?
     @ObservationIgnored private let notificationScheduler: any HomeNotificationScheduling
+    @ObservationIgnored var attachmentGate = NinaAttachmentGate.current
     @ObservationIgnored private var activeHomeUserID: String?
     @ObservationIgnored private var activeUser: AuthUser?
     @ObservationIgnored private var homeContextGeneration: UInt64 = 0
@@ -1192,9 +1193,10 @@ final class AppStore {
 
     func sendMessage(
         _ rawText: String,
-        attachments: [NinaAttachmentInput] = []
+        attachments requestedAttachments: [NinaAttachmentInput] = []
     ) async {
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attachments = attachmentGate.permittedAttachments(requestedAttachments)
         guard canSendNinaMessages,
               (!text.isEmpty || !attachments.isEmpty),
               !isNinaResponding else {

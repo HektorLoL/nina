@@ -340,6 +340,12 @@ export function productionEnvironmentChecks(
       "The Nina AI V2 release decision is explicit.",
       "Set NINA_AI_V2_ENABLED explicitly to YES or NO for this release.",
     ),
+    check(
+      "environment.attachment-release-decision",
+      ["YES", "NO"].includes(value("NINA_ATTACHMENTS_ENABLED") ?? ""),
+      "The household document release decision is explicit.",
+      "Set NINA_ATTACHMENTS_ENABLED explicitly to YES or NO for this release.",
+    ),
   ];
 
   const legalFields = [
@@ -404,6 +410,8 @@ export function iosArtifactChecks(
   const supabaseURL = stringValue(info.NINA_SUPABASE_URL);
   const publishableKey = stringValue(info.NINA_SUPABASE_PUBLISHABLE_KEY);
   const aiV2Enabled = stringValue(info.NINA_AI_V2_ENABLED)?.toUpperCase();
+  const attachmentsEnabled = stringValue(info.NINA_ATTACHMENTS_ENABLED)
+    ?.toUpperCase();
   const products = commaSeparated(stringValue(info.NINA_PREMIUM_PRODUCT_IDS));
   const executable = stringValue(info.CFBundleExecutable);
   const expectedProducts = [...facts.productIDs].sort();
@@ -450,6 +458,13 @@ export function iosArtifactChecks(
       aiV2Enabled === environment.NINA_AI_V2_ENABLED?.trim().toUpperCase(),
       "The built Nina AI V2 flag matches the explicit release decision.",
       "The built Nina AI V2 flag differs from the release inventory.",
+    ),
+    check(
+      "artifact.attachment-release-decision",
+      attachmentsEnabled ===
+        environment.NINA_ATTACHMENTS_ENABLED?.trim().toUpperCase(),
+      "The built document attachment flag matches the release decision.",
+      "The built document attachment flag differs from the release inventory.",
     ),
     check(
       "artifact.resolved-settings",

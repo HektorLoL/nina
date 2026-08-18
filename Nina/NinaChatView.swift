@@ -462,39 +462,47 @@ private struct ChatInputBar: View {
         }
     }
 
+    // Off means absent, not locked: a premium upsell for a feature this build
+    // does not ship would sell a capability no purchase can unlock.
+    private var shipsDocumentReading: Bool {
+        NinaAttachmentGate.current.isEnabled
+    }
+
     @ViewBuilder
     private var attachmentControls: some View {
-        HStack(spacing: 8) {
-            if canReadDocuments {
-                PhotosPicker(
-                    selection: $selectedPhotoItems,
-                    maxSelectionCount: max(remainingAttachmentSlots, 1),
-                    matching: .images
-                ) {
-                    NinaChip(text: "Foto", systemName: "photo", isDisabled: !canAttach)
-                }
-                .buttonStyle(.plain)
-                .disabled(!canAttach)
-                .accessibilityLabel("Adicionar fotos")
+        if shipsDocumentReading {
+            HStack(spacing: 8) {
+                if canReadDocuments {
+                    PhotosPicker(
+                        selection: $selectedPhotoItems,
+                        maxSelectionCount: max(remainingAttachmentSlots, 1),
+                        matching: .images
+                    ) {
+                        NinaChip(text: "Foto", systemName: "photo", isDisabled: !canAttach)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canAttach)
+                    .accessibilityLabel("Adicionar fotos")
 
-                Button {
-                    Haptics.lightImpact()
-                    isShowingDocumentPicker = true
-                } label: {
-                    NinaChip(
-                        text: isLoadingAttachments ? "Abrindo" : "Documento",
-                        systemName: "paperclip",
-                        isDisabled: !canAttach
-                    )
+                    Button {
+                        Haptics.lightImpact()
+                        isShowingDocumentPicker = true
+                    } label: {
+                        NinaChip(
+                            text: isLoadingAttachments ? "Abrindo" : "Documento",
+                            systemName: "paperclip",
+                            isDisabled: !canAttach
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canAttach)
+                    .accessibilityLabel("Adicionar documento")
+                } else {
+                    documentReadingChip
                 }
-                .buttonStyle(.plain)
-                .disabled(!canAttach)
-                .accessibilityLabel("Adicionar documento")
-            } else {
-                documentReadingChip
+
+                Spacer(minLength: 0)
             }
-
-            Spacer(minLength: 0)
         }
     }
 

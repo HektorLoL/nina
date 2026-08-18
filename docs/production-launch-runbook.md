@@ -31,7 +31,7 @@ Distribute only the relevant values:
 
 | Destination                    | Values                                                                                                                                                |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| iOS release xcconfig           | `NINA_SUPABASE_URL`, `NINA_SUPABASE_PUBLISHABLE_KEY`, `NINA_AI_V2_ENABLED`                                                                            |
+| iOS release xcconfig           | `NINA_SUPABASE_URL`, `NINA_SUPABASE_PUBLISHABLE_KEY`, `NINA_AI_V2_ENABLED`, `NINA_ATTACHMENTS_ENABLED`                                                                            |
 | Cloudflare Worker runtime      | `NINA_SUPABASE_URL`, `NINA_SUPABASE_PUBLISHABLE_KEY`, `NINA_SUPABASE_SECRET_KEY`, `NINA_WAITLIST_HASH_SALT`                                           |
 | Astro production build         | All `PUBLIC_NINA_*` values                                                                                                                            |
 | Supabase Edge Function secrets | `OPENAI_API_KEY`, `NINA_APP_BUNDLE_ID`, `NINA_APP_APPLE_ID`, `NINA_PREMIUM_PRODUCT_IDS`, `NINA_APP_STORE_ENVIRONMENT`, `NINA_APP_STORE_ONLINE_CHECKS` |

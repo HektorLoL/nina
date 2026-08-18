@@ -1432,33 +1432,41 @@ struct PremiumPlan: Hashable {
         "\(name): assinatura de \(periodLabel) por \(priceLabel). \(renewalLabel)."
     }
 
-    static let mock = PremiumPlan(
-        name: "Nina Premium",
-        status: "Assinatura",
-        priceLabel: "R$ 24,90/mês",
-        periodLabel: "1 mês",
-        renewalLabel: "Renovação automática pelo App Store",
-        heroTitle: "Um Premium que vale para a casa toda",
-        heroSubtitle: "Leitura de documentos, resumo semanal e prioridade da Nina para todo mundo da casa, em uma assinatura só.",
-        benefits: [
-            PremiumBenefit(
-                title: "Leitura de documentos",
-                detail: "Leitura de recibos, receitas e boletos para transformar detalhes em lembretes claros.",
-                systemName: "doc.text.viewfinder",
-                tone: .sky
-            ),
-            PremiumBenefit(
-                title: "Resumo semanal",
-                detail: "Um digest bonito com pendências, compras, vitórias da semana e sinais de sobrecarga.",
-                systemName: "calendar.badge.clock",
-                tone: .amber
-            ),
-            PremiumBenefit(
-                title: "Prioridade da Nina",
-                detail: "Sugestões mais visíveis, rápidas e contextuais para não deixar urgências escaparem.",
-                systemName: "sparkles",
-                tone: .lavender
-            )
-        ]
-    )
+    // A benefit the build withholds is never priced: the sheet sells only what a
+    // purchase can actually unlock.
+    static var mock: PremiumPlan {
+        let readsDocuments = NinaAttachmentGate.current.isEnabled
+        let documentBenefit = PremiumBenefit(
+            title: "Leitura de documentos",
+            detail: "Leitura de recibos, receitas e boletos para transformar detalhes em lembretes claros.",
+            systemName: "doc.text.viewfinder",
+            tone: .sky
+        )
+
+        return PremiumPlan(
+            name: "Nina Premium",
+            status: "Assinatura",
+            priceLabel: "R$ 24,90/mês",
+            periodLabel: "1 mês",
+            renewalLabel: "Renovação automática pelo App Store",
+            heroTitle: "Um Premium que vale para a casa toda",
+            heroSubtitle: readsDocuments
+                ? "Leitura de documentos, resumo semanal e prioridade da Nina para todo mundo da casa, em uma assinatura só."
+                : "Resumo semanal e prioridade da Nina para todo mundo da casa, em uma assinatura só.",
+            benefits: (readsDocuments ? [documentBenefit] : []) + [
+                PremiumBenefit(
+                    title: "Resumo semanal",
+                    detail: "Um digest bonito com pendências, compras, vitórias da semana e sinais de sobrecarga.",
+                    systemName: "calendar.badge.clock",
+                    tone: .amber
+                ),
+                PremiumBenefit(
+                    title: "Prioridade da Nina",
+                    detail: "Sugestões mais visíveis, rápidas e contextuais para não deixar urgências escaparem.",
+                    systemName: "sparkles",
+                    tone: .lavender
+                )
+            ]
+        )
+    }
 }
