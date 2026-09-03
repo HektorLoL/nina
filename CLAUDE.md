@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-08-12
+Last updated: 2026-09-03
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -863,8 +863,14 @@ fix unprompted.
   entity with a CNPJ and a named DPO exists** — that is a company-formation task,
   not an engineering one. Brazilian counsel must also approve the child/sensitive-data
   wording.
-- **`NINA_APP_APPLE_ID` is still a placeholder** — the app has never been created
-  in App Store Connect. Version 1.0 build 1, never tagged, never released.
+- **The App Store Connect record exists since 2026-09-03**: Apple ID
+  `6808423946`, listed as "Nina: sua amiga da casa" because the bare name was
+  taken. The number is public (it is the `apps.apple.com/br/app/id…` path) and
+  sits in both `.example` inventories. Subscriptions, server-notification URLs,
+  and a sandbox tester are still to be created there. Version 1.0 build 1, never
+  tagged, never released. Do not rebuild the website with
+  `PUBLIC_NINA_APP_STORE_ID` until the app is actually live — the install badge
+  would link to a store page that does not exist yet.
 - **The last AI eval is stale.** `evals/latest-report.json` is dated 2026-06-15,
   ~7 weeks behind the working tree. It passed (schema 1.0, 0 unconfirmed
   mutations, 0 private-data leaks, median turn US$0.0015) but with 92.3%
