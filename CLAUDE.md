@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -429,10 +429,14 @@ secret) and is revoked from every client role. pg_cron runs
 
 ## 7. Edge Functions
 
-Five Deno functions. `verify_jwt` per `supabase/config.toml`: **true** for
-`nina-chat`, `premium-subscription-sync`, and (by platform default, undeclared)
-`delete-account`; **false** for `nina-maintenance` (shared-secret header) and
+Five Deno functions, all deployed to production as of 2026-09-04. `verify_jwt`
+per `supabase/config.toml`: **true** for `nina-chat`, `premium-subscription-sync`,
+and `delete-account`; **false** for `nina-maintenance` (shared-secret header) and
 `app-store-server-notifications` (Apple JWS chain is the only trust).
+`delete-account` is the one function that imports `@supabase/supabase-js` by its
+bare specifier — its lint task forbids an inline `npm:` prefix — so its
+`config.toml` entry carries `import_map = "../deno.json"`; without it the
+platform bundler cannot resolve the import and the deploy fails with 400.
 
 - **`nina-chat`** — the assistant turn. Order is load-bearing and asserted by a
   test: adult gate → `begin_nina_chat_run` (idempotent on `message_id`, claims
@@ -875,8 +879,10 @@ fix unprompted.
 - **The App Store Connect record exists since 2026-09-03**: Apple ID
   `6808423946`, listed as "Nina: sua amiga da casa" because the bare name was
   taken. The number is public (it is the `apps.apple.com/br/app/id…` path) and
-  sits in both `.example` inventories. Subscriptions, server-notification URLs,
-  and a sandbox tester are still to be created there. Version 1.0 build 1, never
+  sits in both `.example` inventories. Both subscriptions (Brazil only, Family
+  Sharing on) and a sandbox tester exist since 2026-09-04; the server-notification
+  URL is `https://apemftmlsjocvifbptum.supabase.co/functions/v1/app-store-server-notifications`
+  and still has to be pasted into App Store Connect. Version 1.0 build 1, never
   tagged, never released. Do not rebuild the website with
   `PUBLIC_NINA_APP_STORE_ID` until the app is actually live — the install badge
   would link to a store page that does not exist yet.

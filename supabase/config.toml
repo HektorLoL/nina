@@ -42,3 +42,7 @@ verify_jwt = true
 
 [functions.app-store-server-notifications]
 verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = true
+import_map = "../deno.json"
