@@ -901,8 +901,12 @@ fix unprompted.
   sits in both `.example` inventories. Both subscriptions (Brazil only, Family
   Sharing on) and a sandbox tester exist since 2026-09-04; the server-notification
   URL is `https://apemftmlsjocvifbptum.supabase.co/functions/v1/app-store-server-notifications`
-  and still has to be pasted into App Store Connect. Version 1.0 build 1, never
-  tagged, never released. Do not rebuild the website with
+  and still has to be pasted into App Store Connect. **Version 1.0 build 1 was
+  uploaded to TestFlight on 2026-09-04**, archived from the sources tagged
+  `testflight-1.0-1`; nothing has been released. The archive passed every
+  artifact check of the production preflight; the App Store verifier is
+  deliberately unset (production + sandbox accepted) for the TestFlight phase
+  and goes back to `production` before submission. Do not rebuild the website with
   `PUBLIC_NINA_APP_STORE_ID` until the app is actually live — the install badge
   would link to a store page that does not exist yet.
 - **The last AI eval is stale.** `evals/latest-report.json` is dated 2026-06-15,
