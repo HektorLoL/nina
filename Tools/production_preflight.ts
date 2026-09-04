@@ -561,6 +561,30 @@ async function plistJSON(path: string): Promise<Record<string, unknown>> {
   return record;
 }
 
+// An archive's Info.plist carries CreationDate, which plutil refuses to emit as
+// JSON; only ApplicationProperties is read, and it is date-free.
+async function archivePropertiesJSON(
+  path: string,
+): Promise<Record<string, unknown>> {
+  const output = await new Deno.Command("plutil", {
+    args: ["-extract", "ApplicationProperties", "json", "-o", "-", path],
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+  if (!output.success) {
+    throw new Error("Unable to decode the xcarchive property list.");
+  }
+
+  const value = JSON.parse(new TextDecoder().decode(output.stdout));
+  const record = recordValue(value);
+  if (!record) {
+    throw new Error(
+      "The xcarchive property list has no ApplicationProperties.",
+    );
+  }
+  return { ApplicationProperties: record };
+}
+
 async function firstApplicationInArchive(archivePath: string): Promise<string> {
   const applicationsPath = joinPath(archivePath, "Products/Applications");
   const applications: string[] = [];
@@ -637,7 +661,9 @@ export async function loadIOSArtifactSnapshot(
     : normalizedPath;
   const [info, archiveInfo, scan] = await Promise.all([
     plistJSON(joinPath(appPath, "Info.plist")),
-    isArchive ? plistJSON(joinPath(normalizedPath, "Info.plist")) : undefined,
+    isArchive
+      ? archivePropertiesJSON(joinPath(normalizedPath, "Info.plist"))
+      : undefined,
     collectArtifactFiles(appPath),
   ]);
 
