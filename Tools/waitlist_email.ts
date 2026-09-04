@@ -78,6 +78,25 @@ function greetingName(firstName: string | null | undefined): string | null {
   return cleaned.length > 0 && cleaned.length <= 80 ? cleaned : null;
 }
 
+export const launchIconURL = "https://ninai.app/images/email/nina-app-icon.png";
+
+const palette = {
+  ground: "#FBFCFD",
+  line: "#DFE4EB",
+  ink: "#131A24",
+  muted: "#5C6675",
+  faint: "#646E7C",
+  cobalt: "#1B4FD8",
+};
+
+const serif = "Fraunces, Georgia, 'Times New Roman', serif";
+const sans =
+  "-apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
+function paragraph(text: string, color = palette.ink): string {
+  return `<p style="margin:0 0 16px 0;font-family:${sans};font-size:16px;line-height:26px;color:${color};">${text}</p>`;
+}
+
 export function buildWaitlistLaunchMessage(
   input: WaitlistLaunchMessageInput,
 ): WaitlistLaunchMessage {
@@ -85,22 +104,64 @@ export function buildWaitlistLaunchMessage(
   const leave = unsubscribeURL(input.unsubscribeToken);
   const name = greetingName(input.firstName);
   const greeting = name ? `Oi, ${name}.` : "Oi.";
+  const preheader = "Pronta para chegar à sua casa.";
 
   const paragraphs = [
     greeting,
     "A Nina está pronta para chegar à sua casa. Você pediu um aviso quando isso acontecesse, e é este.",
     `Para instalar no iPhone:\n${install}`,
+    "Você conta o que precisa ser feito, do jeito que veio na cabeça. Ela transforma em tarefa, lembrete, compra, e espera você confirmar.",
     `Este é o único email desta lista. Se quiser sair dela mesmo assim, é só abrir este link:\n${leave}`,
     "Nina",
   ];
 
-  const html = [
-    `<p>${escapeHTML(greeting)}</p>`,
-    "<p>A Nina está pronta para chegar à sua casa. Você pediu um aviso quando isso acontecesse, e é este.</p>",
-    `<p>Para instalar no iPhone:<br><a href="${install}">${install}</a></p>`,
-    `<p>Este é o único email desta lista. Se quiser sair dela mesmo assim, é só abrir este link:<br><a href="${leave}">${leave}</a></p>`,
-    "<p>Nina</p>",
-  ].join("\n");
+  // One cobalt control on the page, like every screen in the app.
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>A Nina chegou</title>
+</head>
+<body style="margin:0;padding:0;background-color:${palette.ground};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:${palette.ground};">${preheader}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${palette.ground};">
+<tr><td align="center" style="padding:40px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">
+<tr><td style="background-color:#FFFFFF;border:1px solid ${palette.line};border-radius:20px;padding:36px 32px 28px 32px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+<tr><td style="padding:0 0 24px 0;"><img src="${launchIconURL}" width="56" height="56" alt="Nina" style="display:block;width:56px;height:56px;border-radius:14px;border:0;"></td></tr>
+</table>
+<p style="margin:0 0 10px 0;font-family:${sans};font-size:12px;line-height:16px;letter-spacing:1.4px;text-transform:uppercase;color:${palette.faint};">Sua amiga da casa</p>
+<h1 style="margin:0 0 24px 0;font-family:${serif};font-weight:400;font-size:34px;line-height:40px;color:${palette.ink};">A Nina chegou</h1>
+${paragraph(escapeHTML(greeting))}
+${
+    paragraph(
+      "A Nina está pronta para chegar à sua casa. Você pediu um aviso quando isso acontecesse, e é este.",
+    )
+  }
+${
+    paragraph(
+      "Você conta o que precisa ser feito, do jeito que veio na cabeça. Ela transforma em tarefa, lembrete, compra, e espera você confirmar.",
+      palette.muted,
+    )
+  }
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 28px 0;">
+<tr><td style="background-color:${palette.cobalt};border-radius:999px;"><a href="${install}" style="display:inline-block;padding:14px 24px;font-family:${sans};font-size:16px;line-height:20px;font-weight:600;color:#FFFFFF;text-decoration:none;border-radius:999px;">Instalar no iPhone</a></td></tr>
+</table>
+<p style="margin:0 0 0 0;font-family:${serif};font-size:18px;line-height:26px;color:${palette.ink};">Nina</p>
+</td></tr>
+<tr><td style="padding:24px 12px 0 12px;">
+<p style="margin:0 0 8px 0;font-family:${sans};font-size:13px;line-height:20px;color:${palette.muted};">Este é o único email desta lista, como prometido em ninai.app. Se quiser sair dela mesmo assim, é só <a href="${leave}" style="color:${palette.muted};text-decoration:underline;">abrir este link</a>.</p>
+<p style="margin:0;font-family:${sans};font-size:13px;line-height:20px;color:${palette.muted};">Seus dados ficam em servidores em São Paulo.</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
+`;
 
   return {
     subject: "A Nina chegou",

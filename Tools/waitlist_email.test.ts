@@ -44,6 +44,29 @@ Deno.test("the launch message keeps Nina's register", () => {
   assert(message.text.includes("único email desta lista"));
 });
 
+Deno.test("the HTML body is self-contained, branded, and carries one cobalt control", () => {
+  const message = buildWaitlistLaunchMessage({
+    firstName: "Bia",
+    unsubscribeToken: token,
+    appStoreID,
+  });
+  assert(
+    message.html.includes(
+      'src="https://ninai.app/images/email/nina-app-icon.png"',
+    ),
+  );
+  assert(message.html.includes(">Instalar no iPhone</a>"));
+  assert(
+    message.html.includes(
+      `href="https://apps.apple.com/br/app/id${appStoreID}"`,
+    ),
+  );
+  assert(!message.html.includes("<script"));
+  assert(!message.html.includes("<link"));
+  assert(!message.html.includes("<style"));
+  assertEquals(message.html.split("background-color:#1B4FD8").length - 1, 1);
+});
+
 Deno.test("names are escaped before reaching the HTML body", () => {
   const message = buildWaitlistLaunchMessage({
     firstName: "<b>Ana</b>",
