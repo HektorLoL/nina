@@ -557,6 +557,29 @@ final class PremiumSubscriptionTests: XCTestCase {
     }
 
     @MainActor
+    func testAFamilySharedTransactionIsNeverSentToTheServerAndNeverReadsAsPremium() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.success(.inactive))
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([
+                TestEnvironment.liveTransaction(familyShared: true),
+            ])
+        )
+
+        await store.configure(for: environment.user)
+        await store.refreshEntitlement(forcingTransactionSync: true)
+
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertEqual(calls.count, 0)
+        XCTAssertFalse(store.entitlement.isActive)
+        XCTAssertNil(store.errorMessage)
+    }
+
+    @MainActor
     func testAForcedRestoreRepairsTheServerEvenAfterTheLedgerRecordedASync() async {
         let environment = TestEnvironment(function: #function)
         defer { environment.tearDown() }
@@ -728,7 +751,8 @@ private struct TestEnvironment {
         transactionID: String = "2000000000000001",
         expiresAt: Date? = Date(timeIntervalSinceNow: 30 * 24 * 60 * 60),
         revokedAt: Date? = nil,
-        signedTransactionInfo: String = "signed-transaction-2000000000000001"
+        signedTransactionInfo: String = "signed-transaction-2000000000000001",
+        familyShared: Bool = false
     ) -> PremiumLocalTransaction {
         PremiumLocalTransaction(
             productID: productID,
@@ -737,7 +761,8 @@ private struct TestEnvironment {
             purchaseDate: Date(timeIntervalSinceNow: -24 * 60 * 60),
             expirationDate: expiresAt,
             revocationDate: revokedAt,
-            signedTransactionInfo: signedTransactionInfo
+            signedTransactionInfo: signedTransactionInfo,
+            isFamilyShared: familyShared
         )
     }
 

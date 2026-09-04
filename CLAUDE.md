@@ -237,6 +237,15 @@ product regression, not a refactor.
   `premium-subscription-sync` rejects `appAccountToken !== auth.uid()` with 403.
   Apple's JWS is validly signed for *someone* — the token is the only thing
   binding it to a Nina account.
+- **A family-shared transaction never reaches the server and never reads as
+  premium on the device.** Both subscriptions have Family Sharing on in App
+  Store Connect (turned on 2026-09-03; Apple does not allow it to be turned off
+  again), but Nina's sharing unit is the household, not the Apple family: the
+  server binds every receipt to the buyer's `appAccountToken`, so a shared
+  receipt would only ever produce a 403. `PremiumLocalTransaction.isFamilyShared`
+  gates both feeders (`latestUsableLocalTransaction` and the
+  `Transaction.updates` listener). Locked by
+  `PremiumSubscriptionTests.testAFamilySharedTransactionIsNeverSentToTheServerAndNeverReadsAsPremium`.
 - **`NINA_APP_STORE_ENVIRONMENT=production` in production.** Xcode and
   LocalTesting chains are never accepted implicitly; an unrecognized value
   throws rather than degrading.

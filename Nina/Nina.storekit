@@ -31,7 +31,7 @@
 
           ],
           "displayPrice" : "24.90",
-          "familyShareable" : false,
+          "familyShareable" : true,
           "groupNumber" : 1,
           "internalID" : "21500011",
           "introductoryOffer" : null,
@@ -59,7 +59,7 @@
 
           ],
           "displayPrice" : "249.90",
-          "familyShareable" : false,
+          "familyShareable" : true,
           "groupNumber" : 1,
           "internalID" : "21500012",
           "introductoryOffer" : null,

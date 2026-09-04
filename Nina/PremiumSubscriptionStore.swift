@@ -114,6 +114,8 @@ struct PremiumLocalTransaction: Hashable {
     var expirationDate: Date?
     var revocationDate: Date?
     var signedTransactionInfo: String
+    // A family-shared receipt carries the buyer's account token, so the server refuses it; the house already shares premium.
+    var isFamilyShared = false
 
     func isUsable(at date: Date) -> Bool {
         guard revocationDate == nil else { return false }
@@ -153,7 +155,8 @@ extension PremiumLocalTransaction {
             purchaseDate: transaction.purchaseDate,
             expirationDate: transaction.expirationDate,
             revocationDate: transaction.revocationDate,
-            signedTransactionInfo: signedTransactionInfo
+            signedTransactionInfo: signedTransactionInfo,
+            isFamilyShared: transaction.ownershipType == .familyShared
         )
     }
 }
@@ -443,6 +446,7 @@ final class PremiumSubscriptionStore {
                 transaction: transaction,
                 signedTransactionInfo: verifiedTransaction.signedTransactionInfo
             )
+            guard !local.isFamilyShared else { return }
             applyLocal(local)
 
             guard backend != nil, let currentUser else { return }
@@ -544,7 +548,9 @@ final class PremiumSubscriptionStore {
         var latest: PremiumLocalTransaction?
 
         for transaction in await localTransactions.currentEntitlements() {
-            guard productIDs.contains(transaction.productID), transaction.isUsable(at: now) else {
+            guard productIDs.contains(transaction.productID),
+                  !transaction.isFamilyShared,
+                  transaction.isUsable(at: now) else {
                 continue
             }
 
