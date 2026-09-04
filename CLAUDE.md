@@ -823,9 +823,12 @@ ref. **Never run it against production.**
 Honest state as of 2026-08-10. These are facts about the project, not bugs to
 fix unprompted.
 
-- **The flagship AI feature ships off.** `NINA_AI_V2_ENABLED = NO` is the default
-  in `Nina.xcconfig`, the secrets example, and the production inventory, and
-  `supabase/README.md` makes it policy pending a test-account rollout. The flag
+- **The flagship AI feature ships on — decided 2026-09-04.** `NINA_AI_V2_ENABLED`
+  is `YES` in `Nina/Config/Nina.xcconfig`, the secrets example, and the
+  production inventory; the historical
+  default was `NO` pending a test-account rollout, and the paragraph below
+  describes what that state meant and the one server-side step the flip still
+  requires before the first shipped build. The flag
   has exactly one reader, `NinaProposalGate` in `BackendConfiguration.swift`,
   applied at the live turn (`AppStore.sendMessage`) and the hydration path
   (`RemoteHomeBackend.NinaStateMessageRow.domainMessage`) — so Nina still calls

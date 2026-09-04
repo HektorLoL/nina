@@ -286,9 +286,13 @@ to `functions/nina-chat/evals/latest-report.json`, and restores Auth settings
 and deletes all fixtures. It never stores assistant replies or household content
 in the report.
 
-Keep `NINA_AI_V2_ENABLED = NO` for general builds until the test-account rollout
-is approved. Enable it in the ignored local secrets xcconfig or the release
-configuration used for the selected test accounts.
+`NINA_AI_V2_ENABLED = YES` is the launch decision, taken 2026-09-04: Nina ships
+able to organize, not only to talk. The flag has one precondition that no build
+setting can satisfy — before the first build carrying `YES` is archived, the
+pending `nina_proposals` accumulated while it was `NO` must be rejected once,
+server-side, with the statement in `docs/production-launch-runbook.md` §3
+(`npx supabase db query` can run it from this machine). Skipping it ships an
+inbox of stale cards that create duplicate tasks when confirmed.
 
 The database enforces the hard US$25 cap. Also set the OpenAI project
 **Monthly budget** to US$25 under Platform **Project > Limits** as a secondary
