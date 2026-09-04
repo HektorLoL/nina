@@ -143,8 +143,15 @@ async function sendThroughResend(
       html: message.html,
     }),
   });
-  if (!response.ok) throw new Error(`resend_failed_${response.status}`);
-  const result = await response.json() as { id?: unknown };
+  const result = await response.json().catch(() => ({})) as {
+    id?: unknown;
+    name?: unknown;
+  };
+  // The provider's error name is a stable code; its message can quote the address.
+  if (!response.ok) {
+    const name = typeof result.name === "string" ? `_${result.name}` : "";
+    throw new Error(`resend_failed_${response.status}${name}`);
+  }
   return typeof result.id === "string" ? result.id : "";
 }
 
