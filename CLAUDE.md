@@ -898,8 +898,10 @@ fix unprompted.
   block wiring them up. They are copy-paste source for the dashboard only.
 - **TOTP MFA is enabled server-side with zero client support**
   (`[auth.mfa.totp]` in `config.toml`; nothing in `Nina/` references it).
-- **`TARGETED_DEVICE_FAMILY = "1,2"`** declares iPad support, but there is no
-  iPad layout anywhere and the landing FAQ says iPhone-first.
+- **iPhone only, decided 2026-09-04.** `TARGETED_DEVICE_FAMILY = 1` on every
+  target; the project used to declare iPad with no iPad layout anywhere while
+  the landing FAQ said iPhone-first. Declaring iPad again is design work, not a
+  setting.
 - **Zero snapshot or UI tests** for a design-system-heavy app; SwiftUI views,
   Astro pages, and all network-touching code are deliberately uncovered and
   pushed to the manual TestFlight matrix.
