@@ -38,7 +38,8 @@ const unsubscribeTokenPattern = /^[0-9a-f]{64}$/u;
 const appStoreIDPattern = /^[1-9][0-9]{5,}$/u;
 export const campaignPattern = /^[a-z0-9._-]{1,40}$/u;
 
-export const launchSender = "Nina <nina@ninai.app>";
+// Resend verified the contact subdomain, not the apex; the apex would be refused.
+export const launchSender = "Nina <nina@contact.ninai.app>";
 
 export function appStoreURL(appStoreID: string): string {
   if (!appStoreIDPattern.test(appStoreID)) {
