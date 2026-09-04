@@ -128,7 +128,8 @@ export function parseYours(source: string): YoursItem[] {
       continue;
     }
 
-    const item = line.match(/^### \[([ xX])\]\s*(.+)$/);
+    // Heitor ticks by hand as "[ X ]", so the box tolerates inner spaces.
+    const item = line.match(/^### \[\s*([xX]?)\s*\]\s*(.+)$/);
     if (item) {
       if (!inScope) {
         current = undefined;

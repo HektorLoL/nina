@@ -72,8 +72,28 @@ O token fica no fragmento, não chega ao servidor durante o carregamento da
 página e é removido do histórico antes da confirmação. Nunca mova o token para
 query string, path, analytics ou logs. O remetente deve selecionar somente
 linhas com `status = 'subscribed'`, montar a lista imediatamente antes do envio
-e incluir esse link em todo email da lista. A integração com o provedor de email
-também deve bloquear envios agendados depois que o status mudar.
+e incluir esse link em todo email da lista.
+
+A landing promete "um email só, quando a Nina chegar", por isso não existe email
+de boas-vindas no cadastro. O único envio é o aviso de lançamento, feito pelo
+operador a partir desta máquina com o Resend (chave `NINA_RESEND_API_KEY` em
+`config/production.env`, somente envio, nunca no Worker):
+
+```sh
+npx deno task waitlist:send --campaign lancamento-2026 --dry-run
+npx deno task waitlist:send --campaign lancamento-2026 --test-to voce@exemplo.com
+npx deno task waitlist:send --campaign lancamento-2026
+```
+
+O primeiro comando só conta os destinatários. O segundo envia a mensagem real
+para um endereço de teste, sem tocar no banco. O terceiro lê a lista pela RPC
+`list_waitlist_recipients` no instante do envio, manda uma mensagem por
+endereço com `Idempotency-Key` estável, e registra cada entrega em
+`waitlist_deliveries` pela RPC `record_waitlist_delivery`. Rodar de novo depois
+de uma falha envia apenas o que faltou; um endereço que cancelou entre uma
+execução e outra fica de fora. O log tem só contagens e códigos, nunca um
+endereço. A mensagem exige `PUBLIC_NINA_APP_STORE_ID` numérico, porque leva o
+link da App Store, então ela só pode ser enviada com o app publicado.
 
 Use `GET /api/health` no monitor de disponibilidade. O endpoint faz duas
 sondagens somente de leitura, com timeout: uma chamada pública de convite

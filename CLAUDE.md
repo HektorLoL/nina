@@ -518,6 +518,16 @@ CI's `npm audit --audit-level=high`. Every deviation from the Paper boards is in
   at **build** time. Changing a Cloudflare variable requires a rebuild.
 - The invite page must never appear to validate a code. An unreachable API
   renders an explicit "Verificação pendente" state (this was a resolved P1).
+- **The waitlist receives exactly one email, and not from the Worker.** The
+  landing promises "um email só, quando a Nina chegar", so there is no welcome
+  mail at signup. The launch send is `deno task waitlist:send`
+  (`Tools/waitlist_send.ts`), run from the operator machine with a sending-only
+  Resend key: it reads `list_waitlist_recipients` at the instant of sending,
+  records each delivery in `waitlist_deliveries`, and a rerun never repeats an
+  address. The message needs a numeric `PUBLIC_NINA_APP_STORE_ID`, so it cannot
+  be sent before the app is live. Logs carry counts and codes only; a
+  source-text test in `Tools/waitlist_email.test.ts` fails if an address, name,
+  or token reaches a log statement.
 
 `npm run dev` serves static only — `/api/*` and the invite rewrite do **not**
 work there. Use `npm run build && npm run preview` (wrangler dev) to exercise
@@ -669,6 +679,12 @@ Release gates (see `docs/production-launch-runbook.md` for the full six stages):
 
 ```bash
 npx deno task preflight:production --env-file config/production.env --online --ios-artifact /absolute/path/to/Nina.xcarchive
+```
+
+Launch email to the waitlist, once the app is live (dry run first):
+
+```bash
+npx deno task waitlist:send --campaign lancamento-2026 --dry-run
 ```
 
 Local secret files (all gitignored, each with a tracked `.example` sibling):

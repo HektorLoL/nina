@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(54);
+select plan(74);
 
 select has_table(
   'public',
@@ -560,6 +560,200 @@ select is(
   ),
   0,
   'expired anonymous rate limit fingerprints are removed'
+);
+
+-- Launch delivery: one message per subscribed address, never twice.
+
+select has_table(
+  'public',
+  'waitlist_deliveries',
+  'launch deliveries are recorded in a dedicated table'
+);
+
+select ok(
+  (
+    select relrowsecurity
+    from pg_class
+    where oid = 'public.waitlist_deliveries'::regclass
+  ),
+  'waitlist deliveries have row level security enabled'
+);
+
+select ok(
+  not has_table_privilege('anon', 'public.waitlist_deliveries', 'select'),
+  'anonymous users cannot read delivery records'
+);
+
+select ok(
+  not has_table_privilege('service_role', 'public.waitlist_deliveries', 'select'),
+  'even the service role reads deliveries only through the RPCs'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.list_waitlist_recipients(text)',
+    'execute'
+  ),
+  'anonymous clients cannot list recipients'
+);
+
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.list_waitlist_recipients(text)',
+    'execute'
+  ),
+  'authenticated clients cannot list recipients'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.list_waitlist_recipients(text)',
+    'execute'
+  ),
+  'the sender lists recipients as the service role'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.record_waitlist_delivery(text,text,text)',
+    'execute'
+  ),
+  'anonymous clients cannot record deliveries'
+);
+
+set local role service_role;
+
+select lives_ok(
+  $$
+    select public.register_waitlist_signup(
+      'launch@example.com',
+      'Bia',
+      true,
+      '2026-07-29',
+      'landing',
+      'pt-BR',
+      repeat('d', 64)
+    )
+  $$,
+  'a subscribed address exists for the launch send'
+);
+
+select lives_ok(
+  $$
+    select public.register_waitlist_signup(
+      'quiet@example.com',
+      null,
+      true,
+      '2026-07-29',
+      'landing',
+      'pt-BR',
+      repeat('e', 64)
+    )
+  $$,
+  'a second address exists to withdraw before the send'
+);
+
+reset role;
+
+insert into waitlist_test_tokens (label, token)
+select 'quiet', unsubscribe_token
+from public.waitlist_signups
+where email = 'quiet@example.com';
+
+set local role service_role;
+
+select is(
+  public.unsubscribe_waitlist_signup(
+    (select token from waitlist_test_tokens where label = 'quiet')
+  ) ->> 'accepted',
+  'true',
+  'the second address withdraws before the send'
+);
+
+select throws_ok(
+  $$select * from public.list_waitlist_recipients('Launch 2026')$$,
+  '22023',
+  'waitlist_campaign_invalid',
+  'a campaign name is a short lowercase slug'
+);
+
+select results_eq(
+  $$
+    select email, first_name, unsubscribe_token ~ '^[0-9a-f]{64}$'
+    from public.list_waitlist_recipients('launch-test')
+    where email in ('launch@example.com', 'quiet@example.com')
+  $$,
+  $$values ('launch@example.com', 'Bia', true)$$,
+  'the recipient list holds only subscribed addresses that have not received the campaign'
+);
+
+select is(
+  public.record_waitlist_delivery('launch@example.com', 'launch-test', 'msg_123')
+    ->> 'recorded',
+  'true',
+  'a delivery is recorded once'
+);
+
+select is(
+  public.record_waitlist_delivery('launch@example.com', 'launch-test', 'msg_456')
+    ->> 'recorded',
+  'false',
+  'a repeated delivery record is refused rather than duplicated'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.list_waitlist_recipients('launch-test')
+    where email = 'launch@example.com'
+  ),
+  0,
+  'a delivered address leaves the recipient list for that campaign'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.list_waitlist_recipients('another-campaign')
+    where email = 'launch@example.com'
+  ),
+  1,
+  'a different campaign still reaches the subscribed address'
+);
+
+select is(
+  public.record_waitlist_delivery('nobody@example.com', 'launch-test', null)
+    ->> 'recorded',
+  'false',
+  'an unknown address records nothing'
+);
+
+reset role;
+
+select is(
+  (
+    select provider_message_id
+    from public.waitlist_deliveries
+    where email = 'launch@example.com' and campaign = 'launch-test'
+  ),
+  'msg_123',
+  'the first provider message id is the one kept'
+);
+
+delete from public.waitlist_signups where email = 'launch@example.com';
+
+select is(
+  (
+    select count(*)::integer
+    from public.waitlist_deliveries
+    where email = 'launch@example.com'
+  ),
+  0,
+  'removing a signup removes its delivery records'
 );
 
 select * from finish();

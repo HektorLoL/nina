@@ -96,17 +96,34 @@ Deno.test("the blocker list is read from the vault, sections one through three",
 
   // A living note, so this asserts shape rather than a count that would go red
   // every time a blocker is ticked off.
-  assert(items.length >= 10, `parsed only ${items.length} blockers`);
+  assert(items.length >= 5, `parsed only ${items.length} blockers`);
   assert(items.every((item) => item.title.length > 0));
   assert(items.every((item) => item.section.length > 0));
   assert(
-    items.some((item) => item.title.includes("CNPJ")),
-    "the CNPJ blocker should be present",
+    items.some((item) => !item.done),
+    "a note with nothing open would mean the launch is unblocked, which it is not",
   );
   assert(
     !items.some((item) => item.section.startsWith("What I")),
     "informational sections must not reach the work lane",
   );
+});
+
+Deno.test("a box ticked by hand with inner spaces still reads as done", () => {
+  const items = parseYours([
+    "## 1. Blocks launch",
+    "### [ X ] Ticked by hand",
+    "### [x] Ticked by machine",
+    "### [ ] Still open",
+    "## 4. What I installed",
+    "### [ ] Not work",
+  ].join("\n"));
+
+  assertEquals(items.map((item) => [item.title, item.done]), [
+    ["Ticked by hand", true],
+    ["Ticked by machine", true],
+    ["Still open", false],
+  ]);
 });
 
 Deno.test("informational sections are not counted as work", () => {

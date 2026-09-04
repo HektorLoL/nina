@@ -9,11 +9,11 @@
   },
   "nodeModulesDir": "none",
   "tasks": {
-    "check": "deno check supabase/functions/nina-chat/index.ts supabase/functions/nina-maintenance/index.ts supabase/functions/delete-account/index.ts supabase/functions/premium-subscription-sync/index.ts supabase/functions/app-store-server-notifications/index.ts web/src/waitlist.ts web/src/appStore.ts Tools/production_preflight.ts Tools/panel.ts Tools/panel_render.ts",
+    "check": "deno check supabase/functions/nina-chat/index.ts supabase/functions/nina-maintenance/index.ts supabase/functions/delete-account/index.ts supabase/functions/premium-subscription-sync/index.ts supabase/functions/app-store-server-notifications/index.ts web/src/waitlist.ts web/src/appStore.ts Tools/production_preflight.ts Tools/panel.ts Tools/panel_render.ts Tools/waitlist_send.ts",
     "format:deletion": "deno fmt --check supabase/functions/_shared/delete-account*.ts supabase/functions/delete-account/index.ts",
-    "format:web": "deno fmt --check web/src/waitlist.ts web/src/worker.ts web/src/legal.ts web/src/appStore.ts web/tests/*.ts Tools/production_preflight*.ts Tools/panel*.ts",
+    "format:web": "deno fmt --check web/src/waitlist.ts web/src/worker.ts web/src/legal.ts web/src/appStore.ts web/tests/*.ts Tools/production_preflight*.ts Tools/panel*.ts Tools/waitlist*.ts",
     "lint:deletion": "deno lint supabase/functions/_shared/delete-account*.ts supabase/functions/delete-account/index.ts",
-    "lint:web": "deno lint web/src/waitlist.ts web/src/worker.ts web/src/legal.ts web/src/appStore.ts web/tests/*.ts Tools/production_preflight*.ts Tools/panel*.ts",
+    "lint:web": "deno lint web/src/waitlist.ts web/src/worker.ts web/src/legal.ts web/src/appStore.ts web/tests/*.ts Tools/production_preflight*.ts Tools/panel*.ts Tools/waitlist*.ts",
     "test": "deno test --allow-read supabase/functions/_shared/*.test.ts web/tests/*.test.ts Tools/*.test.ts",
     "db:runtime": "colima start --profile nina --cpu 4 --memory 6 --disk 60 --vm-type vz --mount-type virtiofs",
     "db:up": "npx --yes supabase@2.110.0 start",
@@ -22,6 +22,7 @@
     "db:down": "npx --yes supabase@2.110.0 stop --no-backup",
     "preflight:repo": "deno run --allow-read --allow-run=git Tools/production_preflight.ts repository",
     "preflight:production": "deno run --allow-read --allow-run=git,plutil --allow-env --allow-net Tools/production_preflight.ts production",
-    "panel": "deno run --allow-read --allow-write --allow-net=ninai.app --allow-run=deno,gh,git,npx Tools/panel.ts"
+    "panel": "deno run --allow-read --allow-write --allow-net=ninai.app --allow-run=deno,gh,git,npx Tools/panel.ts",
+    "waitlist:send": "deno run --allow-read=config,Tools --allow-net Tools/waitlist_send.ts"
   }
 }

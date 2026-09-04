@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-08-10
+Last updated: 2026-09-04
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -35,6 +35,7 @@ Distribute only the relevant values:
 | Cloudflare Worker runtime      | `NINA_SUPABASE_URL`, `NINA_SUPABASE_PUBLISHABLE_KEY`, `NINA_SUPABASE_SECRET_KEY`, `NINA_WAITLIST_HASH_SALT`                                           |
 | Astro production build         | All `PUBLIC_NINA_*` values                                                                                                                            |
 | Supabase Edge Function secrets | `OPENAI_API_KEY`, `NINA_APP_BUNDLE_ID`, `NINA_APP_APPLE_ID`, `NINA_PREMIUM_PRODUCT_IDS`, `NINA_APP_STORE_ENVIRONMENT`, `NINA_APP_STORE_ONLINE_CHECKS` |
+| Operator machine only          | `NINA_RESEND_API_KEY` (sending-only), read by `deno task waitlist:send`                                                                               |
 | Release records only           | `NINA_APPLE_TEAM_ID`, `NINA_PUBLIC_BASE_URL`                                                                                                          |
 
 Do not upload the complete inventory to any one platform. In particular, never
@@ -136,6 +137,20 @@ badge and offers the waitlist instead. Once the app exists in App Store Connect,
 set the variable, then rebuild and redeploy the website — a Cloudflare variable
 change alone leaves the install path hidden forever, and every invited person
 keeps landing on a page that cannot get them the app.
+
+The waitlist hears from Nina exactly once, after the app is live and the site
+above is rebuilt with the store id. From the repository root, with
+`config/production.env` holding the Resend key and the numeric store id:
+
+```sh
+npx deno task waitlist:send --campaign lancamento-2026 --dry-run
+npx deno task waitlist:send --campaign lancamento-2026
+```
+
+The dry run prints only a count. The real run reads the subscribed rows at that
+instant, sends one message per address, records each delivery, and can be
+rerun after a failure without repeating anyone. `web/README.md` has the test
+send.
 
 After Cloudflare deploys `https://ninai.app`, run:
 

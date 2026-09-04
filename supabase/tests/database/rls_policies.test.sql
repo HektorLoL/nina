@@ -236,13 +236,14 @@ select is(
         'nina_proposals',
         'waitlist_signups',
         'waitlist_submission_limits',
+        'waitlist_deliveries',
         'premium_subscriptions',
         'premium_subscription_transactions',
         'app_store_server_notifications'
       )
       and pg_class.relrowsecurity
   ),
-  26,
+  27,
   'all sensitive public tables have row level security enabled'
 );
 
