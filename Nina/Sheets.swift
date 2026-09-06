@@ -1456,10 +1456,19 @@ struct PremiumBenefitsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var isManagingSubscription = false
     @State private var selectedPeriod: PremiumPeriod = .yearly
+    @State private var activeMarkIsShown = false
 
     private let plan = PremiumPlan.mock
+
+    // The house is the unit that has premium; the phone's own receipt only bridges the
+    // seconds until the server has confirmed it.
+    private var isCovered: Bool {
+        store.householdPremium.isActive || premiumStore.entitlement.isActive
+    }
 
     private var monthlyProduct: Product? {
         premiumStore.products.first { $0.subscription?.subscriptionPeriod.unit == .month }
@@ -1508,7 +1517,11 @@ struct PremiumBenefitsSheet: View {
                 .padding(.bottom, 24)
             }
 
-            purchaseArea
+            if isCovered {
+                activeArea
+            } else {
+                purchaseArea
+            }
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
@@ -1516,6 +1529,57 @@ struct PremiumBenefitsSheet: View {
         .task {
             await premiumStore.configure(for: authSession.currentUser)
         }
+        .onChange(of: isCovered, initial: true) { _, covered in
+            guard covered else {
+                activeMarkIsShown = false
+                return
+            }
+            if reduceMotion {
+                activeMarkIsShown = true
+            } else {
+                withAnimation(.spring(duration: 0.55, bounce: 0.32).delay(0.05)) {
+                    activeMarkIsShown = true
+                }
+            }
+        }
+    }
+
+    // Moss marks what a person confirmed, and a purchase is exactly that.
+    private var activeArea: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(NinaTheme.moss)
+                    .frame(width: 56, height: 56)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(NinaTheme.ground)
+            }
+            .scaleEffect(activeMarkIsShown ? 1 : 0.6)
+            .opacity(activeMarkIsShown ? 1 : 0)
+            .accessibilityHidden(true)
+
+            Text("Premium ativo na casa").ninaText(.display)
+            Text(PremiumTeaserCopy.activeSubtitle)
+                .ninaText(.label, NinaTheme.muted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            NinaButton(title: "Pronto", fillsWidth: true) {
+                Haptics.selection()
+                dismiss()
+            }
+            .padding(.top, 4)
+
+            NinaButton(title: "Gerenciar na App Store", kind: .quiet) {
+                Haptics.lightImpact()
+                isManagingSubscription = true
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
     }
 
     private var heading: some View {
@@ -1654,13 +1718,6 @@ struct PremiumBenefitsSheet: View {
                 )
             }
 
-            if store.householdPremium.isActive {
-                NinaButton(title: "Gerenciar na App Store", kind: .outline) {
-                    Haptics.lightImpact()
-                    isManagingSubscription = true
-                }
-            }
-
             if let statusMessage = premiumStore.statusMessage, !statusMessage.isEmpty {
                 Text(statusMessage)
                     .ninaText(
@@ -1724,6 +1781,7 @@ struct PremiumBenefitsSheet: View {
                     Task {
                         Haptics.lightImpact()
                         await premiumStore.purchase(product)
+                        await reloadHouseIfCovered()
                     }
                 }
 
@@ -1741,6 +1799,7 @@ struct PremiumBenefitsSheet: View {
                 Task {
                     Haptics.lightImpact()
                     await premiumStore.restorePurchases()
+                    await reloadHouseIfCovered()
                 }
             }
             .frame(maxWidth: .infinity)
@@ -1748,6 +1807,13 @@ struct PremiumBenefitsSheet: View {
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 10)
+    }
+
+    // Casa reads premium from the house, not from this phone: without a reload the
+    // purchase looks like nothing happened until the next foreground.
+    private func reloadHouseIfCovered() async {
+        guard premiumStore.entitlement.isActive else { return }
+        await store.refreshHomeFromRemote(for: authSession.currentUser)
     }
 
     private func priceDetail(for product: Product) -> String? {

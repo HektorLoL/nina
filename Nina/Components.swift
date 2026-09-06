@@ -11,6 +11,19 @@ struct Eyebrow: View {
     }
 }
 
+// A mark, not a control: it names a state the house is in, so it takes the wash and
+// never competes with the screen's one cobalt control.
+struct PremiumBadge: View {
+    var body: some View {
+        Text("Premium")
+            .ninaText(.eyebrow, NinaTheme.cobalt, weight: .bold)
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(NinaTheme.cobaltWash, in: Capsule())
+            .accessibilityLabel("Premium ativo na casa")
+    }
+}
+
 struct CategoryGlyph: View {
     var systemName: String
     var size: CGFloat = 20

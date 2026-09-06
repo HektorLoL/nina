@@ -885,9 +885,17 @@ fix unprompted.
   sheet. What is still missing is client-side: a denial becomes a plain Nina chat
   line (`AppStore.swift` maps `NinaEngineError` to `reply`) with no button to
   `SheetDestination.premium`, and only the attachment gate has a pre-emptive
-  affordance (the gold "Documentos" chip). The paywall itself also names none of
-  the three ceilings, offers no monthly/annual comparison, and renders "Restaurar
-  compras" as the only full-width button while purchase is a small pill.
+  affordance (the gold "Documentos" chip). Since 2026-09-06 the paywall shows a
+  moss activation state ("Premium ativo na casa", one cobalt "Pronto") the moment
+  the house is covered, reloads the home context after a recorded purchase or
+  restore — `householdPremium` comes from the server, so without that reload a
+  successful purchase looked like nothing happened — and Casa and Hoje carry a
+  `PremiumBadge` in their headers while the house is covered. The first
+  TestFlight sandbox purchase (2026-09-06) left no server row and the refusal was
+  invisible; `verificationFailureDetails` now logs the library's status code and
+  `appAccountTokenMatches` compares case-insensitively. Sandbox subscriptions
+  expire in minutes (monthly = 5), so "Restaurar compras" hours later finds no
+  usable receipt on the device and sends nothing — that is sandbox, not a bug.
 - **Legal identity is deliberately blank.** `PUBLIC_NINA_LEGAL_ENTITY_NAME`,
   `…DOCUMENT`, `PUBLIC_NINA_DPO_NAME` are all `replace_with_…`. The privacy page
   self-declares `data-legal-status="incomplete"` and the online preflight fails

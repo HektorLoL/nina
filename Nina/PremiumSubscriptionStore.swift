@@ -381,6 +381,7 @@ final class PremiumSubscriptionStore {
 
                 if didRecord {
                     await transaction.finish()
+                    Haptics.success()
                     statusMessage = "Premium ativado."
                     statusIsConfirmation = true
                 } else {
@@ -413,6 +414,7 @@ final class PremiumSubscriptionStore {
             try await StoreKit.AppStore.sync()
             await refreshEntitlement(forcingTransactionSync: true)
             if entitlement.isActive {
+                Haptics.success()
                 statusMessage = "Premium restaurado."
                 statusIsConfirmation = true
             } else if entitlement.isReconciling {

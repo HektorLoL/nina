@@ -103,7 +103,12 @@ struct TodayView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 3) {
-                Eyebrow(text: now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "pt_BR"))))
+                HStack(alignment: .center, spacing: 10) {
+                    Eyebrow(text: now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "pt_BR"))))
+                    if store.householdPremium.isActive {
+                        PremiumBadge()
+                    }
+                }
                 Text(greeting).ninaText(.screen)
             }
 

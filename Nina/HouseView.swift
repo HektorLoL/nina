@@ -65,7 +65,12 @@ struct HouseView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(store.familyGroup.name).ninaText(.screen)
+                HStack(alignment: .center, spacing: 10) {
+                    Text(store.familyGroup.name).ninaText(.screen)
+                    if store.householdPremium.isActive {
+                        PremiumBadge()
+                    }
+                }
                 // The singular branch is load-bearing: the counter used to read
                 // "1 pessoas" on the one screen a solo household sees most.
                 Text(slotLine).ninaText(.label, NinaTheme.muted)
