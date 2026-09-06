@@ -9,6 +9,7 @@ import {
   jsonResponse,
   parseConfiguredKey,
   readAppStoreJSONRequest,
+  verificationFailureDetails,
   verifyNotification,
   verifyRenewalInfo,
   verifyTransaction,
@@ -160,7 +161,7 @@ Deno.serve(async (request: Request) => {
   } catch (error) {
     console.error(JSON.stringify({
       event: "app_store_notification_verification_failed",
-      error: error instanceof Error ? error.message : "unknown",
+      ...verificationFailureDetails(error),
     }));
     return jsonResponse({ error: "notification_verification_failed" }, 400);
   }

@@ -5,6 +5,7 @@ import {
   assertThrows,
 } from "jsr:@std/assert@1";
 import {
+  appAccountTokenMatches,
   appStoreVerificationEnvironments,
   entitlementFromSubscription,
   isAppStoreNotificationRequest,
@@ -13,6 +14,7 @@ import {
   mapAppleSubscriptionStatus,
   maxAppStoreRequestBytes,
   readAppStoreJSONRequest,
+  verificationFailureDetails,
 } from "./app-store.ts";
 
 Deno.test("premium sync request requires a transaction JWS", () => {
@@ -188,4 +190,38 @@ Deno.test("Premium endpoints use the shared bounded parser", async () => {
     ),
   );
   assert(verifierSource.includes("rootCertificatesPromise = undefined"));
+});
+
+Deno.test("an app account token matches its user regardless of letter case", () => {
+  const userID = "7e3fb20b-4cdb-47cc-936d-99d65f608138";
+  assert(
+    appAccountTokenMatches("7E3FB20B-4CDB-47CC-936D-99D65F608138", userID),
+  );
+  assert(appAccountTokenMatches(userID, userID.toUpperCase()));
+  assertFalse(
+    appAccountTokenMatches("7e3fb20b-4cdb-47cc-936d-99d65f608139", userID),
+  );
+  assertFalse(appAccountTokenMatches(undefined, userID));
+  assertFalse(appAccountTokenMatches("not-a-uuid", userID));
+});
+
+Deno.test("verification failures log a status code and a bounded cause, never a body", () => {
+  const failure = Object.assign(new Error(""), {
+    status: 3,
+    cause: new Error("x".repeat(400)),
+  });
+  const details = verificationFailureDetails(failure);
+  assertEquals(details.error, "unknown");
+  assertEquals(details.status, "3");
+  assertEquals(details.cause?.length, 200);
+  assertEquals(verificationFailureDetails("boom"), {
+    error: "unknown",
+    status: null,
+    cause: null,
+  });
+  assertEquals(verificationFailureDetails(new Error("invalid_bundle_id")), {
+    error: "invalid_bundle_id",
+    status: null,
+    cause: null,
+  });
 });

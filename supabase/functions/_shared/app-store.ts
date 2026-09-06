@@ -151,6 +151,35 @@ export function isUUID(value: unknown): value is string {
       .test(value);
 }
 
+// Apple echoes the token as it stores it; a case difference must not read as another account.
+export function appAccountTokenMatches(
+  token: unknown,
+  userID: string,
+): boolean {
+  return isUUID(token) && isUUID(userID) &&
+    token.toLowerCase() === userID.toLowerCase();
+}
+
+// The library's VerificationException carries a status code; its message is often empty.
+export function verificationFailureDetails(
+  error: unknown,
+): { error: string; status: string | null; cause: string | null } {
+  const record = (error && typeof error === "object")
+    ? error as { message?: unknown; status?: unknown; cause?: unknown }
+    : {};
+  const message = typeof record.message === "string" && record.message
+    ? record.message
+    : "unknown";
+  const status = record.status == null ? null : String(record.status);
+  const causeRecord = (record.cause && typeof record.cause === "object")
+    ? record.cause as { message?: unknown }
+    : null;
+  const cause = typeof causeRecord?.message === "string" && causeRecord.message
+    ? causeRecord.message.slice(0, 200)
+    : null;
+  return { error: message, status, cause };
+}
+
 export function isPremiumSyncRequest(value: unknown): value is {
   signed_transaction_info: string;
   source?: string;

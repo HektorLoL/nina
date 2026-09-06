@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
+  appAccountTokenMatches,
   assertTransactionMatchesNina,
   buildSubscriptionUpsert,
   buildTransactionLedgerUpsert,
@@ -9,6 +10,7 @@ import {
   jsonResponse,
   parseConfiguredKey,
   readAppStoreJSONRequest,
+  verificationFailureDetails,
   verifyTransaction,
 } from "../_shared/app-store.ts";
 
@@ -61,7 +63,12 @@ Deno.serve(async (request: Request) => {
     const transaction = await verifyTransaction(body.signed_transaction_info);
     assertTransactionMatchesNina(transaction);
 
-    if (transaction.appAccountToken !== userID) {
+    if (!appAccountTokenMatches(transaction.appAccountToken, userID)) {
+      console.error(JSON.stringify({
+        event: "premium_sync_token_mismatch",
+        token_present: isUUID(transaction.appAccountToken),
+        environment: transaction.environment ?? null,
+      }));
       return jsonResponse({ error: "app_account_token_mismatch" }, 403);
     }
 
@@ -109,7 +116,7 @@ Deno.serve(async (request: Request) => {
   } catch (error) {
     console.error(JSON.stringify({
       event: "premium_sync_verification_failed",
-      error: error instanceof Error ? error.message : "unknown",
+      ...verificationFailureDetails(error),
     }));
     return jsonResponse({ error: "transaction_verification_failed" }, 400);
   }
