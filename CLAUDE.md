@@ -451,7 +451,16 @@ platform bundler cannot resolve the import and the deploy fails with 400.
   injectable `DeleteAccountBackend`; `index.ts` is a thin adapter. Body must be
   exactly `{"confirmation":"delete"}`.
 - **`premium-subscription-sync`** / **`app-store-server-notifications`** —
-  Apple JWS verification via `_shared/app-store.ts`.
+  Apple JWS verification via `_shared/app-store.ts`, which delegates the
+  cryptography to `_shared/apple-jws.ts`: chain rules, Apple's marker OIDs, and
+  the ES256 signature on WebCrypto with `@peculiar/x509`. **Apple's own
+  `@apple/app-store-server-library` verifier cannot run in the Supabase edge
+  runtime** — it leans on `node:crypto`'s `X509Certificate`, which that runtime
+  only stubs (`toString`, `raw`, … throw "Not implemented"), so every real
+  receipt failed with an empty message until 2026-09-06. The library stays for
+  its payload types only. Revocation (OCSP) is not checked; validity is checked
+  against the clock when `NINA_APP_STORE_ONLINE_CHECKS` is `true`, against the
+  payload's `signedDate` otherwise.
 
 **Conventions:**
 
@@ -818,6 +827,11 @@ Never obfuscate a fixture to dodge the scan.
 or IP allowlist — Apple's JWS chain is its only authentication. Sound, but every
 unverifiable POST costs a certificate-chain verification. Apple root certs are
 downloaded from apple.com at cold start unless `APPLE_ROOT_CA_PEMS` is set.
+**Never reintroduce `SignedDataVerifier` from Apple's library on this path**: it
+needs `node:crypto` X.509 support the edge runtime does not have, and the
+failure looks like "every receipt is invalid" with an empty error. The local
+reproduction is `supabase functions serve` with a throwaway function, which
+runs the same runtime container as production.
 
 **`nina_ai_budget_months` is one global row per (month, purpose), not per
 family.** One heavy household can exhaust the US$20 cap and every other user

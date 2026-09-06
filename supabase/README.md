@@ -183,7 +183,8 @@ Copy `supabase/.env.example` to the ignored `supabase/.env.local` and configure:
 - `NINA_APP_APPLE_ID`: the positive numeric Apple ID from App Store Connect
 - `NINA_PREMIUM_PRODUCT_IDS`: the exact monthly/yearly product identifiers
 - `NINA_APP_STORE_ENVIRONMENT=production`
-- `NINA_APP_STORE_ONLINE_CHECKS=true`
+- `NINA_APP_STORE_ONLINE_CHECKS=true` — validity is checked against the clock
+  rather than the payload's signing date; revocation (OCSP) is never consulted
 
 Then upload secrets and deploy both functions:
 

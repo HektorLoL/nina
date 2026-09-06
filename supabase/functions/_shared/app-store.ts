@@ -1,8 +1,10 @@
 import {
-  Environment,
-  SignedDataVerifier,
-} from "npm:@apple/app-store-server-library@3.1.0";
-import { Buffer } from "node:buffer";
+  AppleEnvironment as Environment,
+  type AppleVerifierConfiguration,
+  verifyAppleNotification,
+  verifyAppleRenewalInfo,
+  verifyAppleTransaction,
+} from "./apple-jws.ts";
 import type { JWSTransactionDecodedPayload } from "npm:@apple/app-store-server-library@3.1.0/dist/models/JWSTransactionDecodedPayload";
 import type { JWSRenewalInfoDecodedPayload } from "npm:@apple/app-store-server-library@3.1.0/dist/models/JWSRenewalInfoDecodedPayload";
 import type { ResponseBodyV2DecodedPayload } from "npm:@apple/app-store-server-library@3.1.0/dist/models/ResponseBodyV2DecodedPayload";
@@ -43,7 +45,7 @@ const maxRootCertificateBytes = 64 * 1_024;
 const rootCertificateTimeoutMilliseconds = 5_000;
 const appStoreVerificationTimeoutMilliseconds = 12_000;
 
-let rootCertificatesPromise: Promise<Buffer[]> | undefined;
+let rootCertificatesPromise: Promise<Uint8Array[]> | undefined;
 
 export function allowedPremiumProductIDs(): string[] {
   const configured = Deno.env.get("NINA_PREMIUM_PRODUCT_IDS") ?? "";
@@ -284,7 +286,11 @@ export async function verifyTransaction(
 ): Promise<JWSTransactionDecodedPayload> {
   return await verifyWithCandidates(
     preferredEnvironment,
-    (verifier) => verifier.verifyAndDecodeTransaction(signedTransactionInfo),
+    (configuration) =>
+      verifyAppleTransaction<JWSTransactionDecodedPayload>(
+        signedTransactionInfo,
+        configuration,
+      ),
   );
 }
 
@@ -294,7 +300,11 @@ export async function verifyRenewalInfo(
 ): Promise<JWSRenewalInfoDecodedPayload> {
   return await verifyWithCandidates(
     preferredEnvironment,
-    (verifier) => verifier.verifyAndDecodeRenewalInfo(signedRenewalInfo),
+    (configuration) =>
+      verifyAppleRenewalInfo<JWSRenewalInfoDecodedPayload>(
+        signedRenewalInfo,
+        configuration,
+      ),
   );
 }
 
@@ -304,7 +314,11 @@ export async function verifyNotification(
 ): Promise<ResponseBodyV2DecodedPayload> {
   return await verifyWithCandidates(
     preferredEnvironment,
-    (verifier) => verifier.verifyAndDecodeNotification(signedPayload),
+    (configuration) =>
+      verifyAppleNotification<ResponseBodyV2DecodedPayload>(
+        signedPayload,
+        configuration,
+      ),
   );
 }
 
@@ -474,7 +488,7 @@ function environmentFromString(value?: string): Environment | null {
 
 async function verifyWithCandidates<T>(
   preferredEnvironment: string | undefined,
-  operation: (verifier: SignedDataVerifier) => Promise<T>,
+  operation: (configuration: AppleVerifierConfiguration) => Promise<T>,
 ): Promise<T> {
   let lastError: unknown;
   for (
@@ -515,18 +529,21 @@ export function appStoreVerificationEnvironments(
       preferred === Environment.SANDBOX
     ? preferred
     : null;
-  const candidates = [
+  const candidates: (Environment | null)[] = [
     publicPreferred,
     Environment.PRODUCTION,
     Environment.SANDBOX,
-  ].filter((environment): environment is Environment => environment != null);
+  ];
+  const present = candidates.filter(
+    (environment): environment is Environment => environment != null,
+  );
 
-  return Array.from(new Set(candidates));
+  return Array.from(new Set(present));
 }
 
 async function verifierFor(
   environment: Environment,
-): Promise<SignedDataVerifier> {
+): Promise<AppleVerifierConfiguration> {
   const appAppleId = Number(Deno.env.get("NINA_APP_APPLE_ID") ?? "");
   if (
     environment === Environment.PRODUCTION &&
@@ -535,20 +552,22 @@ async function verifierFor(
     throw new Error("app_apple_id_required");
   }
 
-  const enableOnlineChecks =
+  // "Online checks" means validity against the clock rather than the signing date;
+  // revocation lookups (OCSP) are not performed in this runtime.
+  const useCurrentDate =
     (Deno.env.get("NINA_APP_STORE_ONLINE_CHECKS") ?? "true").toLowerCase() !==
       "false";
 
-  return new SignedDataVerifier(
-    await loadAppleRootCertificates(),
-    enableOnlineChecks,
+  return {
+    rootCertificates: await loadAppleRootCertificates(),
     environment,
-    appBundleID(),
-    environment === Environment.PRODUCTION ? appAppleId : undefined,
-  );
+    bundleID: appBundleID(),
+    appAppleID: environment === Environment.PRODUCTION ? appAppleId : undefined,
+    useCurrentDate,
+  };
 }
 
-async function loadAppleRootCertificates(): Promise<Buffer[]> {
+async function loadAppleRootCertificates(): Promise<Uint8Array[]> {
   if (rootCertificatesPromise) return await rootCertificatesPromise;
 
   const pending = loadConfiguredRootCertificates() ??
@@ -565,7 +584,7 @@ async function loadAppleRootCertificates(): Promise<Buffer[]> {
   }
 }
 
-function loadConfiguredRootCertificates(): Promise<Buffer[]> | undefined {
+function loadConfiguredRootCertificates(): Promise<Uint8Array[]> | undefined {
   const configured = Deno.env.get("APPLE_ROOT_CA_PEMS");
   if (!configured) return undefined;
 
@@ -575,10 +594,15 @@ function loadConfiguredRootCertificates(): Promise<Buffer[]> | undefined {
     .filter(Boolean);
 
   if (pemBlocks.length === 0) return undefined;
-  return Promise.resolve(pemBlocks.map((pem) => Buffer.from(pem)));
+  return Promise.resolve(pemBlocks.map(pemToDER));
 }
 
-async function fetchRootCertificate(url: string): Promise<Buffer> {
+function pemToDER(pem: string): Uint8Array {
+  const base64 = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+}
+
+async function fetchRootCertificate(url: string): Promise<Uint8Array> {
   let response: Response;
   try {
     response = await fetch(url, {
@@ -607,7 +631,7 @@ async function fetchRootCertificate(url: string): Promise<Buffer> {
     throw new Error("apple_root_certificate_unavailable");
   }
 
-  return Buffer.from(certificate);
+  return new Uint8Array(certificate);
 }
 
 async function readBoundedRequestBody(
