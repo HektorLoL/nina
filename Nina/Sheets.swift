@@ -1461,6 +1461,7 @@ struct PremiumBenefitsSheet: View {
     @State private var isManagingSubscription = false
     @State private var selectedPeriod: PremiumPeriod = .yearly
     @State private var activeMarkIsShown = false
+    @State private var wasCoveredOnAppear: Bool?
 
     private let plan = PremiumPlan.mock
 
@@ -1502,10 +1503,16 @@ struct PremiumBenefitsSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    heading
-                    periodControl
-                    comparison
-                    ceilingNote
+                    if isCovered {
+                        managementHeading
+                        subscriptionCard
+                        includedList
+                    } else {
+                        heading
+                        periodControl
+                        comparison
+                        ceilingNote
+                    }
                     NoteCard(
                         eyebrow: "O que o Premium não muda",
                         text: "A Nina continua propondo e esperando você confirmar. Nenhum plano dá a ela permissão de mexer na casa sozinha."
@@ -1518,7 +1525,7 @@ struct PremiumBenefitsSheet: View {
             }
 
             if isCovered {
-                activeArea
+                manageArea
             } else {
                 purchaseArea
             }
@@ -1530,6 +1537,7 @@ struct PremiumBenefitsSheet: View {
             await premiumStore.configure(for: authSession.currentUser)
         }
         .onChange(of: isCovered, initial: true) { _, covered in
+            if wasCoveredOnAppear == nil { wasCoveredOnAppear = covered }
             guard covered else {
                 activeMarkIsShown = false
                 return
@@ -1544,36 +1552,130 @@ struct PremiumBenefitsSheet: View {
         }
     }
 
+    // A house that arrives already covered is managing, not celebrating.
+    private var activatedHere: Bool {
+        wasCoveredOnAppear == false && isCovered
+    }
+
     // Moss marks what a person confirmed, and a purchase is exactly that.
-    private var activeArea: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(NinaTheme.moss)
-                    .frame(width: 56, height: 56)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 26, weight: .semibold))
-                    .foregroundStyle(NinaTheme.ground)
+    private var managementHeading: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if activatedHere {
+                ZStack {
+                    Circle()
+                        .fill(NinaTheme.moss)
+                        .frame(width: 56, height: 56)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(NinaTheme.ground)
+                }
+                .scaleEffect(activeMarkIsShown ? 1 : 0.6)
+                .opacity(activeMarkIsShown ? 1 : 0)
+                .accessibilityHidden(true)
+                .padding(.bottom, 10)
             }
-            .scaleEffect(activeMarkIsShown ? 1 : 0.6)
-            .opacity(activeMarkIsShown ? 1 : 0)
-            .accessibilityHidden(true)
 
             Text("Premium ativo na casa").ninaText(.display)
             Text(PremiumTeaserCopy.activeSubtitle)
                 .ninaText(.label, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var currentProduct: Product? {
+        guard let productID = premiumStore.entitlement.productID else { return nil }
+        return premiumStore.products.first { $0.id == productID }
+    }
+
+    private var currentPlanName: String {
+        if let product = currentProduct { return product.displayName }
+        guard let productID = premiumStore.entitlement.productID else { return "Nina Premium" }
+        if productID.hasSuffix(".yearly") { return "Nina Premium anual" }
+        if productID.hasSuffix(".monthly") { return "Nina Premium mensal" }
+        return "Nina Premium"
+    }
+
+    private var currentPriceLabel: String? {
+        guard let product = currentProduct else { return nil }
+        guard let detail = priceDetail(for: product) else { return product.displayPrice }
+        return "\(product.displayPrice) \(detail)"
+    }
+
+    private var subscriptionCard: some View {
+        VStack(spacing: 0) {
+            detailRow(title: "Plano", value: currentPlanName)
+            NinaDivider(inset: 0)
+            if let price = currentPriceLabel {
+                detailRow(title: "Preço", value: price)
+                NinaDivider(inset: 0)
+            }
+            detailRow(title: "Renovação", value: premiumStore.entitlement.renewalSummary)
+            NinaDivider(inset: 0)
+            detailRow(title: "Situação", value: premiumStore.entitlement.statusTitle)
+        }
+        .ninaCard()
+    }
+
+    private func detailRow(title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title)
+                .ninaText(.label, NinaTheme.muted)
+                .frame(width: 92, alignment: .leading)
+            Text(value)
+                .ninaText(.label, NinaTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    // The same three ceilings the paywall sells, now as what the house has.
+    private var includedList: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Eyebrow(text: "Liberado para a casa")
+            if NinaAttachmentGate.current.isEnabled {
+                includedRow("Ler documento por foto")
+            }
+            includedRow("Conversa com a Nina, 30 por hora")
+            includedRow("Resumo semanal da casa")
+        }
+    }
+
+    private func includedRow(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(NinaTheme.moss)
+                .frame(width: 18)
+            Text(text)
+                .ninaText(.label, NinaTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var manageArea: some View {
+        VStack(spacing: 10) {
+            NinaButton(title: "Gerenciar na App Store", fillsWidth: true) {
+                Haptics.lightImpact()
+                isManagingSubscription = true
+            }
+
+            Text("Trocar de plano ou cancelar acontece na App Store. A casa continua coberta até o fim do período pago.")
+                .ninaText(.micro, NinaTheme.muted)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            NinaButton(title: "Pronto", fillsWidth: true) {
-                Haptics.selection()
-                dismiss()
-            }
-            .padding(.top, 4)
-
-            NinaButton(title: "Gerenciar na App Store", kind: .quiet) {
-                Haptics.lightImpact()
-                isManagingSubscription = true
+            NinaButton(
+                title: premiumStore.isRestoring ? "Restaurando" : "Restaurar compras",
+                kind: .quiet,
+                isEnabled: !premiumStore.isRestoring
+            ) {
+                Task {
+                    Haptics.lightImpact()
+                    await premiumStore.restorePurchases()
+                    await reloadHouseIfCovered()
+                }
             }
             .frame(maxWidth: .infinity)
         }

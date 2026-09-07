@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-09-04
+Last updated: 2026-09-07
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -904,12 +904,19 @@ fix unprompted.
   the house is covered, reloads the home context after a recorded purchase or
   restore — `householdPremium` comes from the server, so without that reload a
   successful purchase looked like nothing happened — and Casa and Hoje carry a
-  `PremiumBadge` in their headers while the house is covered. The first
-  TestFlight sandbox purchase (2026-09-06) left no server row and the refusal was
-  invisible; `verificationFailureDetails` now logs the library's status code and
-  `appAccountTokenMatches` compares case-insensitively. Sandbox subscriptions
-  expire in minutes (monthly = 5), so "Restaurar compras" hours later finds no
-  usable receipt on the device and sends nothing — that is sandbox, not a bug.
+  `PremiumBadge` in their headers while the house is covered; once covered, the
+  same sheet is a management screen (plan, price, renewal, status, what is
+  unlocked, one cobalt "Gerenciar na App Store"), and the moss activation moment
+  shows only when the house became covered while the sheet was open. The first
+  TestFlight sandbox purchase (2026-09-06) was refused every time because Apple's
+  verifier cannot run in the edge runtime (§7); **premium was proven end to end
+  on 2026-09-07** when the pending receipt was redelivered, verified by the
+  WebCrypto path, recorded with `family_id`, and the phone read "Premium ativo
+  para a casa inteira". The whole flow, the failure, and the evidence per claim
+  are in `docs/premium-flow.md`. Apple's server notifications have still never
+  arrived — the Sandbox URL in App Store Connect is the first suspect. Sandbox
+  subscriptions expire in minutes, so "Restaurar compras" hours later finds no
+  usable receipt on the device and sends nothing — sandbox, not a bug.
 - **Legal identity is deliberately blank.** `PUBLIC_NINA_LEGAL_ENTITY_NAME`,
   `…DOCUMENT`, `PUBLIC_NINA_DPO_NAME` are all `replace_with_…`. The privacy page
   self-declares `data-legal-status="incomplete"` and the online preflight fails
