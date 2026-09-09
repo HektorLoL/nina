@@ -2114,6 +2114,7 @@ struct TaskEditorSheet: View {
     @State private var didLoad = false
     @State private var loadedTaskVersion: Int?
     @State private var isShowingDeleteConfirmation = false
+    @State private var isShowingMoreChips = false
     @FocusState private var isTitleFocused: Bool
 
     private var isEditing: Bool {
@@ -2123,6 +2124,16 @@ struct TaskEditorSheet: View {
         case .add:
             false
         }
+    }
+
+    // Recurrence, reminder and priority are defaults nobody set; they stay folded until asked
+    // for, and unfold on their own the moment one of them is not the default.
+    private var hasExtraChoices: Bool {
+        recurrence != .none || reminderLead != .atTime || priority != .normal
+    }
+
+    private var showsExtraChips: Bool {
+        isShowingMoreChips || hasExtraChoices
     }
 
     private var isPlantingSeed: Bool {
@@ -2184,11 +2195,15 @@ struct TaskEditorSheet: View {
                 VStack(alignment: .leading, spacing: 14) {
                     titleField
                     subtitleField
-                    hintLine
+                    if isPlantingSeed {
+                        hintLine
+                    } else {
+                        kindSegment
+                    }
                     notificationNote
 
-                    if isEditing {
-                        NinaButton(title: "Apagar esta tarefa", kind: .quiet) {
+                    if case .edit = mode {
+                        NinaButton(title: isSeed ? "Apagar esta semente" : "Apagar esta tarefa", kind: .quiet) {
                             Haptics.warning()
                             isShowingDeleteConfirmation = true
                         }
@@ -2215,13 +2230,15 @@ struct TaskEditorSheet: View {
             await Task.yield()
             isTitleFocused = true
         }
-        .alert("Apagar esta tarefa?", isPresented: $isShowingDeleteConfirmation) {
+        .alert(isSeed ? "Apagar esta semente?" : "Apagar esta tarefa?", isPresented: $isShowingDeleteConfirmation) {
             Button("Cancelar", role: .cancel) {}
             Button("Apagar", role: .destructive) {
                 deleteTask()
             }
         } message: {
-            Text("A tarefa e o aviso agendado saem para todo mundo da casa.")
+            Text(isSeed
+                ? "A semente some para todo mundo da casa."
+                : "A tarefa e o aviso agendado somem para todo mundo da casa.")
         }
     }
 
@@ -2265,13 +2282,60 @@ struct TaskEditorSheet: View {
     }
 
     private var hintText: String? {
-        if isPlantingSeed {
-            return "Uma semente vira tarefa quando ganha dia e hora."
+        guard isPlantingSeed else { return nil }
+        return "Uma semente vira tarefa quando ganha dia e hora."
+    }
+
+    // Tarefa or Semente is a choice with two visible sides, so the primitive is met where it is
+    // decided and not discovered by tapping a chip that flips.
+    private var kindSegment: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 4) {
+                kindOption(.task)
+                kindOption(.seed)
+            }
+            .padding(4)
+            .background(
+                NinaTheme.grout,
+                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+            )
+
+            Text(isSeed
+                ? "Não tem data. Fica guardada até você plantar."
+                : "Tem dia e hora. A Nina avisa.")
+                .ninaText(.meta, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        if isSeed {
-            return "Semente não tem data. É isso mesmo."
+        .padding(.top, 4)
+    }
+
+    private func kindOption(_ option: TaskKind) -> some View {
+        let isSelected = kind == option
+        return Button {
+            guard !isSelected else { return }
+            Haptics.selection()
+            kind = option
+            if option == .seed {
+                closePanel()
+            }
+        } label: {
+            Text(option.title)
+                .ninaText(.label, isSelected ? NinaTheme.ink : NinaTheme.muted, weight: isSelected ? .semibold : .medium)
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .background(
+                    isSelected ? NinaTheme.ground : Color.clear,
+                    in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field - 4, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: NinaTheme.Radius.field - 4, style: .continuous)
+                        .strokeBorder(isSelected ? NinaTheme.ink : Color.clear, lineWidth: 1)
+                )
+                .contentShape(Rectangle())
         }
-        return nil
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityLabel(option.title)
     }
 
     @ViewBuilder
@@ -2330,24 +2394,15 @@ struct TaskEditorSheet: View {
             chipRow
 
             HStack(spacing: 12) {
-                Text("Só o título é obrigatório")
-                    .ninaText(.caption, NinaTheme.muted)
-
                 Spacer(minLength: 8)
 
-                Button {
+                NinaButton(
+                    title: primaryActionTitle,
+                    systemName: "arrow.up",
+                    isEnabled: !trimmedTitle.isEmpty
+                ) {
                     save()
-                } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(NinaTheme.onCobalt)
-                        .frame(width: 52, height: 52)
-                        .background(NinaTheme.cobalt, in: Circle())
                 }
-                .buttonStyle(.plain)
-                .disabled(trimmedTitle.isEmpty)
-                .opacity(trimmedTitle.isEmpty ? 0.4 : 1)
-                .accessibilityLabel(primaryActionTitle)
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -2359,24 +2414,6 @@ struct TaskEditorSheet: View {
     private var chipRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Button {
-                    Haptics.lightImpact()
-                    let nextKind: TaskKind = isSeed ? .task : .seed
-                    kind = nextKind
-                    if nextKind == .seed {
-                        closePanel()
-                    }
-                } label: {
-                    NinaChip(
-                        text: kind.title,
-                        isSet: true,
-                        systemName: "checkmark",
-                        isDisabled: isPlantingSeed
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(isPlantingSeed)
-
                 dateChip
 
                 Menu {
@@ -2408,82 +2445,100 @@ struct TaskEditorSheet: View {
                 }
                 .buttonStyle(.plain)
 
-                if !isSeed {
-                    Menu {
-                        ForEach(TaskRecurrence.allCases) { option in
-                            Button {
-                                Haptics.selection()
-                                recurrence = option
-                            } label: {
-                                Label(
-                                    option.title,
-                                    systemImage: recurrence == option ? "checkmark" : "repeat"
-                                )
+                if showsExtraChips {
+                    if !isSeed {
+                        Menu {
+                            ForEach(TaskRecurrence.allCases) { option in
+                                Button {
+                                    Haptics.selection()
+                                    recurrence = option
+                                } label: {
+                                    Label(
+                                        option.title,
+                                        systemImage: recurrence == option ? "checkmark" : "repeat"
+                                    )
+                                }
                             }
-                        }
-                    } label: {
-                        NinaChip(
-                            text: recurrence == .none ? "Não repete" : recurrence.shortTitle,
-                            isSet: recurrence != .none
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    Menu {
-                        ForEach(reminderLeadOptions) { option in
-                            Button {
-                                Haptics.selection()
-                                reminderLead = option
-                            } label: {
-                                Label(
-                                    option.title,
-                                    systemImage: reminderLead == option ? "checkmark" : "bell"
-                                )
-                            }
-                        }
-                    } label: {
-                        NinaChip(
-                            text: reminderLead.title,
-                            isSet: reminderLead != .atTime,
-                            isDisabled: isReminderLeadDisabled
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isReminderLeadDisabled)
-                }
-
-                Menu {
-                    ForEach(TaskPriority.allCases) { option in
-                        Button {
-                            Haptics.selection()
-                            priority = option
                         } label: {
-                            Label(
-                                option.title,
-                                systemImage: priority == option ? "checkmark" : "flag"
+                            NinaChip(
+                                text: recurrence == .none ? "Não repete" : recurrence.shortTitle,
+                                isSet: recurrence != .none
                             )
                         }
+                        .buttonStyle(.plain)
+
+                        Menu {
+                            ForEach(reminderLeadOptions) { option in
+                                Button {
+                                    Haptics.selection()
+                                    reminderLead = option
+                                } label: {
+                                    Label(
+                                        option.title,
+                                        systemImage: reminderLead == option ? "checkmark" : "bell"
+                                    )
+                                }
+                            }
+                        } label: {
+                            NinaChip(
+                                text: reminderLead.title,
+                                isSet: reminderLead != .atTime,
+                                isDisabled: isReminderLeadDisabled
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isReminderLeadDisabled)
                     }
-                } label: {
-                    NinaChip(
-                        text: priority == .normal ? "Prioridade normal" : priority.title,
-                        isSet: priority != .normal
-                    )
+
+                    Menu {
+                        ForEach(TaskPriority.allCases) { option in
+                            Button {
+                                Haptics.selection()
+                                priority = option
+                            } label: {
+                                Label(
+                                    option.title,
+                                    systemImage: priority == option ? "checkmark" : "flag"
+                                )
+                            }
+                        }
+                    } label: {
+                        NinaChip(
+                            text: priority == .normal ? "Prioridade normal" : priority.title,
+                            isSet: priority != .normal
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        Haptics.lightImpact()
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                            isShowingMoreChips = true
+                        }
+                    } label: {
+                        NinaChip(text: "Mais", systemName: "plus")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isSeed ? "Mais opções: prioridade" : "Mais opções: repetição, aviso e prioridade")
                 }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 2)
         }
         .scrollClipDisabled()
+        .chipRowTrailingFade()
     }
 
-    // A seed's date chip is present and dead: the primitive is taught where the
-    // control would have been, not in a paragraph somewhere else.
+    // A seed's date slot stays where the control would have been, readable and not a control.
     @ViewBuilder
     private var dateChip: some View {
         if isSeed {
-            NinaChip(text: "Sem data", isDisabled: true)
+            Text("Sem data")
+                .ninaText(.label, NinaTheme.muted, weight: .medium)
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(NinaTheme.grout, in: Capsule())
+                .accessibilityLabel("Sem data. Semente não tem data.")
         } else {
             Button {
                 Haptics.lightImpact()
@@ -2507,7 +2562,7 @@ struct TaskEditorSheet: View {
                 displayedComponents: [.date, .hourAndMinute]
             )
             .labelsHidden()
-            .tint(NinaTheme.cobalt)
+            .tint(NinaTheme.ink)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
@@ -2561,7 +2616,7 @@ struct TaskEditorSheet: View {
                         createCategory()
                     } label: {
                         Text("Criar")
-                            .ninaText(.label, NinaTheme.cobalt, weight: .semibold)
+                            .ninaText(.label, NinaTheme.ink, weight: .semibold)
                     }
                     .buttonStyle(.plain)
                     .disabled(newCategoryTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -3045,24 +3100,15 @@ struct ShoppingEditorSheet: View {
             .scrollClipDisabled()
 
             HStack(spacing: 12) {
-                Text("Só o nome é obrigatório")
-                    .ninaText(.caption, NinaTheme.muted)
-
                 Spacer(minLength: 8)
 
-                Button {
+                NinaButton(
+                    title: isEditing ? "Salvar item" : "Adicionar item",
+                    systemName: "arrow.up",
+                    isEnabled: !trimmedTitle.isEmpty
+                ) {
                     save(keepingSheetOpen: false)
-                } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(NinaTheme.onCobalt)
-                        .frame(width: 52, height: 52)
-                        .background(NinaTheme.cobalt, in: Circle())
                 }
-                .buttonStyle(.plain)
-                .disabled(trimmedTitle.isEmpty)
-                .opacity(trimmedTitle.isEmpty ? 0.4 : 1)
-                .accessibilityLabel(isEditing ? "Salvar item" : "Adicionar item")
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)

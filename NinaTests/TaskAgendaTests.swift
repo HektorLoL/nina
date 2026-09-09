@@ -73,26 +73,59 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertNil(task.displayDate(relativeTo: now, calendar: calendar))
     }
 
-    func testAMissedDailyTaskShowsTodaysOccurrenceRatherThanTheStaleStoredDate() {
+    func testAMissedDailyTaskReadsAsLateSinceItsLastOccurrence() {
         var daily = task(dueAt: date(year: 2026, month: 8, day: 5, hour: 21, minute: 0))
         daily.recurrence = .daily
 
         let displayed = daily.displayDate(relativeTo: now, calendar: calendar)
 
-        XCTAssertEqual(displayed, date(year: 2026, month: 8, day: 8, hour: 21, minute: 0))
-        XCTAssertTrue(daily.isDue(on: now, calendar: calendar))
+        XCTAssertEqual(displayed, date(year: 2026, month: 8, day: 7, hour: 21, minute: 0))
+        XCTAssertFalse(daily.isDue(on: now, calendar: calendar))
         XCTAssertTrue(daily.belongsOnAgenda(for: now, calendar: calendar))
+        XCTAssertTrue(daily.isOverdue(relativeTo: now, calendar: calendar))
+    }
+
+    func testAMissedWeeklyTaskReadsAsLateSinceThisWeeksOccurrenceNotTheFirstMissedOne() {
+        var weekly = task(dueAt: date(year: 2026, month: 7, day: 13, hour: 9, minute: 0))
+        weekly.recurrence = .weekly
+
+        XCTAssertEqual(
+            weekly.displayDate(relativeTo: now, calendar: calendar),
+            date(year: 2026, month: 8, day: 3, hour: 9, minute: 0)
+        )
+        XCTAssertTrue(weekly.isOverdue(relativeTo: now, calendar: calendar))
+    }
+
+    func testARecurringTaskMarkedDoneForTodayShowsTheNextOccurrenceAndIsNotLate() {
+        var daily = task(dueAt: date(year: 2026, month: 8, day: 8, hour: 21, minute: 0))
+        daily.recurrence = .daily
+
+        XCTAssertEqual(
+            daily.displayDate(relativeTo: now, calendar: calendar),
+            date(year: 2026, month: 8, day: 8, hour: 21, minute: 0)
+        )
+        XCTAssertTrue(daily.isDue(on: now, calendar: calendar))
         XCTAssertFalse(daily.isOverdue(relativeTo: now, calendar: calendar))
     }
 
-    func testTheScreenAndTheNotificationSchedulerAgreeOnARecurringTask() {
-        var daily = task(dueAt: date(year: 2026, month: 8, day: 5, hour: 21, minute: 0))
+    func testTheScreenAndTheNotificationSchedulerAgreeOnACurrentRecurringTask() {
+        var daily = task(dueAt: date(year: 2026, month: 8, day: 8, hour: 21, minute: 0))
         daily.recurrence = .daily
 
         let displayed = daily.displayDate(relativeTo: now, calendar: calendar)
         let nextScheduled = daily.scheduledOccurrences(after: now, limit: 1, calendar: calendar).first
 
         XCTAssertEqual(displayed, nextScheduled)
+    }
+
+    func testAMissedRecurringTaskStillSchedulesItsNextOccurrenceWhileTheScreenShowsTheMissedOne() {
+        var daily = task(dueAt: date(year: 2026, month: 8, day: 5, hour: 21, minute: 0))
+        daily.recurrence = .daily
+
+        let nextScheduled = daily.scheduledOccurrences(after: now, limit: 1, calendar: calendar).first
+
+        XCTAssertEqual(nextScheduled, date(year: 2026, month: 8, day: 8, hour: 21, minute: 0))
+        XCTAssertNotEqual(daily.displayDate(relativeTo: now, calendar: calendar), nextScheduled)
     }
 
     func testARecurringTaskPastTodaysOccurrenceReadsAsOverdueToday() {

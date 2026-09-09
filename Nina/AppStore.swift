@@ -1398,7 +1398,6 @@ final class AppStore {
             return true
         } catch {
             guard isCurrentHomeContext(contextToken) else { return false }
-            ninaConnectionNotice = "Não foi possível confirmar essa ação agora."
             Haptics.error()
             return false
         }

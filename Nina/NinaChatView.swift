@@ -1223,6 +1223,7 @@ private struct NinaProposalCard: View {
     @State private var isEditing = false
     @State private var isResolving = false
     @State private var isConfirmingShare = false
+    @State private var resolveFailure: String?
 
     init(proposal: NinaProposal) {
         self.proposal = proposal
@@ -1287,10 +1288,9 @@ private struct NinaProposalCard: View {
             }
 
             if proposal.kind == .memory, proposal.state == .pending {
-                NinaButton(title: isEditing ? "Fechar" : "Corrigir o texto", kind: .outline) {
-                    Haptics.selection()
-                    isEditing.toggle()
-                }
+                Text("Guardada, ela entra nas próximas conversas. Fica em Casa · Memórias.")
+                    .ninaText(.meta, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             proposalBasis
@@ -1298,13 +1298,13 @@ private struct NinaProposalCard: View {
             extractedReadings
 
             if isEditing && proposal.state == .pending {
-                VStack(spacing: 8) {
+                VStack(spacing: 12) {
                     proposalField("Título", text: $draftTitle)
                     proposalField("Detalhes", text: $draftDetail)
                     if proposal.kind != .memory {
-                        proposalField("Responsável", text: $draftOwner)
+                        ownerPicker
                         if !isSeed {
-                            proposalField("Quando", text: $draftDueLabel)
+                            proposalField("Quando", text: $draftDueLabel, hint: dueCorrectionHint)
                         }
                     }
                     if proposal.kind == .shopping {
@@ -1524,24 +1524,111 @@ private struct NinaProposalCard: View {
         .accessibilityElement(children: .combine)
     }
 
+    // The row shows the date Nina actually scheduled, not the words she used for it: a label
+    // that parsed to nothing is confirmed as undated, and the person sees that before accepting.
     private var scheduleValue: String {
         if isSeed {
-            return "sem data, e tudo bem"
+            return "Sem data · plante depois"
         }
-        guard confirmationPayload.dueAt != nil else {
-            return "\(confirmationPayload.dueLabel) · sem lembrete"
+        if let date = confirmationPayload.scheduledDate {
+            return AppStore.taskDueLabel(for: date)
         }
-        return confirmationPayload.dueLabel
+        let label = confirmationPayload.dueLabel
+        guard !label.isEmpty, label.caseInsensitiveCompare("Sem data") != .orderedSame else {
+            return "Sem data · sem lembrete"
+        }
+        return "\(label) · sem data, sem lembrete"
+    }
+
+    private var dueCorrectionHint: String {
+        let typed = draftDueLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if typed.isEmpty {
+            return "Vai ficar sem data e sem lembrete."
+        }
+        if let date = confirmationPayload.scheduledDate {
+            return "Vai ficar: \(AppStore.taskDueLabel(for: date))."
+        }
+        return "Não entendi essa data. Vai ficar sem lembrete. Tente \"amanhã\", \"18:00\" ou \"15/09\"."
     }
 
     private var ownerValue: String {
         HouseholdWorkload.isSharedOwner(confirmationPayload.owner)
-            ? "A casa, por enquanto"
+            ? "Ninguém ainda"
             : confirmationPayload.owner
+    }
+
+    private var ownerOptions: [TaskOwnerChoice] {
+        TaskOwnerChoice.options(
+            members: store.familyGroup.members,
+            selectedName: draftOwner,
+            selectedMemberID: nil
+        )
+    }
+
+    private func isSelectedOwner(_ option: TaskOwnerChoice) -> Bool {
+        HouseholdWorkload.isSameOwner(option.name, draftOwner)
+    }
+
+    private var selectedOwnerLabel: String {
+        if HouseholdWorkload.isSharedOwner(draftOwner) { return "Ninguém ainda" }
+        return ownerOptions.first(where: isSelectedOwner)?.label ?? draftOwner
+    }
+
+    // The owner is picked from the house, never typed: a misspelt name would create work for
+    // someone who does not live here.
+    private var ownerPicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Dono")
+                .ninaText(.caption, NinaTheme.muted)
+
+            Menu {
+                ForEach(ownerOptions) { option in
+                    Button {
+                        Haptics.selection()
+                        draftOwner = option.name
+                    } label: {
+                        Label(
+                            HouseholdWorkload.isSharedOwner(option.name) ? "Ninguém ainda" : option.label,
+                            systemImage: isSelectedOwner(option) ? "checkmark" : "person"
+                        )
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(selectedOwnerLabel)
+                        .ninaText(.label, NinaTheme.ink)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(NinaTheme.muted)
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .background(
+                    NinaTheme.grout,
+                    in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dono: \(selectedOwnerLabel)")
+        }
     }
 
     private var actions: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let resolveFailure, proposal.state == .pending {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.circle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(NinaTheme.ink)
+                    Text(resolveFailure)
+                        .ninaText(.caption, NinaTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+            }
+
             if proposal.state == .pending {
                 if proposal.kind == .memory {
                     memoryActions
@@ -1568,7 +1655,7 @@ private struct NinaProposalCard: View {
 
             HStack(spacing: 8) {
                 NinaButton(
-                    title: isEditing ? "Fechar" : correctionTitle,
+                    title: isEditing ? "Pronto" : correctionTitle,
                     kind: .outline,
                     fillsWidth: true
                 ) {
@@ -1614,8 +1701,15 @@ private struct NinaProposalCard: View {
             }
             .padding(.top, 2)
 
-            NinaButton(title: "Não guardar nada", kind: .quiet, fillsWidth: true) {
-                resolve(decision: .reject)
+            HStack(spacing: 8) {
+                NinaButton(title: isEditing ? "Pronto" : "Corrigir o texto", kind: .quiet, fillsWidth: true) {
+                    Haptics.selection()
+                    isEditing.toggle()
+                }
+
+                NinaButton(title: "Não guardar nada", kind: .quiet, fillsWidth: true) {
+                    resolve(decision: .reject)
+                }
             }
             .padding(.top, 4)
         }
@@ -1655,18 +1749,33 @@ private struct NinaProposalCard: View {
         return proposal.kind == .memory ? "Você guardou." : "Você confirmou."
     }
 
-    private func proposalField(_ title: String, text: Binding<String>) -> some View {
-        TextField(title, text: text)
-            .font(.system(size: 15, weight: .regular))
-            .foregroundStyle(NinaTheme.ink)
-            .tint(NinaTheme.cobalt)
-            .textFieldStyle(.plain)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
-            .background(
-                NinaTheme.grout,
-                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
-            )
+    private func proposalField(
+        _ title: String,
+        text: Binding<String>,
+        hint: String? = nil
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .ninaText(.caption, NinaTheme.muted)
+
+            TextField(title, text: text)
+                .ninaText(.label, NinaTheme.ink)
+                .tint(NinaTheme.cobalt)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .background(
+                    NinaTheme.grout,
+                    in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+                )
+                .accessibilityLabel(title)
+
+            if let hint {
+                Text(hint)
+                    .ninaText(.meta, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private func resolve(
@@ -1674,16 +1783,22 @@ private struct NinaProposalCard: View {
         memoryVisibility: NinaMemoryVisibility? = nil
     ) {
         isResolving = true
+        resolveFailure = nil
         let payload = confirmationPayload
 
         Task {
-            _ = await store.resolveProposal(
+            let resolved = await store.resolveProposal(
                 proposal,
                 decision: decision,
                 editedPayload: decision == .accept ? payload : nil,
                 memoryVisibility: memoryVisibility
             )
             isResolving = false
+            if !resolved {
+                resolveFailure = decision == .accept
+                    ? "Não deu para confirmar agora. Nada entrou na casa. Tente de novo."
+                    : "Não deu para responder agora. Tente de novo."
+            }
         }
     }
 }

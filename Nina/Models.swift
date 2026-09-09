@@ -650,8 +650,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
     }
 
-    // A recurring task's stored dueAt goes stale as soon as one occurrence passes. Resolving the
-    // current period here is what keeps the screen and the scheduled notifications agreeing.
+    // A missed occurrence of a repeating task stays late until a person marks it; only a task
+    // that is current shows its next occurrence.
     func displayDate(
         relativeTo referenceDate: Date = .now,
         calendar: Calendar = .current
@@ -660,10 +660,10 @@ struct TaskItem: Identifiable, Codable, Hashable {
             return snoozedUntil
         }
 
-        guard recurrence != .none, dueAt != nil else { return effectiveDueDate }
+        guard recurrence != .none, let dueAt else { return effectiveDueDate }
+        guard dueAt <= referenceDate else { return dueAt }
 
-        let periodStart = calendar.startOfDay(for: referenceDate).addingTimeInterval(-1)
-        return scheduledOccurrence(after: periodStart, calendar: calendar) ?? effectiveDueDate
+        return latestOccurrence(onOrBefore: referenceDate, calendar: calendar) ?? dueAt
     }
 
     var effectiveDueDate: Date? {
@@ -744,22 +744,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         calendar: Calendar = .current
     ) -> Date? {
         guard let dueAt else { return nil }
-        guard recurrence != .none else { return dueAt }
+        guard let components = recurrenceComponents(calendar: calendar) else { return dueAt }
         guard dueAt <= referenceDate else { return dueAt }
-
-        let components: DateComponents
-        switch recurrence {
-        case .none:
-            return dueAt
-        case .daily:
-            components = calendar.dateComponents([.hour, .minute], from: dueAt)
-        case .weekly:
-            components = calendar.dateComponents([.weekday, .hour, .minute], from: dueAt)
-        case .monthly:
-            components = calendar.dateComponents([.day, .hour, .minute], from: dueAt)
-        case .yearly:
-            components = calendar.dateComponents([.month, .day, .hour, .minute], from: dueAt)
-        }
 
         return calendar.nextDate(
             after: referenceDate,
@@ -768,6 +754,41 @@ struct TaskItem: Identifiable, Codable, Hashable {
             repeatedTimePolicy: .first,
             direction: .forward
         )
+    }
+
+    private func latestOccurrence(
+        onOrBefore referenceDate: Date,
+        calendar: Calendar
+    ) -> Date? {
+        guard let dueAt, dueAt <= referenceDate,
+              let components = recurrenceComponents(calendar: calendar),
+              let occurrence = calendar.nextDate(
+                  after: referenceDate.addingTimeInterval(1),
+                  matching: components,
+                  matchingPolicy: .previousTimePreservingSmallerComponents,
+                  repeatedTimePolicy: .first,
+                  direction: .backward
+              ),
+              occurrence <= referenceDate else {
+            return nil
+        }
+        return max(occurrence, dueAt)
+    }
+
+    private func recurrenceComponents(calendar: Calendar) -> DateComponents? {
+        guard let dueAt else { return nil }
+        switch recurrence {
+        case .none:
+            return nil
+        case .daily:
+            return calendar.dateComponents([.hour, .minute], from: dueAt)
+        case .weekly:
+            return calendar.dateComponents([.weekday, .hour, .minute], from: dueAt)
+        case .monthly:
+            return calendar.dateComponents([.day, .hour, .minute], from: dueAt)
+        case .yearly:
+            return calendar.dateComponents([.month, .day, .hour, .minute], from: dueAt)
+        }
     }
 
     func scheduledOccurrences(
@@ -1129,6 +1150,17 @@ struct NinaProposalPayload: Codable, Hashable {
     }
 
     private static let dueAtFormatter = ISO8601DateFormatter()
+
+    private static let fractionalDueAtFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    var scheduledDate: Date? {
+        guard let dueAt else { return nil }
+        return Self.dueAtFormatter.date(from: dueAt) ?? Self.fractionalDueAtFormatter.date(from: dueAt)
+    }
 
     // Confirming a corrected label has to move the scheduled date with it, and a correction
     // Nina cannot parse lands undated rather than keeping the date she originally proposed.
