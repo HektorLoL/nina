@@ -86,3 +86,21 @@ Two smaller findings from the same analysis:
 - **Sandbox timing** is not production timing: a monthly plan renews every few minutes and expires within the hour, so "Restaurar compras" hours later finds nothing usable on the device and sends nothing. That is sandbox behaviour, not a defect.
 - **Before submission** set `NINA_APP_STORE_ENVIRONMENT=production` again (unset during TestFlight so sandbox receipts verify) and paste the OpenAI key into `config/production.env` so the release gate goes fully green.
 - **Denials are still plain chat lines**: a free household that hits a ceiling gets a sentence from Nina, not a button to the paywall. Recorded in `CLAUDE.md` §13.
+
+## App-side proof, 2026-09-09
+
+Run in the iOS simulator (iPhone 17 Pro, signed Debug build) against
+production, signed in by email with a throwaway user whose house was marked
+premium through a fixture row in `premium_subscriptions` (the membership
+trigger attached `family_id` the moment the house was created). Observed, in
+order: the Casa header carried the PREMIUM badge; Ajustes showed the block
+"Premium ativo para a casa inteira" with the renewal date and the button
+"Ver a assinatura"; that button opened the management screen — plan, price,
+renewal, status, what is unlocked, one cobalt "Gerenciar na App Store", and
+"Restaurar compras". The fixture row, the house, and the user were deleted
+afterwards.
+
+Two things the same run exposed that were not premium's fault: an unsigned
+simulator build cannot persist the session (Keychain `-34018`), and three
+production auth settings had email login broken (provider off, dead SMTP key,
+2 emails/hour). Both are recorded in `CLAUDE.md` §12.

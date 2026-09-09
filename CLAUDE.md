@@ -857,6 +857,26 @@ consumes quota. This ordering is deliberate and asserted by a test — do not
 "optimize" it. Note that document attachments are never moderated; only text and
 images are.
 
+**Three production auth settings silently broke email login until 2026-09-09.**
+Found while proving premium on a simulator: the email provider was disabled
+(`external_email_enabled = false`, so "Usar meu email" could never work), the
+SMTP password was a deleted Resend key ("Error sending magic link email"), and
+`rate_limit_email_sent` was Supabase's built-in-mail default of **2 per hour
+for the whole project**. All three were fixed through the Management API
+(`PATCH /v1/projects/{ref}/config/auth`; the rate limit only accepts a PATCH
+that carries the full SMTP block). Raise the hourly cap again before real
+families sign up, and check `rate_limit_*` whenever a login "fails for no
+reason".
+
+**An unsigned simulator build cannot use the Keychain.** Building with
+`CODE_SIGNING_ALLOWED=NO` makes every `SecItem` call fail with `-34018`; the
+Supabase SDK logs "Failed to store session" only through its optional logger,
+so sign-in looks like "Não foi possível entrar agora" after a *correct* code
+and nothing persists. For any simulator check that signs in, build without that
+flag (ad-hoc signing is automatic). Also: one simulator at a time — a second
+session driving the same device produces phantom taps, and three booted
+devices wedged CoreSimulator on 2026-09-09.
+
 **`Tools/run_nina_ai_eval.mjs` mutates real project auth settings**, creates real
 Auth users, and deletes a real family. It defaults to the production project
 ref. **Never run it against production.**
@@ -931,7 +951,10 @@ fix unprompted.
   are in `docs/premium-flow.md`. Apple's server notifications arrive and are applied: on 2026-09-07 a
   `DID_CHANGE_RENEWAL_STATUS` and an `EXPIRED` notification were verified,
   stored, and the subscription row went to `expired` — the whole loop is
-  proven in sandbox. Sandbox
+  proven in sandbox. The app side was proven on 2026-09-09 in the simulator
+  against production with a throwaway house: the Casa header badge, the
+  Ajustes block "Premium ativo para a casa inteira", and "Ver a assinatura"
+  opening the management screen (screenshot in `docs/premium-flow.md`). Sandbox
   subscriptions expire in minutes, so "Restaurar compras" hours later finds no
   usable receipt on the device and sends nothing — sandbox, not a bug.
 - **Legal identity is deliberately blank.** `PUBLIC_NINA_LEGAL_ENTITY_NAME`,
