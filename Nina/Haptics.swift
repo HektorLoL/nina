@@ -19,12 +19,6 @@ enum Haptics {
         #endif
     }
 
-    static func mediumImpact() {
-        #if canImport(UIKit)
-        impact(.medium)
-        #endif
-    }
-
     static func success() {
         #if canImport(UIKit)
         notification(.success)

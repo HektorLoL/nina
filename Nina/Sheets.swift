@@ -3271,38 +3271,6 @@ struct InviteFamilySheet: View {
     }
 }
 
-struct MemberDetailSheet: View {
-    @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
-    var memberID: UUID
-
-    var body: some View {
-        Group {
-            if let member = store.familyGroup.members.first(where: { $0.id == memberID }) {
-                MemberDetailView(member: member)
-            } else {
-                VStack(spacing: 0) {
-                    SheetHeader(eyebrow: "Pessoa") {
-                        dismiss()
-                    }
-
-                    ZeroState(
-                        headline: "Essa pessoa não está mais na casa.",
-                        body_: "Alguém com permissão pode ter removido o perfil.",
-                        showsMark: false
-                    )
-                    .padding(.horizontal, 20)
-                    .padding(.top, 40)
-
-                    Spacer()
-                }
-                .ninaSheetBackground()
-            }
-        }
-        .toolbar(.hidden, for: .navigationBar)
-    }
-}
-
 struct SuggestionDetailSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss

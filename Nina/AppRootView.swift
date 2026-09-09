@@ -38,7 +38,6 @@ enum SheetDestination: Identifiable, Hashable {
     case settings
     case premium
     case addTask
-    case addTaskInSection(String)
     case editTask(UUID)
     case plantSeed(UUID)
     case addShoppingItem
@@ -56,8 +55,6 @@ enum SheetDestination: Identifiable, Hashable {
             "premium"
         case .addTask:
             "add-task"
-        case .addTaskInSection(let sectionID):
-            "add-task-\(sectionID)"
         case .editTask(let id):
             "edit-task-\(id.uuidString)"
         case .plantSeed(let id):
@@ -934,8 +931,6 @@ private struct SheetDestinationsModifier: ViewModifier {
                     PremiumBenefitsSheet()
                 case .addTask:
                     TaskEditorSheet(mode: .add(sectionID: AppStore.houseTasksSectionID))
-                case .addTaskInSection(let sectionID):
-                    TaskEditorSheet(mode: .add(sectionID: sectionID))
                 case .editTask(let id):
                     TaskEditorSheet(mode: .edit(id))
                 case .plantSeed(let id):

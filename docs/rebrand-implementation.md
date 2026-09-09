@@ -288,6 +288,16 @@ fixes. The departures from the boards and from earlier rounds, all deliberate:
 - **Web readability**: every phone-mockup label has a 12px floor via `max()`,
   the floating-note eyebrows are 12px, the dialog error text wins its
   specificity, and the invite code wraps on its own row at phone widths.
+- **The last raw fonts on text are gone** (2026-09-09): the login, setup,
+  member and profile field wrappers, the chat composer, the proposal and
+  suggestion titles, and the photo picker label all go through `.ninaText`.
+  What remains on `.font(.system(size:))` is SF Symbols and avatar initials,
+  which are glyphs sized to their container and must not scale.
+- **Dead code removed**: `NinaText.hero`, `NinaTheme.cobaltDeep`,
+  `Radius.chip`, `Haptics.mediumImpact`, `PremiumTeaserCopy.title/subtitle`,
+  `AppStore.pendingPriorityTaskIDs` with its two mutators, `MemberDetailSheet`,
+  and `SheetDestination.addTaskInSection`. None had a caller; the backlog's
+  references to them are historical.
 
 ## 7. Verified
 

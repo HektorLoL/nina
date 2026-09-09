@@ -268,11 +268,9 @@ struct NinaDivider: View {
     }
 }
 
-// A household that already pays is never sold to again, so the active copy is a
-// separate string rather than the selling copy with a badge on it.
+// A household that already pays is never sold to again, so the active copy is
+// its own string and never the paywall's selling line with a badge on it.
 enum PremiumTeaserCopy {
-    static let title = "Nina Premium"
-    static let subtitle = "Documento por foto, mais conversa por dia e o resumo semanal da casa."
     static let activeTitle = "Premium ativo para a casa inteira."
     static let activeSubtitle = "Vale para todo mundo daqui, sem cada um assinar o seu."
 }

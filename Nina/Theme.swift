@@ -11,7 +11,6 @@ enum NinaTheme {
     static let muted = Color(hex: 0x5C6675)
     static let faint = Color(hex: 0x646E7C)
     static let cobalt = Color(hex: 0x1B4FD8)
-    static let cobaltDeep = Color(hex: 0x153CA6)
     static let cobaltWash = Color(hex: 0xE6EDFC)
     static let terracotta = Color(hex: 0xC2410C)
     static let terracottaWash = Color(hex: 0xFBEAE1)
@@ -22,7 +21,6 @@ enum NinaTheme {
     static let onCobalt = Color.white
 
     enum Radius {
-        static let chip: CGFloat = 999
         static let field: CGFloat = 14
         static let card: CGFloat = 20
         static let sheet: CGFloat = 28
@@ -46,7 +44,6 @@ extension Color {
 // Fraunces carries brand voice — screen titles, Nina's own speech, the one big
 // number. Anything monolinear is interface and stays on the system face.
 enum NinaText {
-    case hero
     case compose
     case display
     case screen
@@ -62,14 +59,13 @@ enum NinaText {
 
     fileprivate var isDisplay: Bool {
         switch self {
-        case .hero, .display, .screen, .zero, .title, .section: true
+        case .display, .screen, .zero, .title, .section: true
         default: false
         }
     }
 
     fileprivate var size: CGFloat {
         switch self {
-        case .hero: 44
         case .compose: 27
         case .display: 34
         case .screen: 31
@@ -87,7 +83,6 @@ enum NinaText {
 
     fileprivate var leading: CGFloat {
         switch self {
-        case .hero: 50
         case .compose: 34
         case .display: 40
         case .screen: 37
@@ -105,7 +100,7 @@ enum NinaText {
 
     fileprivate var tracking: CGFloat {
         switch self {
-        case .hero, .display, .screen, .zero: -0.5
+        case .display, .screen, .zero: -0.5
         case .compose: -0.4
         case .title, .section: -0.2
         case .eyebrow: 1.1
@@ -118,7 +113,7 @@ enum NinaText {
     // it is metered, so without this the serif grew and the sans did not.
     fileprivate var textStyle: Font.TextStyle {
         switch self {
-        case .hero, .display: .largeTitle
+        case .display: .largeTitle
         case .compose: .title
         case .screen, .zero: .title
         case .title: .title2
@@ -132,7 +127,7 @@ enum NinaText {
 
     fileprivate var uiTextStyle: UIFont.TextStyle {
         switch self {
-        case .hero, .display: .largeTitle
+        case .display: .largeTitle
         case .compose: .title1
         case .screen, .zero: .title1
         case .title: .title2

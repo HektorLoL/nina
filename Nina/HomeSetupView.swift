@@ -321,8 +321,7 @@ private struct HomeSetupField<Field: View>: View {
             Text(title).ninaText(.meta, NinaTheme.muted)
 
             field
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(NinaTheme.ink)
+                .ninaText(.body, NinaTheme.ink)
                 .textFieldStyle(.plain)
                 .lineLimit(1)
         }

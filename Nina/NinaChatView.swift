@@ -361,8 +361,7 @@ private struct ChatInputBar: View {
                 HStack(alignment: .bottom, spacing: 10) {
                     TextField("Escreva pra Nina", text: $draft, axis: .vertical)
                         .lineLimit(1...4)
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(NinaTheme.ink)
+                        .ninaText(.body, NinaTheme.ink)
                         .tint(NinaTheme.cobalt)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 13)
@@ -1364,9 +1363,7 @@ private struct NinaProposalCard: View {
             Text(confirmationPayload.title).ninaText(.section)
         } else {
             Text(confirmationPayload.title)
-                .font(.system(size: 17, weight: .semibold))
-                .tracking(-0.1)
-                .foregroundStyle(NinaTheme.ink)
+                .ninaText(.body, NinaTheme.ink, weight: .semibold)
         }
     }
 
@@ -1850,9 +1847,7 @@ private struct SuggestionMiniCard: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(suggestion.title)
-                        .font(.system(size: 17, weight: .semibold))
-                        .tracking(-0.1)
-                        .foregroundStyle(NinaTheme.ink)
+                        .ninaText(.body, NinaTheme.ink, weight: .semibold)
 
                     Text(suggestion.detail)
                         .ninaText(.caption, NinaTheme.muted)

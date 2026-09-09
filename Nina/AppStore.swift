@@ -208,7 +208,6 @@ final class AppStore {
     var householdPremium: HouseholdPremium = .inactive
     var ninaThread: NinaThread?
     var ninaMemories: [NinaMemory]
-    var pendingPriorityTaskIDs: Set<TaskItem.ID> = []
     var isNinaResponding = false
     var ninaConnectionNotice: String?
     var taskEditConflict: TaskEditConflict?
@@ -447,7 +446,6 @@ final class AppStore {
         activeUser = user
         let contextToken = currentHomeContextToken
         loadAIMemoryConsent(for: user?.id)
-        pendingPriorityTaskIDs = []
         taskEditConflict = nil
         syncErrorMessage = nil
         inviteStatus = nil
@@ -1627,7 +1625,6 @@ final class AppStore {
         pendingJoinRequest = nil
         familyAccessDecision = nil
         joinRequests = []
-        pendingPriorityTaskIDs = []
         isNinaResponding = false
         ninaConnectionNotice = nil
         taskEditConflict = nil
@@ -1958,18 +1955,6 @@ final class AppStore {
 
     func acceptRemoteTaskConflict() {
         taskEditConflict = nil
-    }
-
-    func markPriorityTaskPending(_ id: TaskItem.ID) {
-        var pendingIDs = pendingPriorityTaskIDs
-        pendingIDs.insert(id)
-        pendingPriorityTaskIDs = pendingIDs
-    }
-
-    func clearPriorityTaskPending(_ id: TaskItem.ID) {
-        var pendingIDs = pendingPriorityTaskIDs
-        pendingIDs.remove(id)
-        pendingPriorityTaskIDs = pendingIDs
     }
 
     func addShoppingItem(title: String, amount: String, owner: String, ownerMemberID: UUID? = nil) {

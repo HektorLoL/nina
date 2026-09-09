@@ -202,8 +202,8 @@ final class PremiumSubscriptionTests: XCTestCase {
     }
 
     func testTheTeaserStopsSellingOnceTheHouseholdIsPremium() {
-        XCTAssertNotEqual(PremiumTeaserCopy.activeTitle, PremiumTeaserCopy.title)
-        XCTAssertNotEqual(PremiumTeaserCopy.activeSubtitle, PremiumTeaserCopy.subtitle)
+        XCTAssertNotEqual(PremiumTeaserCopy.activeTitle, PremiumPlan.mock.heroTitle)
+        XCTAssertNotEqual(PremiumTeaserCopy.activeSubtitle, PremiumPlan.mock.heroSubtitle)
         XCTAssertTrue(PremiumTeaserCopy.activeTitle.contains("ativo"))
         XCTAssertFalse(PremiumTeaserCopy.activeSubtitle.contains("!"))
     }

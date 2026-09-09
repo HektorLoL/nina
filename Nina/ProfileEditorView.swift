@@ -195,11 +195,9 @@ struct ProfileEditorView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                         Text(hasPhoto ? "Trocar foto" : "Escolher foto")
-                            .font(.system(size: 16, weight: .semibold))
-                            .tracking(-0.1)
-                            .foregroundStyle(NinaTheme.ink)
+                            .ninaText(.body, NinaTheme.ink, weight: .semibold)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 50)
+                            .frame(minHeight: 50)
                             .contentShape(Rectangle())
                             .overlay(
                                 RoundedRectangle(
@@ -525,8 +523,7 @@ private struct ProfileField<Field: View>: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).ninaText(.meta, NinaTheme.muted)
             field
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(NinaTheme.ink)
+                .ninaText(.body, NinaTheme.ink)
                 .tint(NinaTheme.cobalt)
         }
         .padding(.horizontal, 14)
@@ -549,8 +546,7 @@ private struct ProfileReadOnlyField: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(label).ninaText(.meta, NinaTheme.muted)
                 Text(value)
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(NinaTheme.ink)
+                    .ninaText(.body, NinaTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }

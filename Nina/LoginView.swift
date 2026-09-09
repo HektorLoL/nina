@@ -275,8 +275,7 @@ private struct LoginField_<Field: View>: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).ninaText(.meta, NinaTheme.muted)
             field
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(NinaTheme.ink)
+                .ninaText(.body, NinaTheme.ink)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
