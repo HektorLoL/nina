@@ -918,8 +918,10 @@ fix unprompted.
   on 2026-09-07** when the pending receipt was redelivered, verified by the
   WebCrypto path, recorded with `family_id`, and the phone read "Premium ativo
   para a casa inteira". The whole flow, the failure, and the evidence per claim
-  are in `docs/premium-flow.md`. Apple's server notifications have still never
-  arrived — the Sandbox URL in App Store Connect is the first suspect. Sandbox
+  are in `docs/premium-flow.md`. Apple's server notifications arrive and are applied: on 2026-09-07 a
+  `DID_CHANGE_RENEWAL_STATUS` and an `EXPIRED` notification were verified,
+  stored, and the subscription row went to `expired` — the whole loop is
+  proven in sandbox. Sandbox
   subscriptions expire in minutes, so "Restaurar compras" hours later finds no
   usable receipt on the device and sends nothing — sandbox, not a bug.
 - **Legal identity is deliberately blank.** `PUBLIC_NINA_LEGAL_ENTITY_NAME`,
@@ -935,7 +937,7 @@ fix unprompted.
   sits in both `.example` inventories. Both subscriptions (Brazil only, Family
   Sharing on) and a sandbox tester exist since 2026-09-04; the server-notification
   URL is `https://apemftmlsjocvifbptum.supabase.co/functions/v1/app-store-server-notifications`
-  and still has to be pasted into App Store Connect. **Version 1.0 build 1 was
+  and is set for both Production and Sandbox (confirmed 2026-09-09). **Version 1.0 build 1 was
   uploaded to TestFlight on 2026-09-04**, archived from the sources tagged
   `testflight-1.0-1`; nothing has been released. The archive passed every
   artifact check of the production preflight; the App Store verifier is

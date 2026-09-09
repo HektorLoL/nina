@@ -82,7 +82,7 @@ Two smaller findings from the same analysis:
 
 ## 5. Still open
 
-- **Apple's server notifications have never arrived** (`app_store_server_notifications` is empty after a sandbox purchase and its renewals). Either the Sandbox URL is not set in App Store Connect → App Information → App Store Server Notifications, or Apple is refusing our endpoint. Until this is confirmed, a cancellation only reaches Nina when the phone next syncs its receipt.
+- **Apple's server notifications arrive and are applied.** Confirmed 2026-09-09: both URL fields in App Store Connect hold the function's address, and `app_store_server_notifications` holds a `DID_CHANGE_RENEWAL_STATUS` (`AUTO_RENEW_DISABLED`, 2026-09-07 01:37 UTC) and an `EXPIRED` (`VOLUNTARY`, 2026-09-07 20:24 UTC), both processed; the subscription row carries `latest_notification_type = EXPIRED`, `status = expired`, `is_active = false`. A cancellation therefore reaches Nina from Apple, not only from the phone's next sync.
 - **Sandbox timing** is not production timing: a monthly plan renews every few minutes and expires within the hour, so "Restaurar compras" hours later finds nothing usable on the device and sends nothing. That is sandbox behaviour, not a defect.
 - **Before submission** set `NINA_APP_STORE_ENVIRONMENT=production` again (unset during TestFlight so sandbox receipts verify) and paste the OpenAI key into `config/production.env` so the release gate goes fully green.
 - **Denials are still plain chat lines**: a free household that hits a ceiling gets a sentence from Nina, not a button to the paywall. Recorded in `CLAUDE.md` §13.
