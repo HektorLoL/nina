@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-09-07
+Last updated: 2026-09-09
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -361,7 +361,12 @@ un-completing fires `selection()` — copy that asymmetry.
 **Accessibility:** decorative overlays are `.allowsHitTesting(false)` +
 `.accessibilityHidden(true)`. `reduceMotion` must *disable* ambient animation,
 not shorten it. Icon-only buttons need an explicit label. `HouseView` collapses
-its grid when `dynamicTypeSize.isAccessibilitySize`.
+its grid when `dynamicTypeSize.isAccessibilitySize`. Type is clamped at
+`accessibility3` (`NinaApp`, raised from `accessibility1` on 2026-09-09), which
+only holds because list rows, chips and buttons size with `minHeight` and every
+user-facing string is metered through `.ninaText` — `.compose` (27pt sans) is
+the capture title's tier. A raw `.font(.system(size:))` on text is a regression;
+on an SF Symbol it is fine.
 
 **All UI strings are pt-BR literals inline in the view.** There is no
 `Localizable.strings`, no `.xcstrings`, no `LocalizedStringKey`. Introducing
@@ -735,7 +740,12 @@ substitution on the remote path is `PreviewData.taskSections` — a single
 states *are* reachable for real users and must be designed.
 
 **`toggleTask` on a recurring task does not complete it** — it rolls `dueAt`
-forward. Only `.none`-recurrence tasks flip `isDone`.
+forward. Only `.none`-recurrence tasks flip `isDone`. A missed
+occurrence reads late: `displayDate` returns the latest occurrence at or before
+now whenever `dueAt` is in the past, so a daily 21:00 task nobody tapped shows
+"ontem, 21:00" in terracotta while the scheduler still books tonight's alert.
+Screen and scheduler agree only when nothing was missed
+(`TaskAgendaTests.testAMissedDailyTaskReadsAsLateSinceItsLastOccurrence`).
 
 **`Route` now has four cases and all of them are reachable** — `task`, `member`,
 `workload`, `memories`. This was fixed in the rebrand: `RouterPath.navigate(to:)`

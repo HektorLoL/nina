@@ -57,7 +57,7 @@ struct HouseholdWorkloadSnapshot: Hashable {
         leadName: nil,
         leadShare: 0,
         headline: "Ainda sem retrato da casa",
-        message: "Preciso de algumas tarefas com dono para desenhar a divisão sem chutar. E não desenho nenhum gráfico até lá."
+        message: "Preciso de pelo menos \(HouseholdWorkload.minimumAssignedSample) tarefas abertas com dono, em pelo menos \(HouseholdWorkload.minimumCarriers) pessoas, para desenhar a divisão sem chutar. Até lá, não desenho gráfico nenhum."
     )
 }
 
@@ -67,8 +67,8 @@ enum HouseholdWorkload {
     // A split drawn from too few tasks reads as an accusation rather than a portrait.
     static let minimumAssignedSample = 6
     static let minimumCarriers = 2
-    static let overloadShareThreshold = 0.6
-    static let overloadLeadMargin = 3
+    // The headline and the bands share one threshold, so the chart can never contradict the sentence.
+    static let overloadMarginAboveAverage = 1.5
 
     static func snapshot(
         tasks: [TaskItem],
@@ -79,20 +79,15 @@ enum HouseholdWorkload {
         let committedOpenTasks = tasks.filter { !$0.isDone && $0.kind == .task }
 
         var countsByOwner: [TaskOwnerBucket: Int] = [:]
-        var labelDisplayNames: [String: String] = [:]
         var sharedCount = 0
 
+        // A name nobody in the house has is not a person; its load is the house's, never a new face.
         for task in committedOpenTasks {
             switch resolver.bucket(of: task) {
-            case .shared:
+            case .shared, .label:
                 sharedCount += 1
             case .member(let memberID):
                 countsByOwner[.member(memberID), default: 0] += 1
-            case .label(let key):
-                countsByOwner[.label(key), default: 0] += 1
-                if labelDisplayNames[key] == nil {
-                    labelDisplayNames[key] = task.owner.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
             }
         }
 
@@ -102,17 +97,6 @@ enum HouseholdWorkload {
                 name: resolver.displayName(for: person),
                 tone: person.tone,
                 openCount: countsByOwner[.member(person.id)] ?? 0
-            )
-        }
-
-        for key in labelDisplayNames.keys.sorted() {
-            entries.append(
-                HouseholdWorkloadEntry(
-                    memberID: nil,
-                    name: labelDisplayNames[key] ?? key,
-                    tone: fallbackTone(for: key),
-                    openCount: countsByOwner[.label(key)] ?? 0
-                )
             )
         }
 
@@ -161,13 +145,8 @@ enum HouseholdWorkload {
             )
         }
 
-        let runnerUpCount = entries
-            .filter { !$0.isShared && $0.memberID != lead.memberID }
-            .map(\.openCount)
-            .max() ?? 0
         let leadShare = Double(lead.openCount) / Double(assignedCount)
-        let isBalanced = leadShare <= overloadShareThreshold
-            || lead.openCount - runnerUpCount < overloadLeadMargin
+        let isBalanced = !entries.contains { !$0.isShared && $0.band == .heavier }
 
         // The message carries no count and no percentage, for the same reason the
         // chart does not: a quantified comparison between two people is a
@@ -190,9 +169,20 @@ enum HouseholdWorkload {
     private static func band(for count: Int, average: Double) -> WorkloadBand {
         guard average > 0 else { return .similar }
         let ratio = Double(count) / average
-        if ratio >= 1.25 { return .heavier }
-        if ratio <= 0.75 { return .light }
+        let distance = Double(count) - average
+        if ratio >= 1.25, distance >= overloadMarginAboveAverage { return .heavier }
+        if ratio <= 0.75, -distance >= overloadMarginAboveAverage { return .light }
         return .similar
+    }
+
+    // Unowned work is what the resolver cannot place on a current member: the house's own tasks
+    // and any name that no longer lives here.
+    static func isUnowned(_ task: TaskItem, members: [HouseholdMember]) -> Bool {
+        let resolver = TaskOwnerResolver(people: members.filter { $0.role != .assistant })
+        switch resolver.bucket(of: task) {
+        case .shared, .label: return true
+        case .member: return false
+        }
     }
 
     static func openTaskCount(
@@ -224,11 +214,6 @@ enum HouseholdWorkload {
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pt_BR"))
     }
 
-    private static func fallbackTone(for key: String) -> MemberTone {
-        let tones = MemberTone.allCases
-        let bucket = abs(key.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) % 100_003 })
-        return tones[bucket % tones.count]
-    }
 }
 
 private enum TaskOwnerBucket: Hashable {

@@ -8,7 +8,7 @@ enum TaskEditorMode: Hashable {
     case plant(UUID)
 }
 
-private struct SheetHeader: View {
+struct SheetHeader: View {
     var eyebrow: String
     var alignsCloseTrailing: Bool = false
     var onClose: () -> Void
@@ -31,6 +31,8 @@ private struct SheetHeader: View {
                         .foregroundStyle(NinaTheme.ink)
                         .frame(width: 32, height: 32)
                         .background(NinaTheme.grout, in: Circle())
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Fechar")
@@ -78,8 +80,7 @@ private struct SheetField<Field: View>: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).ninaText(.meta, NinaTheme.muted)
             field
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(NinaTheme.ink)
+                .ninaText(.body, NinaTheme.ink)
                 .tint(NinaTheme.cobalt)
         }
         .padding(.horizontal, 14)
@@ -120,9 +121,7 @@ private struct InkButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 16, weight: .semibold))
-                .tracking(-0.1)
-                .foregroundStyle(NinaTheme.ground)
+                .ninaText(.body, NinaTheme.ground, weight: .semibold)
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
                 .background(
@@ -142,9 +141,7 @@ private struct ShareButtonFace: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 16, weight: .semibold))
-            .tracking(-0.1)
-            .foregroundStyle(isProminent ? NinaTheme.onCobalt : NinaTheme.ink)
+            .ninaText(.body, isProminent ? NinaTheme.onCobalt : NinaTheme.ink, weight: .semibold)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
             .background(
@@ -646,7 +643,7 @@ struct SettingsSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            NinaButton(title: "Sair desta conta", kind: .quiet, isEnabled: !authSession.isSigningIn) {
+            NinaButton(title: "Sair da conta", kind: .quiet, isEnabled: !authSession.isSigningIn) {
                 Haptics.warning()
                 Task {
                     guard await authSession.signOut() else { return }
@@ -853,7 +850,7 @@ private struct EmailAccessView: View {
                             .submitLabel(.done)
                     }
                     .disabled(isWaitingForCode)
-                    .opacity(isWaitingForCode ? 0.5 : 1)
+                    .opacity(isWaitingForCode ? 0.4 : 1)
 
                     if isWaitingForCode {
                         SheetField(label: "Código") {
@@ -1003,9 +1000,7 @@ private struct PrivacyAndDataView: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Deixar a Nina ler o que eu escrevo e fotografo")
-                    .font(.system(size: 17, weight: .medium))
-                    .tracking(-0.1)
-                    .foregroundStyle(NinaTheme.ink)
+                    .ninaText(.body, NinaTheme.ink, weight: .medium)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(acceptedLabel).ninaText(.caption, NinaTheme.muted)
             }
@@ -1016,7 +1011,7 @@ private struct PrivacyAndDataView: View {
                 .labelsHidden()
                 .tint(NinaTheme.ink)
                 .disabled(store.isSyncingHome)
-                .opacity(store.isSyncingHome ? 0.5 : 1)
+                .opacity(store.isSyncingHome ? 0.4 : 1)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1484,7 +1479,7 @@ private struct NotificationPreferencesView: View {
                 .tint(NinaTheme.ink)
         }
         .disabled(!quietHoursEnabled)
-        .opacity(quietHoursEnabled ? 1 : 0.5)
+        .opacity(quietHoursEnabled ? 1 : 0.4)
     }
 
     private var quietHoursSummary: String {
@@ -1599,7 +1594,7 @@ struct PremiumBenefitsSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(eyebrow: "Premium", alignsCloseTrailing: true) {
+            SheetHeader(eyebrow: "Premium") {
                 dismiss()
             }
 
@@ -1816,7 +1811,9 @@ struct PremiumBenefitsSheet: View {
     private var heading: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(plan.name).ninaText(.display)
-            Text("Três limites reais somem. É só isso.")
+            Text(NinaAttachmentGate.current.isEnabled
+                ? "Três limites reais somem. É só isso."
+                : "Dois limites reais somem. É só isso.")
                 .ninaText(.label, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -1838,13 +1835,11 @@ struct PremiumBenefitsSheet: View {
         } label: {
             HStack(spacing: 6) {
                 Text(period.title)
-                    .font(.system(size: 15, weight: selectedPeriod == period ? .semibold : .medium))
-                    .foregroundStyle(selectedPeriod == period ? NinaTheme.ink : NinaTheme.muted)
+                    .ninaText(.label, selectedPeriod == period ? NinaTheme.ink : NinaTheme.muted, weight: selectedPeriod == period ? .semibold : .medium)
 
                 if let badge {
                     Text(badge)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(NinaTheme.ground)
+                        .ninaText(.micro, NinaTheme.ground, weight: .bold)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(NinaTheme.ink, in: Capsule())
@@ -1900,8 +1895,7 @@ struct PremiumBenefitsSheet: View {
     private func comparisonRow(_ title: String, free: String?, premium: String?) -> some View {
         HStack(spacing: 0) {
             Text(title)
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(NinaTheme.ink)
+                .ninaText(.label, NinaTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 8)
@@ -1918,12 +1912,11 @@ struct PremiumBenefitsSheet: View {
         Group {
             if let text {
                 Text(text)
-                    .font(.system(size: 13, weight: isPremium ? .semibold : .regular))
-                    .foregroundStyle(isPremium ? NinaTheme.cobalt : NinaTheme.muted)
+                    .ninaText(.meta, isPremium ? NinaTheme.ink : NinaTheme.muted, weight: isPremium ? .semibold : .regular)
             } else {
                 Image(systemName: isPremium ? "checkmark" : "xmark")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(isPremium ? NinaTheme.cobalt : NinaTheme.faint)
+                    .foregroundStyle(isPremium ? NinaTheme.ink : NinaTheme.faint)
             }
         }
         .frame(width: 76)
@@ -2237,17 +2230,15 @@ struct TaskEditorSheet: View {
             }
         } message: {
             Text(isSeed
-                ? "A semente some para todo mundo da casa."
-                : "A tarefa e o aviso agendado somem para todo mundo da casa.")
+                ? "A semente some para todo mundo da casa. Não dá para desfazer."
+                : "A tarefa e o aviso agendado somem para todo mundo da casa. Não dá para desfazer.")
         }
     }
 
     private var titleField: some View {
         TextField("O que precisa ser feito?", text: $title, axis: .vertical)
             .lineLimit(1...3)
-            .font(.system(size: 27, weight: .semibold))
-            .tracking(-0.4)
-            .foregroundStyle(NinaTheme.ink)
+            .ninaText(.compose, NinaTheme.ink, weight: .semibold)
             .tint(NinaTheme.cobalt)
             .textFieldStyle(.plain)
             .focused($isTitleFocused)
@@ -2257,8 +2248,7 @@ struct TaskEditorSheet: View {
     private var subtitleField: some View {
         TextField("Um detalhe, se ajudar", text: $subtitle, axis: .vertical)
             .lineLimit(1...3)
-            .font(.system(size: 19, weight: .regular))
-            .foregroundStyle(NinaTheme.muted)
+            .ninaText(.body, NinaTheme.muted)
             .tint(NinaTheme.cobalt)
             .textFieldStyle(.plain)
     }
@@ -2348,7 +2338,7 @@ struct TaskEditorSheet: View {
                         .ninaText(.caption, NinaTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    NinaButton(title: "Ligar os avisos", kind: .quiet) {
+                    NinaButton(title: "Permitir os avisos", kind: .quiet) {
                         Haptics.lightImpact()
                         Task {
                             _ = await store.requestNotificationAuthorization()
@@ -2365,7 +2355,7 @@ struct TaskEditorSheet: View {
                         .ninaText(.caption, NinaTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    NinaButton(title: "Abrir os Ajustes", kind: .quiet) {
+                    NinaButton(title: "Abrir os Ajustes do iPhone", kind: .quiet) {
                         Haptics.selection()
                         guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
                         openURL(url)
@@ -2606,8 +2596,7 @@ struct TaskEditorSheet: View {
             if isCreatingCategory {
                 HStack(spacing: 10) {
                     TextField("Nome da categoria", text: $newCategoryTitle)
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(NinaTheme.ink)
+                        .ninaText(.label, NinaTheme.ink)
                         .tint(NinaTheme.cobalt)
                         .textFieldStyle(.plain)
                         .submitLabel(.done)
@@ -2654,15 +2643,14 @@ struct TaskEditorSheet: View {
             )
 
             Text(item.title)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(NinaTheme.ink)
+                .ninaText(.label, NinaTheme.ink, weight: .medium)
 
             Spacer(minLength: 8)
 
             if isSelected {
                 Image(systemName: "checkmark")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(NinaTheme.cobalt)
+                    .foregroundStyle(NinaTheme.ink)
             }
         }
         .padding(.horizontal, 20)
@@ -3001,17 +2989,14 @@ struct ShoppingEditorSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     TextField("O que está faltando?", text: $title)
-                        .font(.system(size: 27, weight: .semibold))
-                        .tracking(-0.4)
-                        .foregroundStyle(NinaTheme.ink)
+                        .ninaText(.compose, NinaTheme.ink, weight: .semibold)
                         .tint(NinaTheme.cobalt)
                         .textFieldStyle(.plain)
                         .focused($isTitleFocused)
                         .submitLabel(.done)
 
                     TextField("Quantidade, se importar", text: $amount)
-                        .font(.system(size: 19, weight: .regular))
-                        .foregroundStyle(NinaTheme.muted)
+                        .ninaText(.body, NinaTheme.muted)
                         .tint(NinaTheme.cobalt)
                         .textFieldStyle(.plain)
 
@@ -3470,17 +3455,14 @@ struct TaskQuickActionsSheet: View {
             NinaCheckbox(isOn: task.isDone, isOverdue: isOverdue)
 
             Text(task.title)
-                .font(.system(size: 17, weight: .medium))
-                .tracking(-0.1)
-                .foregroundStyle(NinaTheme.ink)
+                .ninaText(.body, NinaTheme.ink, weight: .medium)
                 .lineLimit(1)
 
             Spacer(minLength: 8)
 
             if task.kind == .task {
                 Text(task.effectiveDueLabel())
-                    .font(.system(size: 13, weight: isOverdue ? .semibold : .regular))
-                    .foregroundStyle(isOverdue ? NinaTheme.terracotta : NinaTheme.muted)
+                    .ninaText(.meta, isOverdue ? NinaTheme.terracotta : NinaTheme.muted, weight: isOverdue ? .semibold : .regular)
                     .lineLimit(1)
             }
         }
@@ -3605,12 +3587,10 @@ struct TaskEditConflictSheet: View {
             Eyebrow(text: eyebrow)
 
             Text(task.title)
-                .font(.system(size: 17, weight: .semibold))
-                .tracking(-0.1)
-                .foregroundStyle(NinaTheme.ink)
+                .ninaText(.body, NinaTheme.ink, weight: .semibold)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("\(task.kind == .seed ? "Sem data" : task.effectiveDueLabel()) · dono: \(task.owner)")
+            Text("\(task.kind == .seed ? "Sem data · plante depois" : task.effectiveDueLabel()) · dono: \(HouseholdWorkload.isSharedOwner(task.owner) ? "Ninguém ainda" : task.owner)")
                 .ninaText(.caption, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }

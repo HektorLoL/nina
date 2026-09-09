@@ -271,7 +271,7 @@ struct ProfileEditorView: View {
             Eyebrow(text: "Contato")
 
             ProfileReadOnlyField(
-                label: "E-mail",
+                label: "Email",
                 value: user.email ?? "Email não vinculado",
                 note: user.provider.title
             )
@@ -634,7 +634,7 @@ private struct ProfileCoreMemoriesSheet: View {
     private var list: some View {
         if memories.isEmpty {
             ZeroState(
-                headline: "Nada guardado ainda",
+                headline: "Nada guardado ainda.",
                 body_: "Quando você confirmar uma memória na conversa, ela aparece aqui."
             )
             .padding(.top, 28)

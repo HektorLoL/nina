@@ -359,7 +359,7 @@ struct AppRootView: View {
             selectTab(.nina)
         }
         .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
-            selectTab(.today)
+            selectTab(.tasks)
         }
     }
 
@@ -495,6 +495,7 @@ private struct HomeAccessUnavailableView: View {
                     }
 
                     NinaButton(title: "Sair da conta", kind: .quiet) {
+                        Haptics.warning()
                         Task {
                             onboardingStore.cancelReplay()
                             await authSession.signOut()
@@ -723,7 +724,7 @@ private struct SyncErrorToast: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(NinaTheme.muted)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Fechar aviso")
@@ -754,8 +755,7 @@ private struct UndoCompletionToast: View {
                 .foregroundStyle(NinaTheme.ground)
 
             Text(title)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(NinaTheme.ground)
+                .ninaText(.label, NinaTheme.ground, weight: .medium)
                 .lineLimit(1)
 
             Spacer(minLength: 8)
@@ -765,8 +765,7 @@ private struct UndoCompletionToast: View {
                 store.undoLastCompletion()
             } label: {
                 Text("Desfazer")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(NinaTheme.ground)
+                    .ninaText(.label, NinaTheme.ground, weight: .semibold)
             }
             .buttonStyle(.plain)
         }
@@ -784,6 +783,9 @@ private struct KeyboardAwareBottomTabBar: View {
 
     var body: some View {
         BottomTabBar(selectedTab: selectedTab, select: select)
+            // Tab titles grow with the reader's setting up to the largest non-accessibility size;
+            // past that, a four-word bar has no room, so it stops where UIKit's own tab bar stops.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .opacity(isKeyboardVisible ? 0 : 1)
             .allowsHitTesting(!isKeyboardVisible)
             .accessibilityHidden(isKeyboardVisible)
@@ -845,7 +847,7 @@ private struct BottomTabBar: View {
                         }
 
                         Text(tab.title)
-                            .font(.system(size: 12, weight: tab == selectedTab ? .semibold : .regular))
+                            .ninaText(.meta, tab == selectedTab ? NinaTheme.ink : NinaTheme.muted, weight: tab == selectedTab ? .semibold : .regular)
                     }
                     .foregroundStyle(tab == selectedTab ? NinaTheme.ink : NinaTheme.muted)
                     .frame(maxWidth: .infinity)

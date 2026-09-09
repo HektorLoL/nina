@@ -3,6 +3,7 @@ import SwiftUI
 enum TaskListFilter: String, CaseIterable, Identifiable, Hashable {
     case all
     case mine
+    case unowned
     case seeds
     case shopping
 
@@ -12,6 +13,7 @@ enum TaskListFilter: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .all: "Tudo"
         case .mine: "Minhas"
+        case .unowned: "Sem dono"
         case .seeds: "Sementes"
         case .shopping: "Compras"
         }
@@ -21,6 +23,8 @@ enum TaskListFilter: String, CaseIterable, Identifiable, Hashable {
 struct TasksView: View {
     @Environment(AppStore.self) private var store
     @Environment(RouterPath.self) private var router
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var filter: TaskListFilter = .all
     @State private var searchQuery = ""
@@ -37,6 +41,10 @@ struct TasksView: View {
     private var mine: [TaskItem] {
         guard let me = store.currentFamilyMember else { return [] }
         return openTasks.filter { $0.ownerMemberID == me.id }
+    }
+
+    private var unowned: [TaskItem] {
+        openTasks.filter { HouseholdWorkload.isUnowned($0, members: store.familyGroup.members) }
     }
 
     private var completedToday: [TaskItem] {
@@ -78,6 +86,9 @@ struct TasksView: View {
         }
         .ninaScreenBackground()
         .ninaStatusBarMask()
+        .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
+            filter = .unowned
+        }
     }
 
     private var header: some View {
@@ -97,7 +108,7 @@ struct TasksView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 19, weight: .regular))
                     .foregroundStyle(NinaTheme.ink)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Buscar")
@@ -145,6 +156,7 @@ struct TasksView: View {
         let count: Int = switch option {
         case .all: openTasks.count
         case .mine: mine.count
+        case .unowned: unowned.count
         case .seeds: store.openSeeds.count
         case .shopping: store.pendingShoppingItems.count
         }
@@ -157,6 +169,7 @@ struct TasksView: View {
         case .shopping: shopping
         case .seeds: seeds
         case .mine: grouped(mine, emptyHeadline: "Nada está com você agora.", emptyBody: "Quando alguém da casa te passar alguma coisa, ela aparece aqui.")
+        case .unowned: grouped(unowned, emptyHeadline: "Nada sem dono.", emptyBody: "Tudo o que está aberto tem alguém. Pode deixar assim.")
         case .all:
             if store.tasks.isEmpty {
                 firstTasks
@@ -221,6 +234,7 @@ struct TasksView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(isCollapsed ? "recolhida" : "aberta")
             .padding(.bottom, isCollapsed ? 0 : 8)
 
             if !isCollapsed {
@@ -275,7 +289,7 @@ struct TasksView: View {
             body_: "Tarefa aqui é coisa que a casa combinou. Pode ter dono e dia, ou pode só ficar em aberto até alguém pegar."
         ) {
             VStack(spacing: 6) {
-                NinaButton(title: "Contar pra Nina", systemName: "bubble.left") {
+                NinaButton(title: "Conversar com a Nina", systemName: "bubble.left") {
                     Haptics.lightImpact()
                     NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
                 }
@@ -305,8 +319,7 @@ struct TasksView: View {
                     HStack(spacing: 12) {
                         CategoryGlyph(systemName: "leaf", size: 18, tint: NinaTheme.ink)
                         Text("Pintar a sala")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(NinaTheme.ink)
+                            .ninaText(.body, NinaTheme.ink, weight: .medium)
                         Spacer()
                         Text("Plante depois").ninaText(.meta, NinaTheme.muted)
                     }
@@ -387,6 +400,31 @@ struct TasksView: View {
         }
     }
 
+    // At accessibility sizes the amount moves under the name instead of squeezing it.
+    @ViewBuilder
+    private func shoppingRowLabel(_ item: ShoppingItem) -> some View {
+        let title = Text(item.title)
+            .ninaText(.body, item.isChecked ? NinaTheme.muted : NinaTheme.ink, weight: .medium)
+            .strikethrough(item.isChecked, color: NinaTheme.muted)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                title.lineLimit(3)
+                if !item.amount.isEmpty {
+                    Text(item.amount).ninaText(.meta, NinaTheme.muted)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(spacing: 10) {
+                title.lineLimit(2)
+                Spacer(minLength: 8)
+                if !item.amount.isEmpty {
+                    Text(item.amount).ninaText(.meta, NinaTheme.muted)
+                }
+            }
+        }
+    }
+
     private func shoppingRow(_ item: ShoppingItem) -> some View {
         HStack(spacing: 12) {
             Button {
@@ -403,18 +441,8 @@ struct TasksView: View {
                 Haptics.lightImpact()
                 router.presentedSheet = .editShoppingItem(item.id)
             } label: {
-                HStack(spacing: 10) {
-                    Text(item.title)
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(item.isChecked ? NinaTheme.muted : NinaTheme.ink)
-                        .strikethrough(item.isChecked, color: NinaTheme.muted)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    if !item.amount.isEmpty {
-                        Text(item.amount).ninaText(.meta, NinaTheme.muted)
-                    }
-                }
-                .contentShape(Rectangle())
+                shoppingRowLabel(item)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -431,8 +459,7 @@ struct TasksView: View {
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(NinaTheme.cobalt)
                 Text("Adicionar item")
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundStyle(NinaTheme.muted)
+                    .ninaText(.label, NinaTheme.muted)
                 Spacer()
             }
             .padding(.horizontal, 16)
@@ -454,8 +481,7 @@ struct TasksView: View {
                     // Autocorrect turns a household's own words into other words:
                     // "boleto" became "Bolero" the first time this ran.
                     TextField("Procurar na casa", text: $searchQuery)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(NinaTheme.ink)
+                        .ninaText(.label, NinaTheme.ink, weight: .medium)
                         .focused($isSearchFocused)
                         .submitLabel(.search)
                         .autocorrectionDisabled()
@@ -465,14 +491,15 @@ struct TasksView: View {
                 .frame(height: 40)
                 .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
 
-                Button("Cancelar") {
+                Button {
                     Haptics.selection()
                     searchQuery = ""
                     isSearching = false
+                } label: {
+                    Text("Cancelar")
+                        .ninaText(.label, NinaTheme.muted, weight: .medium)
+                        .frame(minHeight: 44)
                 }
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(NinaTheme.muted)
-                .frame(minHeight: 44)
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
@@ -507,7 +534,7 @@ struct TasksView: View {
                             isSearching = false
                             NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
                         } label: {
-                            NinaChip(text: "Perguntar pra Nina", isSet: true)
+                            NinaChip(text: "Conversar com a Nina", isSet: true)
                         }
                         .buttonStyle(.plain)
                     }

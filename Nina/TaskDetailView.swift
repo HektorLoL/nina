@@ -43,14 +43,16 @@ struct TaskDetailView: View {
             footer
         }
         .ninaScreenBackground()
-        .alert("Apagar esta tarefa?", isPresented: $isConfirmingDelete) {
+        .alert(task.kind == .seed ? "Apagar esta semente?" : "Apagar esta tarefa?", isPresented: $isConfirmingDelete) {
             Button("Apagar", role: .destructive) {
                 store.deleteTask(task.id)
                 dismiss()
             }
             Button("Cancelar", role: .cancel) {}
         } message: {
-            Text("Ela sai para todo mundo da casa. Não dá para desfazer.")
+            Text(task.kind == .seed
+                ? "A semente some para todo mundo da casa. Não dá para desfazer."
+                : "A tarefa e o aviso agendado somem para todo mundo da casa. Não dá para desfazer.")
         }
     }
 
@@ -90,9 +92,11 @@ struct TaskDetailView: View {
                 store.toggleTask(task)
             } label: {
                 NinaCheckbox(isOn: task.isDone, isOverdue: isOverdue, size: 26)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.top, 6)
+            .accessibilityLabel(task.completionActionTitle)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(task.title).ninaText(.title)
@@ -106,14 +110,14 @@ struct TaskDetailView: View {
     private var metadata: some View {
         VStack(spacing: 0) {
             metaRow("Quando") {
-                Text(task.kind == .seed ? "Sem data — plante quando quiser" : task.effectiveDueLabel())
+                Text(task.kind == .seed ? "Sem data · plante depois" : task.effectiveDueLabel())
                     .ninaText(.label, isOverdue ? NinaTheme.terracotta : NinaTheme.ink, weight: isOverdue ? .semibold : .regular)
             }
             NinaDivider(inset: 0)
 
             if task.kind == .task {
                 metaRow("Repete") {
-                    Text(task.recurrence.title).ninaText(.label)
+                    Text(task.recurrence == .none ? "Não repete" : task.recurrence.title).ninaText(.label)
                 }
                 NinaDivider(inset: 0)
             }
@@ -124,7 +128,7 @@ struct TaskDetailView: View {
                         MemberAvatar(initials: owner.name.ninaInitials, tone: owner.tone, size: 24)
                     }
                     // Unassigned work is credited to the house and never given a face.
-                    Text(task.owner).ninaText(.label)
+                    Text(HouseholdWorkload.isSharedOwner(task.owner) ? "Ninguém ainda" : task.owner).ninaText(.label)
                 }
             }
             NinaDivider(inset: 0)
@@ -189,6 +193,9 @@ struct TaskDetailView: View {
             $0.name.caseInsensitiveCompare(task.createdBy) == .orderedSame
         }
         guard isPerson else { return "Escrita à mão, aqui no app." }
+        if let me = store.currentFamilyMember, me.name.caseInsensitiveCompare(task.createdBy) == .orderedSame {
+            return "Você colocou isto aqui."
+        }
         return "\(task.createdBy) colocou isto aqui."
     }
 

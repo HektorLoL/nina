@@ -48,7 +48,7 @@ struct NinaApp: App {
                 .preferredColorScheme(.light)
                 // Type scales, but bounded: the boards' layouts have only been
                 // checked to one step into the accessibility range.
-                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility3)
                 .environment(store)
                 .environment(authSession)
                 .environment(onboardingStore)

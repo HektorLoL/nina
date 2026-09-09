@@ -68,12 +68,15 @@ struct HomeSetupView: View {
             Spacer()
 
             Button {
+                Haptics.warning()
                 Task {
                     onboardingStore.cancelReplay()
                     await authSession.signOut()
                 }
             } label: {
-                Text("Sair").ninaText(.label, NinaTheme.muted, weight: .semibold)
+                Text("Sair da conta")
+                    .ninaText(.label, NinaTheme.muted, weight: .semibold)
+                    .frame(minHeight: 44)
             }
             .buttonStyle(.plain)
             .disabled(authSession.isSigningIn)
@@ -117,7 +120,7 @@ struct HomeSetupView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 NinaButton(
-                    title: store.isSyncingHome ? "Criando..." : "Criar a casa",
+                    title: store.isSyncingHome ? "Criando" : "Criar a casa",
                     fillsWidth: true,
                     isEnabled: canCreateHome && !store.isSyncingHome
                 ) {
@@ -200,7 +203,7 @@ struct HomeSetupView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 NinaButton(
-                    title: store.isSyncingHome ? "Enviando..." : "Pedir para entrar",
+                    title: store.isSyncingHome ? "Enviando" : "Pedir para entrar",
                     fillsWidth: true,
                     isEnabled: canJoinHome && !store.isSyncingHome
                 ) {

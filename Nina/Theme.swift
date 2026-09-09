@@ -47,6 +47,7 @@ extension Color {
 // number. Anything monolinear is interface and stays on the system face.
 enum NinaText {
     case hero
+    case compose
     case display
     case screen
     case zero
@@ -69,6 +70,7 @@ enum NinaText {
     fileprivate var size: CGFloat {
         switch self {
         case .hero: 44
+        case .compose: 27
         case .display: 34
         case .screen: 31
         case .zero: 29
@@ -86,6 +88,7 @@ enum NinaText {
     fileprivate var leading: CGFloat {
         switch self {
         case .hero: 50
+        case .compose: 34
         case .display: 40
         case .screen: 37
         case .zero: 36
@@ -103,6 +106,7 @@ enum NinaText {
     fileprivate var tracking: CGFloat {
         switch self {
         case .hero, .display, .screen, .zero: -0.5
+        case .compose: -0.4
         case .title, .section: -0.2
         case .eyebrow: 1.1
         default: -0.1
@@ -115,6 +119,7 @@ enum NinaText {
     fileprivate var textStyle: Font.TextStyle {
         switch self {
         case .hero, .display: .largeTitle
+        case .compose: .title
         case .screen, .zero: .title
         case .title: .title2
         case .section: .title3
@@ -128,6 +133,7 @@ enum NinaText {
     fileprivate var uiTextStyle: UIFont.TextStyle {
         switch self {
         case .hero, .display: .largeTitle
+        case .compose: .title1
         case .screen, .zero: .title1
         case .title: .title2
         case .section: .title3

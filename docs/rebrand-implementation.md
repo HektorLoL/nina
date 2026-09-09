@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -235,10 +235,59 @@ fixes. The departures from the boards and from earlier rounds, all deliberate:
   phone cannot know; owned alerts speak to the owner ("Ficou com você.").
 - **A transport failure never signs anyone out** (`AuthSessionRestoration.unreachable`),
   never calls an invite dead, and never cancels scheduled reminders.
-- **Recurring occurrences missed yesterday still show today's occurrence** and
-  are not marked late. This was pinned by
-  `TaskAgendaTests.testAMissedDailyTaskShowsTodaysOccurrenceRatherThanTheStaleStoredDate`
-  and left as is; changing it is a product decision, not a fix.
+- **A recurring occurrence missed yesterday reads late** (decided 2026-09-09,
+  "mark it late"). `displayDate` returns the latest occurrence at or before now
+  when `dueAt` is in the past; the scheduler still books the next future one.
+  Pinned by `TaskAgendaTests.testAMissedDailyTaskReadsAsLateSinceItsLastOccurrence`.
+- **The proposal card names every correction field, picks the owner from the
+  house** (`TaskOwnerChoice`, never a free text field), **previews the parsed
+  date before accept** ("Vai ficar: Amanhã, 09:00" or "Não entendi essa data")
+  and shows a failed confirmation on the card itself. "Fechar" became "Pronto";
+  the memory card's correction sits in the action block like every other kind.
+- **The capture sheet departs from board `C1`'s seven-chip composer**: a visible
+  Tarefa / Semente segment with one line each sits under the subtitle, three
+  chips (date, owner, category) plus "Mais" unfold recurrence, reminder and
+  priority, the commit is a worded button ("Criar tarefa", "Plantar como
+  tarefa"), and "Sem data" on a seed is a readable grout label, not a dimmed
+  chip. The delete button no longer appears while planting a seed, and the
+  category panel's "Criar" is ink so the sheet keeps one cobalt.
+- **Type is metered on every list surface** (rows, due labels, chips, buttons,
+  tab labels, the capture title via the new `.compose` tier) and the Dynamic
+  Type clamp moved from `accessibility1` to `accessibility3`. Chips and buttons
+  use `minHeight`. Sites still on a raw `.font` are glyphs and a few editor
+  fields; they scale next.
+- **44pt everywhere it was smaller**: sheet close discs, the gear, the search
+  glyph, the attachment and viewer close buttons, the task-detail checkbox, the
+  tutorial's remove disc. Bubbles announce "Nina:" / "Você:", section headers
+  carry an `accessibilityValue`, the owner avatar on a row reads the full name.
+- **One word per act**: "Sair da conta" on all five sign-out sites (armed with
+  `Haptics.warning()`), "email" everywhere, pending labels without dots, "Ninguém
+  ainda" for no owner on the card, the detail, the conflict sheet and the
+  tutorial, "Sem data · plante depois" for undated seeds, "Conversar com a Nina"
+  for every hand-off, "Não repete" as a state, one delete confirmation body,
+  disabled opacity 0.4, and the Premium sheet's close disc leading like the rest.
+- **The workload portrait uses one threshold for the headline and the bands**
+  (`overloadMarginAboveAverage`), so the chart can never contradict the
+  sentence; the who-carries-more line renders whenever the portrait is
+  conclusive; the inconclusive state says what unlocks it; an owner string that
+  matches no member folds into the house band instead of getting a face; the
+  axis says what the bands are relative to; the pinned "não para cobrar" bar
+  moved into the provenance card; "Ver o que está sem dono" opens Tarefas on a
+  new "Sem dono" filter that covers every open unowned task, not only today's.
+- **The landing no longer sells document reading** while
+  `NINA_ATTACHMENTS_ENABLED` is off: the feature bullet is gone, the privacy
+  panel is framed around confirmation and money instead of photos, and the
+  paywall heading counts two limits, not three. The copy returns with the flag.
+- **Web copy**: the hero says "Ela propõe, você confirma"; one CTA label
+  ("Entrar na lista") and the header's copy hides until the hero's has scrolled
+  away; a "Quanto custa?" FAQ names the free tier and the price once; step 3
+  says only the seed stays undated; "o Nina Premium" on every page; the terms
+  say "removida da casa" instead of a leave action that does not exist, and
+  link reportaproblem.apple.com; the waitlist dialog asks for the email first
+  and its eyebrow is "Aviso de lançamento".
+- **Web readability**: every phone-mockup label has a 12px floor via `max()`,
+  the floating-note eyebrows are 12px, the dialog error text wins its
+  specificity, and the invite code wraps on its own row at phone widths.
 
 ## 7. Verified
 

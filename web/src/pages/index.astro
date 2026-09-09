@@ -22,7 +22,7 @@ const steps = [
     number: "3",
     glyph: "people",
     title: "Você confirma",
-    text: "O que você confirma vira tarefa, lembrete ou semente, com dono e prazo, para a casa inteira.",
+    text: "O que você confirma vira tarefa, lembrete ou semente para a casa inteira. Só a semente fica sem data, de propósito.",
   },
 ] as const;
 
@@ -31,7 +31,6 @@ const features = [
   "Sugere quem fica com o quê — quem decide é você",
   "Lembra no momento certo",
   "Se ajusta quando a vida muda",
-  "Lê boleto, receita e comunicado por foto, no Nina Premium",
 ];
 
 const balancePoints = [
@@ -44,13 +43,13 @@ const balancePoints = [
 const privacyCards = [
   {
     glyph: "lock",
-    title: "A foto não fica guardada",
-    text: "Nenhum servidor guarda o seu documento. O que sobra é o que a Nina leu e uma miniatura no seu aparelho.",
+    title: "Nada entra sozinho",
+    text: "A Nina propõe. Tarefa, lembrete, compra ou semente só existem depois que você confirma.",
   },
   {
     glyph: "close",
-    title: "Ela não copia a linha digitável",
-    text: "Para pagar você abre o boleto no banco. A Nina lembra do vencimento, ela não movimenta dinheiro.",
+    title: "Ela não movimenta dinheiro",
+    text: "A Nina lembra do vencimento. Para pagar, você abre o banco. Ela não guarda nem copia dados de pagamento.",
   },
   {
     glyph: "server",
@@ -79,6 +78,11 @@ const faq = [
     question: "Posso editar ou apagar o que eu confirmei?",
     answer:
       "Pode. Quem cria, muda ou apaga é você. A Nina só propõe, e nada existe até você tocar em confirmar.",
+  },
+  {
+    question: "Quanto custa?",
+    answer:
+      "Conversar com a Nina até 10 vezes por dia, tarefas, compras, lembretes e sementes são gratuitos. O Nina Premium custa R$ 24,90 por mês ou R$ 249,90 por ano, cobre a casa inteira e libera 30 conversas por hora, o retrato da casa e o resumo semanal.",
   },
   {
     question: "A Nina funciona no iPhone e Android?",
@@ -140,7 +144,7 @@ const faq = [
     <section class="hero page-shell" aria-labelledby="hero-title">
       <div class="hero-copy">
         <p class="eyebrow">Conversa que vira alívio</p>
-        <h1 id="hero-title">Tira da sua cabeça. Ela cuida do resto.</h1>
+        <h1 id="hero-title">Tira da sua cabeça. Ela propõe, você confirma.</h1>
         <p class="lede hero-lede">
           A Nina é uma amiga que mora no seu celular. Você conta o que precisa ser feito, do
           jeito que veio na cabeça. Ela transforma em tarefa, lembrete, compra — e espera você
@@ -153,7 +157,7 @@ const faq = [
             data-open-waitlist
             data-waitlist-source="hero"
           >
-            Entrar na lista de espera
+            Entrar na lista
             <Glyph name="arrow-right" size={19} />
           </button>
           <a class="button button-secondary button-large" href="#como-funciona">
@@ -193,7 +197,7 @@ const faq = [
                 >
                   Confirmar e criar 1 tarefa
                 </button>
-                <div aria-hidden="true"><em>Corrigir</em><em>Ignorar</em></div>
+                <div aria-hidden="true"><em>Corrigir</em><em>Não</em></div>
               </div>
               <p class="proposal-stored" aria-hidden="true">
                 <Glyph name="check" size={13} />Na casa agora
@@ -376,11 +380,12 @@ const faq = [
 
     <div class="support-grid page-shell">
       <section id="privacidade" class="section panel panel-ink privacy-panel">
-        <p class="eyebrow">Boleto, receita, comunicado</p>
+        <p class="eyebrow">Privacidade</p>
         <h2>O que ela lê, e o que ela não guarda.</h2>
         <p>
-          O boleto da escola, a receita do pediatra, o comunicado que veio na mochila. Você tira
-          a foto, a Nina lê o que dá para ler e monta a proposta. Você confere e confirma.
+          O boleto da escola, a receita do pediatra, o comunicado que veio na mochila. Você
+          escreve do seu jeito, a Nina lê o que dá para ler e monta a proposta. Você confere e
+          confirma.
         </p>
         <ul class="privacy-cards">
           {
@@ -432,7 +437,7 @@ const faq = [
         data-open-waitlist
         data-waitlist-source="footer"
       >
-        Entrar na lista de espera
+        Entrar na lista
       </button>
     </section>
   </main>
@@ -458,7 +463,7 @@ const faq = [
     </button>
     <NinaMark size={56} />
     <div data-waitlist-entry>
-      <p class="eyebrow">Primeiros convites</p>
+      <p class="eyebrow">Aviso de lançamento</p>
       <h2 id="waitlist-title">Entre na lista da Nina.</h2>
       <p id="waitlist-description">
         Deixe seu email para receber um aviso quando a primeira versão estiver pronta.
@@ -470,18 +475,6 @@ const faq = [
         data-consent-version={waitlistConsentVersion}
         novalidate
       >
-        <label class="waitlist-field" for="waitlist-first-name">
-          <span>Como quer ser chamado? <small>opcional</small></span>
-          <input
-            id="waitlist-first-name"
-            name="firstName"
-            type="text"
-            autocomplete="given-name"
-            maxlength="80"
-            placeholder="Seu nome"
-          />
-        </label>
-
         <label class="waitlist-field" for="waitlist-email">
           <span>Email</span>
           <input
@@ -498,6 +491,18 @@ const faq = [
           <small id="waitlist-email-hint" class="waitlist-hint">
             Um email só, quando a Nina chegar. Seus dados ficam em servidores em São Paulo.
           </small>
+        </label>
+
+        <label class="waitlist-field" for="waitlist-first-name">
+          <span>Como quer ser chamado? <small>opcional</small></span>
+          <input
+            id="waitlist-first-name"
+            name="firstName"
+            type="text"
+            autocomplete="given-name"
+            maxlength="80"
+            placeholder="Seu nome"
+          />
         </label>
 
         <div class="waitlist-honeypot" aria-hidden="true">

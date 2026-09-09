@@ -33,28 +33,20 @@ struct WorkloadView: View {
                         .ninaText(.display)
                         .fixedSize(horizontal: false, vertical: true)
 
+                    Text(snapshot.message)
+                        .ninaText(.label, snapshot.isConclusive ? NinaTheme.ink : NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+
                     if snapshot.isConclusive {
                         bands
                         provenance
                         invitation
-                    } else {
-                        Text(snapshot.message)
-                            .ninaText(.label, NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 6)
                 .padding(.bottom, 20)
             }
-
-            Text("Um retrato para conversar, não para cobrar.")
-                .ninaText(.caption, NinaTheme.muted)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .overlay(alignment: .top) {
-                    Rectangle().fill(NinaTheme.line).frame(height: 1)
-                }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .ninaScreenBackground()
@@ -69,6 +61,10 @@ struct WorkloadView: View {
 
     private var bands: some View {
         VStack(alignment: .leading, spacing: 16) {
+            Text("Em relação à média da casa, no que está aberto agora.")
+                .ninaText(.meta, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
             HStack(spacing: 6) {
                 ForEach(Array([WorkloadBand.light, .similar, .heavier].enumerated()), id: \.offset) { _, band in
                     Text(band.title.uppercased())
@@ -90,8 +86,7 @@ struct WorkloadView: View {
                                 .frame(width: 26)
                         }
                         Text(entry.isShared ? "A casa — sem dono" : entry.name)
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(entry.isShared ? NinaTheme.muted : NinaTheme.ink)
+                            .ninaText(.body, entry.isShared ? NinaTheme.muted : NinaTheme.ink, weight: .medium)
                     }
 
                     HStack(spacing: 6) {
@@ -126,7 +121,7 @@ struct WorkloadView: View {
             Image(systemName: "info.circle")
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(NinaTheme.faint)
-            Text("Do que está em aberto agora, e só do que tem dono. Sementes não entram. Não é histórico, é hoje.")
+            Text("Do que está em aberto agora, e só do que tem dono. Sementes não entram. Não é histórico, é hoje. Um retrato para conversar, não para cobrar.")
                 .ninaText(.caption, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }

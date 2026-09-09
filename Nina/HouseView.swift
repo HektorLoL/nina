@@ -84,7 +84,7 @@ struct HouseView: View {
                 Image(systemName: "gearshape")
                     .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(NinaTheme.ink)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Abrir ajustes")
@@ -415,7 +415,7 @@ struct MemoriesView: View {
                             headline: "Nada guardado ainda.",
                             body_: "Uma memória nasce na conversa: conte algo à Nina que valha guardar e ela propõe. Memórias começam privadas; compartilhar com a casa é sempre uma escolha sua."
                         ) {
-                            NinaButton(title: "Contar algo pra Nina", kind: .outline) {
+                            NinaButton(title: "Conversar com a Nina", kind: .outline) {
                                 Haptics.selection()
                                 NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
                             }
@@ -467,21 +467,19 @@ private struct MemoryCard: View {
 
             if isEditing {
                 TextField("Título", text: $draftTitle)
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(NinaTheme.ink)
+                    .ninaText(.body, NinaTheme.ink, weight: .medium)
                     .padding(.horizontal, 12)
                     .frame(height: 44)
                     .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
 
                 TextField("O que a Nina deve lembrar", text: $draftBody, axis: .vertical)
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(NinaTheme.ink)
+                    .ninaText(.label, NinaTheme.ink)
                     .lineLimit(2...6)
                     .padding(12)
                     .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
 
                 HStack(spacing: 10) {
-                    NinaButton(title: isSaving ? "Salvando..." : "Salvar", isEnabled: !isSaving && !draftTitle.trimmingCharacters(in: .whitespaces).isEmpty) {
+                    NinaButton(title: isSaving ? "Salvando" : "Salvar", isEnabled: !isSaving && !draftTitle.trimmingCharacters(in: .whitespaces).isEmpty) {
                         save()
                     }
                     NinaButton(title: "Cancelar", kind: .quiet) {
@@ -528,7 +526,7 @@ private struct MemoryCard: View {
                             Image(systemName: "trash")
                                 .font(.system(size: 15, weight: .regular))
                                 .foregroundStyle(NinaTheme.muted)
-                                .frame(width: 36, height: 36)
+                                .frame(width: 44, height: 44)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Apagar memória")

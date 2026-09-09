@@ -125,8 +125,7 @@ struct OnboardingTutorialView: View {
             HStack(alignment: .bottom, spacing: 12) {
                 TextField("Escreva do seu jeito", text: $draft, axis: .vertical)
                     .lineLimit(1...4)
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(NinaTheme.ink)
+                    .ninaText(.body, NinaTheme.ink)
                     .tint(NinaTheme.cobalt)
                     .focused($isComposerFocused)
                     .padding(.horizontal, 16)
@@ -435,9 +434,7 @@ struct OnboardingTutorialView: View {
             .frame(width: 40, alignment: .center)
 
             Text(suggestion.title)
-                .font(.system(size: 17, weight: .medium))
-                .tracking(-0.1)
-                .foregroundStyle(isRemoved ? NinaTheme.faint : NinaTheme.ink)
+                .ninaText(.body, isRemoved ? NinaTheme.faint : NinaTheme.ink, weight: .medium)
                 .strikethrough(isRemoved, color: NinaTheme.faint)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -454,6 +451,8 @@ struct OnboardingTutorialView: View {
                             .strokeBorder(isRemoved ? NinaTheme.line : Color.clear, lineWidth: 1)
                     )
             }
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
             .buttonStyle(.plain)
             .accessibilityLabel(
                 isRemoved ? "Trazer \(suggestion.title) de volta" : "Tirar \(suggestion.title)"
@@ -588,9 +587,7 @@ struct OnboardingTutorialView: View {
                 .frame(width: 24, height: 24)
 
                 Text(option)
-                    .font(.system(size: 17, weight: .medium))
-                    .tracking(-0.1)
-                    .foregroundStyle(isOpen && !isSelected ? NinaTheme.muted : NinaTheme.ink)
+                    .ninaText(.body, isOpen && !isSelected ? NinaTheme.muted : NinaTheme.ink, weight: .medium)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -789,7 +786,7 @@ struct OnboardingTutorialView: View {
     }
 
     private func makeReading(for phrase: String) -> TutorialReading {
-        let ownerOptions = ["A casa, por enquanto", meLabel]
+        let ownerOptions = ["Ninguém ainda", meLabel]
         let normalized = phrase.lowercased()
 
         if let prepared = TutorialPhrase.all.first(where: { $0.phrase.lowercased() == normalized }) {

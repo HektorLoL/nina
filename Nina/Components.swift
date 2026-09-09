@@ -109,13 +109,13 @@ struct NinaChip: View {
                     .font(.system(size: 12, weight: .semibold))
             }
             Text(text)
-                .font(.system(size: 14, weight: isSet ? .semibold : .medium))
+                .ninaText(.caption, isSet ? NinaTheme.ink : NinaTheme.muted, weight: isSet ? .semibold : .medium)
         }
         // Selection is weight, not cobalt: cobalt stays with the screen's one commit,
         // and an unset chip is a control, so its edge uses the control stroke.
         .foregroundStyle(isSet ? NinaTheme.ink : NinaTheme.muted)
         .padding(.horizontal, 14)
-        .frame(height: 36)
+        .frame(minHeight: 36)
         .background(
             isSet ? NinaTheme.grout : Color.clear,
             in: Capsule()
@@ -156,12 +156,11 @@ struct NinaButton: View {
                         .font(.system(size: 16, weight: .semibold))
                 }
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .tracking(-0.1)
+                    .ninaText(.body, foreground, weight: .semibold)
             }
             .foregroundStyle(foreground)
             .frame(maxWidth: fillsWidth ? .infinity : nil)
-            .frame(height: kind == .quiet ? 26 : 50)
+            .frame(minHeight: kind == .quiet ? 26 : 50)
             .padding(.horizontal, kind == .quiet ? 0 : 24)
             .background(background, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
             .overlay(
@@ -245,9 +244,7 @@ struct NinaRow<Leading: View, Trailing: View>: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 17, weight: .medium))
-                    .tracking(-0.1)
-                    .foregroundStyle(titleColor)
+                    .ninaText(.body, titleColor, weight: .medium)
                 if let subtitle {
                     Text(subtitle).ninaText(.caption, NinaTheme.muted)
                 }

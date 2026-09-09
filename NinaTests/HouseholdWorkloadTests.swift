@@ -132,7 +132,7 @@ final class HouseholdWorkloadTests: XCTestCase {
         XCTAssertEqual(snapshot.entries.first { $0.name == "Mirna" }?.openCount, 7)
     }
 
-    func testAnOwnerWhoIsNoLongerAMemberStillShowsTheirRemainingLoad() {
+    func testWorkLabelledWithANameNobodyInTheHouseHasFallsToTheHouseBand() {
         let tasks = (0..<6).map { _ in openTask(owner: "Tia Lu") }
             + (0..<3).map { _ in openTask(owner: "Heitor") }
         let snapshot = HouseholdWorkload.snapshot(
@@ -140,8 +140,30 @@ final class HouseholdWorkloadTests: XCTestCase {
             members: [member(named: "Heitor", tone: .sky)]
         )
 
-        XCTAssertEqual(snapshot.entries.first { $0.name == "Tia Lu" }?.openCount, 6)
-        XCTAssertEqual(snapshot.assignedCount, 9)
+        // The portrait never gives a face to someone who does not live here.
+        XCTAssertNil(snapshot.entries.first { $0.name == "Tia Lu" })
+        XCTAssertEqual(snapshot.sharedCount, 6)
+        XCTAssertEqual(snapshot.assignedCount, 3)
+        XCTAssertTrue(HouseholdWorkload.isUnowned(tasks[0], members: [member(named: "Heitor", tone: .sky)]))
+    }
+
+    func testTheHeadlineAndTheBandsShareOneThresholdSoTheyNeverContradict() {
+        let members = [member(named: "Mirna", tone: .coral), member(named: "Heitor", tone: .sky)]
+
+        let close = HouseholdWorkload.snapshot(
+            tasks: (0..<4).map { _ in openTask(owner: "Mirna") } + (0..<2).map { _ in openTask(owner: "Heitor") },
+            members: members
+        )
+        XCTAssertTrue(close.isBalanced)
+        XCTAssertTrue(close.entries.allSatisfy { $0.band == .similar })
+
+        let uneven = HouseholdWorkload.snapshot(
+            tasks: (0..<5).map { _ in openTask(owner: "Mirna") } + [openTask(owner: "Heitor")],
+            members: members
+        )
+        XCTAssertFalse(uneven.isBalanced)
+        XCTAssertEqual(uneven.entries.first { $0.name == "Mirna" }?.band, .heavier)
+        XCTAssertEqual(uneven.entries.first { $0.name == "Heitor" }?.band, .light)
     }
 
     func testTheAssistantIsNeverGivenAWorkloadRow() {

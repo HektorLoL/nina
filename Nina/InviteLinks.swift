@@ -198,7 +198,7 @@ struct InviteAcceptanceView: View {
             // keeps the button: the server decides, not the preview.
             if preview?.isValid == true || preview == nil {
                 NinaButton(
-                    title: isJoining ? "Enviando..." : "Pedir para entrar",
+                    title: isJoining ? "Enviando" : "Pedir para entrar",
                     fillsWidth: true,
                     isEnabled: !isLoading && !isJoining
                 ) {

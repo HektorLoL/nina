@@ -58,7 +58,7 @@ struct TodayView: View {
             guard let me = store.currentFamilyMember else { return [] }
             return agenda.filter { $0.ownerMemberID == me.id }
         case .unowned:
-            return agenda.filter { HouseholdWorkload.isSharedOwner($0.owner) }
+            return agenda.filter { HouseholdWorkload.isUnowned($0, members: store.familyGroup.members) }
         case .seeds:
             return store.openSeeds
         }
@@ -97,9 +97,6 @@ struct TodayView: View {
         }
         .ninaScreenBackground()
         .ninaStatusBarMask()
-        .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
-            filter = .unowned
-        }
     }
 
     private var header: some View {
@@ -169,8 +166,7 @@ struct TodayView: View {
         return VStack(alignment: .leading, spacing: 2) {
             Text("\(value)").ninaText(.display, valueColor)
             Text(label)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(labelColor)
+                .ninaText(.meta, labelColor, weight: .medium)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -250,6 +246,7 @@ struct TodayView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityValue(isCollapsed ? "recolhida" : "aberta")
 
                 Spacer()
 
@@ -260,8 +257,7 @@ struct TodayView: View {
                         isConfirmingReschedule = true
                     } label: {
                         (Text("Remarcar as ") + Text("\(count)").foregroundColor(NinaTheme.terracotta))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(NinaTheme.ink)
+                            .ninaText(.meta, NinaTheme.ink, weight: .semibold)
                             .padding(.horizontal, 12)
                             .frame(height: 30)
                             .overlay(Capsule().strokeBorder(NinaTheme.control, lineWidth: 1))
@@ -312,12 +308,12 @@ struct TodayView: View {
             body_: "Você não precisa organizar nada agora. Conta pra Nina o que está pesando na cabeça, do jeito que vier. Ela monta e você confirma."
         ) {
             VStack(spacing: 6) {
-                NinaButton(title: "Falar com a Nina", systemName: "bubble.left") {
+                NinaButton(title: "Conversar com a Nina", systemName: "bubble.left") {
                     Haptics.lightImpact()
                     router.presentedSheet = nil
                     NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
                 }
-                NinaButton(title: "Escrever a primeira sem a Nina", kind: .quiet) {
+                NinaButton(title: "Escrever sem a Nina", kind: .quiet) {
                     Haptics.lightImpact()
                     router.presentedSheet = .addTask
                 }
@@ -345,8 +341,7 @@ struct TodayView: View {
                         HStack(spacing: 12) {
                             NinaCheckbox(isOn: false, size: 22)
                             Text(next.title)
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(NinaTheme.ink)
+                                .ninaText(.label, NinaTheme.ink, weight: .medium)
                                 .lineLimit(1)
                             Spacer(minLength: 8)
                             Text(next.effectiveDueLabel()).ninaText(.meta, NinaTheme.muted)
@@ -410,6 +405,8 @@ struct TaskRowView: View {
 
     let task: TaskItem
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     @State private var isShowingQuickActions = false
     @State private var didLongPress = false
 
@@ -417,6 +414,62 @@ struct TaskRowView: View {
 
     private var owner: HouseholdMember? {
         store.familyGroup.members.first { $0.id == task.ownerMemberID }
+    }
+
+    // At accessibility sizes the date moves under the title instead of squeezing it to a stub.
+    @ViewBuilder
+    private var rowLabel: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 6) {
+                rowTitle.lineLimit(3)
+                HStack(spacing: 10) {
+                    rowTrailing
+                    Spacer(minLength: 0)
+                }
+            }
+        } else {
+            HStack(spacing: 10) {
+                rowTitle.lineLimit(2)
+                Spacer(minLength: 8)
+                rowTrailing
+            }
+        }
+    }
+
+    private var rowTitle: some View {
+        Text(task.title)
+            .ninaText(.body, task.isDone ? NinaTheme.muted : NinaTheme.ink, weight: .medium)
+            .strikethrough(task.isDone, color: NinaTheme.muted)
+            .multilineTextAlignment(.leading)
+    }
+
+    @ViewBuilder
+    private var rowTrailing: some View {
+        if task.kind == .task {
+            Text(task.effectiveDueLabel())
+                .ninaText(.meta, isOverdue ? NinaTheme.terracotta : NinaTheme.muted, weight: isOverdue ? .semibold : .regular)
+                .lineLimit(1)
+                .accessibilityLabel(
+                    isOverdue ? "Atrasada, \(task.effectiveDueLabel())" : task.effectiveDueLabel()
+                )
+        } else {
+            Text("Plante depois").ninaText(.meta, NinaTheme.muted)
+        }
+
+        // A semente's defining property is that it is a semente, so
+        // the kind glyph outranks the category one on its rows.
+        CategoryGlyph(
+            systemName: task.kind == .seed ? "leaf" : task.category.symbolName,
+            size: 15,
+            tint: NinaTheme.muted
+        )
+
+        if let owner {
+            MemberAvatar(initials: owner.name.ninaInitials, tone: owner.tone, size: 24)
+                .accessibilityLabel("Dono: \(owner.name)")
+        } else {
+            Color.clear.frame(width: 24, height: 24)
+        }
     }
 
     var body: some View {
@@ -443,44 +496,8 @@ struct TaskRowView: View {
                 Haptics.selection()
                 router.navigate(to: .task(task.id))
             } label: {
-                HStack(spacing: 10) {
-                    Text(task.title)
-                        .font(.system(size: 17, weight: .medium))
-                        .tracking(-0.1)
-                        .foregroundStyle(task.isDone ? NinaTheme.muted : NinaTheme.ink)
-                        .strikethrough(task.isDone, color: NinaTheme.muted)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-
-                    Spacer(minLength: 8)
-
-                    if task.kind == .task {
-                        Text(task.effectiveDueLabel())
-                            .font(.system(size: 13, weight: isOverdue ? .semibold : .regular))
-                            .foregroundStyle(isOverdue ? NinaTheme.terracotta : NinaTheme.muted)
-                            .lineLimit(1)
-                            .accessibilityLabel(
-                                isOverdue ? "Atrasada, \(task.effectiveDueLabel())" : task.effectiveDueLabel()
-                            )
-                    } else {
-                        Text("Plante depois").ninaText(.meta, NinaTheme.muted)
-                    }
-
-                    // A semente's defining property is that it is a semente, so
-                    // the kind glyph outranks the category one on its rows.
-                    CategoryGlyph(
-                        systemName: task.kind == .seed ? "leaf" : task.category.symbolName,
-                        size: 15,
-                        tint: NinaTheme.muted
-                    )
-
-                    if let owner {
-                        MemberAvatar(initials: owner.name.ninaInitials, tone: owner.tone, size: 24)
-                    } else {
-                        Color.clear.frame(width: 24, height: 24)
-                    }
-                }
-                .contentShape(Rectangle())
+                rowLabel
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }

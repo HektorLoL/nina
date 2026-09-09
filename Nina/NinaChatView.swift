@@ -129,7 +129,7 @@ struct NinaChatView: View {
                 Image(systemName: "gearshape")
                     .font(.system(size: 19, weight: .regular))
                     .foregroundStyle(NinaTheme.ink)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Abrir ajustes")
@@ -188,7 +188,7 @@ struct NinaChatView: View {
             }
             .padding(.top, 4)
             .allowsHitTesting(!store.isNinaResponding)
-            .opacity(store.isNinaResponding ? 0.5 : 1)
+            .opacity(store.isNinaResponding ? 0.4 : 1)
         }
         .padding(.top, 10)
     }
@@ -387,7 +387,7 @@ private struct ChatInputBar: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSend)
-                    .opacity(canSend ? 1 : 0.6)
+                    .opacity(canSend ? 1 : 0.4)
                     .accessibilityLabel("Enviar mensagem")
                 }
             }
@@ -912,7 +912,7 @@ private struct AttachmentDraftChip: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(NinaTheme.muted)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Remover \(attachment.metadata.filename)")
@@ -1032,6 +1032,8 @@ private struct MessageBubble: View {
             isNina ? NinaTheme.cobaltWash : NinaTheme.ink,
             in: RoundedRectangle(cornerRadius: NinaTheme.Radius.card, style: .continuous)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(isNina ? "Nina" : "Você"): \(message.text)")
     }
 
     // A server denial arrives as an ordinary Nina line, so the ceiling it names is recovered here:
@@ -1165,7 +1167,7 @@ private struct AttachmentImageViewer: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(NinaTheme.ground)
-                    .frame(width: 38, height: 38)
+                    .frame(width: 44, height: 44)
                     .background(NinaTheme.ground.opacity(0.18), in: Circle())
             }
             .buttonStyle(.plain)
@@ -1247,7 +1249,7 @@ private struct NinaProposalCard: View {
         .clipShape(RoundedRectangle(cornerRadius: NinaTheme.Radius.card, style: .continuous))
         .ninaCard()
         .disabled(isResolving)
-        .opacity(isResolving ? 0.55 : 1)
+        .opacity(isResolving ? 0.4 : 1)
         .alert("Compartilhar com a casa?", isPresented: $isConfirmingShare) {
             Button("Compartilhar") {
                 resolve(decision: .accept, memoryVisibility: .shared)

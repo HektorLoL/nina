@@ -30,7 +30,7 @@ const openWaitlist = (source) => {
     dialog.dataset.waitlistSource = source;
     dialog.showModal();
     requestAnimationFrame(() => {
-      dialog.querySelector("input[name='firstName']")?.focus();
+      dialog.querySelector("input[name='email']")?.focus();
     });
   }
 };
@@ -94,7 +94,7 @@ waitlistForm?.addEventListener("submit", async (event) => {
 
   if (submitButton instanceof HTMLButtonElement) submitButton.disabled = true;
   waitlistForm.setAttribute("aria-busy", "true");
-  if (waitlistSubmitLabel) waitlistSubmitLabel.textContent = "Entrando...";
+  if (waitlistSubmitLabel) waitlistSubmitLabel.textContent = "Entrando";
   setWaitlistStatus("Enviando com segurança.");
 
   try {

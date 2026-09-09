@@ -98,13 +98,13 @@ struct LoginView: View {
             .frame(height: 52)
             .clipShape(RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
             .disabled(authSession.isSigningIn || !authSession.isBackendAvailable)
-            .opacity(authSession.isSigningIn || !authSession.isBackendAvailable ? 0.5 : 1)
+            .opacity(authSession.isSigningIn || !authSession.isBackendAvailable ? 0.4 : 1)
             .accessibilityIdentifier("apple-sign-in")
 
             if isEmailFlowVisible {
                 emailFields
             } else {
-                NinaButton(title: "Usar meu e-mail", kind: .outline, fillsWidth: true) {
+                NinaButton(title: "Usar meu email", kind: .outline, fillsWidth: true) {
                     Haptics.lightImpact()
                     isEmailFlowVisible = true
                     focusedField = .email
@@ -126,7 +126,7 @@ struct LoginView: View {
 
     @ViewBuilder
     private var emailFields: some View {
-        LoginField_(title: "E-mail") {
+        LoginField_(title: "Email") {
             TextField("voce@exemplo.com", text: $email)
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
@@ -135,7 +135,7 @@ struct LoginView: View {
                 .submitLabel(isWaitingForCode ? .next : .send)
                 .focused($focusedField, equals: .email)
                 .disabled(isWaitingForCode)
-                .opacity(isWaitingForCode ? 0.5 : 1)
+                .opacity(isWaitingForCode ? 0.4 : 1)
                 .onSubmit {
                     if isWaitingForCode {
                         focusedField = .code
@@ -155,7 +155,7 @@ struct LoginView: View {
                     .onSubmit(verifyCode)
             }
 
-            NinaButton(title: "Usar outro e-mail", kind: .quiet) {
+            NinaButton(title: "Usar outro email", kind: .quiet) {
                 authSession.pendingLoginEmail = nil
                 code = ""
                 focusedField = .email
@@ -169,7 +169,7 @@ struct LoginView: View {
 
         NinaButton(
             title: isLoadingAuth
-                ? "Aguarde..."
+                ? (isWaitingForCode ? "Confirmando" : "Enviando")
                 : (isDebugLoginEmail
                     ? "Entrar para testar"
                     : (isWaitingForCode ? "Confirmar código" : "Enviar código")),

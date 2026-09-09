@@ -85,18 +85,8 @@ struct MemberEditorSheet: View {
     }
 
     private var header: some View {
-        HStack {
-            Button {
-                Haptics.selection()
-                dismiss()
-            } label: {
-                Text("Fechar")
-                    .ninaText(.label, NinaTheme.muted, weight: .semibold)
-                    .frame(height: 40, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
+        SheetHeader(eyebrow: "Pessoa") {
+            dismiss()
         }
         .padding(.horizontal, 20)
         .padding(.top, 4)
@@ -156,7 +146,7 @@ struct MemberEditorSheet: View {
                     .submitLabel(.done)
             }
             .disabled(isNameLocked)
-            .opacity(isNameLocked ? 0.5 : 1)
+            .opacity(isNameLocked ? 0.4 : 1)
 
             if isNameLocked {
                 Text("O nome vem da conta desta pessoa.")
@@ -170,7 +160,7 @@ struct MemberEditorSheet: View {
             }
         }
         .disabled(!canEdit)
-        .opacity(canEdit ? 1 : 0.5)
+        .opacity(canEdit ? 1 : 0.4)
     }
 
     @ViewBuilder
@@ -228,7 +218,7 @@ struct MemberEditorSheet: View {
             }
         }
         .disabled(!canEdit)
-        .opacity(canEdit ? 1 : 0.5)
+        .opacity(canEdit ? 1 : 0.4)
     }
 
     @ViewBuilder
@@ -277,7 +267,7 @@ struct MemberEditorSheet: View {
                 }
             }
             .disabled(!canEdit)
-            .opacity(canEdit ? 1 : 0.5)
+            .opacity(canEdit ? 1 : 0.4)
         } else if member != nil {
             VStack(alignment: .leading, spacing: 12) {
                 Eyebrow(text: "Contexto")
@@ -288,7 +278,7 @@ struct MemberEditorSheet: View {
                 }
             }
             .disabled(!canEdit)
-            .opacity(canEdit ? 1 : 0.5)
+            .opacity(canEdit ? 1 : 0.4)
         }
     }
 
@@ -336,7 +326,7 @@ struct MemberEditorSheet: View {
         VStack(spacing: 8) {
             if canEdit {
                 NinaButton(
-                    title: isSaving ? "Salvando..." : saveButtonTitle,
+                    title: isSaving ? "Salvando" : saveButtonTitle,
                     systemName: "checkmark",
                     fillsWidth: true,
                     isEnabled: canSave && !isSaving
@@ -667,7 +657,7 @@ struct PendingHomeApprovalView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 24)
 
-            ZeroState(headline: "Pedido enviado", body_: waitingBody, presence: .waiting) {
+            ZeroState(headline: "Pedido enviado.", body_: waitingBody, presence: .waiting) {
                 VStack(spacing: 10) {
                     if let request = store.pendingJoinRequest {
                         Text(request.status.title).ninaText(.meta, NinaTheme.muted)
@@ -704,7 +694,8 @@ struct PendingHomeApprovalView: View {
 
             Spacer(minLength: 24)
 
-            NinaButton(title: "Sair", kind: .quiet) {
+            NinaButton(title: "Sair da conta", kind: .quiet) {
+                Haptics.warning()
                 Task {
                     onboardingStore.cancelReplay()
                     await authSession.signOut()
@@ -791,7 +782,8 @@ struct FamilyAccessDecisionView: View {
 
             Spacer(minLength: 24)
 
-            NinaButton(title: "Sair", kind: .quiet) {
+            NinaButton(title: "Sair da conta", kind: .quiet) {
+                Haptics.warning()
                 Task {
                     onboardingStore.cancelReplay()
                     await authSession.signOut()

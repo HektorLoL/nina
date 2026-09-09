@@ -65,7 +65,7 @@
 
     setState(
       "loading",
-      "Atualizando suas preferências...",
+      "Atualizando suas preferências",
       "Aguarde enquanto concluímos sua solicitação.",
     );
     submitButton.disabled = true;
