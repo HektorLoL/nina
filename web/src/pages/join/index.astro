@@ -23,7 +23,7 @@ import { appStoreListing } from "../../appStore";
         <NinaMark size={64} />
       </div>
       <p class="eyebrow">Convite da Nina</p>
-      <h1 data-invite-title>Você foi convidado para uma casa.</h1>
+      <h1 data-invite-title>Você recebeu um convite para uma casa.</h1>
       <p class="invite-description" data-invite-description>
         Estou verificando o convite para preparar seu pedido de entrada.
       </p>
@@ -34,7 +34,7 @@ import { appStoreListing } from "../../appStore";
           <Glyph name="copy" size={19} />
         </button>
       </div>
-      <div class="invite-status" data-invite-status>
+      <div class="invite-status" data-invite-status aria-live="polite">
         <span class="spinner" aria-hidden="true"></span>
         Verificando convite
       </div>
@@ -71,7 +71,7 @@ import { appStoreListing } from "../../appStore";
                 O app está sendo preparado para o iPhone. Entre na lista e eu aviso assim que
                 ele chegar.
               </p>
-              <p class="invite-install-text" data-invite-install-keep>
+              <p class="invite-install-text" data-invite-install-keep hidden>
                 Guarde o código acima. Se ele vencer, quem convidou você envia um novo.
               </p>
               <a class="button button-secondary" href="/#lista">

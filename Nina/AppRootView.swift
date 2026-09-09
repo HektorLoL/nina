@@ -249,16 +249,18 @@ struct AppRootView: View {
             return .signedOut
         }
 
-        if onboardingStore.shouldShowTutorial(for: authSession.currentUser) {
-            return .tutorial
-        }
-
         if store.homeAccessState == .loading {
             return .homeLoading
         }
 
+        // A person who arrived through an invite came to join a house; the
+        // rehearsal can wait until they are in it.
         if inviteLinkStore.pendingCode != nil {
             return .invite
+        }
+
+        if onboardingStore.shouldShowTutorial(for: authSession.currentUser) {
+            return .tutorial
         }
 
         switch store.homeAccessState {

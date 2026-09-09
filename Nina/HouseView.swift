@@ -413,8 +413,13 @@ struct MemoriesView: View {
                     if store.ninaMemories.isEmpty {
                         ZeroState(
                             headline: "Nada guardado ainda.",
-                            body_: "Memórias pessoais começam privadas. Compartilhar com a casa é sempre uma escolha explícita."
-                        )
+                            body_: "Uma memória nasce na conversa: conte algo à Nina que valha guardar e ela propõe. Memórias começam privadas; compartilhar com a casa é sempre uma escolha sua."
+                        ) {
+                            NinaButton(title: "Contar algo pra Nina", kind: .outline) {
+                                Haptics.selection()
+                                NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
+                            }
+                        }
                         .padding(.top, 30)
                     } else {
                         ForEach(store.ninaMemories) { memory in

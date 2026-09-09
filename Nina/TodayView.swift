@@ -496,6 +496,10 @@ struct TaskRowView: View {
                 isShowingQuickActions = true
             }
         )
+        // VoiceOver cannot long-press; the same sheet is one rotor action away.
+        .accessibilityAction(named: "Ações rápidas") {
+            isShowingQuickActions = true
+        }
         .sheet(isPresented: $isShowingQuickActions) {
             TaskQuickActionsSheet(task: task)
                 .presentationDragIndicator(.visible)

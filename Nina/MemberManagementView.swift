@@ -716,6 +716,14 @@ struct PendingHomeApprovalView: View {
         .frame(maxWidth: 520)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ninaScreenBackground()
+        // Nobody should have to tap "Atualizar" to learn they were let in.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard !Task.isCancelled else { return }
+                await store.activateHomeContext(for: authSession.currentUser)
+            }
+        }
     }
 
     // Possessing the link grants nothing: the request waits for a person.

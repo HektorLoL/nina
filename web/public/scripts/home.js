@@ -43,6 +43,8 @@ openButtons.forEach((button) => {
 
 if (window.location.hash === "#lista") {
   openWaitlist("invite");
+  // The hash opened the dialog once; a reload must not reopen it over a finished signup.
+  history.replaceState(null, "", window.location.pathname + window.location.search);
 }
 
 closeButtons.forEach((button) => {
@@ -51,8 +53,13 @@ closeButtons.forEach((button) => {
   });
 });
 
+// Only a tap on the backdrop closes the dialog; the card's own padding is the card.
 dialog?.addEventListener("click", (event) => {
-  if (event.target === dialog && dialog instanceof HTMLDialogElement) dialog.close();
+  if (!(dialog instanceof HTMLDialogElement)) return;
+  const rect = dialog.getBoundingClientRect();
+  const outside = event.clientX < rect.left || event.clientX > rect.right ||
+    event.clientY < rect.top || event.clientY > rect.bottom;
+  if (outside) dialog.close();
 });
 
 const setWaitlistStatus = (message, tone = "") => {

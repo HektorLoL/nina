@@ -135,6 +135,21 @@ struct TaskDetailView: View {
                     Text(task.category.title).ninaText(.label)
                 }
             }
+
+            // What the editor asks for must be readable somewhere afterwards.
+            if task.priority != .normal {
+                NinaDivider(inset: 0)
+                metaRow("Prioridade") {
+                    Text(task.priority.title).ninaText(.label)
+                }
+            }
+
+            if task.kind == .task, task.dueAt != nil {
+                NinaDivider(inset: 0)
+                metaRow("Aviso") {
+                    Text(task.reminderLead.title).ninaText(.label)
+                }
+            }
         }
     }
 

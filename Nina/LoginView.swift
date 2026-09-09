@@ -3,6 +3,7 @@ import SwiftUI
 
 struct LoginView: View {
     @Environment(AuthSessionStore.self) private var authSession
+    @Environment(InviteLinkStore.self) private var inviteLinkStore
 
     @State private var email = ""
     @State private var code = ""
@@ -59,12 +60,21 @@ struct LoginView: View {
             NinaMark(size: 64)
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Sua amiga Nina")
-                    .ninaText(.display)
+                if inviteLinkStore.pendingCode != nil {
+                    Text("Você foi convidado para uma casa.")
+                        .ninaText(.display)
 
-                Text("Conta pra ela o que está pesando na casa. Ela monta as tarefas e espera você confirmar — nada entra sozinho.")
-                    .ninaText(.label, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text("Entre para pedir entrada. Quem convidou você aprova, e a Nina cuida do resto com vocês.")
+                        .ninaText(.label, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("Sua amiga Nina")
+                        .ninaText(.display)
+
+                    Text("Conta pra ela o que está pesando na casa. Ela monta as tarefas e espera você confirmar — nada entra sozinho.")
+                        .ninaText(.label, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

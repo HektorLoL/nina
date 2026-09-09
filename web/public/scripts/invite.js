@@ -33,7 +33,7 @@ const showInvalid = () => {
   if (description) {
     description.textContent = "Peça um novo link para quem convidou você.";
   }
-  setStatus("error", "Convite inválido");
+  setStatus("error", "Vencido, já usado ou digitado errado");
   codeBox?.setAttribute("hidden", "");
   actions?.setAttribute("hidden", "");
   installKeepCode?.setAttribute("hidden", "");
@@ -49,9 +49,12 @@ const showInvite = (familyName, verified, usesRemaining, expiresAt) => {
   if (codeValue) codeValue.textContent = code;
   codeBox?.removeAttribute("hidden");
   actions?.removeAttribute("hidden");
+  installKeepCode?.removeAttribute("hidden");
 
   const details = [
-    typeof usesRemaining === "number" ? `${usesRemaining} acessos disponíveis` : "",
+    typeof usesRemaining === "number"
+      ? (usesRemaining === 1 ? "1 entrada disponível" : `${usesRemaining} entradas disponíveis`)
+      : "",
     expiresAt
       ? `válido até ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(expiresAt))}`
       : "",
@@ -73,30 +76,57 @@ const showUnverified = () => {
   if (codeValue) codeValue.textContent = code;
   codeBox?.removeAttribute("hidden");
   actions?.removeAttribute("hidden");
+  installKeepCode?.removeAttribute("hidden");
   setStatus("neutral", "Verificação pendente");
   setOpenAppURL();
   setState("unverified");
 };
 
+let statusRestore = null;
+
+const flashStatus = (tone, message) => {
+  const previous = statusElement ? Array.from(statusElement.childNodes).map((node) => node.cloneNode(true)) : [];
+  setStatus(tone, message);
+  clearTimeout(statusRestore);
+  statusRestore = setTimeout(() => {
+    statusElement?.replaceChildren(...previous);
+  }, 2200);
+};
+
+// Both copy buttons answer on the status line, so the icon-only one is never silent.
 const copyCode = async () => {
   if (!code) return;
   try {
     await navigator.clipboard.writeText(code);
   } catch {
+    flashStatus("neutral", "Não deu para copiar. Toque e segure no código para selecionar.");
     return;
   }
 
+  flashStatus("success", "Código copiado");
   document.querySelectorAll("[data-copy-code]").forEach((button) => {
     const previous = button.textContent;
     if (button.textContent?.trim() === "Copiar código") button.textContent = "Copiado";
+    button.setAttribute("aria-label", "Copiado");
     setTimeout(() => {
-      if (previous) button.textContent = previous;
+      if (previous?.trim() === "Copiar código") button.textContent = previous;
+      button.setAttribute("aria-label", "Copiar código");
     }, 1600);
   });
 };
 
 document.querySelectorAll("[data-copy-code]").forEach((button) => {
   button.addEventListener("click", copyCode);
+});
+
+// A custom scheme cannot report that no app answered; if the page is still
+// here a moment later, the app is not on this phone and the install block is.
+openApp?.addEventListener("click", () => {
+  setTimeout(() => {
+    if (document.visibilityState !== "visible") return;
+    flashStatus("neutral", "A Nina não abriu? Ela ainda não está neste aparelho.");
+    document.querySelector("[data-invite-install]")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, 1500);
 });
 
 if (code.length < 12) {
