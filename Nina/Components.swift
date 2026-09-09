@@ -111,17 +111,20 @@ struct NinaChip: View {
             Text(text)
                 .font(.system(size: 14, weight: isSet ? .semibold : .medium))
         }
-        .foregroundStyle(isSet ? NinaTheme.cobalt : NinaTheme.muted)
+        // Selection is weight, not cobalt: cobalt stays with the screen's one commit,
+        // and an unset chip is a control, so its edge uses the control stroke.
+        .foregroundStyle(isSet ? NinaTheme.ink : NinaTheme.muted)
         .padding(.horizontal, 14)
         .frame(height: 36)
         .background(
-            isSet ? NinaTheme.cobaltWash : Color.clear,
+            isSet ? NinaTheme.grout : Color.clear,
             in: Capsule()
         )
         .overlay(
-            Capsule().strokeBorder(isSet ? Color.clear : NinaTheme.line, lineWidth: 1)
+            Capsule().strokeBorder(isSet ? NinaTheme.ink : NinaTheme.control, lineWidth: 1)
         )
         .opacity(isDisabled ? 0.4 : 1)
+        .accessibilityAddTraits(isSet ? .isSelected : [])
     }
 }
 
@@ -137,12 +140,18 @@ struct NinaButton: View {
     var systemName: String?
     var fillsWidth: Bool = false
     var isEnabled: Bool = true
+    // Pending is not disabled: the label stays legible while the work happens.
+    var isPending: Bool = false
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                if let systemName {
+                if isPending {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(foreground)
+                } else if let systemName {
                     Image(systemName: systemName)
                         .font(.system(size: 16, weight: .semibold))
                 }
@@ -157,12 +166,15 @@ struct NinaButton: View {
             .background(background, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
-                    .strokeBorder(kind == .outline ? NinaTheme.line : Color.clear, lineWidth: 1)
+                    .strokeBorder(kind == .outline ? NinaTheme.control : Color.clear, lineWidth: 1)
             )
+            // A quiet button keeps its 26pt look but answers to a 44pt finger.
+            .padding(.vertical, kind == .quiet ? 9 : 0)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.4)
+        .disabled(!isEnabled || isPending)
+        .opacity(isEnabled || isPending ? 1 : 0.4)
     }
 
     private var foreground: Color {

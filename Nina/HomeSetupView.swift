@@ -27,7 +27,7 @@ struct HomeSetupView: View {
     }
 
     private var displayedError: String? {
-        errorMessage ?? store.syncErrorMessage
+        errorMessage ?? store.syncErrorMessage ?? authSession.errorMessage
     }
 
     var body: some View {

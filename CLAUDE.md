@@ -753,9 +753,14 @@ survives in the model and on the wire, but Tarefas groups by *category*, per boa
 backend, a DEBUG account, or no active home. The mutation persists locally and
 never syncs, with no error surfaced.
 
-**`restoreSession()` returns `.signedOut` on any thrown error** and runs on every
-foreground transition — so a network blip while returning from background bounces
-the user to `LoginView` even though the Keychain session is intact.
+**`restoreSession()` signs out only on an `AuthError`.** Any other failure
+(a dropped refresh, a timeout, `ensure_current_profile` unreachable) returns
+`.unreachable(user)`, which keeps the signed-in user and lets the home context
+decide access. Until 2026-09-08 every thrown error returned `.signedOut`, so a
+network blip on the foreground transition bounced people to `LoginView` with an
+intact Keychain session. The same rule holds for joining (`inviteRefused` is the
+only error that may call an invite dead) and for reminders (an `.unavailable`
+membership never re-syncs notifications).
 
 **Nothing wipes protected local data on plain sign-out.** Only account deletion
 does. Household, profile, photo, and consent files persist on disk after

@@ -73,7 +73,7 @@ enum NinaEngineError: Error, Equatable {
         case .rateLimited:
             "Você chegou ao limite temporário de mensagens. Tente novamente mais tarde."
         case .monthlyBudgetReached:
-            "A Nina atingiu o limite mensal de uso da casa. Novas respostas online voltam no próximo mês."
+            "Cheguei ao limite mensal de conversa. Volto no mês que vem. Tarefas, compras e casa seguem normais."
         case .inputTooLarge:
             "Essa mensagem ou anexo é grande demais para uma única conversa."
         case .adultAccessRequired:
@@ -156,17 +156,19 @@ struct MockNinaEngine: NinaEngine {
             )
         }
 
-        if normalized.contains("veterin") || normalized.contains("thor") {
+        // The fallback engine knows nobody in the house: it never names a person
+        // or a pet, and everything it proposes lands unowned.
+        if normalized.contains("veterin") {
             return NinaEngineResponse(
-                reply: "Claro. Posso deixar isso organizado para vocês. Quer que eu crie a tarefa do veterinário do Thor para esta semana?",
+                reply: "Claro. Posso deixar isso organizado. Quer que eu crie a tarefa do veterinário para esta semana?",
                 suggestion: NinaSuggestion(
-                    title: "Veterinário do Thor",
+                    title: "Veterinário",
                     detail: "Marcar consulta e verificar carteira de vacinas.",
                     actionTitle: "Criar tarefa",
                     kind: .task,
-                    payloadTitle: "Marcar veterinário para o Thor",
+                    payloadTitle: "Marcar veterinário",
                     payloadDetail: "Conferir horários e carteira de vacinas.",
-                    payloadOwner: "Heitor",
+                    payloadOwner: "Casa",
                     payloadDueLabel: "Esta semana",
                     category: .pet,
                     symbolName: "pawprint.fill"
@@ -176,7 +178,7 @@ struct MockNinaEngine: NinaEngine {
 
         if normalized.contains("gas") || normalized.contains("gás") {
             return NinaEngineResponse(
-                reply: "Entendi. Pelo ritmo da casa, faz sentido lembrar antes de virar urgência. Posso criar um lembrete para daqui 8 dias.",
+                reply: "Entendi. Faz sentido lembrar antes de virar urgência. Posso criar um lembrete para daqui 8 dias.",
                 suggestion: NinaSuggestion(
                     title: "Lembrete do gás",
                     detail: "Avisar antes do gás acabar para comprar sem correria.",
@@ -194,15 +196,15 @@ struct MockNinaEngine: NinaEngine {
 
         if normalized.contains("aniversario") || normalized.contains("aniversário") || normalized.contains("mae") || normalized.contains("mãe") {
             return NinaEngineResponse(
-                reply: "Boa lembrança. Posso guardar essa data e sugerir presentes dentro do orçamento que vocês costumam usar.",
+                reply: "Boa lembrança. Posso guardar essa data e lembrar vocês uns dias antes.",
                 suggestion: NinaSuggestion(
                     title: "Aniversário da mãe",
                     detail: "Separar ideias de presente e criar lembrete para comprar antes do fim de semana.",
-                    actionTitle: "Guardar data",
+                    actionTitle: "Criar tarefa",
                     kind: .gift,
                     payloadTitle: "Comprar presente para aniversário da mãe",
-                    payloadDetail: "Sugerir opções simples dentro do orçamento da família.",
-                    payloadOwner: "Mirna",
+                    payloadDetail: "Lembrar uns dias antes.",
+                    payloadOwner: "Casa",
                     payloadDueLabel: "Semana que vem",
                     category: .home,
                     symbolName: "gift.fill"
@@ -212,15 +214,15 @@ struct MockNinaEngine: NinaEngine {
 
         if normalized.contains("conta") || normalized.contains("boleto") || normalized.contains("vencimento") {
             return NinaEngineResponse(
-                reply: "Se você me enviar uma foto da conta, eu consigo ler o vencimento e preparar uma sugestão para colocar o pagamento na rotina da casa.",
+                reply: "Se você me disser o vencimento, eu preparo uma sugestão para colocar o pagamento na rotina da casa.",
                 suggestion: NinaSuggestion(
                     title: "Conta para pagar",
                     detail: "Registrar vencimento e colocar na lista de acompanhamento.",
                     actionTitle: "Criar tarefa",
                     kind: .document,
                     payloadTitle: "Revisar conta recebida",
-                    payloadDetail: "Conferir vencimento e responsável pelo pagamento.",
-                    payloadOwner: "Heitor",
+                    payloadDetail: "Conferir vencimento e quem paga.",
+                    payloadOwner: "Casa",
                     payloadDueLabel: "Próximos dias",
                     category: .bills,
                     symbolName: "doc.text.viewfinder"
@@ -230,15 +232,15 @@ struct MockNinaEngine: NinaEngine {
 
         if normalized.contains("receita") || normalized.contains("remedio") || normalized.contains("remédio") || normalized.contains("medicamento") {
             return NinaEngineResponse(
-                reply: "Envie uma foto ou o arquivo da receita. Eu posso ajudar a organizar horários, doses e quem precisa acompanhar, sem substituir a orientação médica.",
+                reply: "Me conte os horários e as doses. Eu ajudo a organizar quem acompanha, sem substituir a orientação médica.",
                 suggestion: NinaSuggestion(
                     title: "Rotina de medicamento",
                     detail: "Criar lembrete diário para acompanhar a receita.",
-                    actionTitle: "Criar rotina",
+                    actionTitle: "Criar tarefa",
                     kind: .document,
                     payloadTitle: "Organizar medicamento da receita",
-                    payloadDetail: "Registrar horários e responsável por acompanhar.",
-                    payloadOwner: "Mirna",
+                    payloadDetail: "Registrar horários e quem acompanha.",
+                    payloadOwner: "Casa",
                     payloadDueLabel: "Hoje",
                     category: .health,
                     symbolName: "pills.fill"
@@ -248,15 +250,15 @@ struct MockNinaEngine: NinaEngine {
 
         if normalized.contains("escola") || normalized.contains("comprovante") || normalized.contains("reuniao") || normalized.contains("reunião") {
             return NinaEngineResponse(
-                reply: "Consigo usar o comprovante ou documento para preparar uma tarefa escolar com as datas e detalhes importantes.",
+                reply: "Posso preparar uma tarefa escolar com a data e o que precisa levar. Me diga o dia.",
                 suggestion: NinaSuggestion(
                     title: "Compromisso escolar",
                     detail: "Adicionar evento escolar à rotina da família.",
-                    actionTitle: "Criar tarefa escolar",
+                    actionTitle: "Criar tarefa",
                     kind: .document,
-                    payloadTitle: "Organizar comprovante escolar",
+                    payloadTitle: "Organizar compromisso escolar",
                     payloadDetail: "Conferir data e material necessário.",
-                    payloadOwner: "Mirna",
+                    payloadOwner: "Casa",
                     payloadDueLabel: "Esta semana",
                     category: .school,
                     symbolName: "backpack.fill"
@@ -270,7 +272,7 @@ struct MockNinaEngine: NinaEngine {
                 suggestion: NinaSuggestion(
                     title: "Revisar divisão da casa",
                     detail: "Uma conversa sobre quem está pegando o quê, sem números e sem placar.",
-                    actionTitle: "Ver sugestão",
+                    actionTitle: "Criar tarefa",
                     kind: .redistribution,
                     payloadTitle: "Revisar divisão doméstica",
                     payloadDetail: "Conversar sobre redistribuir tarefas recorrentes.",
@@ -283,7 +285,7 @@ struct MockNinaEngine: NinaEngine {
         }
 
         return NinaEngineResponse(
-            reply: "Anotei. Como ainda não há uma data clara, posso guardar isso como semente e vocês decidem quando plantar.",
+            reply: "Entendi. Como ainda não há uma data clara, posso guardar isso como semente e vocês decidem quando plantar.",
             suggestion: NinaSuggestion(
                 title: "Guardar como semente",
                 detail: "Manter essa intenção visível sem escolher uma data agora.",

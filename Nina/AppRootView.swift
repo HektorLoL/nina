@@ -142,6 +142,7 @@ struct AppRootView: View {
     @State private var tabRouter = TabRouter()
     @State private var tabSwipeLock = TabSwipeLock()
     @State private var isShowingLoadingScreen = true
+    @State private var isCoveringForPrivacy = false
     @State private var isAppShellMounted = false
     @State private var didFinishInitialLoad = false
     @State private var shouldRefreshWhenActive = false
@@ -158,6 +159,12 @@ struct AppRootView: View {
                 AppLoadingScreen()
                     .transition(.opacity.combined(with: .scale(scale: 1.015)))
                     .zIndex(1)
+            }
+
+            if isCoveringForPrivacy {
+                AppLoadingScreen()
+                    .transition(.opacity)
+                    .zIndex(4)
             }
         }
         .background(NinaTheme.ground.ignoresSafeArea())
@@ -180,6 +187,10 @@ struct AppRootView: View {
             tabRouter = TabRouter()
         }
         .onChange(of: scenePhase) { _, newPhase in
+            // The app-switcher snapshot is taken while inactive; a boleto reading
+            // in the chat must not be what it captures.
+            isCoveringForPrivacy = newPhase != .active && isAppShellMounted
+
             if newPhase == .background {
                 shouldRefreshWhenActive = didFinishInitialLoad
                 return
@@ -299,6 +310,14 @@ struct AppRootView: View {
         }
     }
 
+    private var syncErrorToastBottomPadding: CGFloat {
+        let base: CGFloat = tabRouter.router(for: selectedTab).path.isEmpty ? 164 : 16
+        let undoIsVisible = store.undoableCompletionID.map { id in
+            store.tasks.contains { $0.id == id }
+        } ?? false
+        return undoIsVisible ? base + 62 : base
+    }
+
     @ViewBuilder
     private var appShell: some View {
         ZStack(alignment: .bottom) {
@@ -314,6 +333,15 @@ struct AppRootView: View {
                     .padding(.bottom, tabRouter.router(for: selectedTab).path.isEmpty ? 164 : 16)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                     .zIndex(2)
+            }
+
+            // A write that fails after the screen moved on must still be reported
+            // where the person is, not on whichever tab happens to read the string.
+            if let message = store.syncErrorMessage {
+                SyncErrorToast(message: message)
+                    .padding(.bottom, syncErrorToastBottomPadding)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .zIndex(3)
             }
 
             // A pushed screen owns the whole viewport: it has its own back
@@ -669,6 +697,50 @@ private extension View {
 }
 
 // Ink and weight, never a hue: this is a neutral confirmation, not a state.
+private struct SyncErrorToast: View {
+    @Environment(AppStore.self) private var store
+    var message: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.circle")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(NinaTheme.ink)
+                .padding(.top, 1)
+
+            Text(message)
+                .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            Button {
+                Haptics.selection()
+                store.dismissSyncError(ifStill: message)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(NinaTheme.muted)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Fechar aviso")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard(fill: NinaTheme.grout, stroke: NinaTheme.line)
+        .padding(.horizontal, 20)
+        .accessibilityElement(children: .combine)
+        .task(id: message) {
+            AccessibilityNotification.Announcement(message).post()
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard !Task.isCancelled else { return }
+            store.dismissSyncError(ifStill: message)
+        }
+    }
+}
+
 private struct UndoCompletionToast: View {
     @Environment(AppStore.self) private var store
     var title: String
@@ -773,7 +845,7 @@ private struct BottomTabBar: View {
                         Text(tab.title)
                             .font(.system(size: 12, weight: tab == selectedTab ? .semibold : .regular))
                     }
-                    .foregroundStyle(tab == selectedTab ? NinaTheme.cobalt : NinaTheme.muted)
+                    .foregroundStyle(tab == selectedTab ? NinaTheme.ink : NinaTheme.muted)
                     .frame(maxWidth: .infinity)
                     .contentShape(Rectangle())
                 }

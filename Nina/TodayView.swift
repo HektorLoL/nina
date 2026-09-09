@@ -24,6 +24,7 @@ struct TodayView: View {
 
     @State private var filter: TodayFilter = .all
     @State private var collapsed: Set<String> = []
+    @State private var isConfirmingReschedule = false
 
     private var now: Date { .now }
 
@@ -95,6 +96,7 @@ struct TodayView: View {
             }
         }
         .ninaScreenBackground()
+        .ninaStatusBarMask()
         .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
             filter = .unowned
         }
@@ -190,8 +192,10 @@ struct TodayView: View {
                 }
             }
             .padding(.vertical, 1)
+            .padding(.trailing, 20)
         }
         .scrollClipDisabled()
+        .chipRowTrailingFade()
     }
 
     private func chipTitle(_ option: TodayFilter) -> String {
@@ -250,18 +254,31 @@ struct TodayView: View {
                 Spacer()
 
                 if isLate, count > 1 {
+                    // Lateness is the count, not the control: the capsule stays ink.
                     Button {
                         Haptics.lightImpact()
-                        rescheduleOverdue()
+                        isConfirmingReschedule = true
                     } label: {
-                        Text("Remarcar as \(count)")
+                        (Text("Remarcar as ") + Text("\(count)").foregroundColor(NinaTheme.terracotta))
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(NinaTheme.terracotta)
+                            .foregroundStyle(NinaTheme.ink)
                             .padding(.horizontal, 12)
                             .frame(height: 30)
-                            .overlay(Capsule().strokeBorder(NinaTheme.terracotta, lineWidth: 1))
+                            .overlay(Capsule().strokeBorder(NinaTheme.control, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
+                    .confirmationDialog(
+                        "Remarcar as \(count) atrasadas para amanhã, 09:00?",
+                        isPresented: $isConfirmingReschedule,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Remarcar para amanhã, 09:00") {
+                            rescheduleOverdue()
+                        }
+                        Button("Cancelar", role: .cancel) {}
+                    } message: {
+                        Text("Cada uma volta para a lista amanhã cedo. Nada é apagado.")
+                    }
                 }
             }
             .padding(.bottom, isCollapsed ? 0 : 8)
@@ -286,6 +303,7 @@ struct TodayView: View {
         for task in overdue {
             store.snoozeTask(task.id, until: target)
         }
+        Haptics.success()
     }
 
     private var firstDay: some View {
@@ -404,13 +422,19 @@ struct TaskRowView: View {
     var body: some View {
         HStack(spacing: 12) {
             Button {
+                // A semente is planted, never ticked: the checkbox opens the date.
+                if task.kind == .seed, !task.isDone {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .plantSeed(task.id)
+                    return
+                }
                 task.isDone ? Haptics.selection() : Haptics.success()
                 store.toggleTask(task)
             } label: {
                 NinaCheckbox(isOn: task.isDone, isOverdue: isOverdue)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(task.isDone ? "Marcar como não feita" : "Marcar como feita")
+            .accessibilityLabel(task.kind == .seed && !task.isDone ? "Plantar" : task.completionActionTitle)
 
             Button {
                 // The long press fires first and the tap follows on lift, so
@@ -425,7 +449,8 @@ struct TaskRowView: View {
                         .tracking(-0.1)
                         .foregroundStyle(task.isDone ? NinaTheme.muted : NinaTheme.ink)
                         .strikethrough(task.isDone, color: NinaTheme.muted)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
 
                     Spacer(minLength: 8)
 
@@ -434,6 +459,9 @@ struct TaskRowView: View {
                             .font(.system(size: 13, weight: isOverdue ? .semibold : .regular))
                             .foregroundStyle(isOverdue ? NinaTheme.terracotta : NinaTheme.muted)
                             .lineLimit(1)
+                            .accessibilityLabel(
+                                isOverdue ? "Atrasada, \(task.effectiveDueLabel())" : task.effectiveDueLabel()
+                            )
                     } else {
                         Text("Plante depois").ninaText(.meta, NinaTheme.muted)
                     }

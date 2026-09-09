@@ -173,6 +173,10 @@ enum AuthFlowError: Error {
     case invalidEmail
     case invalidCode
     case emailNotLinked
+    case codeRejected
+    case emailAlreadyUsed
+    case emailChangeFailed
+    case deletionFailed
     case appleCredentialInvalid
     case configurationMissing
     case unavailable
@@ -183,8 +187,16 @@ enum AuthFlowError: Error {
             "Use um email válido."
         case .invalidCode:
             "Digite o código de 6 números enviado por email."
+        case .codeRejected:
+            "Esse código venceu ou não bate. Peça um novo."
         case .emailNotLinked:
             "Esse email ainda não está vinculado a uma conta Nina."
+        case .emailAlreadyUsed:
+            "Esse email já está em outra conta Nina."
+        case .emailChangeFailed:
+            "Não deu para trocar o email agora. Tente de novo."
+        case .deletionFailed:
+            "Não deu para apagar a conta agora. Nada foi apagado. Tente de novo."
         case .appleCredentialInvalid:
             "A Apple não retornou uma credencial válida. Tente novamente."
         case .configurationMissing:
@@ -199,6 +211,8 @@ enum AuthSessionRestoration {
     case unavailable
     case signedOut
     case signedIn(AuthUser)
+    // The stored session is intact but the network could not confirm it.
+    case unreachable(AuthUser)
 }
 
 protocol AuthClient {
@@ -336,6 +350,12 @@ final class AuthSessionStore {
         case .signedOut:
             currentUser = nil
             isBackendAvailable = true
+        case .unreachable(let offlineUser):
+            // A transport failure never signs anyone out; the home context decides access.
+            if currentUser == nil {
+                currentUser = offlineUser
+            }
+            isBackendAvailable = true
         case .signedIn(let user):
             currentUser = user
             isBackendAvailable = true
@@ -462,26 +482,28 @@ final class AuthSessionStore {
         setError(error)
     }
 
-    func signOut() async {
+    @discardableResult
+    func signOut() async -> Bool {
         errorMessage = nil
 
         #if DEBUG
         if currentUser?.isDebugAccount == true {
             clearSessionState()
-            return
+            return true
         }
         #endif
 
         do {
             try await authClient.signOut()
         } catch is CancellationError {
-            return
+            return false
         } catch {
             handle(error)
-            return
+            return false
         }
 
         clearSessionState()
+        return true
     }
 
     @discardableResult

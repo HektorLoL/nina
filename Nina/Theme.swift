@@ -175,6 +175,35 @@ private struct NinaTextModifier: ViewModifier {
 }
 
 extension View {
+    // Screens draw their own header, so nothing else keeps scrolled text from
+    // colliding with the clock; the glaze is painted over the status bar instead.
+    func ninaStatusBarMask() -> some View {
+        overlay(alignment: .top) {
+            LinearGradient(
+                colors: [NinaTheme.ground, NinaTheme.ground, NinaTheme.ground.opacity(0)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 12)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
+    func chipRowTrailingFade() -> some View {
+        overlay(alignment: .trailing) {
+            LinearGradient(
+                colors: [NinaTheme.ground.opacity(0), NinaTheme.ground],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: 28)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
     func ninaText(
         _ style: NinaText,
         _ color: Color = NinaTheme.ink,

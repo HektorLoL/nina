@@ -68,6 +68,13 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
     static let pendingRequestLimit = 60
     static let missedReminderNudgeDelay: TimeInterval = 60 * 60
 
+    static func settingsSummary(defaults: UserDefaults = .standard) -> String {
+        let alertsEnabled = defaults.object(forKey: notificationsEnabledKey) as? Bool ?? true
+        guard alertsEnabled else { return "Avisos desligados por aqui." }
+        let quietHours = defaults.object(forKey: quietHoursEnabledKey) as? Bool ?? true
+        return quietHours ? "Avisos ligados, com horário de silêncio." : "Avisos ligados."
+    }
+
     private let center: UNUserNotificationCenter
     private let defaults: UserDefaults
     private let calendar: Calendar
@@ -223,8 +230,11 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
 
         func leadAdjusted(_ dueMoments: [Date]) -> [ReminderMoment] {
             dueMoments.compactMap { dueMoment in
-                let alertDate = dueMoment.addingTimeInterval(-lead)
-                guard alertDate > now else { return nil }
+                guard dueMoment > now else { return nil }
+                // A lead longer than the time left falls back to the moment itself,
+                // so a task due in three hours with "1 dia antes" still gets one alert.
+                let leadDate = dueMoment.addingTimeInterval(-lead)
+                let alertDate = leadDate > now ? leadDate : dueMoment
                 return ReminderMoment(dueMoment: dueMoment, alertDate: alertDate)
             }
         }
@@ -277,18 +287,20 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
     // The detail never reaches the lock screen. It may be a boleto, a receita or a
     // comunicado escolar, and whoever walks past the table reads it. Only the
     // title the person wrote themselves and who is holding it ever leave the app.
+    // An owned alert is delivered only to the owner's phone, so it speaks to them,
+    // and a nudge asks rather than asserts a household state the phone cannot see.
     private static func taskNotificationBody(_ task: TaskItem) -> String {
         guard !HouseholdWorkload.isSharedOwner(task.owner) else {
             return "É a hora, e ainda não tem dono."
         }
-        return "É a hora. Ficou com \(task.owner)."
+        return "É a hora. Ficou com você."
     }
 
     private static func nudgeNotificationBody(_ task: TaskItem) -> String {
         guard !HouseholdWorkload.isSharedOwner(task.owner) else {
-            return "Passou da hora e ninguém pegou."
+            return "Passou da hora. Alguém pega?"
         }
-        return "Passou da hora e continua com \(task.owner)."
+        return "Passou da hora. Ainda está de pé?"
     }
 
     private static func domainStatus(

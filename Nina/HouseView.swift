@@ -24,10 +24,6 @@ struct HouseView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
 
-                if let message = store.syncErrorMessage {
-                    banner(message)
-                }
-
                 members
 
                 if isAloneInHouse {
@@ -45,6 +41,8 @@ struct HouseView: View {
                 // Without a surface here, the app charges for something it never shows.
                 if !store.insights.isEmpty {
                     weeklyDigest
+                } else {
+                    digestPlaceholder
                 }
 
                 // While the house is one person the dormant-portrait card already
@@ -60,6 +58,7 @@ struct HouseView: View {
             .padding(.bottom, 104)
         }
         .ninaScreenBackground()
+        .ninaStatusBarMask()
     }
 
     private var header: some View {
@@ -103,20 +102,6 @@ struct HouseView: View {
             : "\(peoplePart). Cabem mais \(remaining)."
     }
 
-    private func banner(_ message: String) -> some View {
-        // Losing the connection is not lateness, so it never takes terracotta.
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(NinaTheme.ink)
-            Text(message).ninaText(.caption, NinaTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
-    }
-
     private var members: some View {
         VStack(spacing: 0) {
             ForEach(people) { member in
@@ -134,6 +119,7 @@ struct HouseView: View {
                             Image(systemName: "crown.fill")
                                 .font(.system(size: 13, weight: .regular))
                                 .foregroundStyle(NinaTheme.ink)
+                                .accessibilityLabel("Responsável pela casa")
                         }
                     }
                     .contentShape(Rectangle())
@@ -146,12 +132,34 @@ struct HouseView: View {
             if let assistant {
                 NinaRow(
                     title: assistant.name,
-                    subtitle: "IA da casa · não ocupa vaga"
+                    subtitle: "Mora aqui. Não ocupa vaga."
                 ) {
                     NinaMark(size: 40)
                 } trailing: {
                     EmptyView()
                 }
+            }
+
+            if store.canManageFamily, store.canInviteMorePeople {
+                NinaDivider()
+
+                Button {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .addMemberProfile
+                } label: {
+                    NinaRow(
+                        title: "Adicionar criança ou pet",
+                        subtitle: "Um perfil que os adultos cuidam. Não usa o app."
+                    ) {
+                        CategoryGlyph(systemName: "person.badge.plus", size: 18, tint: NinaTheme.ink)
+                    } trailing: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(NinaTheme.faint)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -205,7 +213,7 @@ struct HouseView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if store.canInviteMorePeople {
-                NinaButton(title: "Chamar o outro adulto", fillsWidth: true) {
+                NinaButton(title: "Convidar o outro adulto", fillsWidth: true) {
                     Haptics.lightImpact()
                     router.presentedSheet = .inviteFamily
                 }
@@ -243,6 +251,49 @@ struct HouseView: View {
         .ninaCard()
     }
 
+    // A house that pays for the digest must see where it will appear; a house
+    // that does not must see it is Premium, not a card that does nothing.
+    @ViewBuilder
+    private var digestPlaceholder: some View {
+        if store.householdPremium.isActive {
+            VStack(alignment: .leading, spacing: 6) {
+                Eyebrow(text: "Resumo semanal")
+                Text("O primeiro resumo chega em até 7 dias.")
+                    .ninaText(.label, NinaTheme.ink)
+                Text("Toda semana a Nina reúne o que ficou pendente, o que foi concluído e onde a casa está pesando mais.")
+                    .ninaText(.caption, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .ninaCard()
+        } else {
+            Button {
+                Haptics.lightImpact()
+                router.presentedSheet = .premium
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Eyebrow(text: "Resumo semanal")
+                    HStack {
+                        Text("Vem no Premium.").ninaText(.title)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(NinaTheme.faint)
+                    }
+                    Text("Uma leitura curta da semana da casa, para todo mundo daqui.")
+                        .ninaText(.caption, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .ninaCard()
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private var aloneReassurance: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "info.circle")
@@ -258,30 +309,14 @@ struct HouseView: View {
         VStack(alignment: .leading, spacing: 12) {
             Eyebrow(text: "Pedindo para entrar")
             ForEach(store.joinRequests) { request in
-                HStack(spacing: 12) {
-                    MemberAvatar(initials: request.requesterName.ninaInitials, tone: .sky, size: 36)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(request.requesterName)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(NinaTheme.ink)
-                        Text("Ainda não vê nada da casa").ninaText(.meta, NinaTheme.muted)
-                    }
-                    Spacer()
-                }
-                NinaButton(title: "Abrir pedido", kind: .outline, fillsWidth: true) {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .inviteFamily
-                }
+                PendingJoinRequestCard(request: request)
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .ninaCard()
     }
 
     private var inviteCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Eyebrow(text: "Chamar alguém")
+            Eyebrow(text: "Convidar")
             // Possessing the link grants nothing: it opens a request an owner or
             // admin approves. Saying so is the whole point of this card.
             Text("O link não dá acesso. Ele pede entrada, e alguém da casa aprova.")
@@ -289,7 +324,7 @@ struct HouseView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if store.canInviteMorePeople {
-                NinaButton(title: "Enviar convite", fillsWidth: true) {
+                NinaButton(title: "Convidar alguém", fillsWidth: true) {
                     Haptics.lightImpact()
                     router.presentedSheet = .inviteFamily
                 }

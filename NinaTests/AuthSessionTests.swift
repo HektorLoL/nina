@@ -89,6 +89,32 @@ final class AuthSessionTests: XCTestCase {
     }
 
     @MainActor
+    func testAnUnreachableRestorationKeepsTheSignedInUserInsteadOfBouncingToLogin() async {
+        let kept = AuthUser(id: "kept", displayName: "Kept", email: nil, provider: .apple)
+        let offline = AuthUser(id: "kept", displayName: "kept@nina.local", email: "kept@nina.local", provider: .apple)
+        let store = AuthSessionStore(authClient: AuthClientSpy(restoration: .unreachable(offline)))
+        store.currentUser = kept
+        store.isBackendAvailable = false
+
+        await store.restoreSession()
+
+        XCTAssertEqual(store.currentUser, kept)
+        XCTAssertTrue(store.isBackendAvailable)
+        XCTAssertNil(store.errorMessage)
+    }
+
+    @MainActor
+    func testAnUnreachableRestorationOnColdStartSignsInFromTheStoredSession() async {
+        let offline = AuthUser(id: "stored", displayName: "Stored", email: nil, provider: .apple)
+        let store = AuthSessionStore(authClient: AuthClientSpy(restoration: .unreachable(offline)))
+
+        await store.restoreSession()
+
+        XCTAssertEqual(store.currentUser, offline)
+        XCTAssertTrue(store.isBackendAvailable)
+    }
+
+    @MainActor
     func testUnavailableRestorationClearsStaleUserAndMarksBackendUnavailable() async {
         let store = AuthSessionStore(authClient: AuthClientSpy(restoration: .unavailable))
         store.currentUser = AuthUser(

@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-08-12
+Last updated: 2026-09-08
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -200,6 +200,45 @@ the workload house band is computed rather than pinned, the type system's two
 halves now scale together, and rows derive their date label and their lateness
 colour from the same source. The premium-denial string-equality routing and the
 proposal card's fixed "Não repete" row remain exactly as described.
+
+## 6c. What the 2026-09-08 UX audit changed
+
+The audit (vault note "UX audit 2026-09-08", 435 findings) drove one pass of
+fixes. The departures from the boards and from earlier rounds, all deliberate:
+
+- **Selected chips and the selected tab are ink, not cobalt.** Boards `T1`/`H1`
+  draw the selected filter in cobalt; the one-cobalt-per-screen rule wins, so
+  cobalt now belongs to the screen's single commit (the FAB, a footer button,
+  the paywall's buy button). `NinaChip` selected = grout fill + ink stroke;
+  unset chips and outline buttons use `control`, the stroke `Theme.swift`
+  reserves for unfilled controls.
+- **`WL-0`'s load strip is gone.** It never tapped and repeated Hoje's numbers.
+- **Task rows wrap to two lines.** `H1` draws one-line rows; real titles were
+  truncating at ~18 characters beside the date column.
+- **"Remarcar as N" is an ink outline capsule with only the count in
+  terracotta**, and it confirms with the target ("amanhã, 09:00") before
+  snoozing anything.
+- **The chat's sample chips prefill the composer instead of sending.**
+- **"Marcar como feita" on a repeating task reads "Feita por hoje"** on the row,
+  the detail and the quick-actions sheet. The roll-forward is unchanged.
+- **Every failed write is reported by one root toast** (`SyncErrorToast` in
+  `AppRootView`), so Casa no longer carries the banner and the other tabs no
+  longer stay silent. The store fires `Haptics.error()` from the queue.
+- **`NinaButton` has a pending state** (`isPending`): spinner glyph, full
+  opacity, disabled. Pending is not the same as disabled.
+- **Quiet buttons keep their 26pt look inside a 44pt hit area.**
+- **The mock engine names nobody.** "Thor", "Heitor" and "Mirna" left the
+  fallback replies; everything it proposes is unowned, and it no longer asks
+  for photos while attachments are compiled out.
+- **A missed lead falls back to the due moment** instead of dropping the
+  alert; the nudge asks ("Ainda está de pé?") instead of asserting a state the
+  phone cannot know; owned alerts speak to the owner ("Ficou com você.").
+- **A transport failure never signs anyone out** (`AuthSessionRestoration.unreachable`),
+  never calls an invite dead, and never cancels scheduled reminders.
+- **Recurring occurrences missed yesterday still show today's occurrence** and
+  are not marked late. This was pinned by
+  `TaskAgendaTests.testAMissedDailyTaskShowsTodaysOccurrenceRatherThanTheStaleStoredDate`
+  and left as is; changing it is a product decision, not a fix.
 
 ## 7. Verified
 

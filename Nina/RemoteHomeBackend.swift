@@ -150,6 +150,7 @@ enum RemoteHomeBackendError: Error {
     case invalidInviteCode
     case familyNotFound
     case operationUnavailable
+    case inviteRefused
 }
 
 extension RemoteHomeBackend {
@@ -316,14 +317,20 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
             throw RemoteHomeBackendError.invalidInviteCode
         }
 
-        let outcome: FamilyJoinOutcomeRow = try await perform(operation: "request_family_join") {
-            try await client
-                .rpc(
-                    "request_family_join",
-                    params: JoinFamilyByInviteParams(inviteCode: normalizedInvite)
-                )
-                .execute()
-                .value
+        let outcome: FamilyJoinOutcomeRow
+        do {
+            outcome = try await perform(operation: "request_family_join") {
+                try await client
+                    .rpc(
+                        "request_family_join",
+                        params: JoinFamilyByInviteParams(inviteCode: normalizedInvite)
+                    )
+                    .execute()
+                    .value
+            }
+        } catch is PostgrestError {
+            // Only the server's verdict may call an invite dead; a transport failure must not.
+            throw RemoteHomeBackendError.inviteRefused
         }
 
         switch outcome.status {

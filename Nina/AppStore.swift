@@ -633,8 +633,10 @@ final class AppStore {
             homeAccessState = decision == nil ? .noHome : .accessDecision
             syncErrorMessage = lostMembershipNotice
         case .unverifiable:
-            releaseHousehold(discardingQueuedWrites: false)
+            // The state must change first: releasing the household re-syncs the
+            // reminders, and an unverifiable membership must not cancel them.
             homeAccessState = .unavailable
+            releaseHousehold(discardingQueuedWrites: false)
             syncErrorMessage = "Não foi possível verificar sua participação nesta casa."
         }
     }
@@ -749,7 +751,9 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Este convite é inválido, expirou ou a casa está sem vagas."
+                syncErrorMessage = error is RemoteHomeBackendError
+                    ? "Este convite é inválido, expirou ou a casa está sem vagas."
+                    : "Não deu para verificar o convite agora. Tente de novo em instantes."
                 Haptics.error()
                 return false
             }
@@ -1256,11 +1260,12 @@ final class AppStore {
             )
             guard isCurrentHomeContext(contextToken) else { return }
             response = fallbackResponse ?? NinaEngineResponse(
-                    reply: "Anotei. Tente novamente em instantes para eu organizar isso com você.",
+                    reply: "Não consegui organizar isso agora. Tente de novo em instantes.",
                     suggestion: nil
                 )
-            ninaConnectionNotice = "A Nina online está indisponível. A resposta abaixo usou o modo local."
+            ninaConnectionNotice = "Sem conexão com a Nina agora. Esta resposta veio do modo local deste aparelho."
             shouldPersistLegacyTurn = false
+            Haptics.error()
         }
         guard isCurrentHomeContext(contextToken) else { return }
 
@@ -1922,6 +1927,9 @@ final class AppStore {
     }
 
     func synchronizeLocalNotifications() {
+        // A membership the server could not confirm is not a lost one: the alerts
+        // already on the phone stay until a verified answer replaces them.
+        guard homeAccessState != .unavailable else { return }
         let canScheduleForActiveUser = activeHomeUserID != nil && hasActiveHome
         let tasksForNotifications = canScheduleForActiveUser ? tasks : []
         let viewer = canScheduleForActiveUser
@@ -2129,8 +2137,14 @@ final class AppStore {
                       self.isCurrentHomeContext(contextToken),
                       self.activeHomeUserID == userID else { return }
                 self.syncErrorMessage = errorMessage
+                Haptics.error()
             }
         }
+    }
+
+    func dismissSyncError(ifStill message: String) {
+        guard syncErrorMessage == message else { return }
+        syncErrorMessage = nil
     }
 
     private func submitTaskUpdate(_ proposedTask: TaskItem, basedOn baseTask: TaskItem) {

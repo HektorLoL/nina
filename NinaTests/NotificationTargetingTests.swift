@@ -143,11 +143,14 @@ final class NotificationTargetingTests: XCTestCase {
         )
     }
 
-    func testALeadTimeThatWouldLandInThePastDropsTheReminderInsteadOfFiringItImmediately() {
+    func testALeadTimeThatWouldLandInThePastFallsBackToTheDueMomentInsteadOfDroppingTheAlert() {
         var task = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: 10, minute: 20))
         task.reminderLead = .oneHour
 
-        XCTAssertTrue(plan([task]).isEmpty)
+        XCTAssertEqual(
+            plan([task]).map(\.deliveryDate),
+            [date(year: 2026, month: 8, day: 8, hour: 10, minute: 20)]
+        )
     }
 
     func testALeadTimeMovesEveryOccurrenceOfARecurringTask() {
@@ -209,7 +212,7 @@ final class NotificationTargetingTests: XCTestCase {
             planned.last?.deliveryDate,
             date(year: 2026, month: 8, day: 8, hour: 19, minute: 0)
         )
-        XCTAssertEqual(planned.last?.body, "Passou da hora e continua com Ana.")
+        XCTAssertEqual(planned.last?.body, "Passou da hora. Ainda está de pé?")
     }
 
     func testTheTaskDetailNeverReachesTheLockScreen() {
@@ -258,7 +261,8 @@ final class NotificationTargetingTests: XCTestCase {
     }
 
     func testATaskWhoseFirstAlertWasDroppedIsNeverFollowedUpAlone() {
-        var task = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: 10, minute: 20))
+        // Due forty minutes ago: the first alert is gone, the nudge would still be ahead.
+        var task = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: 9, minute: 20))
         task.priority = .urgent
         task.reminderLead = .oneHour
 

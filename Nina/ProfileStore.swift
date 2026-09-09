@@ -497,28 +497,38 @@ final class ProfileStore {
     func saveProfile(_ profile: UserProfile, user: AuthUser? = nil) {
         profiles[profile.userID] = profile
         persistProfileLocally(profile)
+    }
 
-        guard !AuthUser.isDebugAccountID(profile.userID) else { return }
+    // The editor reports success only after this returns true: a profile the
+    // other adult never receives must not pop the screen with a success haptic.
+    func pushProfileToServer(
+        _ profile: UserProfile,
+        photoData: Data?,
+        removesPhoto: Bool,
+        user: AuthUser? = nil
+    ) async -> Bool {
+        guard !AuthUser.isDebugAccountID(profile.userID),
+              let remoteProfileBackend else { return true }
 
-        if let remoteProfileBackend {
-            Task {
-                try? await remoteProfileBackend.saveProfile(profile, user: user)
+        do {
+            if let photoData {
+                try await remoteProfileBackend.savePhotoData(photoData, for: profile.userID)
+            } else if removesPhoto {
+                try await remoteProfileBackend.deletePhoto(for: profile.userID)
             }
+            try await remoteProfileBackend.saveProfile(profile, user: user)
+            return true
+        } catch {
+            return false
         }
     }
 
-    func savePhotoData(_ data: Data, for userID: String) throws {
+    @discardableResult
+    func savePhotoData(_ data: Data, for userID: String) throws -> Data {
         let preparedData = try ProfilePhotoPolicy.prepareForStorage(data)
         try persistPhotoLocally(preparedData, for: userID)
         photoVersions[userID, default: 0] += 1
-
-        guard !AuthUser.isDebugAccountID(userID) else { return }
-
-        if let remoteProfileBackend {
-            Task {
-                try? await remoteProfileBackend.savePhotoData(preparedData, for: userID)
-            }
-        }
+        return preparedData
     }
 
     func photoData(for profile: UserProfile) -> Data? {
@@ -530,14 +540,6 @@ final class ProfileStore {
     func deleteLocalPhoto(for userID: String) {
         removeLocalPhotoData(for: userID)
         photoVersions[userID, default: 0] += 1
-
-        guard !AuthUser.isDebugAccountID(userID) else { return }
-
-        if let remoteProfileBackend {
-            Task {
-                try? await remoteProfileBackend.deletePhoto(for: userID)
-            }
-        }
     }
 
     func clearLocalData(for userID: String) {

@@ -175,8 +175,14 @@ struct LoginView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Ao continuar você aceita os Termos e a Política de Privacidade.")
-                .ninaText(.meta, NinaTheme.muted)
+            Text(
+                .init(
+                    "Ao continuar você aceita os [Termos](\(NinaLegalLinks.termsOfUse.absoluteString)) "
+                        + "e a [Política de Privacidade](\(NinaLegalLinks.privacyPolicy.absoluteString))."
+                )
+            )
+            .ninaText(.meta, NinaTheme.muted)
+            .tint(NinaTheme.cobalt)
 
             if !authSession.isBackendAvailable {
                 Text("Configure o projeto Supabase para habilitar o acesso.")

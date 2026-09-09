@@ -510,6 +510,21 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(store.homeAccessState, .noHome)
         XCTAssertEqual(
             store.syncErrorMessage,
+            "Não deu para verificar o convite agora. Tente de novo em instantes."
+        )
+    }
+
+    @MainActor
+    func testATransportFailureNeverCallsAnInviteDeadButAServerRefusalDoes() async {
+        let user = makeUser()
+        let refusing = HomeLifecycleBackend(refuseJoin: true)
+        let store = AppStore(remoteHomeBackend: refusing, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let joined = await store.joinHome(with: "casa-valid-invite", member: user)
+        XCTAssertFalse(joined)
+        XCTAssertEqual(
+            store.syncErrorMessage,
             "Este convite é inválido, expirou ou a casa está sem vagas."
         )
     }
@@ -3093,6 +3108,7 @@ private actor HomeLifecycleBackend: RemoteHomeBackend {
     private let joinState: RemoteHomeState?
     private let failCreate: Bool
     private let failJoin: Bool
+    private let refuseJoin: Bool
     private let pendingRequest: FamilyJoinRequest?
     private var recordedCreateRequest: CreateRequest?
     private var recordedJoinRequest: JoinRequest?
@@ -3103,13 +3119,15 @@ private actor HomeLifecycleBackend: RemoteHomeBackend {
         joinState: RemoteHomeState? = nil,
         pendingRequest: FamilyJoinRequest? = nil,
         failCreate: Bool = false,
-        failJoin: Bool = false
+        failJoin: Bool = false,
+        refuseJoin: Bool = false
     ) {
         self.createState = createState
         self.joinState = joinState
         self.pendingRequest = pendingRequest
         self.failCreate = failCreate
         self.failJoin = failJoin
+        self.refuseJoin = refuseJoin
     }
 
     func createRequest() -> CreateRequest? {
@@ -3141,6 +3159,7 @@ private actor HomeLifecycleBackend: RemoteHomeBackend {
         member: AuthUser?
     ) async throws -> FamilyJoinOutcome {
         recordedJoinRequest = JoinRequest(inviteCode: inviteCode, memberID: member?.id)
+        guard !refuseJoin else { throw RemoteHomeBackendError.inviteRefused }
         guard !failJoin else { throw LifecycleError.expected }
         didSubmitJoinRequest = true
         if let pendingRequest {

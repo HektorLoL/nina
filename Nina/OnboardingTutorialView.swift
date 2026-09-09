@@ -308,7 +308,8 @@ struct OnboardingTutorialView: View {
                         toggleCorrecting()
                     }
 
-                    NinaButton(title: "Ignorar", kind: .outline, fillsWidth: true) {
+                    // The live card's third exit is "Não"; the rehearsal teaches the same word.
+                    NinaButton(title: "Não", kind: .outline, fillsWidth: true) {
                         ignoreProposal()
                     }
                 }
@@ -505,12 +506,9 @@ struct OnboardingTutorialView: View {
         return "Sobrou o que é a sua casa."
     }
 
+    // Nothing here is kept anywhere: the button must not promise it.
     private var keptTitle: String {
-        switch keptSuggestions {
-        case 0: "Seguir sem nenhuma"
-        case 1: "Ficar com esta"
-        default: "Ficar com estas \(keptSuggestions)"
-        }
+        keptSuggestions == 0 ? "Seguir sem nenhuma" : "Continuar"
     }
 
     private var questionsStep: some View {
@@ -680,16 +678,16 @@ struct OnboardingTutorialView: View {
                     : "Você leu a proposta inteira antes de confirmar."
             )
         case .ignored:
-            lines.append("Você ignorou a proposta, e nada foi criado.")
+            lines.append("Você disse não à proposta, e nada foi criado.")
         case nil:
             lines.append("Você viu a Nina propor, e a decisão ficou com você.")
         }
 
         switch keptSuggestions {
-        case 0: lines.append("Você não ficou com nenhuma das sugestões.")
-        case 1: lines.append("Você ficou com 1 de \(TutorialSuggestion.all.count) sugestões.")
+        case 0: lines.append("Você tirou todas as sugestões do ensaio.")
+        case 1: lines.append("Você marcou 1 de \(TutorialSuggestion.all.count) como coisa da sua casa. Nada virou tarefa.")
         default:
-            lines.append("Você ficou com \(keptSuggestions) de \(TutorialSuggestion.all.count) sugestões.")
+            lines.append("Você marcou \(keptSuggestions) de \(TutorialSuggestion.all.count) como coisas da sua casa. Nada virou tarefa.")
         }
 
         lines.append(
@@ -878,14 +876,28 @@ private struct TutorialPhrase: Identifiable {
 
     var id: String { phrase }
 
+    // A literal date in a rehearsal goes stale; the reading is always next Monday.
+    private static var nextMondayLabel: String {
+        let calendar = Calendar.current
+        let next = calendar.nextDate(
+            after: .now,
+            matching: DateComponents(weekday: 2),
+            matchingPolicy: .nextTime
+        ) ?? .now
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.dateFormat = "EEEE, d 'de' MMMM"
+        return formatter.string(from: next)
+    }
+
     static let all: [TutorialPhrase] = [
         TutorialPhrase(
-            phrase: "o boleto do condomínio vence dia 10",
+            phrase: "o boleto do condomínio vence segunda",
             title: "Pagar o condomínio",
             detail: "",
             category: .bills,
-            when: "segunda, 10 de agosto",
-            whenOptions: ["segunda, 10 de agosto", TutorialReading.noDate],
+            when: nextMondayLabel,
+            whenOptions: [nextMondayLabel, TutorialReading.noDate],
             repeats: "todo mês",
             repeatOptions: ["todo mês", "não repete"]
         ),

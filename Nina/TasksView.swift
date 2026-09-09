@@ -77,6 +77,7 @@ struct TasksView: View {
             }
         }
         .ninaScreenBackground()
+        .ninaStatusBarMask()
     }
 
     private var header: some View {
@@ -134,8 +135,10 @@ struct TasksView: View {
                 }
             }
             .padding(.vertical, 1)
+            .padding(.trailing, 20)
         }
         .scrollClipDisabled()
+        .chipRowTrailingFade()
     }
 
     private func chipTitle(_ option: TaskListFilter) -> String {
@@ -468,7 +471,8 @@ struct TasksView: View {
                     isSearching = false
                 }
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(NinaTheme.cobalt)
+                .foregroundStyle(NinaTheme.muted)
+                .frame(minHeight: 44)
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
@@ -522,6 +526,7 @@ struct TasksView: View {
                         }
                     }
                     .padding(.horizontal, 20)
+                    .padding(.bottom, 104)
                 }
             }
         }

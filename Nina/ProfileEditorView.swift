@@ -16,6 +16,8 @@ struct ProfileEditorView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingPhotoData: Data?
     @State private var photoError: String?
+    @State private var saveError: String?
+    @State private var isSaving = false
     @State private var isShowingCoreMemories = false
     @FocusState private var isNameFocused: Bool
 
@@ -346,13 +348,17 @@ struct ProfileEditorView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Só o nome é obrigatório.")
-                .ninaText(.meta, NinaTheme.muted)
+            if let saveError {
+                Text(saveError)
+                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             NinaButton(
-                title: "Salvar perfil",
+                title: isSaving ? "Salvando" : "Salvar perfil",
                 fillsWidth: true,
                 isEnabled: canSave,
+                isPending: isSaving,
                 action: saveProfile
             )
         }
@@ -384,11 +390,16 @@ struct ProfileEditorView: View {
         profile.availabilityNote = profile.availabilityNote.trimmingCharacters(in: .whitespacesAndNewlines)
         profile.memoryNote = profile.memoryNote.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        guard !isSaving else { return }
+        let hadServerPhoto = profileStore.profile(for: user).avatar.kind == .photo
+        var preparedPhoto: Data?
+        var removesPhoto = false
+
         // The photo is written first: a profile that points at a photo the disk
         // does not hold would render a face that cannot be loaded.
         if let pendingPhotoData {
             do {
-                try profileStore.savePhotoData(pendingPhotoData, for: profile.userID)
+                preparedPhoto = try profileStore.savePhotoData(pendingPhotoData, for: profile.userID)
                 profile.avatar = profile.avatar.asPhoto(for: profile.userID)
             } catch {
                 photoError = error.localizedDescription
@@ -397,11 +408,29 @@ struct ProfileEditorView: View {
             }
         } else if profile.avatar.kind == .preset {
             profileStore.deleteLocalPhoto(for: profile.userID)
+            removesPhoto = hadServerPhoto
         }
 
         profileStore.saveProfile(profile, user: user)
-        Haptics.success()
-        dismiss()
+        isSaving = true
+        saveError = nil
+
+        Task {
+            let reachedServer = await profileStore.pushProfileToServer(
+                profile,
+                photoData: preparedPhoto,
+                removesPhoto: removesPhoto,
+                user: user
+            )
+            isSaving = false
+            if reachedServer {
+                Haptics.success()
+                dismiss()
+            } else {
+                saveError = "Ficou salvo neste aparelho, mas não chegou ao servidor. Tente de novo."
+                Haptics.error()
+            }
+        }
     }
 
     private func showCoreMemories() {
@@ -437,7 +466,7 @@ struct ProfileEditorView: View {
                     pendingPhotoData = normalizedData
                     draft.avatar = draft.avatar.asPhoto(for: draft.userID)
                     photoError = nil
-                    Haptics.success()
+                    Haptics.selection()
                 }
             } catch {
                 await MainActor.run {

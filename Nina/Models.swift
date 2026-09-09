@@ -686,6 +686,13 @@ struct TaskItem: Identifiable, Codable, Hashable {
         return calendar.isDate(displayDate, inSameDayAs: date)
     }
 
+    // A repeating task is never closed by one tap: the label must promise the
+    // roll-forward that toggleTask performs, not a completion it never records.
+    var completionActionTitle: String {
+        if isDone { return "Marcar como não feita" }
+        return recurrence == .none ? "Marcar como feita" : "Feita por hoje"
+    }
+
     /// The label to draw. `dueLabel` is stored at write time and never recomputed,
     /// so a snoozed or recurring task keeps showing the date it used to have —
     /// while lateness colour is computed from `displayDate`. Both must agree.

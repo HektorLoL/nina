@@ -673,6 +673,13 @@ struct PendingHomeApprovalView: View {
                         Text(request.status.title).ninaText(.meta, NinaTheme.muted)
                     }
 
+                    if let message = store.syncErrorMessage ?? authSession.errorMessage {
+                        Text(message)
+                            .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     NinaButton(
                         title: "Atualizar status",
                         systemName: "arrow.clockwise",
@@ -722,7 +729,9 @@ struct PendingHomeApprovalView: View {
         guard !isCancelling else { return }
         isCancelling = true
         Task {
-            _ = await store.cancelPendingJoinRequest()
+            if await store.cancelPendingJoinRequest() {
+                Haptics.selection()
+            }
             isCancelling = false
         }
     }
@@ -750,7 +759,7 @@ struct FamilyAccessDecisionView: View {
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 306)
 
-                    if let syncErrorMessage = store.syncErrorMessage {
+                    if let syncErrorMessage = store.syncErrorMessage ?? authSession.errorMessage {
                         Text(syncErrorMessage)
                             .ninaText(.caption, NinaTheme.ink)
                             .multilineTextAlignment(.center)

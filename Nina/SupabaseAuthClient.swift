@@ -27,8 +27,11 @@ struct SupabaseAuthClient: AuthClient {
             }
             let profile = try await ensureProfile(displayNameHint: nil)
             return .signedIn(AuthUser(supabaseUser: session.user, profile: profile))
-        } catch {
+        } catch is AuthError {
             return .signedOut
+        } catch {
+            // Only Auth itself may end a session; a refresh the network dropped keeps it.
+            return .unreachable(AuthUser(offlineSupabaseUser: storedSession.user))
         }
     }
 
@@ -125,7 +128,7 @@ struct SupabaseAuthClient: AuthClient {
                 try await client.auth.update(user: UserAttributes(email: email))
             }
         } catch {
-            throw mapEmailError(error)
+            throw mapEmailChangeError(error)
         }
     }
 
@@ -166,12 +169,12 @@ struct SupabaseAuthClient: AuthClient {
                 )
             }
         } catch {
-            throw AuthFlowError.unavailable
+            throw AuthFlowError.deletionFailed
         }
 
         // A non-deleting response must not let the caller erase local data.
         guard response.deleted else {
-            throw AuthFlowError.unavailable
+            throw AuthFlowError.deletionFailed
         }
     }
 
@@ -212,9 +215,17 @@ struct SupabaseAuthClient: AuthClient {
     private func mapCodeError(_ error: Error) -> AuthFlowError {
         let message = String(describing: error).lowercased()
         if message.contains("otp") || message.contains("token") || message.contains("expired") {
-            return .invalidCode
+            return .codeRejected
         }
         return .unavailable
+    }
+
+    private func mapEmailChangeError(_ error: Error) -> AuthFlowError {
+        let message = String(describing: error).lowercased()
+        if message.contains("already") || message.contains("exists") {
+            return .emailAlreadyUsed
+        }
+        return .emailChangeFailed
     }
 }
 
@@ -262,6 +273,25 @@ extension AuthUser {
             id: user.id.uuidString,
             displayName: profile.displayName,
             email: profile.email ?? user.email,
+            provider: providerResolution.primary,
+            isEmailVerified: user.emailConfirmedAt != nil,
+            linkedProviders: providerResolution.linked
+        )
+    }
+
+    init(offlineSupabaseUser user: User) {
+        let providerResolution = AuthProviderResolver.resolve(
+            identityProviders: (user.identities ?? []).map(\.provider),
+            metadataProvider: user.appMetadata["provider"]?.stringValue,
+            preferredProvider: nil
+        )
+        let metadataName = user.userMetadata["display_name"]?.stringValue
+            ?? user.userMetadata["full_name"]?.stringValue
+
+        self.init(
+            id: user.id.uuidString,
+            displayName: metadataName ?? user.email ?? "Você",
+            email: user.email,
             provider: providerResolution.primary,
             isEmailVerified: user.emailConfirmedAt != nil,
             linkedProviders: providerResolution.linked

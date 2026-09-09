@@ -75,7 +75,7 @@ struct TaskDetailView: View {
                 router.presentedSheet = .editTask(task.id)
             } label: {
                 Text("Editar")
-                    .ninaText(.label, NinaTheme.cobalt, weight: .semibold)
+                    .ninaText(.label, NinaTheme.ink, weight: .semibold)
             }
             .buttonStyle(.plain)
         }
@@ -241,7 +241,7 @@ struct TaskDetailView: View {
         VStack(spacing: 6) {
             if task.kind == .task {
                 NinaButton(
-                    title: task.isDone ? "Marcar como não feita" : "Marcar como feita",
+                    title: task.completionActionTitle,
                     systemName: task.isDone ? "arrow.uturn.backward" : "checkmark",
                     fillsWidth: true
                 ) {

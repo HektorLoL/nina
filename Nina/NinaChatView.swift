@@ -9,6 +9,7 @@ struct NinaChatView: View {
     @Environment(AppStore.self) private var store
     @Environment(RouterPath.self) private var router
     @State private var didLoadInitialMessages = false
+    @State private var composerDraft = ""
 
     private static let captureExamples = [
         "a escola pediu autorização até sexta",
@@ -35,7 +36,6 @@ struct NinaChatView: View {
     private var chatContent: some View {
         VStack(spacing: 0) {
             header
-            houseStrip
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -87,7 +87,7 @@ struct NinaChatView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ChatInputBar()
+            ChatInputBar(draft: $composerDraft)
         }
     }
 
@@ -139,38 +139,6 @@ struct NinaChatView: View {
     }
 
     @ViewBuilder
-    private var houseStrip: some View {
-        if mineCount > 0 || overdueCount > 0 {
-            HStack(spacing: 8) {
-                Text("\(mineCount) na sua mão")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(NinaTheme.ink)
-
-                if overdueCount > 0 {
-                    Text("·")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(NinaTheme.line)
-
-                    Text(overdueCount == 1 ? "1 atrasada" : "\(overdueCount) atrasadas")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(NinaTheme.terracotta)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 44)
-            .background(
-                NinaTheme.grout,
-                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
-            )
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .accessibilityElement(children: .combine)
-        }
-    }
-
-    @ViewBuilder
     private var connectionNotice: some View {
         if let notice = store.ninaConnectionNotice {
             noticeRow(systemName: "wifi.exclamationmark", text: notice)
@@ -199,7 +167,7 @@ struct NinaChatView: View {
 
     private var capturePrompt: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Joga uma lembrança aqui.")
+            Text("Jogue uma lembrança aqui.")
                 .ninaText(.zero)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -237,9 +205,8 @@ struct NinaChatView: View {
 
     private var waitingText: String {
         switch pendingProposalCount {
-        case 1: "A Nina está esperando você."
-        case 2: "A Nina está esperando as duas."
-        default: "A Nina está esperando as \(pendingProposalCount)."
+        case 1: "A Nina está esperando a sua resposta."
+        default: "A Nina está esperando \(pendingProposalCount) respostas suas."
         }
     }
 
@@ -253,19 +220,10 @@ struct NinaChatView: View {
         store.tasks.filter { $0.kind == .task && !$0.isDone }
     }
 
-    private var mineCount: Int {
-        guard let me = store.currentFamilyMember else { return 0 }
-        return openTasks.count { $0.ownerMemberID == me.id }
-    }
-
-    private var overdueCount: Int {
-        openTasks.count { $0.isOverdue() }
-    }
-
+    // An example is a draft to edit, not a message to send: the chip fills the
+    // composer and the person decides.
     private func sendPreset(_ text: String) {
-        Task {
-            await store.sendMessage(text)
-        }
+        composerDraft = text
     }
 }
 
@@ -288,7 +246,7 @@ private struct AIMemoryConsentCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 consentLine("Nada do que você manda fica guardado lá. A sua conversa não treina modelo nenhum.")
                 consentLine("A sua conversa é só sua. O outro adulto da casa não lê o que você escreve para mim.")
-                consentLine("Dá para desligar quando quiser, em Casa · Privacidade. Aí eu paro de ler na hora.")
+                consentLine("Dá para desligar quando quiser, em Ajustes · Privacidade e dados. Aí eu paro de ler na hora.")
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -299,9 +257,11 @@ private struct AIMemoryConsentCard: View {
                 fillsWidth: true,
                 isEnabled: !store.isSyncingHome
             ) {
-                Haptics.success()
+                Haptics.lightImpact()
                 Task {
-                    await store.grantAIMemoryConsent()
+                    if await store.grantAIMemoryConsent() {
+                        Haptics.success()
+                    }
                 }
             }
 
@@ -352,7 +312,7 @@ private struct ChatInputBar: View {
     @Environment(AppStore.self) private var store
     @Environment(RouterPath.self) private var router
     @Environment(TabSwipeLock.self) private var tabSwipeLock
-    @State private var draft = ""
+    @Binding var draft: String
     @State private var isKeyboardVisible = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var pendingAttachments: [PendingChatAttachment] = []
@@ -399,7 +359,7 @@ private struct ChatInputBar: View {
                 attachmentControls
 
                 HStack(alignment: .bottom, spacing: 10) {
-                    TextField("Escreve pra Nina", text: $draft, axis: .vertical)
+                    TextField("Escreva pra Nina", text: $draft, axis: .vertical)
                         .lineLimit(1...4)
                         .font(.system(size: 16, weight: .regular))
                         .foregroundStyle(NinaTheme.ink)
@@ -414,14 +374,12 @@ private struct ChatInputBar: View {
                         .textInputAutocapitalization(.sentences)
                         .submitLabel(.send)
                         .onSubmit(sendDraft)
-                        .disabled(store.isNinaResponding)
-                        .opacity(store.isNinaResponding ? 0.55 : 1)
                         .transaction { transaction in
                             transaction.animation = nil
                         }
 
                     Button(action: sendDraft) {
-                        Image(systemName: store.isNinaResponding ? "ellipsis" : "arrow.up")
+                        Image(systemName: "arrow.up")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(canSend ? NinaTheme.onCobalt : NinaTheme.muted)
                             .frame(width: 46, height: 46)

@@ -173,17 +173,35 @@ private struct SettingsSection<Content: View>: View {
 }
 
 private struct SettingsLinkRow: View {
+    enum Destination {
+        case push
+        case external
+        case action
+    }
+
     var title: String
     var subtitle: String?
     var systemName: String
+    var destination: Destination = .push
 
+    // A chevron promises a pushed screen; rows that leave the app or open a
+    // dialog must not wear it.
     var body: some View {
         NinaRow(title: title, subtitle: subtitle) {
             CategoryGlyph(systemName: systemName, size: 18, tint: NinaTheme.ink)
         } trailing: {
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(NinaTheme.faint)
+            switch destination {
+            case .push:
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NinaTheme.faint)
+            case .external:
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NinaTheme.faint)
+            case .action:
+                EmptyView()
+            }
         }
         .contentShape(Rectangle())
     }
@@ -240,9 +258,8 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    private var inviteURL: URL {
-        store.inviteURL
-    }
+    @State private var isRenamingHouse = false
+    @State private var houseNameDraft = ""
 
     private var versionLabel: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -259,8 +276,8 @@ struct SettingsSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
                     titleBlock
-                    premiumBlock
                     accountSection
+                    premiumBlock
                     ninaSection
                     houseSection
                     privacySection
@@ -279,13 +296,11 @@ struct SettingsSheet: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
+    // The sheet header already names the screen; a second "Ajustes" said nothing new.
     private var titleBlock: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Ajustes").ninaText(.screen)
-            Text("Sua conta, a casa e o que a Nina pode ler.")
-                .ninaText(.label, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        Text("Sua conta, a casa e o que a Nina pode ler.")
+            .ninaText(.label, NinaTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
@@ -299,10 +314,17 @@ struct SettingsSheet: View {
                 Text(PremiumTeaserCopy.activeSubtitle)
                     .ninaText(.caption, NinaTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(premiumStore.entitlement.renewalSummary)
-                    .ninaText(.caption, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                NinaButton(title: "Ver a assinatura", kind: .outline) {
+                Text(
+                    premiumStore.entitlement.isActive
+                        ? premiumStore.entitlement.renewalSummary
+                        : "Assinatura de outro adulto da casa."
+                )
+                .ninaText(.caption, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                NinaButton(
+                    title: premiumStore.entitlement.isActive ? "Ver a assinatura" : "Ver o que está liberado",
+                    kind: .outline
+                ) {
                     Haptics.lightImpact()
                     router.presentedSheet = .premium
                 }
@@ -364,7 +386,7 @@ struct SettingsSheet: View {
                     SettingsLinkRow(
                         title: user.linkedProviders.contains(.email) ? "Email de acesso" : "Vincular um email",
                         subtitle: user.linkedProviders.contains(.email)
-                            ? (user.email ?? "Email verificado")
+                            ? "Trocar o email que entra nesta conta."
                             : "Outra forma de entrar, se você perder a Apple.",
                         systemName: "envelope"
                     )
@@ -382,7 +404,8 @@ struct SettingsSheet: View {
                 SettingsLinkRow(
                     title: "Ver o tutorial de novo",
                     subtitle: "Como a Nina funciona, do começo.",
-                    systemName: "play.circle"
+                    systemName: "play.circle",
+                    destination: .action
                 )
             }
             .buttonStyle(.plain)
@@ -410,7 +433,20 @@ struct SettingsSheet: View {
 
     @ViewBuilder
     private var weeklyDigestRow: some View {
-        if store.canManageFamily {
+        if !store.householdPremium.isActive {
+            // A live switch for a digest the server will not send would read as "on".
+            Button {
+                Haptics.lightImpact()
+                router.presentedSheet = .premium
+            } label: {
+                SettingsLinkRow(
+                    title: "Resumo semanal",
+                    subtitle: "Vem no Premium. Toque para ver o que ele libera.",
+                    systemName: "calendar"
+                )
+            }
+            .buttonStyle(.plain)
+        } else if store.canManageFamily {
             SettingsToggleRow(
                 title: "Resumo semanal",
                 subtitle: weeklyDigestSubtitle,
@@ -434,6 +470,10 @@ struct SettingsSheet: View {
         )
     }
 
+    private var remainingSlotsLabel: String {
+        store.remainingFamilySlots == 1 ? "1 vaga" : "\(store.remainingFamilySlots) vagas"
+    }
+
     private var weeklyDigestSubtitle: String {
         if !store.householdPremium.isActive {
             return "Uma leitura curta da semana da casa. Vem no Premium."
@@ -446,12 +486,36 @@ struct SettingsSheet: View {
 
     private var houseSection: some View {
         SettingsSection(title: "Casa") {
-            SettingsValueRow(
-                title: store.familyGroup.name,
-                subtitle: store.familyLimitLabel,
-                value: "\(store.remainingFamilySlots) vagas",
-                systemName: "house"
-            )
+            if store.canManageFamily {
+                Button {
+                    Haptics.lightImpact()
+                    houseNameDraft = store.familyGroup.name
+                    isRenamingHouse = true
+                } label: {
+                    SettingsLinkRow(
+                        title: store.familyGroup.name,
+                        subtitle: "\(store.familyLimitLabel) · \(remainingSlotsLabel). Toque para renomear.",
+                        systemName: "house"
+                    )
+                }
+                .buttonStyle(.plain)
+                .alert("Nome da casa", isPresented: $isRenamingHouse) {
+                    TextField("Nome da casa", text: $houseNameDraft)
+                    Button("Salvar") {
+                        Task { await store.updateFamilyGroup(name: houseNameDraft) }
+                    }
+                    Button("Cancelar", role: .cancel) {}
+                } message: {
+                    Text("Todo mundo da casa vê o novo nome.")
+                }
+            } else {
+                SettingsValueRow(
+                    title: store.familyGroup.name,
+                    subtitle: store.familyLimitLabel,
+                    value: remainingSlotsLabel,
+                    systemName: "house"
+                )
+            }
 
             NinaDivider()
 
@@ -461,7 +525,7 @@ struct SettingsSheet: View {
                     router.presentedSheet = .inviteFamily
                 } label: {
                     SettingsLinkRow(
-                        title: "Chamar alguém para a casa",
+                        title: "Convidar alguém para a casa",
                         subtitle: "O link pede entrada. Alguém daqui aprova.",
                         systemName: "person.badge.plus"
                     )
@@ -511,7 +575,8 @@ struct SettingsSheet: View {
                 SettingsLinkRow(
                     title: "Política de privacidade",
                     subtitle: "O texto completo, no site.",
-                    systemName: "doc.text"
+                    systemName: "doc.text",
+                    destination: .external
                 )
             }
             .buttonStyle(.plain)
@@ -521,7 +586,7 @@ struct SettingsSheet: View {
     private var notificationStatusSubtitle: String {
         switch store.notificationAuthorizationStatus {
         case .authorized, .provisional, .ephemeral:
-            "Avisos ligados, com horário de silêncio."
+            LocalHomeNotificationScheduler.settingsSummary()
         case .denied:
             "O iPhone está bloqueando. Toque para resolver."
         case .notDetermined:
@@ -549,7 +614,8 @@ struct SettingsSheet: View {
                 SettingsLinkRow(
                     title: "Termos de uso",
                     subtitle: "Condições da assinatura e do serviço.",
-                    systemName: "text.book.closed"
+                    systemName: "text.book.closed",
+                    destination: .external
                 )
             }
             .buttonStyle(.plain)
@@ -563,7 +629,8 @@ struct SettingsSheet: View {
                 SettingsLinkRow(
                     title: "Falar com o suporte",
                     subtitle: "oi@ninai.app",
-                    systemName: "envelope.open"
+                    systemName: "envelope.open",
+                    destination: .external
                 )
             }
             .buttonStyle(.plain)
@@ -571,12 +638,21 @@ struct SettingsSheet: View {
     }
 
     private var signOutButton: some View {
-        NinaButton(title: "Sair desta conta", kind: .quiet, isEnabled: !authSession.isSigningIn) {
-            Haptics.warning()
-            Task {
-                await authSession.signOut()
-                onboardingStore.cancelReplay()
-                dismiss()
+        VStack(spacing: 10) {
+            if let message = authSession.errorMessage {
+                Text(message)
+                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            NinaButton(title: "Sair desta conta", kind: .quiet, isEnabled: !authSession.isSigningIn) {
+                Haptics.warning()
+                Task {
+                    guard await authSession.signOut() else { return }
+                    onboardingStore.cancelReplay()
+                    dismiss()
+                }
             }
         }
         .frame(maxWidth: .infinity)
@@ -836,7 +912,9 @@ private struct EmailAccessView: View {
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
-            email = authSession.pendingEmailChange ?? authSession.currentUser?.email ?? ""
+            // Prefilling the address already in use under "Novo email" invites a no-op change request.
+            email = authSession.pendingEmailChange ?? ""
+            authSession.errorMessage = nil
         }
     }
 
@@ -875,11 +953,12 @@ private struct PrivacyAndDataView: View {
         Binding(
             get: { store.hasAIMemoryConsent },
             set: { isOn in
+                Haptics.selection()
                 if isOn {
-                    Haptics.success()
-                    Task { _ = await store.grantAIMemoryConsent() }
+                    Task {
+                        if await store.grantAIMemoryConsent() { Haptics.success() }
+                    }
                 } else {
-                    Haptics.warning()
                     Task { _ = await store.revokeAIMemoryConsent() }
                 }
             }
@@ -902,7 +981,7 @@ private struct PrivacyAndDataView: View {
 
                     NoteCard(
                         eyebrow: "Onde ficam os seus dados",
-                        text: "Em São Paulo. Os seus registros ficam em servidores brasileiros. Para a Nina entender o que você escreve e o que está nas fotos, o conteúdo vai para um modelo fora do Brasil e volta — usado só para responder, sem ficar guardado lá."
+                        text: "Em São Paulo. Os seus registros ficam em servidores brasileiros. Para a Nina entender o que você escreve e o que está nas fotos, o conteúdo vai para um modelo fora do Brasil e volta, usado só para responder."
                     )
 
                     if let error = store.syncErrorMessage {
@@ -923,16 +1002,17 @@ private struct PrivacyAndDataView: View {
     private var consentCard: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("A Nina pode me ler")
+                Text("Deixar a Nina ler o que eu escrevo e fotografo")
                     .font(.system(size: 17, weight: .medium))
                     .tracking(-0.1)
                     .foregroundStyle(NinaTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(acceptedLabel).ninaText(.caption, NinaTheme.muted)
             }
 
             Spacer(minLength: 12)
 
-            Toggle("A Nina pode me ler", isOn: consentBinding)
+            Toggle("Deixar a Nina ler o que eu escrevo e fotografo", isOn: consentBinding)
                 .labelsHidden()
                 .tint(NinaTheme.ink)
                 .disabled(store.isSyncingHome)
@@ -976,7 +1056,8 @@ private struct PrivacyAndDataView: View {
                 SettingsLinkRow(
                     title: "Apagar a minha conversa com a Nina",
                     subtitle: "Só a sua. A conversa do outro adulto continua.",
-                    systemName: "bubble.left.and.exclamationmark.bubble.right"
+                    systemName: "bubble.left.and.exclamationmark.bubble.right",
+                    destination: .action
                 )
             }
             .buttonStyle(.plain)
@@ -1195,6 +1276,7 @@ private struct AccountDeletionView: View {
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .onAppear { authSession.errorMessage = nil }
         .alert("Apagar a sua conta Nina?", isPresented: $isShowingConfirmation) {
             Button("Cancelar", role: .cancel) {}
             Button("Apagar conta", role: .destructive) {
@@ -1252,7 +1334,7 @@ private struct NotificationPreferencesView: View {
                     VStack(spacing: 0) {
                         SettingsToggleRow(
                             title: "Avisos neste aparelho",
-                            subtitle: "Tarefas com horário e o empurrão de véspera.",
+                            subtitle: "Tarefas com horário. As urgentes ganham um lembrete uma hora depois.",
                             systemName: "bell",
                             isOn: notificationToggle
                         )
@@ -1348,12 +1430,15 @@ private struct NotificationPreferencesView: View {
 
     private var notificationToggle: Binding<Bool> {
         Binding(
-            get: { notificationsEnabled },
+            // A switch that reads ON while iOS blocks delivery promises alerts that never come.
+            get: { notificationsEnabled && store.notificationAuthorizationStatus != .denied },
             set: { isEnabled in
                 notificationsEnabled = isEnabled
                 if isEnabled, store.notificationAuthorizationStatus == .notDetermined {
                     Task {
-                        _ = await store.requestNotificationAuthorization()
+                        if await store.requestNotificationAuthorization() == false {
+                            notificationsEnabled = false
+                        }
                     }
                 } else {
                     store.synchronizeLocalNotifications()
@@ -1403,7 +1488,10 @@ private struct NotificationPreferencesView: View {
     }
 
     private var quietHoursSummary: String {
-        "Entre \(formattedTime(quietHoursStartMinutes)) e \(formattedTime(quietHoursEndMinutes))."
+        guard quietHoursStartMinutes != quietHoursEndMinutes else {
+            return "Sem janela: começo e fim são a mesma hora."
+        }
+        return "Entre \(formattedTime(quietHoursStartMinutes)) e \(formattedTime(quietHoursEndMinutes))."
     }
 
     private func formattedTime(_ minutes: Int) -> String {
@@ -1428,7 +1516,7 @@ private struct NotificationPreferencesView: View {
         case .authorized, .provisional, .ephemeral:
             "Os próximos avisos são agendados neste aparelho."
         case .notDetermined:
-            "Ligue depois de criar uma tarefa com horário. A Nina pede permissão só nesse momento."
+            "A Nina só avisa depois que você permitir. Dá para permitir agora ou quando criar a primeira tarefa com horário."
         case .denied:
             "Dá para mudar isso nos Ajustes do iPhone."
         case .unavailable:
@@ -1469,6 +1557,20 @@ struct PremiumBenefitsSheet: View {
     // seconds until the server has confirmed it.
     private var isCovered: Bool {
         store.householdPremium.isActive || premiumStore.entitlement.isActive
+    }
+
+    // The house is the sharing unit, but the receipt belongs to one adult: the
+    // other adult must never be told both "ativo" and "assine".
+    private var isCoveredByAnotherAdult: Bool {
+        store.householdPremium.isActive && !premiumStore.entitlement.isActive
+    }
+
+    private var coverageEndLabel: String? {
+        guard let expiresAt = store.householdPremium.expiresAt else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.dateFormat = "d 'de' MMMM"
+        return formatter.string(from: expiresAt)
     }
 
     private var monthlyProduct: Product? {
@@ -1601,19 +1703,34 @@ struct PremiumBenefitsSheet: View {
         return "\(product.displayPrice) \(detail)"
     }
 
+    @ViewBuilder
     private var subscriptionCard: some View {
-        VStack(spacing: 0) {
-            detailRow(title: "Plano", value: currentPlanName)
-            NinaDivider(inset: 0)
-            if let price = currentPriceLabel {
-                detailRow(title: "Preço", value: price)
+        if isCoveredByAnotherAdult {
+            VStack(spacing: 0) {
+                detailRow(title: "Plano", value: "Nina Premium")
                 NinaDivider(inset: 0)
+                detailRow(title: "Quem assina", value: "Outro adulto da casa")
+                NinaDivider(inset: 0)
+                detailRow(
+                    title: "Situação",
+                    value: coverageEndLabel.map { "Ativo para a casa até \($0)" } ?? "Ativo para a casa"
+                )
             }
-            detailRow(title: "Renovação", value: premiumStore.entitlement.renewalSummary)
-            NinaDivider(inset: 0)
-            detailRow(title: "Situação", value: premiumStore.entitlement.statusTitle)
+            .ninaCard()
+        } else {
+            VStack(spacing: 0) {
+                detailRow(title: "Plano", value: currentPlanName)
+                NinaDivider(inset: 0)
+                if let price = currentPriceLabel {
+                    detailRow(title: "Preço", value: price)
+                    NinaDivider(inset: 0)
+                }
+                detailRow(title: "Renovação", value: premiumStore.entitlement.renewalSummary)
+                NinaDivider(inset: 0)
+                detailRow(title: "Situação", value: premiumStore.entitlement.statusTitle)
+            }
+            .ninaCard()
         }
-        .ninaCard()
     }
 
     private func detailRow(title: String, value: String) -> some View {
@@ -1654,34 +1771,46 @@ struct PremiumBenefitsSheet: View {
         }
     }
 
+    @ViewBuilder
     private var manageArea: some View {
-        VStack(spacing: 10) {
-            NinaButton(title: "Gerenciar na App Store", fillsWidth: true) {
-                Haptics.lightImpact()
-                isManagingSubscription = true
-            }
-
-            Text("Trocar de plano ou cancelar acontece na App Store. A casa continua coberta até o fim do período pago.")
-                .ninaText(.micro, NinaTheme.muted)
+        if isCoveredByAnotherAdult {
+            Text("Quem assinou troca de plano ou cancela na App Store dele. A casa continua coberta até o fim do período pago.")
+                .ninaText(.caption, NinaTheme.muted)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-
-            NinaButton(
-                title: premiumStore.isRestoring ? "Restaurando" : "Restaurar compras",
-                kind: .quiet,
-                isEnabled: !premiumStore.isRestoring
-            ) {
-                Task {
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+        } else {
+            VStack(spacing: 10) {
+                NinaButton(title: "Gerenciar na App Store", fillsWidth: true) {
                     Haptics.lightImpact()
-                    await premiumStore.restorePurchases()
-                    await reloadHouseIfCovered()
+                    isManagingSubscription = true
                 }
+
+                Text("Trocar de plano ou cancelar acontece na App Store. A casa continua coberta até o fim do período pago.")
+                    .ninaText(.caption, NinaTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                NinaButton(
+                    title: premiumStore.isRestoring ? "Restaurando" : "Restaurar compras",
+                    kind: .quiet,
+                    isEnabled: !premiumStore.isRestoring
+                ) {
+                    Task {
+                        Haptics.lightImpact()
+                        await premiumStore.restorePurchases()
+                        await reloadHouseIfCovered()
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
     }
 
     private var heading: some View {
@@ -1816,7 +1945,7 @@ struct PremiumBenefitsSheet: View {
                 NoteCard(
                     eyebrow: "Planos indisponíveis",
                     text: premiumStore.productLoadMessage
-                        ?? "Configure os produtos Premium no App Store Connect ou em um arquivo StoreKit local."
+                        ?? "Os planos não carregaram. Tente abrir de novo daqui a pouco."
                 )
             }
 
@@ -1846,9 +1975,11 @@ struct PremiumBenefitsSheet: View {
     }
 
     private var subscriptionDisclosure: String {
-        guard let product = selectedProduct,
+        // The management view describes the plan the house has, never the one the picker defaulted to.
+        let describedProduct = isCovered ? (currentProduct ?? selectedProduct) : selectedProduct
+        guard let product = describedProduct,
               let period = product.subscription?.subscriptionPeriod else {
-            return plan.subscriptionDisclosure
+            return "\(plan.name): assinatura renovada automaticamente pela App Store. O preço aparece quando os planos carregarem."
         }
         return "\(plan.name): assinatura de \(period.localizedTitle) por \(product.displayPrice). \(plan.renewalLabel)."
     }
@@ -1876,9 +2007,10 @@ struct PremiumBenefitsSheet: View {
                 }
 
                 NinaButton(
-                    title: isCurrentPlan ? "Este já é o seu plano" : "Assinar o Premium",
+                    title: purchaseButtonTitle,
                     fillsWidth: true,
-                    isEnabled: !isCurrentPlan && !isBusy
+                    isEnabled: !isCurrentPlan,
+                    isPending: isBusy
                 ) {
                     Task {
                         Haptics.lightImpact()
@@ -1909,6 +2041,12 @@ struct PremiumBenefitsSheet: View {
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 10)
+    }
+
+    private var purchaseButtonTitle: String {
+        if premiumStore.isPurchasing { return "Assinando" }
+        if premiumStore.isSyncingBackend { return "Registrando na casa" }
+        return isCurrentPlan ? "Este já é o seu plano" : "Assinar o Premium"
     }
 
     // Casa reads premium from the house, not from this phone: without a reload the
@@ -2513,7 +2651,9 @@ struct TaskEditorSheet: View {
         owner = task.owner
         ownerMemberID = task.ownerMemberID
         kind = isPlantingSeed ? .task : task.kind
-        dueDate = isPlantingSeed
+        // A semente has no date to load; the editor must not offer "now", which
+        // is already past by the time the sheet is saved.
+        dueDate = isPlantingSeed || task.kind == .seed
             ? Self.defaultDueDate()
             : (task.dueAt ?? Self.date(fromDueLabel: task.dueLabel))
         category = task.category
@@ -3211,16 +3351,17 @@ struct TaskQuickActionsSheet: View {
                 NinaDivider(inset: 0)
 
                 actionRow(
-                    title: task.isDone ? "Marcar como não feita" : "Marcar como feita",
+                    title: task.completionActionTitle,
                     systemName: "checkmark",
-                    tint: task.isDone ? NinaTheme.ink : NinaTheme.moss
+                    tint: NinaTheme.ink
                 ) {
                     task.isDone ? Haptics.selection() : Haptics.success()
                     store.toggleTask(task)
                     dismiss()
                 }
 
-                if task.kind == .task {
+                // A closed task has nothing to push, hand over or plant.
+                if task.kind == .task, !task.isDone {
                     NinaDivider(inset: 52)
 
                     actionRow(title: "Empurrar pra amanhã", systemName: "clock") {
@@ -3230,46 +3371,52 @@ struct TaskQuickActionsSheet: View {
                     }
                 }
 
-                if canTakeOver, let me {
+                if canTakeOver, !task.isDone, let me {
                     NinaDivider(inset: 52)
 
-                    actionRow(title: "Chamar pra mim", systemName: "person") {
+                    actionRow(title: "Assumir esta tarefa", systemName: "person") {
                         Haptics.success()
                         takeOver(as: me)
                         dismiss()
                     }
                 }
 
-                NinaDivider(inset: 52)
+                if !task.isDone {
+                    NinaDivider(inset: 52)
 
-                if task.kind == .task {
-                    actionRow(title: "Virar semente", systemName: "leaf") {
-                        Haptics.success()
-                        turnIntoSeed()
-                        dismiss()
-                    }
-                } else {
-                    actionRow(title: "Plantar", systemName: "calendar") {
-                        Haptics.lightImpact()
-                        dismiss()
-                        router.presentedSheet = .plantSeed(task.id)
+                    if task.kind == .task {
+                        actionRow(title: "Virar semente", systemName: "leaf") {
+                            Haptics.success()
+                            turnIntoSeed()
+                            dismiss()
+                        }
+                    } else {
+                        actionRow(title: "Plantar", systemName: "calendar") {
+                            Haptics.lightImpact()
+                            plantAfterDismissal()
+                        }
                     }
                 }
             }
             .padding(.horizontal, 20)
 
-            Text("Toque e segure numa linha para abrir isto. A Nina não usa deslize lateral — esse gesto é de trocar de aba.")
-                .ninaText(.caption, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-
             Spacer(minLength: 0)
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
+    }
+
+    // Two presentations in one tick lose one of them; the editor waits for the
+    // sheet to be gone before it is asked for.
+    private func plantAfterDismissal() {
+        let router = router
+        let taskID = task.id
+        dismiss()
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            router.presentedSheet = .plantSeed(taskID)
+        }
     }
 
     private var taskLine: some View {
@@ -3311,20 +3458,12 @@ struct TaskQuickActionsSheet: View {
         .buttonStyle(.plain)
     }
 
+    // A snooze, not a rewrite of dueAt: rewriting the anchor of a repeating task
+    // would move every future occurrence, not only this one.
     private func pushToTomorrow() {
         let base = max(task.dueAt ?? .now, .now)
         let target = Calendar.current.date(byAdding: .day, value: 1, to: base) ?? base
-        store.updateTask(
-            id: task.id,
-            title: task.title,
-            subtitle: task.subtitle,
-            owner: task.owner,
-            ownerMemberID: task.ownerMemberID,
-            dueLabel: AppStore.taskDueLabel(for: target),
-            dueAt: target,
-            category: task.category,
-            priority: task.priority
-        )
+        store.snoozeTask(task.id, until: target)
     }
 
     private func takeOver(as member: HouseholdMember) {

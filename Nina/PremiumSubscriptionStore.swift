@@ -328,7 +328,7 @@ final class PremiumSubscriptionStore {
                 return lhsRank < rhsRank
             }
             productLoadMessage = products.isEmpty
-                ? "Nenhum plano Premium foi encontrado para estes IDs: \(configuredProductIDsLabel)."
+                ? "Os planos Premium não estão disponíveis agora. Tente de novo daqui a pouco."
                 : nil
         } catch {
             productLoadMessage = "Não foi possível carregar os planos Premium agora."

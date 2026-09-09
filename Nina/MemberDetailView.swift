@@ -33,7 +33,7 @@ struct MemberDetailView: View {
                         Haptics.lightImpact()
                         router.presentedSheet = .member(member.id)
                     } label: {
-                        Text("Editar").ninaText(.label, NinaTheme.cobalt, weight: .semibold)
+                        Text("Editar").ninaText(.label, NinaTheme.ink, weight: .semibold)
                     }
                     .buttonStyle(.plain)
                 }
