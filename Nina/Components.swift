@@ -211,10 +211,12 @@ struct ZeroState<Actions: View>: View {
                 .ninaText(.zero)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 330)
-            Text(body_)
-                .ninaText(.label, NinaTheme.muted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 306)
+            if !body_.isEmpty {
+                Text(body_)
+                    .ninaText(.label, NinaTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 306)
+            }
             actions.padding(.top, 8)
         }
         .frame(maxWidth: .infinity)
@@ -271,8 +273,8 @@ struct NinaDivider: View {
 // A household that already pays is never sold to again, so the active copy is
 // its own string and never the paywall's selling line with a badge on it.
 enum PremiumTeaserCopy {
-    static let activeTitle = "Premium ativo para a casa inteira."
-    static let activeSubtitle = "Vale para todo mundo daqui, sem cada um assinar o seu."
+    static let activeTitle = "Premium ativo na casa."
+    static let activeSubtitle = "Vale para a casa toda."
 }
 
 // Premium is named where the resource is spent, never as a nag. Every gate says
@@ -284,16 +286,15 @@ struct PremiumGateCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(NinaTheme.cobalt)
-                Text("Nina Premium")
-                    .ninaText(.eyebrow, NinaTheme.cobalt, weight: .bold)
+                    .accessibilityHidden(true)
+                Text(detail)
+                    .ninaText(.label, NinaTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text(detail)
-                .ninaText(.label, NinaTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
             NinaButton(title: title, fillsWidth: true, action: action)
                 .padding(.top, 2)
         }

@@ -503,7 +503,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         let created = await store.createHome(named: "Casa", owner: user)
         XCTAssertFalse(created)
         XCTAssertEqual(store.homeAccessState, .noHome)
-        XCTAssertEqual(store.syncErrorMessage, "Não consegui criar a casa no Supabase agora.")
+        XCTAssertEqual(store.syncErrorMessage, "Não deu para criar a casa agora. Tente de novo.")
 
         let joined = await store.joinHome(with: "casa-valid-invite", member: user)
         XCTAssertFalse(joined)

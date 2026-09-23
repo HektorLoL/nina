@@ -200,7 +200,7 @@ enum AuthFlowError: Error {
         case .appleCredentialInvalid:
             "A Apple não retornou uma credencial válida. Tente novamente."
         case .configurationMissing:
-            "O acesso online da Nina ainda não foi configurado."
+            "Não dá para entrar agora. Tente mais tarde."
         case .unavailable:
             "Não foi possível entrar agora. Tente de novo."
         }

@@ -11,11 +11,11 @@ struct NinaChatView: View {
     @State private var didLoadInitialMessages = false
     @State private var composerDraft = ""
 
+    // An example never names a person or a pet: this house may not have them.
     private static let captureExamples = [
-        "a escola pediu autorização até sexta",
-        "acabou o café e o detergente",
-        "quem vai buscar o Téo quinta?",
-        "um dia quero pintar a sala"
+        "Acabou o café",
+        "Autorização da escola até sexta",
+        "Um dia, pintar a sala"
     ]
 
     var body: some View {
@@ -37,66 +37,114 @@ struct NinaChatView: View {
         VStack(spacing: 0) {
             header
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        connectionNotice
-
-                        // A seeded greeting means `messages` is never empty, so
-                        // gating on that hid the capture prompt from every new
-                        // household — the one screen it was written for.
-                        if !store.messages.contains(where: { $0.sender == .user }) {
-                            capturePrompt
-                        }
-
-                        LazyVStack(alignment: .leading, spacing: 16) {
-                            ForEach(store.messages) { message in
-                                MessageBubble(message: message)
-                                    .id(message.id)
-                            }
-
-                            if store.isNinaResponding {
-                                NinaTypingBubble()
-                                    .id("nina-typing")
-                            }
-
-                            if pendingProposalCount > 0 {
-                                waitingLine
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 18)
-                }
-                .scrollDismissesKeyboard(.interactively)
-                // The newest turn is the one being read, and a pending proposal
-                // card sits under it. Opening at the top of the thread hides both.
-                .task(id: store.messages.last?.id) {
-                    await Task.yield()
-                    guard let lastID = store.messages.last?.id else { return }
-                    if didLoadInitialMessages {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo(lastID, anchor: .bottom)
-                        }
-                    } else {
-                        didLoadInitialMessages = true
-                        proxy.scrollTo(lastID, anchor: .bottom)
-                    }
-                }
+            if showsIntro {
+                intro
+            } else {
+                thread
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ChatInputBar(draft: $composerDraft)
+            ChatInputBar(
+                draft: $composerDraft,
+                examples: showsIntro ? Self.captureExamples : []
+            )
         }
     }
 
-    private var consentContent: some View {
-        ScrollView {
-            AIMemoryConsentCard()
+    // The intro stands in for a thread with nothing to decide yet: a greeting may hide
+    // behind it, a proposal never does.
+    private var showsIntro: Bool {
+        store.messages.allSatisfy { message in
+            message.sender == .nina
+                && message.proposals.isEmpty
+                && message.suggestion == nil
+                && !message.hasWithheldProposals
+        }
+    }
+
+    private var intro: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 10) {
+                    Text("Jogue uma lembrança aqui.")
+                        .ninaText(.zero)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Eu proponho. Você confirma.")
+                        .ninaText(.label, NinaTheme.muted)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 .padding(.horizontal, 20)
-                .padding(.top, 30)
-                .padding(.bottom, 104)
+                .padding(.vertical, 24)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
+        }
+    }
+
+    private var thread: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    ForEach(store.messages) { message in
+                        MessageBubble(
+                            message: message,
+                            showsDisclaimer: message.id == disclaimerMessageID
+                        )
+                        .id(message.id)
+                    }
+
+                    if store.isNinaResponding {
+                        NinaTypingBubble()
+                            .id("nina-typing")
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 18)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            // The newest turn is the one being read, and a pending proposal
+            // card sits under it. Opening at the top of the thread hides both.
+            .task(id: store.messages.last?.id) {
+                await Task.yield()
+                guard let lastID = store.messages.last?.id else { return }
+                if didLoadInitialMessages {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(lastID, anchor: .bottom)
+                    }
+                } else {
+                    didLoadInitialMessages = true
+                    proxy.scrollTo(lastID, anchor: .bottom)
+                }
+            }
+        }
+    }
+
+    // "Can read it wrong" is said once per screen, under the newest reply still waiting on a person.
+    private var disclaimerMessageID: ChatMessage.ID? {
+        store.messages.last { message in
+            message.sender == .nina && message.proposals.contains { $0.state == .pending }
+        }?.id
+    }
+
+    private var consentContent: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                AIMemoryConsentCard()
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 24)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: max(proxy.size.height - 104, 0),
+                        alignment: .leading
+                    )
+                    .padding(.bottom, 104)
+            }
+            .scrollBounceBehavior(.basedOnSize)
         }
     }
 
@@ -106,7 +154,7 @@ struct NinaChatView: View {
 
             ZeroState(
                 headline: "A conversa é dos adultos da casa.",
-                body_: "Tarefas, compras e o que a casa combinou continuam aqui para você. Só a conversa com a Nina fica com os adultos.",
+                body_: "Tarefas e compras continuam com você.",
                 presence: .unavailable
             )
 
@@ -138,92 +186,8 @@ struct NinaChatView: View {
         .padding(.top, 4)
     }
 
-    @ViewBuilder
-    private var connectionNotice: some View {
-        if let notice = store.ninaConnectionNotice {
-            noticeRow(systemName: "wifi.exclamationmark", text: notice)
-        } else if store.isUsingLocalNina {
-            noticeRow(systemName: "iphone", text: "Modo local. A conversa fica só neste aparelho.")
-        }
-    }
-
-    private func noticeRow(systemName: String, text: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: systemName)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(NinaTheme.ink)
-
-            Text(text)
-                .ninaText(.caption, NinaTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            NinaTheme.grout,
-            in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
-        )
-    }
-
-    private var capturePrompt: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Jogue uma lembrança aqui.")
-                .ninaText(.zero)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text("Do jeito que veio na cabeça. Eu leio, monto uma proposta e espero você confirmar. Nada entra na casa sozinho.")
-                .ninaText(.label, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Self.captureExamples, id: \.self) { example in
-                    Button {
-                        Haptics.lightImpact()
-                        sendPreset(example)
-                    } label: {
-                        NinaChip(text: example)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.top, 4)
-            .allowsHitTesting(!store.isNinaResponding)
-            .opacity(store.isNinaResponding ? 0.4 : 1)
-        }
-        .padding(.top, 10)
-    }
-
-    private var waitingLine: some View {
-        HStack(spacing: 8) {
-            NinaMark(size: 10)
-            Text(waitingText)
-                .ninaText(.caption, NinaTheme.cobalt, weight: .semibold)
-        }
-        .padding(.top, 2)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var waitingText: String {
-        switch pendingProposalCount {
-        case 1: "A Nina está esperando a sua resposta."
-        default: "A Nina está esperando \(pendingProposalCount) respostas suas."
-        }
-    }
-
-    private var pendingProposalCount: Int {
-        store.messages.reduce(0) { total, message in
-            total + message.proposals.count { $0.state == .pending }
-        }
-    }
-
     private var openTasks: [TaskItem] {
         store.tasks.filter { $0.kind == .task && !$0.isDone }
-    }
-
-    // An example is a draft to edit, not a message to send: the chip fills the
-    // composer and the person decides.
-    private func sendPreset(_ text: String) {
-        composerDraft = text
     }
 }
 
@@ -311,8 +275,8 @@ private struct AIMemoryConsentCard: View {
 private struct ChatInputBar: View {
     @Environment(AppStore.self) private var store
     @Environment(RouterPath.self) private var router
-    @Environment(TabSwipeLock.self) private var tabSwipeLock
     @Binding var draft: String
+    var examples: [String]
     @State private var isKeyboardVisible = false
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var pendingAttachments: [PendingChatAttachment] = []
@@ -320,13 +284,21 @@ private struct ChatInputBar: View {
     @State private var isShowingDocumentReadingNotice = false
     @State private var isLoadingAttachments = false
     @State private var attachmentError: String?
-    @State private var tabSwipeUnlockTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
+            if !examples.isEmpty {
+                examplesRow
+                    .padding(.bottom, 10)
+            }
+
             Rectangle()
                 .fill(NinaTheme.line)
                 .frame(height: 1)
+
+            if let notice {
+                noticeStrip(notice)
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 if !pendingAttachments.isEmpty {
@@ -334,8 +306,6 @@ private struct ChatInputBar: View {
                         attachments: pendingAttachments,
                         onRemove: removeAttachment
                     )
-                    .simultaneousGesture(tabSwipeDragLock)
-                    .onDisappear(perform: unlockTabSwipeImmediately)
                 }
 
                 if let attachmentError {
@@ -394,7 +364,7 @@ private struct ChatInputBar: View {
             .padding(.top, 12)
             .padding(.bottom, 10)
 
-            footerNote
+            attachmentPrivacyNote
         }
         .padding(.bottom, isKeyboardVisible ? 8 : 92)
         .background(NinaTheme.ground)
@@ -415,8 +385,102 @@ private struct ChatInputBar: View {
         .onChange(of: canReadDocuments) { _, isAllowed in
             guard !isAllowed, !pendingAttachments.isEmpty else { return }
             pendingAttachments = []
-            attachmentError = "A leitura de documentos faz parte do Premium da casa."
+            attachmentError = "Foto e documento são do Premium."
         }
+    }
+
+    // An example is a draft to edit, not a message to send: the chip fills the
+    // composer and the person decides.
+    private var examplesRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(examples, id: \.self) { example in
+                    Button {
+                        Haptics.lightImpact()
+                        draft = example
+                    } label: {
+                        NinaChip(text: example)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .chipRowTrailingFade()
+        .disabled(store.isNinaResponding)
+        .opacity(store.isNinaResponding ? 0.4 : 1)
+    }
+
+    private struct ComposerNotice {
+        var systemName: String
+        var text: String
+        var opensPremium = false
+    }
+
+    // An honesty state is never replaced by silence: whatever the thread cannot show about
+    // where a reply came from, or which ceiling stopped it, sits on the composer.
+    private var notice: ComposerNotice? {
+        if let connectionNotice = store.ninaConnectionNotice {
+            return ComposerNotice(systemName: "wifi.exclamationmark", text: connectionNotice)
+        }
+        if let premiumCeiling {
+            return ComposerNotice(systemName: "lock", text: premiumCeiling, opensPremium: true)
+        }
+        if store.isUsingLocalNina {
+            return ComposerNotice(systemName: "iphone", text: "Modo local. Nada sai deste aparelho.")
+        }
+        return nil
+    }
+
+    // A server denial arrives as an ordinary Nina line, so the ceiling it names is recovered here:
+    // a refusal this household can lift must carry the route, never end the conversation.
+    private var premiumCeiling: String? {
+        guard !store.householdPremium.isActive,
+              let latest = store.messages.last,
+              latest.sender == .nina else {
+            return nil
+        }
+        if latest.text == NinaEngineError.attachmentsRequirePremium.userMessage {
+            return "Ler foto e documento é do Premium."
+        }
+        if latest.text == NinaEngineError.rateLimited.userMessage {
+            return "No Premium, 30 mensagens por hora."
+        }
+        return nil
+    }
+
+    private func noticeStrip(_ notice: ComposerNotice) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: notice.systemName)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(NinaTheme.muted)
+                .accessibilityHidden(true)
+
+            Text(notice.text)
+                .ninaText(.meta, NinaTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            if notice.opensPremium {
+                Button {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .premium
+                } label: {
+                    Text("Ver o Premium")
+                        .ninaText(.meta, NinaTheme.ink, weight: .semibold)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .background(NinaTheme.grout)
     }
 
     // Off means absent, not locked: a premium upsell for a feature this build
@@ -476,7 +540,7 @@ private struct ChatInputBar: View {
         .popover(isPresented: $isShowingDocumentReadingNotice, arrowEdge: .bottom) {
             PremiumGateCard(
                 title: "Ver o Premium",
-                detail: "Ler boleto, receita e comunicado por foto faz parte do Premium da casa. Sem ele, o envio de foto e documento fica desligado por aqui."
+                detail: "Foto e documento são do Premium."
             ) {
                 Haptics.lightImpact()
                 isShowingDocumentReadingNotice = false
@@ -490,41 +554,29 @@ private struct ChatInputBar: View {
     }
 
     @ViewBuilder
-    private var footerNote: some View {
+    private var attachmentPrivacyNote: some View {
         if !pendingAttachments.isEmpty {
-            footerLine(
-                systemName: "lock",
-                text: "A foto não fica guardada em nenhum servidor. O que sobra é o que eu leio dela, e uma miniatura no seu aparelho."
-            )
-        } else if hasPendingProposals {
-            footerLine(
-                systemName: "info.circle",
-                text: "A Nina pode ler errado. Nada entra na casa até você confirmar cada uma."
-            )
-        }
-    }
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(NinaTheme.line)
+                    .frame(height: 1)
 
-    private func footerLine(systemName: String, text: String) -> some View {
-        VStack(spacing: 0) {
-            Rectangle()
-                .fill(NinaTheme.line)
-                .frame(height: 1)
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "lock")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(NinaTheme.muted)
 
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: systemName)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(NinaTheme.faint)
+                    Text("A foto não fica guardada em servidor nenhum.")
+                        .ninaText(.meta, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                Text(text)
-                    .ninaText(.micro, NinaTheme.faint)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
+            .accessibilityElement(children: .combine)
         }
-        .accessibilityElement(children: .combine)
     }
 
     private var trimmedDraft: String {
@@ -548,45 +600,6 @@ private struct ChatInputBar: View {
             && store.canSendNinaMessages
             && !store.isNinaResponding
             && !isLoadingAttachments
-    }
-
-    private var hasPendingProposals: Bool {
-        store.messages.contains { message in
-            message.proposals.contains { $0.state == .pending }
-        }
-    }
-
-    private var tabSwipeDragLock: some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .local)
-            .onChanged { value in
-                guard isHorizontalDrag(value.translation) else { return }
-                tabSwipeUnlockTask?.cancel()
-                tabSwipeUnlockTask = nil
-                tabSwipeLock.isLocked = true
-            }
-            .onEnded { _ in
-                scheduleTabSwipeUnlock()
-            }
-    }
-
-    private func isHorizontalDrag(_ translation: CGSize) -> Bool {
-        abs(translation.width) > 8 && abs(translation.width) > abs(translation.height)
-    }
-
-    private func scheduleTabSwipeUnlock() {
-        tabSwipeUnlockTask?.cancel()
-        tabSwipeUnlockTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 160_000_000)
-            guard !Task.isCancelled else { return }
-            tabSwipeLock.isLocked = false
-            tabSwipeUnlockTask = nil
-        }
-    }
-
-    private func unlockTabSwipeImmediately() {
-        tabSwipeUnlockTask?.cancel()
-        tabSwipeUnlockTask = nil
-        tabSwipeLock.isLocked = false
     }
 
     private func sendDraft() {
@@ -951,7 +964,7 @@ private struct NinaTypingBubble: View {
             NinaMark(size: 22, presence: .reading)
                 .padding(.top, 4)
 
-            Text("A Nina está lendo")
+            Text("Lendo")
                 .ninaText(.caption, NinaTheme.muted)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 11)
@@ -962,13 +975,14 @@ private struct NinaTypingBubble: View {
 
             Spacer(minLength: 40)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("A Nina está lendo")
     }
 }
 
 private struct MessageBubble: View {
-    @Environment(AppStore.self) private var store
-    @Environment(RouterPath.self) private var router
     var message: ChatMessage
+    var showsDisclaimer: Bool
 
     private var isNina: Bool {
         message.sender == .nina
@@ -992,18 +1006,17 @@ private struct MessageBubble: View {
                 }
 
                 if message.hasWithheldProposals {
-                    WithheldProposalsCard()
-                }
-
-                if let premiumCeiling {
-                    PremiumGateCard(title: "Ver o Premium", detail: premiumCeiling) {
-                        Haptics.lightImpact()
-                        router.presentedSheet = .premium
-                    }
+                    WithheldProposalsLine()
                 }
 
                 if let suggestion = message.suggestion {
                     SuggestionMiniCard(suggestion: suggestion)
+                }
+
+                if showsDisclaimer {
+                    Text("A Nina pode ler errado. Nada entra sem você confirmar.")
+                        .ninaText(.meta, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: isNina ? .leading : .trailing)
@@ -1033,19 +1046,6 @@ private struct MessageBubble: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(isNina ? "Nina" : "Você"): \(message.text)")
-    }
-
-    // A server denial arrives as an ordinary Nina line, so the ceiling it names is recovered here:
-    // a refusal this household can lift must carry the route, never end the conversation.
-    private var premiumCeiling: String? {
-        guard isNina, !store.householdPremium.isActive else { return nil }
-        if message.text == NinaEngineError.attachmentsRequirePremium.userMessage {
-            return "Ler boleto, receita e comunicado por foto faz parte do Premium da casa."
-        }
-        if message.text == NinaEngineError.rateLimited.userMessage {
-            return "No Premium são 30 mensagens por hora, e não 10 por dia."
-        }
-        return nil
     }
 }
 
@@ -1237,10 +1237,6 @@ private struct NinaProposalCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if proposal.state == .pending {
-                banner
-            }
-
             face
 
             actions
@@ -1259,42 +1255,32 @@ private struct NinaProposalCard: View {
         }
     }
 
-    private var banner: some View {
-        HStack(spacing: 8) {
+    private var pendingTag: some View {
+        HStack(spacing: 6) {
             Image(systemName: proposal.kind == .memory ? "lock" : "plus")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(NinaTheme.faint)
+                .accessibilityHidden(true)
 
-            Eyebrow(text: proposal.kind == .memory ? "Memória · ainda não guardada" : "Isto ainda não existe")
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 38)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NinaTheme.grout)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(NinaTheme.line).frame(height: 1)
+            Eyebrow(text: proposal.kind == .memory ? "Ainda não guardada" : "Ainda não existe")
         }
     }
 
     private var face: some View {
         VStack(alignment: .leading, spacing: 12) {
-            objectRow
+            VStack(alignment: .leading, spacing: 8) {
+                if proposal.state == .pending {
+                    pendingTag
+                }
 
-            if !confirmationPayload.detail.isEmpty {
-                Text(confirmationPayload.detail)
+                objectRow
+            }
+
+            if let secondaryLine {
+                Text(secondaryLine)
                     .ninaText(.caption, NinaTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            if proposal.kind == .memory, proposal.state == .pending {
-                Text("Guardada, ela entra nas próximas conversas. Fica em Casa · Memórias.")
-                    .ninaText(.meta, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            proposalBasis
 
             extractedReadings
 
@@ -1314,46 +1300,28 @@ private struct NinaProposalCard: View {
                 }
             }
 
-            decisiveRows
+            metaLine
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(NinaTheme.ground)
     }
 
-    // The card draws the real object — the same checkbox and the same category glyph a task row
-    // carries — so what a person confirms is what the house is about to get.
     private var objectRow: some View {
-        HStack(alignment: .top, spacing: 12) {
-            if isSeed {
-                CategoryGlyph(systemName: "leaf", size: 18, tint: NinaTheme.ink)
-            } else if proposal.kind != .memory {
-                NinaCheckbox(isOn: false, size: 22)
-                    .padding(.top, 1)
+        HStack(alignment: .top, spacing: 10) {
+            if proposal.kind != .memory {
+                CategoryGlyph(
+                    systemName: confirmationPayload.category.symbolName,
+                    size: 18,
+                    tint: NinaTheme.ink
+                )
+                .accessibilityLabel(confirmationPayload.category.title)
             }
 
             objectTitle
                 .fixedSize(horizontal: false, vertical: true)
 
-            Spacer(minLength: 8)
-
-            if isSeed {
-                Eyebrow(text: TaskKind.seed.title)
-                    .padding(.horizontal, 10)
-                    .frame(height: 24)
-                    .background(NinaTheme.grout, in: Capsule())
-            } else if proposal.kind != .memory {
-                HStack(spacing: 6) {
-                    CategoryGlyph(
-                        systemName: confirmationPayload.category.symbolName,
-                        size: 14,
-                        tint: NinaTheme.muted
-                    )
-                    Text(confirmationPayload.category.title)
-                        .ninaText(.meta, NinaTheme.muted)
-                }
-                .padding(.top, 2)
-            }
+            Spacer(minLength: 0)
         }
     }
 
@@ -1381,41 +1349,12 @@ private struct NinaProposalCard: View {
         proposal.kind == .seed
     }
 
-    // The basis says where a proposal came from; how sure Nina is never joins it, because a score
-    // on a household suggestion reads as a verdict on the house instead of a portrait of it.
-    @ViewBuilder
-    private var proposalBasis: some View {
-        if proposal.payload.source != nil || !proposal.payload.rationale.isEmpty {
-            VStack(alignment: .leading, spacing: 7) {
-                if let source = proposal.payload.source {
-                    HStack(spacing: 6) {
-                        Image(systemName: source.symbolName)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(NinaTheme.muted)
-                        Text(source.title)
-                            .ninaText(.micro, NinaTheme.muted, weight: .semibold)
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(height: 26)
-                    .background(NinaTheme.grout, in: Capsule())
-                }
-
-                if !proposal.payload.rationale.isEmpty {
-                    Text(proposal.payload.rationale)
-                        .ninaText(.meta, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(basisAccessibilityLabel)
+    // One line under the title, and what the house will carry outranks why Nina proposed it.
+    private var secondaryLine: String? {
+        if !confirmationPayload.detail.isEmpty {
+            return confirmationPayload.detail
         }
-    }
-
-    private var basisAccessibilityLabel: String {
-        [proposal.payload.source?.title, proposal.payload.rationale]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-            .joined(separator: ". ")
+        return proposal.payload.rationale.isEmpty ? nil : proposal.payload.rationale
     }
 
     // What Nina read is evidence, not a field: it keeps showing the document's own wording so a
@@ -1441,13 +1380,8 @@ private struct NinaProposalCard: View {
                     }
                 }
 
-                if proposal.state == .pending {
-                    Text("Corrija se eu tiver lido errado.")
-                        .ninaText(.meta, NinaTheme.muted)
-                }
-
                 if confirmationPayload.category.id == TaskCategory.bills.id {
-                    Text("Eu não copio a linha digitável. Para pagar, você abre o boleto no banco, porque este cartão não serve para isso.")
+                    Text("Para pagar, abra o boleto no banco.")
                         .ninaText(.meta, NinaTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1475,84 +1409,105 @@ private struct NinaProposalCard: View {
         .accessibilityLabel("\(reading.label): \(reading.value)")
     }
 
-    // Quando, Repete and Dono are decided on the card face: a field kept behind the correction
-    // toggle would let a person confirm a date they never saw.
-    @ViewBuilder
-    private var decisiveRows: some View {
+    private struct MetaPair: Hashable {
+        var systemName: String
+        var value: String
+        var label: String
+        var isMuted = false
+    }
+
+    // Only an attachment is named as the basis; how sure Nina is never joins it, because a score
+    // on a household suggestion reads as a verdict on the house instead of a portrait of it.
+    private var metaPairs: [MetaPair] {
+        var pairs: [MetaPair] = []
         if proposal.kind != .memory {
-            VStack(spacing: 0) {
-                NinaDivider(inset: 0)
+            pairs.append(
+                MetaPair(
+                    systemName: isSeed ? "leaf" : "calendar",
+                    value: scheduleValue,
+                    label: isSeed ? TaskKind.seed.title : "Quando",
+                    isMuted: isSeed
+                )
+            )
+            pairs.append(MetaPair(systemName: "person", value: ownerValue, label: "Dono"))
+            if proposal.kind == .shopping, !confirmationPayload.amount.isEmpty {
+                pairs.append(
+                    MetaPair(systemName: "number", value: confirmationPayload.amount, label: "Quantidade")
+                )
+            }
+        }
+        if proposal.payload.source == .attachment {
+            pairs.append(
+                MetaPair(
+                    systemName: "paperclip",
+                    value: NinaProposalSource.attachment.title,
+                    label: "Origem"
+                )
+            )
+        }
+        return pairs
+    }
 
-                decisiveRow("Quando") {
-                    Text(scheduleValue)
-                        .ninaText(.label, isSeed ? NinaTheme.muted : NinaTheme.ink)
+    // The date and the owner are decided on the card face: a value kept behind Corrigir would let
+    // a person confirm a date they never saw.
+    @ViewBuilder
+    private var metaLine: some View {
+        if !metaPairs.isEmpty {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) {
+                    ForEach(metaPairs, id: \.self) { metaPairView($0) }
                 }
-
-                if proposal.kind == .task || proposal.kind == .reminder {
-                    NinaDivider(inset: 0)
-                    decisiveRow("Repete") {
-                        Text("Não repete").ninaText(.label)
-                    }
-                }
-
-                NinaDivider(inset: 0)
-
-                decisiveRow("Dono") {
-                    Text(ownerValue).ninaText(.label)
-                }
-
-                if proposal.kind == .shopping, !confirmationPayload.amount.isEmpty {
-                    NinaDivider(inset: 0)
-                    decisiveRow("Quantidade") {
-                        Text(confirmationPayload.amount).ninaText(.label)
-                    }
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(metaPairs, id: \.self) { metaPairView($0) }
                 }
             }
         }
     }
 
-    private func decisiveRow<V: View>(_ label: String, @ViewBuilder value: () -> V) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text(label)
-                .ninaText(.caption, NinaTheme.muted)
-                .frame(width: 86, alignment: .leading)
-            value()
-            Spacer(minLength: 0)
+    private func metaPairView(_ pair: MetaPair) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: pair.systemName)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(NinaTheme.muted)
+
+            Text(pair.value)
+                .ninaText(.label, pair.isMuted ? NinaTheme.muted : NinaTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(minHeight: 42)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(pair.label): \(pair.value)")
     }
 
-    // The row shows the date Nina actually scheduled, not the words she used for it: a label
-    // that parsed to nothing is confirmed as undated, and the person sees that before accepting.
+    // The line shows the date Nina actually scheduled, not the words she used for it: a label
+    // that parsed to nothing is confirmed without a reminder, and the person sees that first.
     private var scheduleValue: String {
         if isSeed {
-            return "Sem data · plante depois"
+            return "Plante depois"
         }
         if let date = confirmationPayload.scheduledDate {
             return AppStore.taskDueLabel(for: date)
         }
         let label = confirmationPayload.dueLabel
         guard !label.isEmpty, label.caseInsensitiveCompare("Sem data") != .orderedSame else {
-            return "Sem data · sem lembrete"
+            return "Sem data"
         }
-        return "\(label) · sem data, sem lembrete"
+        return "\(label) · sem lembrete"
     }
 
     private var dueCorrectionHint: String {
         let typed = draftDueLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         if typed.isEmpty {
-            return "Vai ficar sem data e sem lembrete."
+            return "Vai ficar sem data."
         }
         if let date = confirmationPayload.scheduledDate {
             return "Vai ficar: \(AppStore.taskDueLabel(for: date))."
         }
-        return "Não entendi essa data. Vai ficar sem lembrete. Tente \"amanhã\", \"18:00\" ou \"15/09\"."
+        return "Não entendi a data. Tente \"amanhã\" ou \"18:00\"."
     }
 
     private var ownerValue: String {
         HouseholdWorkload.isSharedOwner(confirmationPayload.owner)
-            ? "Ninguém ainda"
+            ? "Sem dono"
             : confirmationPayload.owner
     }
 
@@ -1569,7 +1524,7 @@ private struct NinaProposalCard: View {
     }
 
     private var selectedOwnerLabel: String {
-        if HouseholdWorkload.isSharedOwner(draftOwner) { return "Ninguém ainda" }
+        if HouseholdWorkload.isSharedOwner(draftOwner) { return "Sem dono" }
         return ownerOptions.first(where: isSelectedOwner)?.label ?? draftOwner
     }
 
@@ -1587,7 +1542,7 @@ private struct NinaProposalCard: View {
                         draftOwner = option.name
                     } label: {
                         Label(
-                            HouseholdWorkload.isSharedOwner(option.name) ? "Ninguém ainda" : option.label,
+                            HouseholdWorkload.isSharedOwner(option.name) ? "Sem dono" : option.label,
                             systemImage: isSelectedOwner(option) ? "checkmark" : "person"
                         )
                     }
@@ -1646,15 +1601,23 @@ private struct NinaProposalCard: View {
         }
     }
 
+    private var primaryTitle: String {
+        switch proposal.kind {
+        case .seed: "Criar semente"
+        case .shopping: "Adicionar à lista"
+        default: "Criar tarefa"
+        }
+    }
+
     private var standardActions: some View {
         VStack(spacing: 8) {
-            NinaButton(title: proposal.actionTitle, fillsWidth: true) {
+            NinaButton(title: primaryTitle, fillsWidth: true) {
                 resolve(decision: .accept)
             }
 
             HStack(spacing: 8) {
                 NinaButton(
-                    title: isEditing ? "Pronto" : correctionTitle,
+                    title: isEditing ? "Pronto" : "Corrigir",
                     kind: .outline,
                     fillsWidth: true
                 ) {
@@ -1670,15 +1633,11 @@ private struct NinaProposalCard: View {
         }
     }
 
-    private var correctionTitle: String {
-        proposal.payload.extracted.isEmpty ? "Corrigir" : "Corrigir o que li"
-    }
-
     // Sharing is the one move nobody can take back, so it names who gains the reading and asks
     // again; keeping it for yourself stays the single tap.
     private var memoryActions: some View {
         VStack(spacing: 8) {
-            NinaButton(title: "Guardar só para mim", systemName: "lock", fillsWidth: true) {
+            NinaButton(title: "Guardar para mim", systemName: "lock", fillsWidth: true) {
                 resolve(decision: .accept, memoryVisibility: .privateMemory)
             }
 
@@ -1687,26 +1646,13 @@ private struct NinaProposalCard: View {
                 isConfirmingShare = true
             }
 
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(NinaTheme.faint)
-
-                Text(shareWarning)
-                    .ninaText(.meta, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 2)
-
             HStack(spacing: 8) {
-                NinaButton(title: isEditing ? "Pronto" : "Corrigir o texto", kind: .quiet, fillsWidth: true) {
+                NinaButton(title: isEditing ? "Pronto" : "Corrigir", kind: .quiet, fillsWidth: true) {
                     Haptics.selection()
                     isEditing.toggle()
                 }
 
-                NinaButton(title: "Não guardar nada", kind: .quiet, fillsWidth: true) {
+                NinaButton(title: "Não", kind: .quiet, fillsWidth: true) {
                     resolve(decision: .reject)
                 }
             }
@@ -1719,12 +1665,12 @@ private struct NinaProposalCard: View {
             $0.role == .adult && $0.id != store.currentFamilyMember?.id
         }
         if others.count == 1, let other = others.first, !other.name.firstWord.isEmpty {
-            return "Compartilhar não tem volta. \(other.name.firstWord) vai poder ler, e tirar depois não desfaz a leitura."
+            return "\(other.name.firstWord) vai poder ler. Não dá para desfazer."
         }
         if others.isEmpty {
-            return "Compartilhar não tem volta. Quem entrar na casa depois vai poder ler."
+            return "Quem entrar vai poder ler. Não dá para desfazer."
         }
-        return "Compartilhar não tem volta. Os outros adultos da casa vão poder ler, e tirar depois não desfaz a leitura."
+        return "Os outros adultos vão poder ler. Não dá para desfazer."
     }
 
     private var resolvedLine: some View {
@@ -1802,24 +1748,19 @@ private struct NinaProposalCard: View {
     }
 }
 
-private struct WithheldProposalsCard: View {
+// A withheld turn keeps its own line in the thread: the discard is stated on the turn it hid.
+private struct WithheldProposalsLine: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "hourglass")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(NinaTheme.faint)
-                Eyebrow(text: "Confirmação ainda fechada")
-                Spacer(minLength: 0)
-            }
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "hourglass")
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(NinaTheme.muted)
+                .accessibilityHidden(true)
 
-            Text("Entendi algo para organizar, mas nesta versão a confirmação ainda não abre. Nada entra na casa até ela abrir.")
-                .ninaText(.caption, NinaTheme.ink)
+            Text("Confirmação ainda fechada nesta versão. Nada entrou na casa.")
+                .ninaText(.meta, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
         .accessibilityElement(children: .combine)
     }
 }
@@ -1872,7 +1813,7 @@ private struct SuggestionMiniCard: View {
             // Three exits, never two: disagreement is a first-class button, and a
             // card you can only accept or inspect is a card you cannot refuse.
             HStack(spacing: 10) {
-                NinaButton(title: "Ver os detalhes", kind: .outline, fillsWidth: true) {
+                NinaButton(title: "Ver detalhes", kind: .outline, fillsWidth: true) {
                     Haptics.lightImpact()
                     router.presentedSheet = .suggestion(suggestion)
                 }
@@ -1917,5 +1858,4 @@ private extension Int {
     NinaChatView()
         .environment(AppStore())
         .environment(RouterPath())
-        .environment(TabSwipeLock())
 }

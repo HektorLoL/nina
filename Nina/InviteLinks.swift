@@ -98,39 +98,41 @@ struct InviteAcceptanceView: View {
     }
 
     private var householdName: String {
-        preview?.familyName ?? "uma casa"
+        preview?.familyName ?? "Uma casa"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if isLoading {
-                loadingHeader
-            } else if preview?.isValid == true {
-                validHeader
-            } else if preview == nil {
-                // The preview RPC answers {valid:false} for a genuinely dead code,
-                // so a nil can only mean we could not reach it. Saying the link is
-                // dead would be asserting a fact we do not have.
-                unverifiedHeader
-            } else {
-                invalidHeader
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 32)
+
+                    Group {
+                        if isLoading {
+                            loadingHeader
+                        } else if preview?.isValid == true {
+                            validHeader
+                        } else if preview == nil {
+                            // The preview RPC answers {valid:false} for a genuinely dead code,
+                            // so a nil can only mean we could not reach it. Saying the link is
+                            // dead would be asserting a fact we do not have.
+                            unverifiedHeader
+                        } else {
+                            invalidHeader
+                        }
+                    }
+                    .multilineTextAlignment(.center)
+
+                    Spacer(minLength: 32)
+
+                    actions
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+                .frame(minHeight: proxy.size.height)
             }
-
-            Spacer(minLength: 24)
-
-            if let errorMessage {
-                Text(errorMessage)
-                    .ninaText(.caption, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 10)
-            }
-
-            actions
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 40)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .ninaScreenBackground()
         .task(id: code) {
             await loadPreview()
@@ -138,54 +140,51 @@ struct InviteAcceptanceView: View {
     }
 
     private var loadingHeader: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(spacing: 14) {
             NinaMark(size: 44, presence: .reading)
-            Text("Vendo de quem é este link.").ninaText(.label, NinaTheme.muted)
+            Text("Conferindo o link.").ninaText(.label, NinaTheme.muted)
         }
     }
 
     private var validHeader: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 14) {
-                MemberAvatar(initials: householdName.ninaInitials, tone: .mint, size: 44)
-                Text("Alguém quer dividir a \(householdName) com você.")
-                    .ninaText(.caption, NinaTheme.muted)
+        VStack(spacing: 14) {
+            MemberAvatar(initials: householdName.ninaInitials, tone: .mint, size: 56)
+
+            VStack(spacing: 6) {
+                Eyebrow(text: "Convite")
+                Text(householdName)
+                    .ninaText(.display)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("Você abriu o link.\nAinda não entrou.")
-                .ninaText(.display)
-                .fixedSize(horizontal: false, vertical: true)
-
-            // Possessing an invite grants nothing: the link opens a request, and
-            // an owner or admin approves it. Saying so here is the whole screen.
-            Text("Ter o link não dá acesso a nada. Ele pede entrada, e alguém da casa precisa aprovar — até lá você não vê nenhuma tarefa, nenhuma conta, nenhuma criança desta casa.")
+            // Possessing an invite grants nothing: an owner or admin approves the request.
+            Text("Ter o link não dá acesso. Alguém da casa aprova.")
                 .ninaText(.label, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var unverifiedHeader: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Não deu para conferir o link agora.")
+        VStack(spacing: 14) {
+            Text("Não deu para conferir o link.")
                 .ninaText(.display)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Pode ser a conexão. Você ainda pode pedir entrada — quem cuida da casa decide, e é esse pedido que vale, não o link.")
+            Text("Ter o link não dá acesso. Alguém da casa aprova.")
                 .ninaText(.label, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var invalidHeader: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(spacing: 14) {
             Text("Este link não vale mais.")
                 .ninaText(.display)
                 .fixedSize(horizontal: false, vertical: true)
 
             // The RPC answers the same way for every failure, so the copy names
             // no reason: guessing one would be inventing it.
-            Text("Ele pode ter expirado, já ter sido usado o bastante, ou ter sido renovado. Peça um novo para quem te chamou.")
+            Text("Peça um novo para quem te chamou.")
                 .ninaText(.label, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -194,6 +193,13 @@ struct InviteAcceptanceView: View {
     @ViewBuilder
     private var actions: some View {
         VStack(spacing: 10) {
+            if let errorMessage {
+                Text(errorMessage)
+                    .ninaText(.caption, NinaTheme.ink, weight: .semibold)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // request_family_join is the real authority, so an unverified link
             // keeps the button: the server decides, not the preview.
             if preview?.isValid == true || preview == nil {
@@ -206,7 +212,7 @@ struct InviteAcceptanceView: View {
                 }
             }
 
-            NinaButton(title: "Montar a minha própria casa", kind: .outline, fillsWidth: true) {
+            NinaButton(title: "Criar minha casa", kind: .outline, fillsWidth: true) {
                 inviteLinkStore.clear()
             }
         }

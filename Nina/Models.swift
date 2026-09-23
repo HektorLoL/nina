@@ -13,7 +13,7 @@ enum HouseholdRole: String, CaseIterable, Identifiable, Codable, Hashable {
         case .adult: "Adulto"
         case .child: "Criança"
         case .pet: "Pet"
-        case .assistant: "Nina IA"
+        case .assistant: "Nina"
         }
     }
 
@@ -105,11 +105,11 @@ enum FamilyPermissionRole: String, CaseIterable, Identifiable, Codable, Hashable
     var summary: String {
         switch self {
         case .owner:
-            "Controla convites, participantes, permissões e ajustes da casa."
+            "Convites, permissões e ajustes da casa."
         case .admin:
-            "Aprova entradas e gerencia participantes, exceto responsáveis e outros administradores."
+            "Aprova entradas, edita e remove participantes."
         case .member:
-            "Participa das tarefas, compras e conversas da casa."
+            "Tarefas, compras e conversa da casa."
         }
     }
 
@@ -453,16 +453,6 @@ enum TaskRecurrence: String, CaseIterable, Identifiable, Codable, Hashable {
         case .yearly: "Anual"
         }
     }
-
-    var explicitTitle: String {
-        switch self {
-        case .none: "Não se repete"
-        case .daily: "Repete diariamente"
-        case .weekly: "Repete semanalmente"
-        case .monthly: "Repete mensalmente"
-        case .yearly: "Repete anualmente"
-        }
-    }
 }
 
 // The raw values are the closed set tasks_remind_offset_minutes_check accepts; a value outside it
@@ -520,29 +510,12 @@ enum TaskKind: String, CaseIterable, Identifiable, Codable, Hashable {
         }
     }
 
-    var editorDescription: String {
-        switch self {
-        case .task:
-            "Algo que já tem um momento para acontecer."
-        case .seed:
-            "Uma intenção sem data definida. Guarde agora e plante quando estiver pronta."
-        }
-    }
-
     var symbolName: String {
         switch self {
         case .task: "checkmark.circle.fill"
         case .seed: "leaf.fill"
         }
     }
-}
-
-// The window must match the archival interval in run_nina_retention; drift makes the list lie.
-enum CompletedTaskRetention {
-    static let visibleDays = 30
-
-    static let disclosureNote =
-        "Aqui ficam as conclusões dos últimos \(visibleDays) dias. As antigas seguem guardadas."
 }
 
 struct TaskItem: Identifiable, Codable, Hashable {
@@ -689,7 +662,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     // A repeating task is never closed by one tap: the label must promise the
     // roll-forward that toggleTask performs, not a completion it never records.
     var completionActionTitle: String {
-        if isDone { return "Marcar como não feita" }
+        if isDone { return "Reabrir" }
         return recurrence == .none ? "Marcar como feita" : "Feita por hoje"
     }
 
@@ -1003,9 +976,9 @@ enum NinaProposalSource: String, Codable, Hashable {
         switch self {
         case .message: "Da conversa"
         case .attachment: "Do anexo"
-        case .existingTask: "De uma tarefa da casa"
-        case .memory: "De algo que guardei"
-        case .routine: "Da rotina da casa"
+        case .existingTask: "De uma tarefa"
+        case .memory: "De uma memória"
+        case .routine: "Da rotina"
         }
     }
 
@@ -1477,7 +1450,7 @@ struct PremiumPlan: Hashable {
         let readsDocuments = NinaAttachmentGate.current.isEnabled
         let documentBenefit = PremiumBenefit(
             title: "Leitura de documentos",
-            detail: "Leitura de recibos, receitas e boletos para transformar detalhes em lembretes claros.",
+            detail: "Recibos, receitas e boletos lidos por foto.",
             systemName: "doc.text.viewfinder",
             tone: .sky
         )
@@ -1488,20 +1461,20 @@ struct PremiumPlan: Hashable {
             priceLabel: "R$ 24,90/mês",
             periodLabel: "1 mês",
             renewalLabel: "Renovação automática pelo App Store",
-            heroTitle: "Um Premium que vale para a casa toda",
+            heroTitle: "Premium para a casa toda",
             heroSubtitle: readsDocuments
-                ? "Leitura de documentos, resumo semanal e prioridade da Nina para todo mundo da casa, em uma assinatura só."
-                : "Resumo semanal e prioridade da Nina para todo mundo da casa, em uma assinatura só.",
+                ? "Leitura de documentos, resumo semanal e prioridade da Nina, para a casa toda."
+                : "Resumo semanal e prioridade da Nina, para a casa toda.",
             benefits: (readsDocuments ? [documentBenefit] : []) + [
                 PremiumBenefit(
                     title: "Resumo semanal",
-                    detail: "Um digest bonito com pendências, compras, vitórias da semana e sinais de sobrecarga.",
+                    detail: "Pendências, conclusões e onde a casa pesa mais.",
                     systemName: "calendar.badge.clock",
                     tone: .amber
                 ),
                 PremiumBenefit(
                     title: "Prioridade da Nina",
-                    detail: "Sugestões mais visíveis, rápidas e contextuais para não deixar urgências escaparem.",
+                    detail: "Mais conversa com a Nina, 30 por hora.",
                     systemName: "sparkles",
                     tone: .lavender
                 )

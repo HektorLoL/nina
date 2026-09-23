@@ -8,6 +8,8 @@ struct WorkloadView: View {
     @Environment(RouterPath.self) private var router
     @Environment(\.dismiss) private var dismiss
 
+    @State private var showsMethod = false
+
     private var snapshot: HouseholdWorkloadSnapshot { store.workloadSnapshot }
 
     var body: some View {
@@ -33,14 +35,22 @@ struct WorkloadView: View {
                         .ninaText(.display)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text(snapshot.message)
-                        .ninaText(.label, snapshot.isConclusive ? NinaTheme.ink : NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if !snapshot.message.isEmpty {
+                        Text(snapshot.message)
+                            .ninaText(.label, snapshot.isConclusive ? NinaTheme.ink : NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     if snapshot.isConclusive {
                         bands
                         provenance
-                        invitation
+                        if snapshot.sharedCount > 0 {
+                            NinaButton(title: "Ver sem dono", kind: .outline, fillsWidth: true) {
+                                Haptics.lightImpact()
+                                dismiss()
+                                NotificationCenter.default.post(name: .ninaShowUnowned, object: nil)
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -61,10 +71,6 @@ struct WorkloadView: View {
 
     private var bands: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Em relação à média da casa, no que está aberto agora.")
-                .ninaText(.meta, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
             HStack(spacing: 6) {
                 ForEach(Array([WorkloadBand.light, .similar, .heavier].enumerated()), id: \.offset) { _, band in
                     Text(band.title.uppercased())
@@ -85,7 +91,7 @@ struct WorkloadView: View {
                             MemberAvatar(initials: entry.name.ninaInitials, tone: entry.tone, size: 26)
                                 .frame(width: 26)
                         }
-                        Text(entry.isShared ? "A casa — sem dono" : entry.name)
+                        Text(entry.isShared ? "Sem dono" : entry.name)
                             .ninaText(.body, entry.isShared ? NinaTheme.muted : NinaTheme.ink, weight: .medium)
                     }
 
@@ -102,7 +108,7 @@ struct WorkloadView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(
                     entry.isShared
-                        ? "A casa, sem dono: \(entry.band.title)"
+                        ? "Sem dono: \(entry.band.title)"
                         : "\(entry.name): \(entry.band.title)"
                 )
             }
@@ -117,31 +123,32 @@ struct WorkloadView: View {
     }
 
     private var provenance: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "info.circle")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(NinaTheme.faint)
-            Text("Do que está em aberto agora, e só do que tem dono. Sementes não entram. Não é histórico, é hoje. Um retrato para conversar, não para cobrar.")
-                .ninaText(.caption, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
-    }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                Text("Só o que está aberto e tem dono. Para conversar, não para cobrar.")
+                    .ninaText(.meta, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-    private var invitation: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Se isso fizer sentido, dá para mexer. Se não fizer, ignora — eu não sei o que acontece fora do app.")
-                .ninaText(.label, NinaTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if snapshot.sharedCount > 0 {
-                NinaButton(title: "Ver o que está sem dono", kind: .outline, fillsWidth: true) {
-                    Haptics.lightImpact()
-                    dismiss()
-                    NotificationCenter.default.post(name: .ninaShowUnowned, object: nil)
+                Button {
+                    Haptics.selection()
+                    showsMethod.toggle()
+                } label: {
+                    Image(systemName: showsMethod ? "info.circle.fill" : "info.circle")
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(NinaTheme.muted)
+                        .frame(width: 44, height: 44, alignment: .topTrailing)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Como o retrato é feito")
+                .accessibilityValue(showsMethod ? "Aberto" : "Fechado")
+            }
+
+            if showsMethod {
+                Text("Sementes não entram. Não é histórico, é hoje.")
+                    .ninaText(.meta, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -38,6 +38,7 @@ enum SheetDestination: Identifiable, Hashable {
     case settings
     case premium
     case addTask
+    case addSeed
     case editTask(UUID)
     case plantSeed(UUID)
     case addShoppingItem
@@ -55,6 +56,8 @@ enum SheetDestination: Identifiable, Hashable {
             "premium"
         case .addTask:
             "add-task"
+        case .addSeed:
+            "add-seed"
         case .editTask(let id):
             "edit-task-\(id.uuidString)"
         case .plantSeed(let id):
@@ -108,12 +111,6 @@ final class TabRouter {
     }
 }
 
-@MainActor
-@Observable
-final class TabSwipeLock {
-    var isLocked = false
-}
-
 private enum AppEntryPhase: Hashable {
     case signedOut
     case tutorial
@@ -137,13 +134,11 @@ struct AppRootView: View {
 
     @State private var selectedTab: AppTab = .nina
     @State private var tabRouter = TabRouter()
-    @State private var tabSwipeLock = TabSwipeLock()
     @State private var isShowingLoadingScreen = true
     @State private var isCoveringForPrivacy = false
     @State private var isAppShellMounted = false
     @State private var didFinishInitialLoad = false
     @State private var shouldRefreshWhenActive = false
-    @State private var didDismissKeyboardForCurrentSwipe = false
 
     var body: some View {
         ZStack {
@@ -165,7 +160,6 @@ struct AppRootView: View {
             }
         }
         .background(NinaTheme.ground.ignoresSafeArea())
-        .environment(tabSwipeLock)
         .tint(NinaTheme.cobalt)
         .keyboardDismissesOnOutsideTap()
         .animation(.easeInOut(duration: 0.28), value: entryPhase)
@@ -363,22 +357,18 @@ struct AppRootView: View {
     @ViewBuilder
     private var tabPager: some View {
         GeometryReader { proxy in
-            let width = max(proxy.size.width, 1)
-
+            // Every tab stays mounted: each owns a navigation stack and a scroll position.
             ZStack {
                 ForEach(AppTab.allCases) { tab in
                     tabContent(for: tab)
-                        .frame(width: width, height: proxy.size.height)
-                        .offset(x: CGFloat(tab.index - selectedTab.index) * width)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .opacity(tab == selectedTab ? 1 : 0)
+                        .zIndex(tab == selectedTab ? 1 : 0)
                         .allowsHitTesting(tab == selectedTab)
                         .accessibilityHidden(tab != selectedTab)
                 }
             }
-            .frame(width: width, height: proxy.size.height)
-            .clipped()
-            .contentShape(Rectangle())
-            .animation(.interactiveSpring(response: 0.34, dampingFraction: 0.9, blendDuration: 0.08), value: selectedTab)
-            .simultaneousGesture(tabSwipeGesture(width: width))
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
     }
 
@@ -407,45 +397,7 @@ struct AppRootView: View {
         guard tab != selectedTab else { return }
 
         Haptics.selection()
-        withAnimation(.interactiveSpring(response: 0.44, dampingFraction: 0.86, blendDuration: 0.12)) {
-            selectedTab = tab
-        }
-    }
-
-    private func tabSwipeGesture(width: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 30, coordinateSpace: .local)
-            .onChanged { value in
-                guard !tabSwipeLock.isLocked,
-                      !didDismissKeyboardForCurrentSwipe,
-                      isTabSwipe(value.translation) else {
-                    return
-                }
-
-                didDismissKeyboardForCurrentSwipe = true
-                dismissKeyboard()
-            }
-            .onEnded { value in
-                didDismissKeyboardForCurrentSwipe = false
-                guard !tabSwipeLock.isLocked, isTabSwipe(value.translation) else { return }
-
-                let threshold = min(width * 0.26, 110)
-                let predicted = value.predictedEndTranslation.width
-
-                if value.translation.width < -threshold || predicted < -width * 0.35 {
-                    selectRelativeTab(offset: 1)
-                } else if value.translation.width > threshold || predicted > width * 0.35 {
-                    selectRelativeTab(offset: -1)
-                }
-            }
-    }
-
-    private func selectRelativeTab(offset: Int) {
-        let nextIndex = min(max(selectedTab.index + offset, 0), AppTab.allCases.count - 1)
-        selectTab(AppTab.allCases[nextIndex])
-    }
-
-    private func isTabSwipe(_ translation: CGSize) -> Bool {
-        abs(translation.width) > 42 && abs(translation.width) > abs(translation.height) * 1.9
+        selectedTab = tab
     }
 
     private func dismissKeyboard() {
@@ -459,9 +411,10 @@ private struct HomeAccessLoadingView: View {
     var body: some View {
         VStack(spacing: 16) {
             NinaMark(size: 84, presence: .reading)
-            Text("Vendo se a casa ainda é sua.")
+            Text("Só um instante.")
                 .ninaText(.label, NinaTheme.muted)
         }
+        .accessibilityElement(children: .combine)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ninaScreenBackground()
     }
@@ -473,37 +426,38 @@ private struct HomeAccessUnavailableView: View {
     @Environment(OnboardingStore.self) private var onboardingStore
 
     var body: some View {
-        // Nina is the subject here, so she renders without pigment rather than
-        // beside an alarm colour: losing the connection is not lateness.
-        VStack(spacing: 0) {
-            ZeroState(
-                headline: "Não deu para confirmar a sua casa.",
-                body_: store.syncErrorMessage
-                    ?? "Sem conexão, a Nina não consegue checar se você ainda faz parte desta casa. Nada foi perdido.",
-                presence: .unavailable
-            ) {
-                VStack(spacing: 10) {
-                    NinaButton(
-                        title: "Tentar de novo",
-                        systemName: "arrow.clockwise",
-                        isEnabled: !store.isSyncingHome
-                    ) {
-                        Task { await store.activateHomeContext(for: authSession.currentUser) }
-                    }
+        GeometryReader { proxy in
+            ScrollView {
+                // Nina is the subject here, so she renders without pigment rather than
+                // beside an alarm colour: losing the connection is not lateness.
+                ZeroState(
+                    headline: "Não deu para abrir a casa.",
+                    body_: "Nada foi perdido.",
+                    presence: .unavailable
+                ) {
+                    VStack(spacing: 10) {
+                        NinaButton(
+                            title: "Tentar de novo",
+                            systemName: "arrow.clockwise",
+                            isEnabled: !store.isSyncingHome
+                        ) {
+                            Task { await store.activateHomeContext(for: authSession.currentUser) }
+                        }
 
-                    NinaButton(title: "Sair da conta", kind: .quiet) {
-                        Haptics.warning()
-                        Task {
-                            onboardingStore.cancelReplay()
-                            await authSession.signOut()
+                        NinaButton(title: "Sair da conta", kind: .quiet) {
+                            Haptics.warning()
+                            Task {
+                                onboardingStore.cancelReplay()
+                                await authSession.signOut()
+                            }
                         }
                     }
                 }
+                .padding(28)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .padding(28)
-        .frame(maxWidth: 520)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ninaScreenBackground()
     }
 }
@@ -668,6 +622,18 @@ private extension UIWindow {
         return nil
     }
 }
+
+extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
+    override open func viewDidLoad() {
+        super.viewDidLoad()
+        interactivePopGestureRecognizer?.delegate = self
+    }
+
+    // A pop begun on a root screen or mid-transition leaves the whole stack frozen.
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        viewControllers.count > 1 && transitionCoordinator == nil
+    }
+}
 #else
 struct KeyboardVisibilityModifier: ViewModifier {
     @Binding var isVisible: Bool
@@ -750,6 +716,7 @@ private struct UndoCompletionToast: View {
             Image(systemName: "checkmark")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(NinaTheme.ground)
+                .accessibilityHidden(true)
 
             Text(title)
                 .ninaText(.label, NinaTheme.ground, weight: .medium)
@@ -763,11 +730,14 @@ private struct UndoCompletionToast: View {
             } label: {
                 Text("Desfazer")
                     .ninaText(.label, NinaTheme.ground, weight: .semibold)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
-        .frame(height: 50)
+        .padding(.vertical, 3)
+        .frame(minHeight: 50)
         .background(NinaTheme.ink, in: Capsule())
         .padding(.horizontal, 20)
     }
@@ -851,11 +821,8 @@ private struct BottomTabBar: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(
-                    tab == .house && store.pendingJoinRequestCount > 0
-                        ? "\(tab.title), \(store.pendingJoinRequestCount) pedindo para entrar"
-                        : tab.title
-                )
+                .accessibilityLabel(tab.title)
+                .accessibilityValue(joinRequestValue(for: tab))
                 .accessibilityAddTraits(tab == selectedTab ? [.isSelected] : [])
             }
         }
@@ -869,13 +836,14 @@ private struct BottomTabBar: View {
                 .ignoresSafeArea(edges: .bottom)
         }
     }
+
+    private func joinRequestValue(for tab: AppTab) -> String {
+        guard tab == .house, store.pendingJoinRequestCount > 0 else { return "" }
+        return "\(store.pendingJoinRequestCount) pedindo para entrar"
+    }
 }
 
 private extension AppTab {
-    var index: Int {
-        AppTab.allCases.firstIndex(of: self) ?? 0
-    }
-
     var title: String {
         switch self {
         case .nina: "Nina"
@@ -931,6 +899,11 @@ private struct SheetDestinationsModifier: ViewModifier {
                     PremiumBenefitsSheet()
                 case .addTask:
                     TaskEditorSheet(mode: .add(sectionID: AppStore.houseTasksSectionID))
+                case .addSeed:
+                    TaskEditorSheet(
+                        mode: .add(sectionID: AppStore.houseTasksSectionID),
+                        initialKind: .seed
+                    )
                 case .editTask(let id):
                     TaskEditorSheet(mode: .edit(id))
                 case .plantSeed(let id):
@@ -997,8 +970,8 @@ private struct MemberRouteDetail: View {
             MemberDetailView(member: member)
         } else {
             ZeroState(
-                headline: "Essa pessoa não está mais na casa.",
-                body_: "Alguém com permissão pode ter removido o perfil.",
+                headline: "Essa pessoa não está mais aqui.",
+                body_: "Alguém pode ter removido este perfil.",
                 showsMark: false
             )
             .padding(24)

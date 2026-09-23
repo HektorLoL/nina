@@ -60,7 +60,8 @@ private struct BackHeader: View {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(NinaTheme.ink)
-                    .frame(width: 40, height: 40, alignment: .leading)
+                    .frame(width: 44, height: 44, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Voltar")
@@ -156,16 +157,51 @@ private struct ShareButtonFace: View {
 }
 
 private struct SettingsSection<Content: View>: View {
-    var title: String
+    var title: String? = nil
+    var footer: String? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Eyebrow(text: title)
+            if let title {
+                Eyebrow(text: title)
+            }
             VStack(spacing: 0) {
                 content
             }
+            if let footer {
+                Text(footer)
+                    .ninaText(.meta, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+    }
+}
+
+private struct NounList: View {
+    var eyebrow: String
+    var items: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Eyebrow(text: eyebrow)
+            ForEach(items, id: \.self) { item in
+                Text(item)
+                    .ninaText(.label, NinaTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SettingsValueText: View {
+    var value: String
+
+    var body: some View {
+        Text(value)
+            .ninaText(.meta, NinaTheme.muted)
+            .multilineTextAlignment(.trailing)
     }
 }
 
@@ -177,8 +213,9 @@ private struct SettingsLinkRow: View {
     }
 
     var title: String
-    var subtitle: String?
+    var subtitle: String? = nil
     var systemName: String
+    var value: String? = nil
     var destination: Destination = .push
 
     // A chevron promises a pushed screen; rows that leave the app or open a
@@ -187,48 +224,55 @@ private struct SettingsLinkRow: View {
         NinaRow(title: title, subtitle: subtitle) {
             CategoryGlyph(systemName: systemName, size: 18, tint: NinaTheme.ink)
         } trailing: {
-            switch destination {
-            case .push:
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(NinaTheme.faint)
-            case .external:
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(NinaTheme.faint)
-            case .action:
-                EmptyView()
+            HStack(spacing: 8) {
+                if let value {
+                    SettingsValueText(value: value)
+                }
+                switch destination {
+                case .push:
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(NinaTheme.faint)
+                case .external:
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(NinaTheme.faint)
+                case .action:
+                    EmptyView()
+                }
             }
         }
         .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(subtitle.map { "\(title), \($0)" } ?? title)
+        .accessibilityValue(value ?? "")
     }
 }
 
 private struct SettingsValueRow: View {
     var title: String
-    var subtitle: String?
-    var value: String?
+    var value: String
     var systemName: String
 
     var body: some View {
-        NinaRow(title: title, subtitle: subtitle) {
+        NinaRow(title: title) {
             CategoryGlyph(systemName: systemName, size: 18, tint: NinaTheme.ink)
         } trailing: {
-            if let value {
-                Text(value).ninaText(.meta, NinaTheme.muted)
-            }
+            SettingsValueText(value: value)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
     }
 }
 
 private struct SettingsToggleRow: View {
     var title: String
-    var subtitle: String
     var systemName: String
     @Binding var isOn: Bool
 
     var body: some View {
-        NinaRow(title: title, subtitle: subtitle) {
+        NinaRow(title: title) {
             CategoryGlyph(systemName: systemName, size: 18, tint: NinaTheme.ink)
         } trailing: {
             Toggle(title, isOn: $isOn)
@@ -258,6 +302,9 @@ struct SettingsSheet: View {
     @State private var isRenamingHouse = false
     @State private var houseNameDraft = ""
 
+    @AppStorage(LocalHomeNotificationScheduler.notificationsEnabledKey)
+    private var notificationsEnabled = true
+
     private var versionLabel: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
@@ -272,17 +319,14 @@ struct SettingsSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    titleBlock
                     accountSection
-                    premiumBlock
                     ninaSection
                     houseSection
-                    privacySection
-                    aboutSection
+                    helpSection
                     #if DEBUG
                     developerSection
                     #endif
-                    signOutButton
+                    exits
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 2)
@@ -293,64 +337,28 @@ struct SettingsSheet: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    // The sheet header already names the screen; a second "Ajustes" said nothing new.
-    private var titleBlock: some View {
-        Text("Sua conta, a casa e o que a Nina pode ler.")
-            .ninaText(.label, NinaTheme.muted)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    @ViewBuilder
-    private var premiumBlock: some View {
-        if store.householdPremium.isActive {
-            VStack(alignment: .leading, spacing: 8) {
-                Eyebrow(text: "Premium")
-                Text(PremiumTeaserCopy.activeTitle)
-                    .ninaText(.label, NinaTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(PremiumTeaserCopy.activeSubtitle)
-                    .ninaText(.caption, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(
-                    premiumStore.entitlement.isActive
-                        ? premiumStore.entitlement.renewalSummary
-                        : "Assinatura de outro adulto da casa."
-                )
-                .ninaText(.caption, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                NinaButton(
-                    title: premiumStore.entitlement.isActive ? "Ver a assinatura" : "Ver o que está liberado",
-                    kind: .outline
-                ) {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .premium
-                }
-                .padding(.top, 4)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .ninaCard(fill: NinaTheme.grout, stroke: .clear)
-        } else {
-            PremiumGateCard(
-                title: premiumPriceTitle,
-                detail: NinaAttachmentGate.current.isEnabled
-                    ? "Documento por foto, mais conversa por dia e o resumo semanal da casa."
-                    : "Mais conversa por dia e o resumo semanal da casa."
-            ) {
-                Haptics.lightImpact()
-                router.presentedSheet = .premium
-            }
+    private var premiumRow: some View {
+        Button {
+            Haptics.lightImpact()
+            router.presentedSheet = .premium
+        } label: {
+            SettingsLinkRow(
+                title: "Nina Premium",
+                systemName: "star",
+                value: store.householdPremium.isActive ? "Ativo" : monthlyPriceLabel
+            )
         }
+        .buttonStyle(.plain)
     }
 
-    private var premiumPriceTitle: String {
-        guard let priceLabel = premiumStore.primaryPriceLabel else { return "Ver o Premium" }
-        return "Ver o Premium · \(priceLabel)"
+    private var monthlyPriceLabel: String? {
+        premiumStore.products
+            .first { $0.subscription?.subscriptionPeriod.unit == .month }
+            .map { "\($0.displayPrice)/mês" }
     }
 
-    @ViewBuilder
     private var accountSection: some View {
-        SettingsSection(title: "Conta") {
+        SettingsSection {
             if let user = authSession.currentUser {
                 let profile = profileStore.profile(for: user)
 
@@ -381,10 +389,7 @@ struct SettingsSheet: View {
                     EmailAccessView()
                 } label: {
                     SettingsLinkRow(
-                        title: user.linkedProviders.contains(.email) ? "Email de acesso" : "Vincular um email",
-                        subtitle: user.linkedProviders.contains(.email)
-                            ? "Trocar o email que entra nesta conta."
-                            : "Outra forma de entrar, se você perder a Apple.",
+                        title: user.linkedProviders.contains(.email) ? "Email de acesso" : "Adicionar email",
                         systemName: "envelope"
                     )
                 }
@@ -393,19 +398,7 @@ struct SettingsSheet: View {
                 NinaDivider()
             }
 
-            Button {
-                Haptics.lightImpact()
-                onboardingStore.replayTutorial()
-                dismiss()
-            } label: {
-                SettingsLinkRow(
-                    title: "Ver o tutorial de novo",
-                    subtitle: "Como a Nina funciona, do começo.",
-                    systemName: "play.circle",
-                    destination: .action
-                )
-            }
-            .buttonStyle(.plain)
+            premiumRow
         }
     }
 
@@ -415,9 +408,9 @@ struct SettingsSheet: View {
                 NotificationPreferencesView()
             } label: {
                 SettingsLinkRow(
-                    title: "Lembretes e avisos",
-                    subtitle: notificationStatusSubtitle,
-                    systemName: "bell"
+                    title: "Avisos",
+                    systemName: "bell",
+                    value: notificationStatusValue
                 )
             }
             .buttonStyle(.plain)
@@ -425,6 +418,29 @@ struct SettingsSheet: View {
             NinaDivider()
 
             weeklyDigestRow
+
+            NinaDivider()
+
+            NavigationLink {
+                PrivacyAndDataView()
+            } label: {
+                SettingsLinkRow(title: "Privacidade e dados", systemName: "lock")
+            }
+            .buttonStyle(.plain)
+
+            NinaDivider()
+
+            Button {
+                Haptics.selection()
+                openURL(NinaLegalLinks.privacyPolicy)
+            } label: {
+                SettingsLinkRow(
+                    title: "Política de privacidade",
+                    systemName: "doc.text",
+                    destination: .external
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -438,23 +454,21 @@ struct SettingsSheet: View {
             } label: {
                 SettingsLinkRow(
                     title: "Resumo semanal",
-                    subtitle: "Vem no Premium. Toque para ver o que ele libera.",
-                    systemName: "calendar"
+                    systemName: "calendar",
+                    value: "Premium"
                 )
             }
             .buttonStyle(.plain)
         } else if store.canManageFamily {
             SettingsToggleRow(
                 title: "Resumo semanal",
-                subtitle: weeklyDigestSubtitle,
                 systemName: "calendar",
                 isOn: weeklyDigestBinding
             )
         } else {
             SettingsValueRow(
                 title: "Resumo semanal",
-                subtitle: weeklyDigestSubtitle,
-                value: store.isWeeklyDigestEnabled ? "ligado" : "desligado",
+                value: store.isWeeklyDigestEnabled ? "Ligado" : "Desligado",
                 systemName: "calendar"
             )
         }
@@ -471,14 +485,10 @@ struct SettingsSheet: View {
         store.remainingFamilySlots == 1 ? "1 vaga" : "\(store.remainingFamilySlots) vagas"
     }
 
-    private var weeklyDigestSubtitle: String {
-        if !store.householdPremium.isActive {
-            return "Uma leitura curta da semana da casa. Vem no Premium."
-        }
-        if !store.canManageFamily {
-            return "Quem cuida da casa escolhe se ele sai."
-        }
-        return "Uma leitura curta da semana, para todo mundo daqui."
+    private var inviteValue: String {
+        guard store.canInviteMorePeople else { return "Casa cheia" }
+        guard store.inviteStatus?.isActive ?? true else { return "Link vencido" }
+        return remainingSlotsLabel
     }
 
     private var houseSection: some View {
@@ -490,9 +500,9 @@ struct SettingsSheet: View {
                     isRenamingHouse = true
                 } label: {
                     SettingsLinkRow(
-                        title: store.familyGroup.name,
-                        subtitle: "\(store.familyLimitLabel) · \(remainingSlotsLabel). Toque para renomear.",
-                        systemName: "house"
+                        title: "Nome da casa",
+                        systemName: "house",
+                        value: store.familyGroup.name
                     )
                 }
                 .buttonStyle(.plain)
@@ -505,114 +515,64 @@ struct SettingsSheet: View {
                 } message: {
                     Text("Todo mundo da casa vê o novo nome.")
                 }
-            } else {
-                SettingsValueRow(
-                    title: store.familyGroup.name,
-                    subtitle: store.familyLimitLabel,
-                    value: remainingSlotsLabel,
-                    systemName: "house"
-                )
-            }
 
-            NinaDivider()
+                NinaDivider()
 
-            if store.canManageFamily, store.canInviteMorePeople, store.inviteStatus?.isActive ?? true {
                 Button {
                     Haptics.lightImpact()
                     router.presentedSheet = .inviteFamily
                 } label: {
                     SettingsLinkRow(
-                        title: "Convidar alguém para a casa",
-                        subtitle: "O link pede entrada. Alguém daqui aprova.",
-                        systemName: "person.badge.plus"
+                        title: "Convidar alguém",
+                        systemName: "person.badge.plus",
+                        value: inviteValue
                     )
                 }
                 .buttonStyle(.plain)
-            } else if store.canManageFamily {
-                SettingsValueRow(
-                    title: "Convite pausado",
-                    subtitle: store.canInviteMorePeople
-                        ? "Gere um link novo na tela Casa."
-                        : "A casa chegou no limite de pessoas.",
-                    value: nil,
-                    systemName: "person.badge.plus"
-                )
+                .disabled(!store.canInviteMorePeople)
+                .opacity(store.canInviteMorePeople ? 1 : 0.4)
             } else {
                 SettingsValueRow(
-                    title: store.currentPermissionRole.title,
-                    subtitle: store.currentPermissionRole.summary,
-                    value: "acesso",
+                    title: "Nome da casa",
+                    value: store.familyGroup.name,
+                    systemName: "house"
+                )
+
+                NinaDivider()
+
+                SettingsValueRow(
+                    title: "Seu acesso",
+                    value: store.currentPermissionRole.title,
                     systemName: store.currentPermissionRole.symbolName
                 )
             }
         }
     }
 
-    private var privacySection: some View {
-        SettingsSection(title: "Privacidade") {
-            NavigationLink {
-                PrivacyAndDataView()
-            } label: {
-                SettingsLinkRow(
-                    title: "Privacidade e dados",
-                    subtitle: store.hasAIMemoryConsent
-                        ? "A Nina pode ler o que você escreve."
-                        : "A conversa online está desligada.",
-                    systemName: "lock"
-                )
-            }
-            .buttonStyle(.plain)
-
-            NinaDivider()
-
-            Button {
-                Haptics.selection()
-                openURL(NinaLegalLinks.privacyPolicy)
-            } label: {
-                SettingsLinkRow(
-                    title: "Política de privacidade",
-                    subtitle: "O texto completo, no site.",
-                    systemName: "doc.text",
-                    destination: .external
-                )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var notificationStatusSubtitle: String {
+    private var notificationStatusValue: String? {
         switch store.notificationAuthorizationStatus {
         case .authorized, .provisional, .ephemeral:
-            LocalHomeNotificationScheduler.settingsSummary()
-        case .denied:
-            "O iPhone está bloqueando. Toque para resolver."
+            notificationsEnabled ? "Ligados" : "Desligados"
         case .notDetermined:
-            "Ligue quando fizer sentido para você."
+            "Desligados"
+        case .denied:
+            "Bloqueados"
         case .unavailable:
-            "Configure os avisos deste aparelho."
+            nil
         }
     }
 
-    private var aboutSection: some View {
-        SettingsSection(title: "Sobre") {
-            SettingsValueRow(
-                title: "Versão",
-                subtitle: nil,
-                value: versionLabel,
-                systemName: "info.circle"
-            )
-
-            NinaDivider()
-
+    private var helpSection: some View {
+        SettingsSection(title: "Ajuda") {
             Button {
-                Haptics.selection()
-                openURL(NinaLegalLinks.termsOfUse)
+                Haptics.lightImpact()
+                onboardingStore.replayTutorial()
+                dismiss()
             } label: {
                 SettingsLinkRow(
-                    title: "Termos de uso",
-                    subtitle: "Condições da assinatura e do serviço.",
-                    systemName: "text.book.closed",
-                    destination: .external
+                    title: "Rever o tutorial",
+                    systemName: "play.circle",
+                    destination: .action
                 )
             }
             .buttonStyle(.plain)
@@ -625,8 +585,21 @@ struct SettingsSheet: View {
             } label: {
                 SettingsLinkRow(
                     title: "Falar com o suporte",
-                    subtitle: "oi@ninai.app",
                     systemName: "envelope.open",
+                    destination: .external
+                )
+            }
+            .buttonStyle(.plain)
+
+            NinaDivider()
+
+            Button {
+                Haptics.selection()
+                openURL(NinaLegalLinks.termsOfUse)
+            } label: {
+                SettingsLinkRow(
+                    title: "Termos de uso",
+                    systemName: "text.book.closed",
                     destination: .external
                 )
             }
@@ -634,13 +607,14 @@ struct SettingsSheet: View {
         }
     }
 
-    private var signOutButton: some View {
-        VStack(spacing: 10) {
+    private var exits: some View {
+        VStack(spacing: 4) {
             if let message = authSession.errorMessage {
                 Text(message)
                     .ninaText(.caption, NinaTheme.ink, weight: .medium)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 6)
             }
 
             NinaButton(title: "Sair da conta", kind: .quiet, isEnabled: !authSession.isSigningIn) {
@@ -651,6 +625,20 @@ struct SettingsSheet: View {
                     dismiss()
                 }
             }
+
+            NavigationLink {
+                AccountDeletionView()
+            } label: {
+                Text("Apagar conta")
+                    .ninaText(.body, NinaTheme.ink, weight: .semibold)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Text("Nina \(versionLabel)")
+                .ninaText(.meta, NinaTheme.muted)
+                .padding(.top, 10)
         }
         .frame(maxWidth: .infinity)
     }
@@ -817,11 +805,12 @@ private struct EmailAccessView: View {
         authSession.pendingEmailChange != nil
     }
 
-    private var currentEmailLine: String {
-        guard authSession.currentUser?.linkedProviders.contains(.email) == true else {
-            return "Hoje você entra só com a Apple."
-        }
-        return authSession.currentUser?.email ?? "Email verificado"
+    private var hasLinkedEmail: Bool {
+        authSession.currentUser?.linkedProviders.contains(.email) == true
+    }
+
+    private var linkedEmail: String? {
+        hasLinkedEmail ? authSession.currentUser?.email : nil
     }
 
     var body: some View {
@@ -830,27 +819,38 @@ private struct EmailAccessView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Email de acesso").ninaText(.screen)
-                        Text("Um email confirmado deixa você entrar por código, sem depender da Apple.")
-                            .ninaText(.label, NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
+                    Text(hasLinkedEmail ? "Email de acesso" : "Adicionar email").ninaText(.screen)
+
+                    if let linkedEmail {
+                        NinaRow(title: "Email atual", subtitle: linkedEmail) {
+                            CategoryGlyph(systemName: "envelope", size: 18, tint: NinaTheme.ink)
+                        } trailing: {
+                            EmptyView()
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Email atual")
+                        .accessibilityValue(linkedEmail)
                     }
 
-                    Text(currentEmailLine)
-                        .ninaText(.caption, NinaTheme.muted)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SheetField(label: "Novo email") {
+                            TextField("voce@exemplo.com", text: $email)
+                                .focused($focusedField, equals: .email)
+                                .keyboardType(.emailAddress)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .textContentType(.emailAddress)
+                                .submitLabel(.done)
+                        }
+                        .disabled(isWaitingForCode)
+                        .opacity(isWaitingForCode ? 0.4 : 1)
 
-                    SheetField(label: "Novo email") {
-                        TextField("voce@exemplo.com", text: $email)
-                            .focused($focusedField, equals: .email)
-                            .keyboardType(.emailAddress)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .textContentType(.emailAddress)
-                            .submitLabel(.done)
+                        if !hasLinkedEmail {
+                            Text("Com um email, você entra por código, sem a Apple.")
+                                .ninaText(.meta, NinaTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                    .disabled(isWaitingForCode)
-                    .opacity(isWaitingForCode ? 0.4 : 1)
 
                     if isWaitingForCode {
                         SheetField(label: "Código") {
@@ -870,12 +870,12 @@ private struct EmailAccessView: View {
                     }
 
                     if didComplete {
-                        Text("Email confirmado. Dá para entrar por código agora.")
+                        Text("Email confirmado.")
                             .ninaText(.caption, NinaTheme.moss, weight: .semibold)
                     }
 
                     NinaButton(
-                        title: isWaitingForCode ? "Confirmar o email" : "Enviar o código",
+                        title: isWaitingForCode ? "Confirmar" : "Enviar código",
                         fillsWidth: true,
                         isEnabled: !(authSession.isRequestingCode || authSession.isSigningIn)
                     ) {
@@ -883,7 +883,7 @@ private struct EmailAccessView: View {
                     }
 
                     if isWaitingForCode {
-                        NinaButton(title: "Usar outro email", kind: .quiet) {
+                        NinaButton(title: "Trocar email", kind: .quiet) {
                             Haptics.selection()
                             authSession.pendingEmailChange = nil
                             code = ""
@@ -939,10 +939,8 @@ private struct PrivacyAndDataView: View {
 
     @State private var isConfirmingHistoryDeletion = false
 
-    private var acceptedLabel: String {
-        guard let acceptedAt = store.aiMemoryConsent?.acceptedAt else {
-            return "Ainda não ligado"
-        }
+    private var acceptedLabel: String? {
+        guard let acceptedAt = store.aiMemoryConsent?.acceptedAt else { return nil }
         return "Aceito em \(acceptedAt.formatted(date: .abbreviated, time: .omitted))"
     }
 
@@ -970,22 +968,26 @@ private struct PrivacyAndDataView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("Privacidade e dados").ninaText(.screen)
 
-                    consentCard
+                    VStack(alignment: .leading, spacing: 8) {
+                        consentCard
 
-                    Text("Desligar aqui vale só para você. A conversa de outro adulto da casa continua, e o resumo semanal continua saindo se outro adulto ainda tiver aceitado.")
-                        .ninaText(.caption, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    NoteCard(
-                        eyebrow: "Onde ficam os seus dados",
-                        text: "Em São Paulo. Os seus registros ficam em servidores brasileiros. Para a Nina entender o que você escreve e o que está nas fotos, o conteúdo vai para um modelo fora do Brasil e volta, usado só para responder."
-                    )
+                        Text("Desligar aqui vale só para você. A conversa de outro adulto da casa continua, e o resumo semanal continua saindo se outro adulto ainda tiver aceitado.")
+                            .ninaText(.meta, NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     if let error = store.syncErrorMessage {
                         NoteCard(eyebrow: nil, text: error)
                     }
 
                     dataRows
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Eyebrow(text: "Onde ficam os seus dados")
+                        Text("Em São Paulo. Os seus registros ficam em servidores brasileiros. Para a Nina entender o que você escreve e o que está nas fotos, o conteúdo vai para um modelo fora do Brasil e volta, usado só para responder.")
+                            .ninaText(.meta, NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
@@ -1002,7 +1004,9 @@ private struct PrivacyAndDataView: View {
                 Text("Deixar a Nina ler o que eu escrevo e fotografo")
                     .ninaText(.body, NinaTheme.ink, weight: .medium)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(acceptedLabel).ninaText(.caption, NinaTheme.muted)
+                if let acceptedLabel {
+                    Text(acceptedLabel).ninaText(.caption, NinaTheme.muted)
+                }
             }
 
             Spacer(minLength: 12)
@@ -1019,26 +1023,13 @@ private struct PrivacyAndDataView: View {
     }
 
     private var dataRows: some View {
-        VStack(spacing: 0) {
+        SettingsSection(footer: "A conversa some sozinha depois de 30 dias.") {
             NavigationLink {
                 PrivacyExportView()
             } label: {
-                SettingsLinkRow(
-                    title: "Baixar tudo o que é meu",
-                    subtitle: "Um arquivo JSON gerado neste aparelho.",
-                    systemName: "arrow.down.to.line"
-                )
+                SettingsLinkRow(title: "Baixar meus dados", systemName: "arrow.down.to.line")
             }
             .buttonStyle(.plain)
-
-            NinaDivider()
-
-            SettingsValueRow(
-                title: "O que some com o tempo",
-                subtitle: "A conversa com a Nina apaga depois de 30 dias. Conclusões saem da lista depois de \(CompletedTaskRetention.visibleDays) dias, mas seguem guardadas.",
-                value: nil,
-                systemName: "clock.arrow.circlepath"
-            )
 
             NinaDivider()
 
@@ -1049,34 +1040,20 @@ private struct PrivacyAndDataView: View {
                 isConfirmingHistoryDeletion = true
             } label: {
                 SettingsLinkRow(
-                    title: "Apagar a minha conversa com a Nina",
-                    subtitle: "Só a sua. A conversa do outro adulto continua.",
+                    title: "Apagar minha conversa",
                     systemName: "bubble.left.and.exclamationmark.bubble.right",
                     destination: .action
                 )
             }
             .buttonStyle(.plain)
-
-            NinaDivider()
-
-            NavigationLink {
-                AccountDeletionView()
-            } label: {
-                SettingsLinkRow(
-                    title: "Apagar a minha conta",
-                    subtitle: nil,
-                    systemName: "trash"
-                )
-            }
-            .buttonStyle(.plain)
         }
-        .alert("Apagar a sua conversa?", isPresented: $isConfirmingHistoryDeletion) {
+        .alert("Apagar sua conversa?", isPresented: $isConfirmingHistoryDeletion) {
             Button("Apagar", role: .destructive) {
                 Task { _ = await store.deleteNinaChatHistory() }
             }
             Button("Cancelar", role: .cancel) {}
         } message: {
-            Text("Some tudo o que você já escreveu para a Nina. As tarefas e as memórias que você confirmou ficam.")
+            Text("Tarefas e memórias confirmadas ficam. Não dá para desfazer.")
         }
     }
 }
@@ -1090,10 +1067,11 @@ private struct PrivacyExportView: View {
     @State private var exportError: String?
 
     private let contents = [
-        "O seu perfil e a foto salva, se houver.",
-        "A casa, quem mora nela, tarefas com horário, compras e retratos.",
-        "A sua conversa com a Nina carregada neste aparelho.",
-        "O estado do seu consentimento de leitura."
+        "Seu perfil e sua foto",
+        "A casa e quem mora nela",
+        "Tarefas, compras e retratos",
+        "Sua conversa com a Nina neste aparelho",
+        "Seu consentimento de leitura"
     ]
 
     var body: some View {
@@ -1102,39 +1080,21 @@ private struct PrivacyExportView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Baixar tudo o que é meu").ninaText(.screen)
-                        Text("O arquivo é montado aqui no aparelho, em JSON, e você escolhe para onde ele vai.")
-                            .ninaText(.label, NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    Text("Baixar meus dados").ninaText(.screen)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Eyebrow(text: "O que vai no arquivo")
-                        ForEach(contents, id: \.self) { line in
-                            HStack(alignment: .top, spacing: 10) {
-                                Circle()
-                                    .fill(NinaTheme.line)
-                                    .frame(width: 5, height: 5)
-                                    .padding(.top, 8)
-                                Text(line)
-                                    .ninaText(.caption, NinaTheme.muted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
+                    NounList(eyebrow: "O que vai no arquivo", items: contents)
 
                     if let exportError {
                         NoteCard(eyebrow: nil, text: exportError)
                     }
 
-                    NinaButton(title: "Gerar o arquivo", fillsWidth: true) {
+                    NinaButton(title: "Gerar arquivo", fillsWidth: true) {
                         generateExport()
                     }
 
                     if let exportURL {
                         ShareLink(item: exportURL) {
-                            ShareButtonFace(title: "Compartilhar o arquivo")
+                            ShareButtonFace(title: "Compartilhar")
                         }
                         .buttonStyle(.plain)
                     }
@@ -1195,6 +1155,21 @@ private struct AccountDeletionView: View {
 
     private static let confirmationWord = "apagar"
 
+    private static let remainingItems = [
+        "Tarefas que você criou, sem dono",
+        "Compras",
+        "Memórias compartilhadas"
+    ]
+
+    private var disappearingItems: [String] {
+        [
+            "Sua conversa com a Nina",
+            "Suas memórias privadas",
+            "Seu perfil e sua foto",
+            "Seu acesso a \(store.familyGroup.name)"
+        ]
+    }
+
     private var isConfirmed: Bool {
         confirmation
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1208,60 +1183,37 @@ private struct AccountDeletionView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Apagar a minha conta").ninaText(.screen)
-                        Text("Isso não tem volta. Antes de você decidir, veja exatamente o que some e o que continua na casa.")
-                            .ninaText(.label, NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    Text("Apagar conta").ninaText(.screen)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Eyebrow(text: "Some para sempre")
-                        Text("A sua conversa com a Nina. As suas memórias privadas. A sua foto e o seu perfil. O seu acesso a \(store.familyGroup.name).")
-                            .ninaText(.label, NinaTheme.ink)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .ninaCard()
+                    NounList(eyebrow: "Some para sempre", items: disappearingItems)
+                        .padding(16)
+                        .ninaCard()
 
-                    NoteCard(
-                        eyebrow: "Continua com a casa",
-                        text: "As tarefas que você criou continuam lá, sem dono. As compras continuam. As memórias que você compartilhou continuam com quem já podia ler."
-                    )
+                    NounList(eyebrow: "Fica na casa", items: Self.remainingItems)
+                        .padding(16)
+                        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
 
                     if let errorMessage = authSession.errorMessage {
                         NoteCard(eyebrow: nil, text: errorMessage)
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Escreva \(Self.confirmationWord) para confirmar")
-                            .ninaText(.caption, NinaTheme.muted)
-
-                        SheetField(label: "Confirmação") {
-                            TextField(Self.confirmationWord, text: $confirmation)
-                                .focused($isConfirmationFocused)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .submitLabel(.done)
-                        }
+                    SheetField(label: "Escreva \(Self.confirmationWord) para confirmar") {
+                        TextField(Self.confirmationWord, text: $confirmation)
+                            .focused($isConfirmationFocused)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.done)
                     }
                     .padding(.top, 6)
 
                     InkButton(
-                        title: authSession.isDeletingAccount ? "Apagando" : "Apagar a minha conta",
+                        title: authSession.isDeletingAccount ? "Apagando" : "Apagar conta",
                         isEnabled: isConfirmed && !authSession.isDeletingAccount
                     ) {
                         Haptics.warning()
                         isConfirmationFocused = false
                         isShowingConfirmation = true
                     }
-
-                    NinaButton(title: "Deixa pra lá", kind: .quiet) {
-                        Haptics.selection()
-                        dismiss()
-                    }
-                    .frame(maxWidth: .infinity)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
@@ -1272,13 +1224,13 @@ private struct AccountDeletionView: View {
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { authSession.errorMessage = nil }
-        .alert("Apagar a sua conta Nina?", isPresented: $isShowingConfirmation) {
+        .alert("Apagar sua conta?", isPresented: $isShowingConfirmation) {
             Button("Cancelar", role: .cancel) {}
-            Button("Apagar conta", role: .destructive) {
+            Button("Apagar", role: .destructive) {
                 deleteAccount()
             }
         } message: {
-            Text("Remove a sua conta e os dados pessoais ligados a ela. Não dá para desfazer.")
+            Text("Não dá para desfazer.")
         }
     }
 
@@ -1317,28 +1269,25 @@ private struct NotificationPreferencesView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Lembretes e avisos").ninaText(.screen)
-                        Text("A Nina avisa na hora combinada e respeita o descanso da casa.")
-                            .ninaText(.label, NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
+                    Text("Avisos").ninaText(.screen)
+
+                    if store.notificationAuthorizationStatus == .denied {
+                        deniedCard
                     }
 
-                    authorizationBlock
-
-                    VStack(spacing: 0) {
+                    SettingsSection(footer: "Prioridade alta ou urgente ganha um segundo aviso uma hora depois.") {
                         SettingsToggleRow(
                             title: "Avisos neste aparelho",
-                            subtitle: "Tarefas com horário. As urgentes ganham um lembrete uma hora depois.",
                             systemName: "bell",
                             isOn: notificationToggle
                         )
+                    }
 
-                        NinaDivider()
-
+                    // Quiet hours silence the alert; they never move it, because the
+                    // app must not show one time and deliver another.
+                    SettingsSection(footer: "No silêncio, o aviso chega na hora, sem som.") {
                         SettingsToggleRow(
                             title: "Silenciar à noite",
-                            subtitle: quietHoursSummary,
                             systemName: "moon",
                             isOn: $quietHoursEnabled
                         )
@@ -1359,12 +1308,6 @@ private struct NotificationPreferencesView: View {
                             selection: quietHoursEndBinding
                         )
                     }
-
-                    // Quiet hours silence the alert; they never move it, because the
-                    // app must not show one time and deliver another.
-                    Text("No silêncio o aviso chega sem som, na hora marcada. Ele não muda de horário.")
-                        .ninaText(.caption, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
@@ -1387,35 +1330,16 @@ private struct NotificationPreferencesView: View {
         }
     }
 
-    @ViewBuilder
-    private var authorizationBlock: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(authorizationTitle)
+    private var deniedCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("O iPhone bloqueou os avisos.")
                 .ninaText(.section)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(authorizationMessage)
-                .ninaText(.caption, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            switch store.notificationAuthorizationStatus {
-            case .notDetermined:
-                NinaButton(title: "Permitir os avisos", kind: .outline) {
-                    Haptics.lightImpact()
-                    Task {
-                        _ = await store.requestNotificationAuthorization()
-                    }
-                }
-                .padding(.top, 2)
-            case .denied:
-                NinaButton(title: "Abrir os Ajustes do iPhone", kind: .outline) {
-                    Haptics.selection()
-                    guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
-                    openURL(url)
-                }
-                .padding(.top, 2)
-            case .authorized, .provisional, .ephemeral, .unavailable:
-                EmptyView()
+            NinaButton(title: "Abrir Ajustes do iPhone", kind: .outline) {
+                Haptics.selection()
+                guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+                openURL(url)
             }
         }
         .padding(16)
@@ -1425,8 +1349,15 @@ private struct NotificationPreferencesView: View {
 
     private var notificationToggle: Binding<Bool> {
         Binding(
-            // A switch that reads ON while iOS blocks delivery promises alerts that never come.
-            get: { notificationsEnabled && store.notificationAuthorizationStatus != .denied },
+            // A switch that reads ON before iOS allows delivery promises alerts that never come.
+            get: {
+                switch store.notificationAuthorizationStatus {
+                case .denied, .notDetermined:
+                    false
+                case .authorized, .provisional, .ephemeral, .unavailable:
+                    notificationsEnabled
+                }
+            },
             set: { isEnabled in
                 notificationsEnabled = isEnabled
                 if isEnabled, store.notificationAuthorizationStatus == .notDetermined {
@@ -1480,43 +1411,6 @@ private struct NotificationPreferencesView: View {
         }
         .disabled(!quietHoursEnabled)
         .opacity(quietHoursEnabled ? 1 : 0.4)
-    }
-
-    private var quietHoursSummary: String {
-        guard quietHoursStartMinutes != quietHoursEndMinutes else {
-            return "Sem janela: começo e fim são a mesma hora."
-        }
-        return "Entre \(formattedTime(quietHoursStartMinutes)) e \(formattedTime(quietHoursEndMinutes))."
-    }
-
-    private func formattedTime(_ minutes: Int) -> String {
-        String(format: "%02d:%02d", minutes / 60, minutes % 60)
-    }
-
-    private var authorizationTitle: String {
-        switch store.notificationAuthorizationStatus {
-        case .authorized, .provisional, .ephemeral:
-            "Os avisos estão liberados"
-        case .notDetermined:
-            "Você escolhe quando ligar"
-        case .denied:
-            "O iPhone está bloqueando os avisos"
-        case .unavailable:
-            "Estado desconhecido"
-        }
-    }
-
-    private var authorizationMessage: String {
-        switch store.notificationAuthorizationStatus {
-        case .authorized, .provisional, .ephemeral:
-            "Os próximos avisos são agendados neste aparelho."
-        case .notDetermined:
-            "A Nina só avisa depois que você permitir. Dá para permitir agora ou quando criar a primeira tarefa com horário."
-        case .denied:
-            "Dá para mudar isso nos Ajustes do iPhone."
-        case .unavailable:
-            "Este aparelho não informou o estado dos avisos."
-        }
     }
 }
 
@@ -1594,7 +1488,7 @@ struct PremiumBenefitsSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(eyebrow: "Premium") {
+            SheetHeader(eyebrow: "") {
                 dismiss()
             }
 
@@ -1603,17 +1497,12 @@ struct PremiumBenefitsSheet: View {
                     if isCovered {
                         managementHeading
                         subscriptionCard
-                        includedList
                     } else {
                         heading
                         periodControl
                         comparison
                         ceilingNote
                     }
-                    NoteCard(
-                        eyebrow: "O que o Premium não muda",
-                        text: "A Nina continua propondo e esperando você confirmar. Nenhum plano dá a ela permissão de mexer na casa sozinha."
-                    )
                     statusArea
                 }
                 .padding(.horizontal, 20)
@@ -1694,38 +1583,40 @@ struct PremiumBenefitsSheet: View {
 
     private var currentPriceLabel: String? {
         guard let product = currentProduct else { return nil }
-        guard let detail = priceDetail(for: product) else { return product.displayPrice }
-        return "\(product.displayPrice) \(detail)"
+        guard let period = product.subscription?.subscriptionPeriod else { return product.displayPrice }
+        return "\(product.displayPrice) por \(period.localizedTitle)"
     }
 
-    @ViewBuilder
+    // The title already says the house is covered; a status row appears only when it says something else.
     private var subscriptionCard: some View {
-        if isCoveredByAnotherAdult {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            if isCoveredByAnotherAdult {
                 detailRow(title: "Plano", value: "Nina Premium")
                 NinaDivider(inset: 0)
-                detailRow(title: "Quem assina", value: "Outro adulto da casa")
-                NinaDivider(inset: 0)
-                detailRow(
-                    title: "Situação",
-                    value: coverageEndLabel.map { "Ativo para a casa até \($0)" } ?? "Ativo para a casa"
-                )
-            }
-            .ninaCard()
-        } else {
-            VStack(spacing: 0) {
-                detailRow(title: "Plano", value: currentPlanName)
-                NinaDivider(inset: 0)
-                if let price = currentPriceLabel {
-                    detailRow(title: "Preço", value: price)
+                detailRow(title: "Quem assina", value: "Outro adulto")
+                if let coverageEndLabel {
                     NinaDivider(inset: 0)
+                    detailRow(title: "Vale até", value: coverageEndLabel)
                 }
-                detailRow(title: "Renovação", value: premiumStore.entitlement.renewalSummary)
+                if store.householdPremium.status != .active {
+                    NinaDivider(inset: 0)
+                    detailRow(title: "Situação", value: store.householdPremium.status.title)
+                }
+            } else {
+                detailRow(title: "Plano", value: currentPlanName)
+                if let price = currentPriceLabel {
+                    NinaDivider(inset: 0)
+                    detailRow(title: "Preço", value: price)
+                }
                 NinaDivider(inset: 0)
-                detailRow(title: "Situação", value: premiumStore.entitlement.statusTitle)
+                detailRow(title: "Renovação", value: premiumStore.entitlement.renewalSummary)
+                if premiumStore.entitlement.status != .active {
+                    NinaDivider(inset: 0)
+                    detailRow(title: "Situação", value: premiumStore.entitlement.statusTitle)
+                }
             }
-            .ninaCard()
         }
+        .ninaCard()
     }
 
     private func detailRow(title: String, value: String) -> some View {
@@ -1742,34 +1633,10 @@ struct PremiumBenefitsSheet: View {
         .padding(.vertical, 12)
     }
 
-    // The same three ceilings the paywall sells, now as what the house has.
-    private var includedList: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Eyebrow(text: "Liberado para a casa")
-            if NinaAttachmentGate.current.isEnabled {
-                includedRow("Ler documento por foto")
-            }
-            includedRow("Conversa com a Nina, 30 por hora")
-            includedRow("Resumo semanal da casa")
-        }
-    }
-
-    private func includedRow(_ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(NinaTheme.moss)
-                .frame(width: 18)
-            Text(text)
-                .ninaText(.label, NinaTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
     @ViewBuilder
     private var manageArea: some View {
         if isCoveredByAnotherAdult {
-            Text("Quem assinou troca de plano ou cancela na App Store dele. A casa continua coberta até o fim do período pago.")
+            Text("Só quem assina muda o plano.")
                 .ninaText(.caption, NinaTheme.muted)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1778,29 +1645,9 @@ struct PremiumBenefitsSheet: View {
                 .padding(.top, 12)
                 .padding(.bottom, 10)
         } else {
-            VStack(spacing: 10) {
-                NinaButton(title: "Gerenciar na App Store", fillsWidth: true) {
-                    Haptics.lightImpact()
-                    isManagingSubscription = true
-                }
-
-                Text("Trocar de plano ou cancelar acontece na App Store. A casa continua coberta até o fim do período pago.")
-                    .ninaText(.caption, NinaTheme.muted)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                NinaButton(
-                    title: premiumStore.isRestoring ? "Restaurando" : "Restaurar compras",
-                    kind: .quiet,
-                    isEnabled: !premiumStore.isRestoring
-                ) {
-                    Task {
-                        Haptics.lightImpact()
-                        await premiumStore.restorePurchases()
-                        await reloadHouseIfCovered()
-                    }
-                }
-                .frame(maxWidth: .infinity)
+            NinaButton(title: "Gerenciar na App Store", fillsWidth: true) {
+                Haptics.lightImpact()
+                isManagingSubscription = true
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -1809,49 +1656,66 @@ struct PremiumBenefitsSheet: View {
     }
 
     private var heading: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(plan.name).ninaText(.display)
-            Text(NinaAttachmentGate.current.isEnabled
-                ? "Três limites reais somem. É só isso."
-                : "Dois limites reais somem. É só isso.")
-                .ninaText(.label, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        Text(plan.name).ninaText(.display)
     }
 
     private var periodControl: some View {
         HStack(spacing: 4) {
-            periodButton(.monthly, badge: nil)
-            periodButton(.yearly, badge: yearlySavingsLabel)
+            periodOption(.monthly, product: monthlyProduct, badge: nil)
+            periodOption(.yearly, product: yearlyProduct, badge: yearlySavingsLabel)
         }
         .padding(4)
-        .background(NinaTheme.grout, in: Capsule())
+        .background(
+            NinaTheme.grout,
+            in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+        )
     }
 
-    private func periodButton(_ period: PremiumPeriod, badge: String?) -> some View {
-        Button {
+    private func periodOption(_ period: PremiumPeriod, product: Product?, badge: String?) -> some View {
+        let isSelected = selectedPeriod == period
+        return Button {
             Haptics.selection()
             selectedPeriod = period
         } label: {
-            HStack(spacing: 6) {
-                Text(period.title)
-                    .ninaText(.label, selectedPeriod == period ? NinaTheme.ink : NinaTheme.muted, weight: selectedPeriod == period ? .semibold : .medium)
+            VStack(spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(period.title)
+                        .ninaText(.label, isSelected ? NinaTheme.ink : NinaTheme.muted, weight: isSelected ? .semibold : .medium)
 
-                if let badge {
-                    Text(badge)
-                        .ninaText(.micro, NinaTheme.ground, weight: .bold)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(NinaTheme.ink, in: Capsule())
+                    if let badge {
+                        Text(badge)
+                            .ninaText(.micro, NinaTheme.ground, weight: .bold)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(NinaTheme.ink, in: Capsule())
+                    }
+                }
+
+                if let price = billedPrice(for: product) {
+                    Text(price)
+                        .ninaText(.meta, isSelected ? NinaTheme.ink : NinaTheme.muted, weight: isSelected ? .semibold : .regular)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 40)
-            .background(selectedPeriod == period ? NinaTheme.ground : Color.clear, in: Capsule())
-            .contentShape(Capsule())
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(
+                isSelected ? NinaTheme.ground : Color.clear,
+                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field - 4, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: NinaTheme.Radius.field - 4, style: .continuous)
+                    .strokeBorder(isSelected ? NinaTheme.ink : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(selectedPeriod == period ? [.isSelected] : [])
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    // The billed amount is the price each option shows; a monthly equivalent never stands in for it.
+    private func billedPrice(for product: Product?) -> String? {
+        guard let product, let period = product.subscription?.subscriptionPeriod else { return nil }
+        return "\(product.displayPrice)/\(period.localizedTitle)"
     }
 
     private var yearlySavingsLabel: String? {
@@ -1882,7 +1746,7 @@ struct PremiumBenefitsSheet: View {
             NinaDivider(inset: 0)
 
             if NinaAttachmentGate.current.isEnabled {
-                comparisonRow("Ler documento por foto", free: nil, premium: nil)
+                comparisonRow("Fotos de documentos", free: nil, premium: nil)
                 NinaDivider(inset: 0)
             }
             comparisonRow("Conversa com a Nina", free: "10/dia", premium: "30/hora")
@@ -1924,25 +1788,28 @@ struct PremiumBenefitsSheet: View {
     }
 
     private var ceilingNote: some View {
-        Text("Mesmo no Premium a casa inteira tem um teto de 100 conversas por dia.")
+        Text("Teto da casa: 100 conversas por dia.")
             .ninaText(.caption, NinaTheme.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    @ViewBuilder
     private var statusArea: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if premiumStore.isLoadingProducts {
-                Text("Carregando os planos.").ninaText(.caption, NinaTheme.muted)
-            } else if premiumStore.products.isEmpty {
-                NoteCard(
-                    eyebrow: "Planos indisponíveis",
-                    text: premiumStore.productLoadMessage
-                        ?? "Os planos não carregaram. Tente abrir de novo daqui a pouco."
-                )
+            if !isCovered {
+                if premiumStore.isLoadingProducts {
+                    Text("Carregando os planos.").ninaText(.caption, NinaTheme.muted)
+                } else if premiumStore.products.isEmpty {
+                    NoteCard(
+                        eyebrow: nil,
+                        text: premiumStore.productLoadMessage
+                            ?? "Os planos não carregaram. Tente mais tarde."
+                    )
+                }
             }
 
-            if let statusMessage = premiumStore.statusMessage, !statusMessage.isEmpty {
+            // A covered house already reads its confirmation in the title and the moss mark.
+            if let statusMessage = premiumStore.statusMessage, !statusMessage.isEmpty,
+               !(isCovered && premiumStore.statusIsConfirmation) {
                 Text(statusMessage)
                     .ninaText(
                         .caption,
@@ -1955,50 +1822,23 @@ struct PremiumBenefitsSheet: View {
             if let errorMessage = premiumStore.errorMessage, !errorMessage.isEmpty {
                 NoteCard(eyebrow: nil, text: errorMessage)
             }
-
-            Text(subscriptionDisclosure)
-                .ninaText(.micro, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 16) {
-                legalLink("Termos de uso", url: NinaLegalLinks.termsOfUse)
-                legalLink("Privacidade", url: NinaLegalLinks.privacyPolicy)
-            }
         }
     }
 
-    private var subscriptionDisclosure: String {
-        // The management view describes the plan the house has, never the one the picker defaulted to.
-        let describedProduct = isCovered ? (currentProduct ?? selectedProduct) : selectedProduct
-        guard let product = describedProduct,
+    static let renewalTerms = "Renova sozinho. Cancele quando quiser na App Store."
+
+    // App Review 3.1.2: the billed price, its period, auto-renewal and how to cancel sit beside the button.
+    private var subscriptionTerms: String {
+        guard let product = selectedProduct,
               let period = product.subscription?.subscriptionPeriod else {
-            return "\(plan.name): assinatura renovada automaticamente pela App Store. O preço aparece quando os planos carregarem."
+            return Self.renewalTerms
         }
-        return "\(plan.name): assinatura de \(period.localizedTitle) por \(product.displayPrice). \(plan.renewalLabel)."
+        return "\(product.displayPrice) por \(period.localizedTitle). \(Self.renewalTerms)"
     }
 
-    private func legalLink(_ title: String, url: URL) -> some View {
-        Button {
-            Haptics.selection()
-            openURL(url)
-        } label: {
-            Text(title).ninaText(.caption, NinaTheme.muted, weight: .semibold)
-        }
-        .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
     private var purchaseArea: some View {
         VStack(spacing: 10) {
             if let product = selectedProduct {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(product.displayPrice).ninaText(.display)
-                    if let priceDetail = priceDetail(for: product) {
-                        Text(priceDetail).ninaText(.caption, NinaTheme.muted)
-                    }
-                    Spacer(minLength: 0)
-                }
-
                 NinaButton(
                     title: purchaseButtonTitle,
                     fillsWidth: true,
@@ -2011,22 +1851,19 @@ struct PremiumBenefitsSheet: View {
                         await reloadHouseIfCovered()
                     }
                 }
-
-                Text("Renova sozinho. Dá para cancelar quando quiser, direto na App Store.")
-                    .ninaText(.micro, NinaTheme.muted)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            NinaButton(
-                title: premiumStore.isRestoring ? "Restaurando" : "Restaurar compras",
-                kind: .quiet,
-                isEnabled: !premiumStore.isRestoring
-            ) {
-                Task {
-                    Haptics.lightImpact()
-                    await premiumStore.restorePurchases()
-                    await reloadHouseIfCovered()
+            Text(subscriptionTerms)
+                .ninaText(.meta, NinaTheme.muted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 4) {
+                    legalLinks(separated: true)
+                }
+                VStack(spacing: 0) {
+                    legalLinks(separated: false)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -2036,10 +1873,64 @@ struct PremiumBenefitsSheet: View {
         .padding(.bottom, 10)
     }
 
+    @ViewBuilder
+    private func legalLinks(separated: Bool) -> some View {
+        linkButton(
+            premiumStore.isRestoring ? "Restaurando" : "Restaurar",
+            accessibilityLabel: "Restaurar compras",
+            isEnabled: !premiumStore.isRestoring
+        ) {
+            Task {
+                Haptics.lightImpact()
+                await premiumStore.restorePurchases()
+                await reloadHouseIfCovered()
+            }
+        }
+        if separated {
+            linkSeparator
+        }
+        linkButton("Termos", accessibilityLabel: "Termos de uso") {
+            Haptics.selection()
+            openURL(NinaLegalLinks.termsOfUse)
+        }
+        if separated {
+            linkSeparator
+        }
+        linkButton("Privacidade", accessibilityLabel: "Política de privacidade") {
+            Haptics.selection()
+            openURL(NinaLegalLinks.privacyPolicy)
+        }
+    }
+
+    private var linkSeparator: some View {
+        Text("·")
+            .ninaText(.caption, NinaTheme.muted)
+            .accessibilityHidden(true)
+    }
+
+    private func linkButton(
+        _ title: String,
+        accessibilityLabel: String,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .ninaText(.caption, NinaTheme.muted, weight: .semibold)
+                .padding(.horizontal, 4)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.4)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
     private var purchaseButtonTitle: String {
         if premiumStore.isPurchasing { return "Assinando" }
         if premiumStore.isSyncingBackend { return "Registrando na casa" }
-        return isCurrentPlan ? "Este já é o seu plano" : "Assinar o Premium"
+        return isCurrentPlan ? "Plano atual" : "Assinar"
     }
 
     // Casa reads premium from the house, not from this phone: without a reload the
@@ -2047,15 +1938,6 @@ struct PremiumBenefitsSheet: View {
     private func reloadHouseIfCovered() async {
         guard premiumStore.entitlement.isActive else { return }
         await store.refreshHomeFromRemote(for: authSession.currentUser)
-    }
-
-    private func priceDetail(for product: Product) -> String? {
-        guard let period = product.subscription?.subscriptionPeriod else { return nil }
-        guard period.unit == .year, period.value == 1 else {
-            return "por \(period.localizedTitle)"
-        }
-        let perMonth = (product.price / 12).formatted(product.priceFormatStyle)
-        return "por ano · \(perMonth)/mês"
     }
 }
 
@@ -2090,6 +1972,7 @@ struct TaskEditorSheet: View {
     @Environment(\.openURL) private var openURL
 
     var mode: TaskEditorMode
+    var initialKind: TaskKind = .task
     @State private var title = ""
     @State private var subtitle = ""
     @State private var owner = "Casa"
@@ -2107,7 +1990,6 @@ struct TaskEditorSheet: View {
     @State private var didLoad = false
     @State private var loadedTaskVersion: Int?
     @State private var isShowingDeleteConfirmation = false
-    @State private var isShowingMoreChips = false
     @FocusState private var isTitleFocused: Bool
 
     private var isEditing: Bool {
@@ -2117,16 +1999,6 @@ struct TaskEditorSheet: View {
         case .add:
             false
         }
-    }
-
-    // Recurrence, reminder and priority are defaults nobody set; they stay folded until asked
-    // for, and unfold on their own the moment one of them is not the default.
-    private var hasExtraChoices: Bool {
-        recurrence != .none || reminderLead != .atTime || priority != .normal
-    }
-
-    private var showsExtraChips: Bool {
-        isShowingMoreChips || hasExtraChoices
     }
 
     private var isPlantingSeed: Bool {
@@ -2168,10 +2040,6 @@ struct TaskEditorSheet: View {
         return (options + [reminderLead]).sorted { $0.minutes < $1.minutes }
     }
 
-    private var isReminderLeadDisabled: Bool {
-        store.notificationAuthorizationStatus == .denied
-    }
-
     // The house owns unassigned work and it is never given a face; the chip says
     // so in the words the person reading it would use.
     private var isOwnerAssigned: Bool {
@@ -2188,15 +2056,12 @@ struct TaskEditorSheet: View {
                 VStack(alignment: .leading, spacing: 14) {
                     titleField
                     subtitleField
-                    if isPlantingSeed {
-                        hintLine
-                    } else {
+                    if !isPlantingSeed {
                         kindSegment
                     }
-                    notificationNote
 
                     if case .edit = mode {
-                        NinaButton(title: isSeed ? "Apagar esta semente" : "Apagar esta tarefa", kind: .quiet) {
+                        NinaButton(title: "Apagar", kind: .quiet) {
                             Haptics.warning()
                             isShowingDeleteConfirmation = true
                         }
@@ -2229,14 +2094,12 @@ struct TaskEditorSheet: View {
                 deleteTask()
             }
         } message: {
-            Text(isSeed
-                ? "A semente some para todo mundo da casa. Não dá para desfazer."
-                : "A tarefa e o aviso agendado somem para todo mundo da casa. Não dá para desfazer.")
+            Text("Some para toda a casa. Não dá para desfazer.")
         }
     }
 
     private var titleField: some View {
-        TextField("O que precisa ser feito?", text: $title, axis: .vertical)
+        TextField("O que fazer?", text: $title, axis: .vertical)
             .lineLimit(1...3)
             .ninaText(.compose, NinaTheme.ink, weight: .semibold)
             .tint(NinaTheme.cobalt)
@@ -2246,56 +2109,25 @@ struct TaskEditorSheet: View {
     }
 
     private var subtitleField: some View {
-        TextField("Um detalhe, se ajudar", text: $subtitle, axis: .vertical)
+        TextField("Nota", text: $subtitle, axis: .vertical)
             .lineLimit(1...3)
             .ninaText(.body, NinaTheme.muted)
             .tint(NinaTheme.cobalt)
             .textFieldStyle(.plain)
     }
 
-    @ViewBuilder
-    private var hintLine: some View {
-        if let hintText {
-            HStack(alignment: .top, spacing: 10) {
-                Circle()
-                    .fill(NinaTheme.cobalt)
-                    .frame(width: 8, height: 8)
-                    .padding(.top, 7)
-                    .accessibilityHidden(true)
-
-                Text(hintText)
-                    .ninaText(.label, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.top, 6)
-        }
-    }
-
-    private var hintText: String? {
-        guard isPlantingSeed else { return nil }
-        return "Uma semente vira tarefa quando ganha dia e hora."
-    }
-
     // Tarefa or Semente is a choice with two visible sides, so the primitive is met where it is
     // decided and not discovered by tapping a chip that flips.
     private var kindSegment: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 4) {
-                kindOption(.task)
-                kindOption(.seed)
-            }
-            .padding(4)
-            .background(
-                NinaTheme.grout,
-                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
-            )
-
-            Text(isSeed
-                ? "Não tem data. Fica guardada até você plantar."
-                : "Tem dia e hora. A Nina avisa.")
-                .ninaText(.meta, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 4) {
+            kindOption(.task)
+            kindOption(.seed)
         }
+        .padding(4)
+        .background(
+            NinaTheme.grout,
+            in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+        )
         .padding(.top, 4)
     }
 
@@ -2329,45 +2161,50 @@ struct TaskEditorSheet: View {
     }
 
     @ViewBuilder
-    private var notificationNote: some View {
-        if !isSeed {
-            switch store.notificationAuthorizationStatus {
-            case .notDetermined:
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Ligue os avisos para receber isto na hora marcada.")
-                        .ninaText(.caption, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    NinaButton(title: "Permitir os avisos", kind: .quiet) {
-                        Haptics.lightImpact()
-                        Task {
-                            _ = await store.requestNotificationAuthorization()
-                        }
-                    }
+    private var reminderChip: some View {
+        switch store.notificationAuthorizationStatus {
+        case .notDetermined:
+            Button {
+                Haptics.lightImpact()
+                Task {
+                    _ = await store.requestNotificationAuthorization()
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .ninaCard(fill: NinaTheme.grout, stroke: .clear)
-                .padding(.top, 8)
-            case .denied:
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("O iPhone está bloqueando os avisos da Nina.")
-                        .ninaText(.caption, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    NinaButton(title: "Abrir os Ajustes do iPhone", kind: .quiet) {
-                        Haptics.selection()
-                        guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
-                        openURL(url)
-                    }
-                }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .ninaCard(fill: NinaTheme.grout, stroke: .clear)
-                .padding(.top, 8)
-            case .authorized, .provisional, .ephemeral, .unavailable:
-                EmptyView()
+            } label: {
+                EditorChip(systemName: "bell.slash", text: "Ativar avisos")
             }
+            .buttonStyle(.plain)
+        case .denied:
+            Button {
+                Haptics.selection()
+                guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+                openURL(url)
+            } label: {
+                EditorChip(systemName: "bell.slash", text: "Avisos bloqueados")
+            }
+            .buttonStyle(.plain)
+        case .authorized, .provisional, .ephemeral, .unavailable:
+            Menu {
+                ForEach(reminderLeadOptions) { option in
+                    Button {
+                        Haptics.selection()
+                        reminderLead = option
+                    } label: {
+                        Label(
+                            option.title,
+                            systemImage: reminderLead == option ? "checkmark" : "bell"
+                        )
+                    }
+                }
+            } label: {
+                EditorChip(
+                    systemName: "bell",
+                    text: reminderLead == .atTime ? nil : reminderLead.title,
+                    isSet: reminderLead != .atTime
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Aviso")
+            .accessibilityValue(reminderLead.title)
         }
     }
 
@@ -2406,6 +2243,10 @@ struct TaskEditorSheet: View {
             HStack(spacing: 8) {
                 dateChip
 
+                if !isSeed {
+                    reminderChip
+                }
+
                 Menu {
                     ForEach(ownerOptions) { option in
                         Button {
@@ -2420,8 +2261,9 @@ struct TaskEditorSheet: View {
                         }
                     }
                 } label: {
-                    NinaChip(
-                        text: isOwnerAssigned ? selectedOwnerLabel : "Ninguém ainda",
+                    EditorChip(
+                        systemName: "person",
+                        text: isOwnerAssigned ? selectedOwnerLabel : "Sem dono",
                         isSet: isOwnerAssigned
                     )
                 }
@@ -2431,86 +2273,57 @@ struct TaskEditorSheet: View {
                     Haptics.lightImpact()
                     togglePanel(.category)
                 } label: {
-                    NinaChip(text: category.title, isSet: true)
+                    EditorChip(systemName: category.symbolName, text: category.title, isSet: true)
                 }
                 .buttonStyle(.plain)
 
-                if showsExtraChips {
-                    if !isSeed {
-                        Menu {
-                            ForEach(TaskRecurrence.allCases) { option in
-                                Button {
-                                    Haptics.selection()
-                                    recurrence = option
-                                } label: {
-                                    Label(
-                                        option.title,
-                                        systemImage: recurrence == option ? "checkmark" : "repeat"
-                                    )
-                                }
-                            }
-                        } label: {
-                            NinaChip(
-                                text: recurrence == .none ? "Não repete" : recurrence.shortTitle,
-                                isSet: recurrence != .none
-                            )
-                        }
-                        .buttonStyle(.plain)
-
-                        Menu {
-                            ForEach(reminderLeadOptions) { option in
-                                Button {
-                                    Haptics.selection()
-                                    reminderLead = option
-                                } label: {
-                                    Label(
-                                        option.title,
-                                        systemImage: reminderLead == option ? "checkmark" : "bell"
-                                    )
-                                }
-                            }
-                        } label: {
-                            NinaChip(
-                                text: reminderLead.title,
-                                isSet: reminderLead != .atTime,
-                                isDisabled: isReminderLeadDisabled
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isReminderLeadDisabled)
-                    }
-
+                if !isSeed {
                     Menu {
-                        ForEach(TaskPriority.allCases) { option in
+                        ForEach(TaskRecurrence.allCases) { option in
                             Button {
                                 Haptics.selection()
-                                priority = option
+                                recurrence = option
                             } label: {
                                 Label(
                                     option.title,
-                                    systemImage: priority == option ? "checkmark" : "flag"
+                                    systemImage: recurrence == option ? "checkmark" : "repeat"
                                 )
                             }
                         }
                     } label: {
-                        NinaChip(
-                            text: priority == .normal ? "Prioridade normal" : priority.title,
-                            isSet: priority != .normal
+                        EditorChip(
+                            systemName: "repeat",
+                            text: recurrence == .none ? nil : recurrence.shortTitle,
+                            isSet: recurrence != .none
                         )
                     }
                     .buttonStyle(.plain)
-                } else {
-                    Button {
-                        Haptics.lightImpact()
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                            isShowingMoreChips = true
-                        }
-                    } label: {
-                        NinaChip(text: "Mais", systemName: "plus")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(isSeed ? "Mais opções: prioridade" : "Mais opções: repetição, aviso e prioridade")
+                    .accessibilityLabel("Repetição")
+                    .accessibilityValue(recurrence == .none ? "Não repete" : recurrence.title)
                 }
+
+                Menu {
+                    ForEach(TaskPriority.allCases) { option in
+                        Button {
+                            Haptics.selection()
+                            priority = option
+                        } label: {
+                            Label(
+                                option.title,
+                                systemImage: priority == option ? "checkmark" : "flag"
+                            )
+                        }
+                    }
+                } label: {
+                    EditorChip(
+                        systemName: "flag",
+                        text: priority == .normal ? nil : priority.title,
+                        isSet: priority != .normal
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Prioridade")
+                .accessibilityValue(priority.title)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 2)
@@ -2523,18 +2336,25 @@ struct TaskEditorSheet: View {
     @ViewBuilder
     private var dateChip: some View {
         if isSeed {
-            Text("Sem data")
-                .ninaText(.label, NinaTheme.muted, weight: .medium)
-                .padding(.horizontal, 14)
-                .frame(height: 36)
-                .background(NinaTheme.grout, in: Capsule())
-                .accessibilityLabel("Sem data. Semente não tem data.")
+            HStack(spacing: 6) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Sem data")
+                    .ninaText(.caption, NinaTheme.muted, weight: .medium)
+            }
+            .foregroundStyle(NinaTheme.muted)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 36)
+            .background(NinaTheme.grout, in: Capsule())
+            .frame(minHeight: 44)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Sem data. Semente não tem data.")
         } else {
             Button {
                 Haptics.lightImpact()
                 togglePanel(.date)
             } label: {
-                NinaChip(text: Self.dateLabel(for: dueDate), isSet: true)
+                EditorChip(systemName: "calendar", text: Self.dateLabel(for: dueDate), isSet: true)
             }
             .buttonStyle(.plain)
         }
@@ -2542,10 +2362,6 @@ struct TaskEditorSheet: View {
 
     private var datePanel: some View {
         HStack(spacing: 12) {
-            Text("Quando").ninaText(.label, NinaTheme.muted)
-
-            Spacer(minLength: 8)
-
             DatePicker(
                 "Quando",
                 selection: $dueDate,
@@ -2553,6 +2369,8 @@ struct TaskEditorSheet: View {
             )
             .labelsHidden()
             .tint(NinaTheme.ink)
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
@@ -2604,12 +2422,16 @@ struct TaskEditorSheet: View {
                     Button {
                         createCategory()
                     } label: {
-                        Text("Criar")
-                            .ninaText(.label, NinaTheme.ink, weight: .semibold)
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(NinaTheme.ink)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(newCategoryTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .opacity(newCategoryTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
+                    .accessibilityLabel("Criar categoria")
 
                     Button {
                         Haptics.selection()
@@ -2680,6 +2502,7 @@ struct TaskEditorSheet: View {
         case .edit(let id), .plant(let id):
             taskID = id
         case .add:
+            kind = initialKind
             dueDate = Self.defaultDueDate()
             return
         }
@@ -2783,12 +2606,9 @@ struct TaskEditorSheet: View {
 
     private var primaryActionTitle: String {
         if isPlantingSeed {
-            return "Plantar como tarefa"
+            return "Plantar"
         }
-        if isEditing {
-            return isSeed ? "Salvar semente" : "Salvar tarefa"
-        }
-        return isSeed ? "Guardar semente" : "Criar tarefa"
+        return isEditing ? "Salvar" : "Criar"
     }
 
     private func deleteTask() {
@@ -2896,6 +2716,28 @@ struct TaskEditorSheet: View {
 
 }
 
+private struct EditorChip: View {
+    var systemName: String
+    var text: String?
+    var isSet: Bool = false
+
+    var body: some View {
+        Group {
+            if let text {
+                NinaChip(text: text, isSet: isSet, systemName: systemName)
+            } else {
+                Image(systemName: systemName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(NinaTheme.muted)
+                    .frame(width: 44, height: 36)
+                    .overlay(Capsule().strokeBorder(NinaTheme.control, lineWidth: 1))
+            }
+        }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+    }
+}
+
 struct TaskOwnerChoice: Identifiable, Hashable {
     var memberID: UUID?
     var name: String
@@ -2913,7 +2755,7 @@ struct TaskOwnerChoice: Identifiable, Hashable {
             TaskOwnerChoice(
                 memberID: nil,
                 name: HouseholdWorkload.sharedOwnerLabel,
-                label: HouseholdWorkload.sharedOwnerLabel
+                label: "Sem dono"
             )
         ]
 
@@ -2995,7 +2837,7 @@ struct ShoppingEditorSheet: View {
                         .focused($isTitleFocused)
                         .submitLabel(.done)
 
-                    TextField("Quantidade, se importar", text: $amount)
+                    TextField("Quantidade", text: $amount)
                         .ninaText(.body, NinaTheme.muted)
                         .tint(NinaTheme.cobalt)
                         .textFieldStyle(.plain)
@@ -3010,15 +2852,15 @@ struct ShoppingEditorSheet: View {
                         if addedCount > 0 {
                             Text(
                                 addedCount == 1
-                                    ? "1 item entrou na lista."
-                                    : "\(addedCount) itens entraram na lista."
+                                    ? "1 item adicionado."
+                                    : "\(addedCount) itens adicionados."
                             )
                             .ninaText(.caption, NinaTheme.muted)
                         }
                     }
 
                     if isEditing {
-                        NinaButton(title: "Apagar este item", kind: .quiet) {
+                        NinaButton(title: "Apagar", kind: .quiet) {
                             Haptics.warning()
                             isShowingDeleteConfirmation = true
                         }
@@ -3042,7 +2884,7 @@ struct ShoppingEditorSheet: View {
                 deleteItem()
             }
         } message: {
-            Text("O item sai da lista para todo mundo da casa.")
+            Text("Some para toda a casa. Não dá para desfazer.")
         }
         .onAppear(perform: loadIfNeeded)
         .task {
@@ -3070,9 +2912,10 @@ struct ShoppingEditorSheet: View {
                             }
                         }
                     } label: {
-                        NinaChip(
+                        EditorChip(
+                            systemName: "person",
                             text: ownerMemberID == nil
-                                ? "Ninguém ainda"
+                                ? "Sem dono"
                                 : (ownerOptions.first(where: isSelectedOwner)?.label ?? owner),
                             isSet: ownerMemberID != nil
                         )
@@ -3088,7 +2931,7 @@ struct ShoppingEditorSheet: View {
                 Spacer(minLength: 8)
 
                 NinaButton(
-                    title: isEditing ? "Salvar item" : "Adicionar item",
+                    title: isEditing ? "Salvar" : "Adicionar",
                     systemName: "arrow.up",
                     isEnabled: !trimmedTitle.isEmpty
                 ) {
@@ -3165,12 +3008,19 @@ struct InviteFamilySheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
+    @State private var isRotatingInvite = false
+    @State private var renewFailed = false
+
     private var inviteURL: URL {
         store.inviteURL
     }
 
     private var inviteIsActive: Bool {
         store.inviteStatus?.isActive ?? true
+    }
+
+    private var canShare: Bool {
+        store.canManageFamily && store.canInviteMorePeople && inviteIsActive
     }
 
     private var inviterName: String {
@@ -3185,51 +3035,43 @@ struct InviteFamilySheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(eyebrow: "Convite") {
+            SheetHeader(eyebrow: "") {
                 dismiss()
             }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Chamar alguém para a casa").ninaText(.screen)
-                        Text("O link não dá acesso. Ele pede entrada, e alguém daqui aprova. Isto é o que vai chegar:")
+                        Text("Convidar alguém").ninaText(.screen)
+                        Text("Quem abrir o link pede para entrar. Alguém da casa aprova.")
                             .ninaText(.label, NinaTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(messageText)
-                            .ninaText(.label, NinaTheme.ink)
-                            .fixedSize(horizontal: false, vertical: true)
+                    if canShare {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(inviteURL.absoluteString)
+                                .ninaText(.caption, NinaTheme.cobalt, weight: .semibold)
+                                .textSelection(.enabled)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
 
-                        Text(inviteURL.absoluteString)
-                            .ninaText(.caption, NinaTheme.cobalt, weight: .semibold)
-                            .textSelection(.enabled)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+                            if let inviteValidity {
+                                Text(inviteValidity)
+                                    .ninaText(.meta, NinaTheme.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
 
-                    inviteFacts
-
-                    if store.canManageFamily, store.canInviteMorePeople, inviteIsActive {
                         ShareLink(item: inviteURL, message: Text(messageText)) {
                             ShareButtonFace(title: "Enviar convite", isProminent: true)
                         }
                         .buttonStyle(.plain)
                     } else {
-                        Text(
-                            store.canInviteMorePeople
-                                ? "O link atual não vale mais. Gere um novo na tela Casa."
-                                : "A casa chegou no limite de 8 pessoas. A Nina não ocupa vaga."
-                        )
-                        .ninaText(.caption, NinaTheme.muted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+                        unavailableState
                     }
                 }
                 .padding(.horizontal, 20)
@@ -3241,33 +3083,58 @@ struct InviteFamilySheet: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private var inviteFacts: some View {
-        VStack(spacing: 0) {
-            factRow(
-                "Vagas na casa",
-                store.canInviteMorePeople ? "\(store.remainingFamilySlots)" : "nenhuma"
-            )
+    private var inviteValidity: String? {
+        guard let invite = store.inviteStatus else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.dateFormat = "d 'de' MMM"
+        let uses = invite.usesRemaining == 1 ? "1 uso restante" : "\(invite.usesRemaining) usos restantes"
+        return "Vale até \(formatter.string(from: invite.expiresAt)) · \(uses)"
+    }
 
-            if let invite = store.inviteStatus {
-                NinaDivider(inset: 0)
-                factRow("Situação do link", invite.status.title)
-                NinaDivider(inset: 0)
-                factRow("Usos restantes", "\(invite.usesRemaining) de \(invite.maxUses)")
-                NinaDivider(inset: 0)
-                factRow("Vale até", invite.expiresAt.formatted(date: .abbreviated, time: .shortened))
+    @ViewBuilder
+    private var unavailableState: some View {
+        if !store.canInviteMorePeople {
+            unavailableLine("A casa chegou ao limite de \(AppStore.maxFamilyPeople) pessoas.")
+        } else if !store.canManageFamily {
+            unavailableLine("Só quem administra a casa convida.")
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                unavailableLine("Este link não vale mais.")
+
+                NinaButton(title: "Renovar o link", kind: .quiet, isPending: isRotatingInvite) {
+                    renewInvite()
+                }
+
+                if renewFailed, let message = store.syncErrorMessage {
+                    Text(message)
+                        .ninaText(.caption, NinaTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
 
-    private func factRow(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 12) {
-            Text(label)
-                .ninaText(.caption, NinaTheme.muted)
-                .frame(width: 120, alignment: .leading)
-            Text(value).ninaText(.label)
-            Spacer(minLength: 0)
+    private func unavailableLine(_ text: String) -> some View {
+        Text(text)
+            .ninaText(.caption, NinaTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+    }
+
+    private func renewInvite() {
+        isRotatingInvite = true
+        renewFailed = false
+        Task {
+            let rotated = await store.rotateFamilyInvite()
+            isRotatingInvite = false
+            renewFailed = !rotated
+            if rotated {
+                Haptics.success()
+            }
         }
-        .frame(minHeight: 44)
     }
 }
 
@@ -3275,6 +3142,10 @@ struct SuggestionDetailSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     var suggestion: NinaSuggestion
+
+    private var ownerLabel: String {
+        HouseholdWorkload.isSharedOwner(suggestion.payloadOwner) ? "Sem dono" : suggestion.payloadOwner
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -3286,19 +3157,15 @@ struct SuggestionDetailSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     Text(suggestion.title).ninaText(.screen)
 
-                    Text(suggestion.detail)
+                    Text(suggestion.payloadDetail)
                         .ninaText(.label, NinaTheme.ink)
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 10) {
                         CategoryGlyph(systemName: suggestion.symbolName, size: 17, tint: NinaTheme.muted)
-                        Text("\(suggestion.payloadOwner) · \(suggestion.payloadDueLabel)")
+                        Text("\(ownerLabel) · \(suggestion.payloadDueLabel)")
                             .ninaText(.caption, NinaTheme.muted)
                     }
-
-                    Text(suggestion.payloadDetail)
-                        .ninaText(.caption, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
 
                     // Nothing enters the house until a person taps this.
                     NinaButton(title: suggestion.actionTitle, fillsWidth: true) {
@@ -3318,8 +3185,7 @@ struct SuggestionDetailSheet: View {
     }
 }
 
-// The horizontal drag belongs to the tab pager, so a row cannot carry swipe
-// actions. Long press opens this instead, and the sheet says so out loud.
+// Rows live in a ScrollView, not a List, so long-press is the substitute for swipe actions.
 struct TaskQuickActionsSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(RouterPath.self) private var router
@@ -3373,7 +3239,7 @@ struct TaskQuickActionsSheet: View {
                 if canTakeOver, !task.isDone, let me {
                     NinaDivider(inset: 52)
 
-                    actionRow(title: "Assumir esta tarefa", systemName: "person") {
+                    actionRow(title: "Assumir", systemName: "person") {
                         Haptics.success()
                         takeOver(as: me)
                         dismiss()
@@ -3503,42 +3369,34 @@ struct TaskEditConflictSheet: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Outra pessoa mexeu nesta tarefa enquanto você escrevia.")
-                        .ninaText(.caption, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text("As duas versões existem. Escolha uma.")
+                    Text("Outra pessoa mexeu nesta tarefa.")
                         .ninaText(.zero)
                         .fixedSize(horizontal: false, vertical: true)
 
                     versionCard(
-                        eyebrow: "A sua",
+                        eyebrow: "Sua versão",
                         task: conflict.localTask,
                         isMine: true
                     )
 
                     versionCard(
-                        eyebrow: "A que chegou",
+                        eyebrow: "Outra versão",
                         task: conflict.remoteTask,
                         isMine: false
                     )
 
                     VStack(spacing: 8) {
-                        NinaButton(title: "Ficar com a minha", fillsWidth: true) {
+                        NinaButton(title: "Manter a minha", fillsWidth: true) {
                             Haptics.success()
                             store.keepLocalTaskConflict()
                         }
 
-                        NinaButton(title: "Ficar com a que chegou", kind: .outline, fillsWidth: true) {
+                        NinaButton(title: "Manter a outra", kind: .outline, fillsWidth: true) {
                             Haptics.selection()
                             store.acceptRemoteTaskConflict()
                         }
                     }
                     .padding(.top, 4)
-
-                    Text("Não dá para fechar isto sem escolher. Sair daqui sem responder apagaria a sua edição sem você saber.")
-                        .ninaText(.caption, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 24)
@@ -3558,7 +3416,7 @@ struct TaskEditConflictSheet: View {
                 .ninaText(.body, NinaTheme.ink, weight: .semibold)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("\(task.kind == .seed ? "Sem data · plante depois" : task.effectiveDueLabel()) · dono: \(HouseholdWorkload.isSharedOwner(task.owner) ? "Ninguém ainda" : task.owner)")
+            Text("\(task.kind == .seed ? "Plante depois" : task.effectiveDueLabel()) · \(HouseholdWorkload.isSharedOwner(task.owner) ? "Sem dono" : task.owner)")
                 .ninaText(.caption, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }

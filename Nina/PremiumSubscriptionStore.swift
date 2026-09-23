@@ -17,19 +17,19 @@ enum PremiumSubscriptionStatus: String, Codable, Hashable {
         case .unknown:
             "Verificando"
         case .inactive:
-            "Premium inativo"
+            "Inativo"
         case .active:
-            "Premium ativo"
+            "Ativo"
         case .gracePeriod:
-            "Premium em período de graça"
+            "Problema na cobrança"
         case .billingRetry:
-            "Pagamento em nova tentativa"
+            "Cobrança recusada"
         case .expired:
-            "Premium expirado"
+            "Expirado"
         case .revoked:
-            "Premium revogado"
+            "Revogado"
         case .reconciling:
-            "Confirmando sua assinatura"
+            "Confirmando compra"
         }
     }
 }
@@ -89,20 +89,20 @@ struct PremiumEntitlement: Codable, Hashable {
 
     var renewalSummary: String {
         if isReconciling {
-            return "A compra está confirmada no aparelho. A Nina está registrando no servidor."
+            return "Registrando na casa"
         }
 
-        guard isActive else { return "Assine para liberar os recursos Premium." }
+        guard isActive else { return "Sem assinatura" }
 
         if let expiresAt {
             let date = expiresAt.formatted(date: .abbreviated, time: .omitted)
             if willRenew == true {
-                return "Renova em \(date)."
+                return "Renova em \(date)"
             }
-            return "Acesso até \(date)."
+            return "Acesso até \(date)"
         }
 
-        return "Acesso Premium liberado."
+        return "Acesso liberado"
     }
 }
 
@@ -236,18 +236,17 @@ enum PremiumPurchaseError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notSignedIn:
-            "Entre na sua conta para assinar o Premium."
+            "Entre na sua conta para assinar."
         case .onlineAccountRequired:
-            "Use uma conta online da Nina para assinar. Contas de debug local não podem ser associadas ao App Store."
+            "Entre com Apple ou email para assinar."
         case .unverifiedTransaction:
-            "A compra não pôde ser verificada pelo App Store."
+            "A App Store não confirmou a compra."
         }
     }
 }
 
 enum PremiumReconciliationCopy {
-    static let purchaseRecorded =
-        "A compra está confirmada no aparelho. A Nina termina o registro no servidor."
+    static let purchaseRecorded = "Compra confirmada. Registrando na casa."
 }
 
 @MainActor
@@ -328,10 +327,10 @@ final class PremiumSubscriptionStore {
                 return lhsRank < rhsRank
             }
             productLoadMessage = products.isEmpty
-                ? "Os planos Premium não estão disponíveis agora. Tente de novo daqui a pouco."
+                ? "Os planos não carregaram. Tente mais tarde."
                 : nil
         } catch {
-            productLoadMessage = "Não foi possível carregar os planos Premium agora."
+            productLoadMessage = "Os planos não carregaram. Tente mais tarde."
         }
     }
 
@@ -389,7 +388,7 @@ final class PremiumSubscriptionStore {
                     statusIsConfirmation = true
                 }
             case .pending:
-                statusMessage = "A compra está pendente de aprovação."
+                statusMessage = "Compra aguardando aprovação."
                 statusIsConfirmation = false
             case .userCancelled:
                 break
@@ -421,7 +420,7 @@ final class PremiumSubscriptionStore {
                 statusMessage = PremiumReconciliationCopy.purchaseRecorded
                 statusIsConfirmation = true
             } else {
-                statusMessage = "Nenhuma assinatura Premium ativa foi encontrada."
+                statusMessage = "Nenhuma assinatura ativa encontrada."
                 statusIsConfirmation = false
             }
         } catch {
@@ -508,7 +507,7 @@ final class PremiumSubscriptionStore {
             await recordOnServer(local, for: currentUser.id, source: "entitlement_repair")
         } catch {
             guard let local else {
-                errorMessage = "Não foi possível atualizar o status Premium no servidor."
+                errorMessage = "Não foi possível atualizar o Premium agora."
                 return
             }
             entitlement = reconciling(for: local)
@@ -655,21 +654,21 @@ final class PremiumSubscriptionStore {
             case .userCancelled:
                 return ""
             case .networkError:
-                return "Sem conexão com o App Store. Tente novamente."
+                return "Sem conexão. Tente de novo."
             case .notAvailableInStorefront:
-                return "Este plano ainda não está disponível na sua loja."
+                return "Plano indisponível na sua App Store."
             case .notEntitled:
-                return "Esta assinatura não está disponível para esta conta."
+                return "Assinatura indisponível para esta conta."
             case .systemError:
-                return "O App Store não concluiu a operação agora."
+                return "A App Store não concluiu. Tente de novo."
             case .unknown, .unsupported:
-                return "Não foi possível concluir a operação no App Store."
+                return "Não foi possível concluir. Tente de novo."
             @unknown default:
-                return "Não foi possível concluir a operação no App Store."
+                return "Não foi possível concluir. Tente de novo."
             }
         }
 
-        return "Não foi possível concluir a operação agora."
+        return "Não foi possível concluir agora."
     }
 }
 

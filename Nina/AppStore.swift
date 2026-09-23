@@ -532,7 +532,7 @@ final class AppStore {
         activateLocalHomeContext(for: user)
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "O backend da Nina não está configurado."
+        syncErrorMessage = "Não dá para fazer isso agora. Tente mais tarde."
         #endif
     }
 
@@ -686,7 +686,7 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não consegui criar a casa no Supabase agora."
+                syncErrorMessage = "Não deu para criar a casa agora. Tente de novo."
                 Haptics.error()
                 return false
             }
@@ -709,7 +709,7 @@ final class AppStore {
         return true
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "O Supabase não está configurado para criar uma casa."
+        syncErrorMessage = "Não dá para criar a casa agora. Tente mais tarde."
         return false
         #endif
     }
@@ -774,7 +774,7 @@ final class AppStore {
         return true
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "O Supabase não está configurado para entrar em uma casa."
+        syncErrorMessage = "Não dá para entrar na casa agora. Tente mais tarde."
         return false
         #endif
     }
@@ -911,7 +911,7 @@ final class AppStore {
         return true
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "O backend da Nina não está configurado."
+        syncErrorMessage = "Não dá para fazer isso agora. Tente mais tarde."
         return false
         #endif
     }
@@ -983,7 +983,7 @@ final class AppStore {
         return true
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "O backend da Nina não está configurado."
+        syncErrorMessage = "Não dá para fazer isso agora. Tente mais tarde."
         return false
         #endif
     }
@@ -1029,7 +1029,7 @@ final class AppStore {
         return true
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "O backend da Nina não está configurado."
+        syncErrorMessage = "Não dá para fazer isso agora. Tente mais tarde."
         return false
         #endif
     }
@@ -1261,7 +1261,7 @@ final class AppStore {
                     reply: "Não consegui organizar isso agora. Tente de novo em instantes.",
                     suggestion: nil
                 )
-            ninaConnectionNotice = "Sem conexão com a Nina agora. Esta resposta veio do modo local deste aparelho."
+            ninaConnectionNotice = "Sem conexão. Esta resposta veio do aparelho."
             shouldPersistLegacyTurn = false
             Haptics.error()
         }
@@ -2745,7 +2745,7 @@ enum PreviewData {
     static let messages: [ChatMessage] = [
         ChatMessage(
             sender: .nina,
-            text: "Oi, eu sou a Nina. Pode escrever como você falaria com alguém da casa. Eu transformo isso em tarefa, lembrete ou memória.",
+            text: "Me conta o que está pesando.",
             timestamp: .now
         )
     ]

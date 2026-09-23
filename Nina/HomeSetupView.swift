@@ -16,9 +16,7 @@ struct HomeSetupView: View {
     @State private var errorMessage: String?
     @FocusState private var focusedField: FocusedField?
 
-    @State private var normalizedHomeName = ""
     @State private var canCreateHome = false
-    @State private var normalizedInviteCode: String? = nil
     @State private var canJoinHome = false
 
     private enum FocusedField {
@@ -34,15 +32,17 @@ struct HomeSetupView: View {
         VStack(spacing: 0) {
             header
 
-            ScrollView {
-                modeContent
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .padding(.bottom, 34)
-                    .frame(maxWidth: 520)
-                    .frame(maxWidth: .infinity)
+            GeometryReader { proxy in
+                ScrollView {
+                    modeContent
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
+                        .padding(.bottom, 16)
+                        .frame(minHeight: proxy.size.height)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollDismissesKeyboard(.interactively)
         }
         .ninaScreenBackground()
         .animation(.easeInOut(duration: 0.2), value: mode)
@@ -50,14 +50,10 @@ struct HomeSetupView: View {
             errorMessage = nil
         }
         .onChange(of: homeName) { _, newValue in
-            let norm = AppStore.normalizedHomeName(newValue)
-            normalizedHomeName = norm
-            canCreateHome = !norm.isEmpty
+            canCreateHome = !AppStore.normalizedHomeName(newValue).isEmpty
         }
         .onChange(of: inviteText) { _, newValue in
-            let code = AppStore.normalizedInviteCode(from: newValue)
-            normalizedInviteCode = code
-            canJoinHome = code != nil
+            canJoinHome = AppStore.normalizedInviteCode(from: newValue) != nil
         }
     }
 
@@ -97,181 +93,87 @@ struct HomeSetupView: View {
     }
 
     private var createPath: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 22) {
                 Text("Toda casa começa com um nome.")
                     .ninaText(.display)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Crie a sua e chame o resto da família quando quiser. Uma casa de uma pessoa só já é uma casa.")
-                    .ninaText(.label, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HomeSetupField(title: "Nome da casa") {
-                TextField("Casa Castello", text: $homeName)
-                    .textInputAutocapitalization(.words)
-                    .submitLabel(.done)
-                    .focused($focusedField, equals: .homeName)
-                    .onSubmit(createHome)
-            }
-
-            housePreview
-
-            VStack(alignment: .leading, spacing: 10) {
-                NinaButton(
-                    title: store.isSyncingHome ? "Criando" : "Criar a casa",
-                    fillsWidth: true,
-                    isEnabled: canCreateHome && !store.isSyncingHome
-                ) {
-                    createHome()
-                }
-
-                if let displayedError {
-                    errorLine(displayedError)
+                HomeSetupField(title: "Nome da casa") {
+                    TextField("Casa Castello", text: $homeName)
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .focused($focusedField, equals: .homeName)
+                        .onSubmit(createHome)
                 }
             }
 
-            alternatePath(
-                caption: "Alguém já te chamou para uma casa?",
-                title: "Tenho um convite",
-                target: .join
+            Spacer(minLength: 32)
+
+            actionGroup(
+                title: store.isSyncingHome ? "Criando" : "Criar",
+                isEnabled: canCreateHome && !store.isSyncingHome,
+                action: createHome,
+                alternateTitle: "Tenho um convite",
+                alternateTarget: .join
             )
         }
-    }
-
-    private var housePreview: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Eyebrow(text: "A sua casa")
-                .padding(.bottom, 4)
-
-            NinaRow(
-                title: canCreateHome ? normalizedHomeName : "Sem nome ainda",
-                subtitle: canCreateHome
-                    ? "Você entra como responsável pela casa"
-                    : "Escreva acima como ela se chama",
-                titleColor: canCreateHome ? NinaTheme.ink : NinaTheme.muted
-            ) {
-                if canCreateHome {
-                    MemberAvatar(initials: normalizedHomeName.ninaInitials, tone: .mint, size: 34)
-                } else {
-                    CategoryGlyph(systemName: "house", size: 20, tint: NinaTheme.muted)
-                }
-            } trailing: {
-                EmptyView()
-            }
-
-            NinaDivider()
-
-            NinaRow(
-                title: "A Nina não ocupa vaga",
-                subtitle: "Cabem 8 pessoas na casa, e ela não é uma delas."
-            ) {
-                NinaMark(size: 30)
-            } trailing: {
-                EmptyView()
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .ninaCard()
     }
 
     private var joinPath: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Entrar numa casa que já existe.")
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 22) {
+                Text("Entrar numa casa.")
                     .ninaText(.display)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Cole o link ou o código que te mandaram.")
-                    .ninaText(.label, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                VStack(alignment: .leading, spacing: 10) {
+                    HomeSetupField(title: "Link ou código") {
+                        TextField("casa-47a9f2d0b3c1e8a4d6f2", text: $inviteText)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.join)
+                            .focused($focusedField, equals: .invite)
+                            .onSubmit(joinHome)
+                    }
 
-            HomeSetupField(title: "Convite") {
-                TextField("casa-47a9f2d0b3c1e8a4d6f2", text: $inviteText)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.join)
-                    .focused($focusedField, equals: .invite)
-                    .onSubmit(joinHome)
-            }
-
-            joinConsequence
-
-            VStack(alignment: .leading, spacing: 10) {
-                NinaButton(
-                    title: store.isSyncingHome ? "Enviando" : "Pedir para entrar",
-                    fillsWidth: true,
-                    isEnabled: canJoinHome && !store.isSyncingHome
-                ) {
-                    joinHome()
-                }
-
-                if let displayedError {
-                    errorLine(displayedError)
+                    // Possessing an invite grants nothing: it opens a request an owner approves.
+                    Text("Ter o convite não dá acesso. Alguém da casa aprova.")
+                        .ninaText(.label, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            alternatePath(
-                caption: "Ninguém te chamou ainda?",
-                title: "Criar a minha casa",
-                target: .create
+            Spacer(minLength: 32)
+
+            actionGroup(
+                title: store.isSyncingHome ? "Enviando" : "Pedir para entrar",
+                isEnabled: canJoinHome && !store.isSyncingHome,
+                action: joinHome,
+                alternateTitle: "Criar minha casa",
+                alternateTarget: .create
             )
         }
     }
 
-    private var joinConsequence: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Eyebrow(text: "O que este código faz")
-
-            // Possessing an invite grants nothing: it opens a request an owner approves.
-            Text("Ter o código não dá acesso a nada. Ele abre um pedido, e alguém da casa precisa aprovar. Até lá você não vê nenhuma tarefa, nenhuma conta, nenhuma criança de lá.")
-                .ninaText(.label, NinaTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let normalizedInviteCode {
-                NinaDivider(inset: 0)
-                    .padding(.vertical, 2)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(normalizedInviteCode)
-                        .ninaText(.caption, NinaTheme.ink, weight: .semibold)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-
-                    // The screen must never look like it validated a code: the app
-                    // learns nothing about the house until the request is sent.
-                    Text("A casa só confere este código quando você pedir entrada.")
-                        .ninaText(.meta, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .ninaCard()
-    }
-
-    private func alternatePath(
-        caption: String,
+    private func actionGroup(
         title: String,
-        target: HomeSetupMode
+        isEnabled: Bool,
+        action: @escaping () -> Void,
+        alternateTitle: String,
+        alternateTarget: HomeSetupMode
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            NinaDivider(inset: 0)
-                .padding(.bottom, 10)
+        VStack(spacing: 12) {
+            NinaButton(title: title, fillsWidth: true, isEnabled: isEnabled, action: action)
 
-            Text(caption)
-                .ninaText(.caption, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
+            if let displayedError {
+                errorLine(displayedError)
+            }
 
-            NinaButton(title: title, kind: .quiet) {
+            NinaButton(title: alternateTitle, kind: .quiet) {
                 Haptics.selection()
                 focusedField = nil
-                mode = target
+                mode = alternateTarget
             }
         }
     }
@@ -279,7 +181,9 @@ struct HomeSetupView: View {
     private func errorLine(_ message: String) -> some View {
         Text(message)
             .ninaText(.caption, NinaTheme.ink, weight: .semibold)
+            .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
     }
 
     private func createHome() {

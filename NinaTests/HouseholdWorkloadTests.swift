@@ -37,7 +37,7 @@ final class HouseholdWorkloadTests: XCTestCase {
         XCTAssertFalse(snapshot.isBalanced)
         XCTAssertEqual(snapshot.leadName, "Mirna")
         XCTAssertEqual(snapshot.assignedCount, 9)
-        XCTAssertEqual(snapshot.headline, "Sinal de sobrecarga")
+        XCTAssertEqual(snapshot.headline, "Pesando de um lado")
         XCTAssertTrue(snapshot.message.contains("Mirna"))
         XCTAssertFalse(
             snapshot.message.contains(where: \.isNumber),

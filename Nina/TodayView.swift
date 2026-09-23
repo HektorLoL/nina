@@ -16,6 +16,15 @@ private enum TodayFilter: String, CaseIterable, Identifiable {
         case .seeds: "Sementes"
         }
     }
+
+    var emptyLine: String {
+        switch self {
+        case .all: "Nada mais para hoje."
+        case .mine: "Nada com você."
+        case .unowned: "Tudo tem dono."
+        case .seeds: "Nenhuma semente."
+        }
+    }
 }
 
 struct TodayView: View {
@@ -23,7 +32,7 @@ struct TodayView: View {
     @Environment(RouterPath.self) private var router
 
     @State private var filter: TodayFilter = .all
-    @State private var collapsed: Set<String> = []
+    @State private var isOverdueCollapsed = false
     @State private var isConfirmingReschedule = false
 
     private var now: Date { .now }
@@ -70,30 +79,34 @@ struct TodayView: View {
         !store.tasks.isEmpty || !store.shoppingItems.isEmpty
     }
 
+    private var showsZeroState: Bool {
+        !hasEverCaptured || (agenda.isEmpty && filter == .all)
+    }
+
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    header
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        header
 
-                    if !hasEverCaptured {
-                        firstDay
-                    } else if agenda.isEmpty && filter == .all {
-                        dayCleared
-                    } else {
-                        stats
-                        filters
-                        list
+                        if !hasEverCaptured {
+                            firstDay
+                        } else if agenda.isEmpty && filter == .all {
+                            dayCleared
+                        } else {
+                            filters
+                            list
+                        }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+                    .padding(.bottom, 104)
+                    .frame(minHeight: showsZeroState ? proxy.size.height : nil, alignment: .top)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .padding(.bottom, 104)
             }
 
-            if hasEverCaptured {
-                fab
-            }
+            fab
         }
         .ninaScreenBackground()
         .ninaStatusBarMask()
@@ -134,46 +147,6 @@ struct TodayView: View {
         return name.isEmpty ? salute : "\(salute), \(name)"
     }
 
-    private var stats: some View {
-        HStack(spacing: 10) {
-            statTile(value: mineCount, label: "na sua mão", style: .primary)
-            statTile(value: overdue.count, label: "atrasadas", style: .late)
-            statTile(value: unownedCount, label: "sem dono", style: .quiet)
-        }
-    }
-
-    private enum StatStyle { case primary, late, quiet }
-
-    private func statTile(value: Int, label: String, style: StatStyle) -> some View {
-        let fill: Color = switch style {
-        case .primary: NinaTheme.ink
-        case .late: NinaTheme.terracottaWash
-        case .quiet: NinaTheme.grout
-        }
-        let valueColor: Color = switch style {
-        case .primary: NinaTheme.ground
-        case .late: NinaTheme.terracotta
-        case .quiet: NinaTheme.ink
-        }
-        // On the ink tile the palette has no legible muted value, so the label is
-        // the ground colour held back rather than a second token.
-        let labelColor: Color = switch style {
-        case .primary: NinaTheme.ground.opacity(0.72)
-        case .late: NinaTheme.terracotta
-        case .quiet: NinaTheme.muted
-        }
-
-        return VStack(alignment: .leading, spacing: 2) {
-            Text("\(value)").ninaText(.display, valueColor)
-            Text(label)
-                .ninaText(.meta, labelColor, weight: .medium)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(fill, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.card, style: .continuous))
-    }
-
     private var filters: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -206,89 +179,94 @@ struct TodayView: View {
 
     @ViewBuilder
     private var list: some View {
-        if filter == .seeds {
-            section(title: "Sementes", count: store.openSeeds.count, tasks: store.openSeeds)
-        } else if filter == .all {
+        if filter == .all {
             if !overdue.isEmpty {
-                section(title: "Atrasadas", count: overdue.count, tasks: overdue, isLate: true)
+                overdueSection
+            }
+            if !overdue.isEmpty && !dueToday.isEmpty {
+                NinaDivider(inset: 0)
             }
             if !dueToday.isEmpty {
-                section(title: "Hoje", count: dueToday.count, tasks: dueToday)
+                rows(dueToday)
             }
         } else if filtered.isEmpty {
-            // A filter that finds nothing educates; it never offers to create.
-            ZeroState(
-                headline: "Nada com esse filtro.",
-                body_: "Isso é uma boa notícia, não um vazio para preencher.",
-                showsMark: false
-            )
-            .padding(.top, 26)
+            // A filter that finds nothing never offers to create.
+            Text(filter.emptyLine)
+                .ninaText(.label, NinaTheme.muted)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
         } else {
-            section(title: filter.title, count: filtered.count, tasks: filtered)
+            rows(filtered)
         }
     }
 
-    private func section(title: String, count: Int, tasks: [TaskItem], isLate: Bool = false) -> some View {
-        let isCollapsed = collapsed.contains(title)
-        return VStack(spacing: 0) {
+    private var overdueSection: some View {
+        VStack(spacing: 0) {
             HStack {
                 Button {
                     Haptics.selection()
-                    if isCollapsed { collapsed.remove(title) } else { collapsed.insert(title) }
+                    isOverdueCollapsed.toggle()
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        Image(systemName: isOverdueCollapsed ? "chevron.right" : "chevron.down")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(isLate ? NinaTheme.terracotta : NinaTheme.faint)
-                        Text("\(title.uppercased()) · \(count)")
-                            .ninaText(.eyebrow, isLate ? NinaTheme.terracotta : NinaTheme.faint, weight: .bold)
+                            .foregroundStyle(NinaTheme.terracotta)
+                        Text("ATRASADAS · \(overdue.count)")
+                            .ninaText(.eyebrow, NinaTheme.terracotta, weight: .bold)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityValue(isCollapsed ? "recolhida" : "aberta")
+                .accessibilityValue(isOverdueCollapsed ? "recolhida" : "aberta")
 
                 Spacer()
 
-                if isLate, count > 1 {
+                if overdue.count > 1 {
                     // Lateness is the count, not the control: the capsule stays ink.
                     Button {
                         Haptics.lightImpact()
                         isConfirmingReschedule = true
                     } label: {
-                        (Text("Remarcar as ") + Text("\(count)").foregroundColor(NinaTheme.terracotta))
+                        Text("Remarcar")
                             .ninaText(.meta, NinaTheme.ink, weight: .semibold)
                             .padding(.horizontal, 12)
-                            .frame(height: 30)
+                            .frame(minHeight: 30)
                             .overlay(Capsule().strokeBorder(NinaTheme.control, lineWidth: 1))
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .confirmationDialog(
-                        "Remarcar as \(count) atrasadas para amanhã, 09:00?",
+                        "Remarcar para amanhã, 09:00?",
                         isPresented: $isConfirmingReschedule,
                         titleVisibility: .visible
                     ) {
-                        Button("Remarcar para amanhã, 09:00") {
+                        Button("Remarcar") {
                             rescheduleOverdue()
                         }
                         Button("Cancelar", role: .cancel) {}
                     } message: {
-                        Text("Cada uma volta para a lista amanhã cedo. Nada é apagado.")
+                        Text("Nada é apagado.")
                     }
                 }
             }
-            .padding(.bottom, isCollapsed ? 0 : 8)
+            .padding(.bottom, isOverdueCollapsed ? 0 : 8)
 
-            if !isCollapsed {
-                ForEach(tasks) { task in
-                    TaskRowView(task: task)
-                    if task.id != tasks.last?.id {
-                        NinaDivider(inset: 36)
-                    }
-                }
+            if !isOverdueCollapsed {
+                rows(overdue)
             }
         }
         .padding(.top, 6)
+    }
+
+    private func rows(_ tasks: [TaskItem]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(tasks) { task in
+                TaskRowView(task: task)
+                if task.id != tasks.last?.id {
+                    NinaDivider(inset: 36)
+                }
+            }
+        }
     }
 
     private func rescheduleOverdue() {
@@ -305,55 +283,42 @@ struct TodayView: View {
     private var firstDay: some View {
         ZeroState(
             headline: "A casa começa vazia.",
-            body_: "Você não precisa organizar nada agora. Conta pra Nina o que está pesando na cabeça, do jeito que vier. Ela monta e você confirma."
+            body_: "Conta pra Nina o que está pesando."
         ) {
-            VStack(spacing: 6) {
-                NinaButton(title: "Conversar com a Nina", systemName: "bubble.left") {
-                    Haptics.lightImpact()
-                    router.presentedSheet = nil
-                    NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
-                }
-                NinaButton(title: "Escrever sem a Nina", kind: .quiet) {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .addTask
-                }
+            NinaButton(title: "Conversar com a Nina", kind: .quiet, systemName: "bubble.left") {
+                Haptics.lightImpact()
+                router.presentedSheet = nil
+                NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
             }
         }
-        .padding(.top, 40)
+        .centeredBelowHeader(minimumGap: 40)
     }
 
     private var dayCleared: some View {
-        // Credit goes to the house, never to a person: a two-name completion count
-        // is a scoreboard on the one screen whose job is relief.
+        // No completion tally here: on the one screen whose job is relief, a count is a scoreboard.
         ZeroState(
-            headline: "Acabou o dia da casa.",
-            body_: closedTodayCount > 0
-                ? "A casa fechou \(closedTodayCount) \(closedTodayCount == 1 ? "coisa" : "coisas") hoje. Não tem mais nada te esperando até amanhã de manhã."
-                : "Não tem nada te esperando até amanhã de manhã.",
+            headline: "Nada mais para hoje.",
+            body_: "Pode largar o celular.",
             presence: .stored
         ) {
-            VStack(spacing: 18) {
-                Text("Pode largar o celular.").ninaText(.label, NinaTheme.ink, weight: .semibold)
-
-                if let next = nextUp {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Eyebrow(text: "Amanhã cedo")
-                        HStack(spacing: 12) {
-                            NinaCheckbox(isOn: false, size: 22)
-                            Text(next.title)
-                                .ninaText(.label, NinaTheme.ink, weight: .medium)
-                                .lineLimit(1)
-                            Spacer(minLength: 8)
-                            Text(next.effectiveDueLabel()).ninaText(.meta, NinaTheme.muted)
-                        }
+            if let next = nextUp {
+                VStack(alignment: .leading, spacing: 8) {
+                    Eyebrow(text: "Próxima")
+                    HStack(spacing: 12) {
+                        NinaCheckbox(isOn: false, size: 22)
+                        Text(next.title)
+                            .ninaText(.label, NinaTheme.ink, weight: .medium)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(next.effectiveDueLabel()).ninaText(.meta, NinaTheme.muted)
                     }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .ninaCard()
                 }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .ninaCard()
             }
         }
-        .padding(.top, 40)
+        .centeredBelowHeader(minimumGap: 40)
     }
 
     // What the day being clear does not mean: that nothing is coming.
@@ -366,13 +331,6 @@ struct TodayView: View {
             }
             .min { $0.1 < $1.1 }?
             .0
-    }
-
-    private var closedTodayCount: Int {
-        store.tasks.count { task in
-            guard let completedAt = task.completedAt else { return false }
-            return Calendar.current.isDate(completedAt, inSameDayAs: now)
-        }
     }
 
     private var fab: some View {
@@ -396,6 +354,16 @@ struct TodayView: View {
 
 extension Notification.Name {
     static let ninaSelectChatTab = Notification.Name("nina.selectChatTab")
+}
+
+extension View {
+    func centeredBelowHeader(minimumGap: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: minimumGap)
+            self
+            Spacer(minLength: 0)
+        }
+    }
 }
 
 // One row drawing, shared by Hoje and Tarefas, so the two lists cannot drift.
@@ -502,9 +470,9 @@ struct TaskRowView: View {
             .buttonStyle(.plain)
         }
         .frame(minHeight: 48)
-        // Nina has no swipe actions by architectural necessity: the horizontal
-        // drag belongs to the custom tab pager. Long-press is the substitute, and
-        // it must be simultaneous or the row's own buttons swallow it.
+        // Rows live in a ScrollView, not a List, so there are no swipe actions:
+        // long-press is the substitute, and it must be simultaneous or the row's
+        // own buttons swallow it.
         .contentShape(Rectangle())
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.4).onEnded { _ in

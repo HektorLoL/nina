@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-09-09
+Last updated: 2026-09-23
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -145,10 +145,9 @@ every case the choice was to omit rather than ship something inert.
   `acceptRemoteTaskConflict()` when swiped away — a silent remote-wins that threw
   away what the person had just typed. It is now a non-dismissable sheet showing
   both versions.
-- **Long-press opens quick actions** (`C4`), the substitute for the swipe actions
-  this app cannot have, because the horizontal drag belongs to the tab pager.
-  **This is the one interaction that has never been tested against that gesture
-  on a real device**, and it is the first thing to check on TestFlight.
+- **Long-press opens quick actions** (`C4`), the substitute for swipe actions:
+  rows live in a `ScrollView`, not a `List`. (Until 2026-09-23 the horizontal
+  drag also belonged to a swiping tab pager; that swipe is gone, see §6d.)
 - **The workload portrait is three qualitative bands.** No count, no percentage,
   no ranking. Rows are in household order; unassigned work gets its own house band
   drawn in a different weight rather than a different hue, and is never given a
@@ -298,6 +297,43 @@ fixes. The departures from the boards and from earlier rounds, all deliberate:
   `AppStore.pendingPriorityTaskIDs` with its two mutators, `MemberDetailSheet`,
   and `SheetDestination.addTaskInSection`. None had a caller; the backlog's
   references to them are historical.
+
+## 6d. What the 2026-09-23 "What I didn't like" pass changed
+
+Heitor's list: tab swipe causes mis-taps and steals the back gesture; too much
+text; the login looks unfinished and is not vertically centered; every settings
+row has a description; the tutorial has useless text. A Mobbin study of ~90 iOS
+screens became `docs/text-rubric.md`, and every screen was re-cut against it.
+The deliberate departures from the boards:
+
+- **No swipe between tabs; instant tab switching; edge swipe-back everywhere.**
+  The boards assume a paging container. `TabSwipeLock` and the pager gesture are
+  gone, and a `UINavigationController` extension re-enables the pop gesture the
+  hidden navigation bar had disabled.
+- **Login (`L1`–`L8`):** the brand block is centered in the space above the
+  actions, and the Apple button, "Entrar com email" and the legal line sit at the
+  bottom. Email and code entry moved into a sheet, so the welcome never reflows.
+  Tagline: "Conta pra ela o que pesa." The welcome has no cobalt; the sheet does.
+- **Tutorial: 3 screens instead of 7.** The three question steps stored their
+  answers in local state nothing read, and the "subtract" step left nothing
+  behind, so both were removed with their dead types. The confirm step mirrors
+  the live card word for word.
+- **Settings:** no description line on any row except the account row; state is
+  a trailing value ("Desligados", "7 vagas", "Premium"); no intro sentence.
+- **Chat:** one centered intro ("Jogue uma lembrança aqui." / "Eu proponho. Você
+  confirma."), three chips in one row above the composer, no seeded greeting
+  while the intro shows, one disclaimer line per screen ("A Nina pode ler
+  errado. Nada entra sem você confirmar."), notices as one line on the composer.
+- **Proposal card:** tag "Ainda não existe", title, one meta line of glyph +
+  value pairs; no "Quando/Repete/Dono" label column; the primary button label
+  comes from the kind ("Criar tarefa" / "Criar semente"), not the model's text.
+- **One word per act:** "Sem dono" for unowned everywhere (it was "Ninguém
+  ainda" on some surfaces), "Plante depois" for an undated semente, "Não dá para
+  desfazer." on every irreversible alert. The unbalanced workload headline is
+  "Pesando de um lado", because the eyebrow already says "Sinal de sobrecarga".
+- **Vendor names left user copy:** no error string says "Supabase" or "backend".
+- **Removed with no reader left:** `CompletedTaskRetention` (the "Concluídas hoje"
+  group only ever holds today, so its disclosure note said nothing).
 
 ## 7. Verified
 

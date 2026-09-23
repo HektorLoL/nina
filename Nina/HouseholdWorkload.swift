@@ -57,7 +57,7 @@ struct HouseholdWorkloadSnapshot: Hashable {
         leadName: nil,
         leadShare: 0,
         headline: "Ainda sem retrato da casa",
-        message: "Preciso de pelo menos \(HouseholdWorkload.minimumAssignedSample) tarefas abertas com dono, em pelo menos \(HouseholdWorkload.minimumCarriers) pessoas, para desenhar a divisão sem chutar. Até lá, não desenho gráfico nenhum."
+        message: "Preciso de \(HouseholdWorkload.minimumAssignedSample) tarefas com dono, entre \(HouseholdWorkload.minimumCarriers) pessoas."
     )
 }
 
@@ -159,10 +159,8 @@ enum HouseholdWorkload {
             isBalanced: isBalanced,
             leadName: lead.name,
             leadShare: leadShare,
-            headline: isBalanced ? "A casa está parecida" : "Sinal de sobrecarga",
-            message: isBalanced
-                ? "O que está aberto agora está bem dividido entre vocês. Nada para ajustar."
-                : "\(lead.name) está com a parte mais pesada do que está aberto agora. Pode ser uma boa hora para conversar."
+            headline: isBalanced ? "A casa está parecida" : "Pesando de um lado",
+            message: isBalanced ? "" : "\(lead.name) está com a parte mais pesada agora."
         )
     }
 

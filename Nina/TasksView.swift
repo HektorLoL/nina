@@ -69,18 +69,21 @@ struct TasksView: View {
 
     private var main: some View {
         ZStack(alignment: .bottomTrailing) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                    filters
-                    content
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        header
+                        filters
+                        content
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+                    .padding(.bottom, 104)
+                    .frame(minHeight: showsZeroState ? proxy.size.height : nil, alignment: .top)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .padding(.bottom, 104)
             }
 
-            if filter != .shopping, !store.tasks.isEmpty {
+            if filter != .shopping {
                 fab
             }
         }
@@ -92,11 +95,8 @@ struct TasksView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(screenTitle).ninaText(.screen)
-                Text(subtitle).ninaText(.label, NinaTheme.muted)
-            }
+        HStack(alignment: .center) {
+            Text(screenTitle).ninaText(.screen)
 
             Spacer()
 
@@ -112,7 +112,6 @@ struct TasksView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Buscar")
-            .padding(.top, 4)
         }
     }
 
@@ -121,14 +120,6 @@ struct TasksView: View {
         case .shopping: "Compras"
         case .seeds: "Sementes"
         default: "Tarefas"
-        }
-    }
-
-    private var subtitle: String {
-        switch filter {
-        case .shopping: "A lista é da casa inteira."
-        case .seeds: "O que não tem dia marcado."
-        default: "Tudo o que a casa tem em aberto."
         }
     }
 
@@ -150,6 +141,7 @@ struct TasksView: View {
         }
         .scrollClipDisabled()
         .chipRowTrailingFade()
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func chipTitle(_ option: TaskListFilter) -> String {
@@ -163,28 +155,38 @@ struct TasksView: View {
         return count > 0 ? "\(option.title) \(count)" : option.title
     }
 
+    private var showsZeroState: Bool {
+        switch filter {
+        case .all: store.tasks.isEmpty
+        case .seeds: store.openSeeds.isEmpty
+        case .shopping: store.shoppingItems.isEmpty
+        case .mine, .unowned: false
+        }
+    }
+
     @ViewBuilder
     private var content: some View {
         switch filter {
         case .shopping: shopping
         case .seeds: seeds
-        case .mine: grouped(mine, emptyHeadline: "Nada está com você agora.", emptyBody: "Quando alguém da casa te passar alguma coisa, ela aparece aqui.")
-        case .unowned: grouped(unowned, emptyHeadline: "Nada sem dono.", emptyBody: "Tudo o que está aberto tem alguém. Pode deixar assim.")
+        case .mine: grouped(mine, emptyLine: "Nada com você.")
+        case .unowned: grouped(unowned, emptyLine: "Tudo tem dono.")
         case .all:
             if store.tasks.isEmpty {
                 firstTasks
             } else {
-                grouped(openTasks, emptyHeadline: "Nada em aberto.", emptyBody: "A casa está em dia. Pode deixar assim.")
+                grouped(openTasks, emptyLine: "Nada em aberto.")
             }
         }
     }
 
 
     @ViewBuilder
-    private func grouped(_ tasks: [TaskItem], emptyHeadline: String, emptyBody: String) -> some View {
+    private func grouped(_ tasks: [TaskItem], emptyLine: String) -> some View {
         if tasks.isEmpty, completedToday.isEmpty {
-            ZeroState(headline: emptyHeadline, body_: emptyBody, presence: .stored)
-                .padding(.top, 40)
+            Text(emptyLine)
+                .ninaText(.label, NinaTheme.muted)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
         } else {
             VStack(spacing: 18) {
                 ForEach(categoryGroups(of: tasks), id: \.0.id) { category, items in
@@ -227,9 +229,6 @@ struct TasksView: View {
                     Text("\(category.title.uppercased()) · \(items.count)")
                         .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
                     Spacer()
-                    if isCollapsed {
-                        Text("recolhida").ninaText(.meta, NinaTheme.muted)
-                    }
                 }
                 .contentShape(Rectangle())
             }
@@ -265,6 +264,7 @@ struct TasksView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(isShowingCompleted ? "aberta" : "recolhida")
             .padding(.bottom, isShowingCompleted ? 8 : 0)
 
             if isShowingCompleted {
@@ -274,48 +274,31 @@ struct TasksView: View {
                         NinaDivider(inset: 36)
                     }
                 }
-
-                Text(CompletedTaskRetention.disclosureNote)
-                    .ninaText(.meta, NinaTheme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 10)
             }
         }
     }
 
     private var firstTasks: some View {
         ZeroState(
-            headline: "A casa ainda não combinou nada.",
-            body_: "Tarefa aqui é coisa que a casa combinou. Pode ter dono e dia, ou pode só ficar em aberto até alguém pegar."
+            headline: "Nada combinado ainda.",
+            body_: "Conta pra Nina. Ela propõe, você confirma."
         ) {
-            VStack(spacing: 6) {
-                NinaButton(title: "Conversar com a Nina", systemName: "bubble.left") {
-                    Haptics.lightImpact()
-                    NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
-                }
-                NinaButton(title: "Escrever sem a Nina", kind: .quiet) {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .addTask
-                }
+            NinaButton(title: "Conversar com a Nina", kind: .quiet, systemName: "bubble.left") {
+                Haptics.lightImpact()
+                NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
             }
         }
-        .padding(.top, 44)
+        .centeredBelowHeader(minimumGap: 44)
     }
 
 
     @ViewBuilder
     private var seeds: some View {
         if store.openSeeds.isEmpty {
-            VStack(spacing: 20) {
-                ZeroState(
-                    headline: "Semente é vontade sem data.",
-                    body_: "O que você quer fazer um dia e não quer marcar agora. Fica guardado sem cobrar nada."
-                )
-
-                // Teaching by showing the real object: a semente rendered as it
-                // will look, with the date slot deliberately empty.
-                VStack(alignment: .leading, spacing: 10) {
-                    Eyebrow(text: "Uma semente é assim")
+            ZeroState(headline: "Semente é vontade sem data.", body_: "", showsMark: false) {
+                VStack(spacing: 20) {
+                    // Teaching by showing the real object: a semente rendered as it
+                    // will look, with the date slot deliberately empty.
                     HStack(spacing: 12) {
                         CategoryGlyph(systemName: "leaf", size: 18, tint: NinaTheme.ink)
                         Text("Pintar a sala")
@@ -323,17 +306,17 @@ struct TasksView: View {
                         Spacer()
                         Text("Plante depois").ninaText(.meta, NinaTheme.muted)
                     }
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .ninaCard(fill: NinaTheme.grout, stroke: .clear)
 
-                NinaButton(title: "Plantar uma semente", kind: .outline) {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .addTask
+                    NinaButton(title: "Nova semente", kind: .outline) {
+                        Haptics.lightImpact()
+                        router.presentedSheet = .addSeed
+                    }
                 }
             }
-            .padding(.top, 34)
+            .centeredBelowHeader(minimumGap: 34)
         } else {
             VStack(spacing: 0) {
                 ForEach(store.openSeeds) { seed in
@@ -342,13 +325,6 @@ struct TasksView: View {
                         NinaDivider(inset: 36)
                     }
                 }
-
-                Text("Semente não vira atraso e não conta no retrato da casa. Ela só vira tarefa no dia em que você tocar em Plantar.")
-                    .ninaText(.caption, NinaTheme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .ninaCard(fill: NinaTheme.grout, stroke: .clear)
-                    .padding(.top, 18)
             }
             .padding(.top, 4)
         }
@@ -360,13 +336,13 @@ struct TasksView: View {
         if store.shoppingItems.isEmpty {
             VStack(spacing: 22) {
                 ZeroState(
-                    headline: "Nada faltando por enquanto.",
-                    body_: "O que acabar em casa entra aqui. Qualquer pessoa da casa pode botar na lista, e a Nina não cobra de ninguém."
+                    headline: "Nada faltando.",
+                    body_: "O que acabar em casa aparece aqui."
                 )
 
                 addShoppingField
             }
-            .padding(.top, 34)
+            .centeredBelowHeader(minimumGap: 34)
         } else {
             VStack(spacing: 0) {
                 // Checked items stay exactly where they are: in an aisle you need
@@ -381,7 +357,7 @@ struct TasksView: View {
                 addShoppingField.padding(.top, 16)
 
                 if store.shoppingItems.contains(where: \.isChecked) {
-                    NinaButton(title: "Limpar o que já foi comprado", kind: .quiet) {
+                    NinaButton(title: "Limpar comprados", kind: .quiet) {
                         Haptics.warning()
                         isConfirmingShoppingClear = true
                     }
@@ -389,7 +365,7 @@ struct TasksView: View {
                 }
             }
             .padding(.top, 4)
-            .alert("Limpar os comprados?", isPresented: $isConfirmingShoppingClear) {
+            .alert("Limpar comprados?", isPresented: $isConfirmingShoppingClear) {
                 Button("Limpar", role: .destructive) {
                     _ = store.clearCheckedShoppingItems()
                 }
@@ -513,31 +489,17 @@ struct TasksView: View {
                 // the thing, they want to find it.
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Nada com esse nome.").ninaText(.screen)
-                    Text("Procurei em tarefas e sementes, abertas e concluídas. Pode estar guardado com outra palavra.")
-                        .ninaText(.label, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Tenta outra palavra.").ninaText(.label, NinaTheme.muted)
 
-                    HStack(spacing: 8) {
-                        Button {
-                            Haptics.selection()
-                            searchQuery = ""
-                            isSearching = false
-                            filter = .all
-                        } label: {
-                            NinaChip(text: "Ver tudo em aberto")
-                        }
-                        .buttonStyle(.plain)
-
-                        Button {
-                            Haptics.lightImpact()
-                            searchQuery = ""
-                            isSearching = false
-                            NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
-                        } label: {
-                            NinaChip(text: "Conversar com a Nina", isSet: true)
-                        }
-                        .buttonStyle(.plain)
+                    Button {
+                        Haptics.lightImpact()
+                        searchQuery = ""
+                        isSearching = false
+                        NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
+                    } label: {
+                        NinaChip(text: "Conversar com a Nina", isSet: true)
                     }
+                    .buttonStyle(.plain)
                     .padding(.top, 12)
                 }
                 .padding(.horizontal, 20)

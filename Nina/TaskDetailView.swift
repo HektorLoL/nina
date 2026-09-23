@@ -50,9 +50,7 @@ struct TaskDetailView: View {
             }
             Button("Cancelar", role: .cancel) {}
         } message: {
-            Text(task.kind == .seed
-                ? "A semente some para todo mundo da casa. Não dá para desfazer."
-                : "A tarefa e o aviso agendado somem para todo mundo da casa. Não dá para desfazer.")
+            Text("Some para toda a casa. Não dá para desfazer.")
         }
     }
 
@@ -65,7 +63,8 @@ struct TaskDetailView: View {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(NinaTheme.ink)
-                    .frame(width: 40, height: 40, alignment: .leading)
+                    .frame(width: 44, height: 44, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Voltar")
@@ -78,6 +77,8 @@ struct TaskDetailView: View {
             } label: {
                 Text("Editar")
                     .ninaText(.label, NinaTheme.ink, weight: .semibold)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -109,63 +110,74 @@ struct TaskDetailView: View {
 
     private var metadata: some View {
         VStack(spacing: 0) {
-            metaRow("Quando") {
-                Text(task.kind == .seed ? "Sem data · plante depois" : task.effectiveDueLabel())
-                    .ninaText(.label, isOverdue ? NinaTheme.terracotta : NinaTheme.ink, weight: isOverdue ? .semibold : .regular)
+            metaRow(
+                "Quando",
+                value: task.kind == .seed ? "Plante depois" : task.effectiveDueLabel(),
+                isLate: isOverdue
+            ) {
+                metaGlyph("calendar")
             }
-            NinaDivider(inset: 0)
+            NinaDivider(inset: 36)
 
-            if task.kind == .task {
-                metaRow("Repete") {
-                    Text(task.recurrence == .none ? "Não repete" : task.recurrence.title).ninaText(.label)
+            if task.kind == .task, task.recurrence != .none {
+                metaRow("Repete", value: task.recurrence.title) {
+                    metaGlyph("repeat")
                 }
-                NinaDivider(inset: 0)
+                NinaDivider(inset: 36)
             }
 
-            metaRow("Dono") {
-                HStack(spacing: 8) {
-                    if let owner {
-                        MemberAvatar(initials: owner.name.ninaInitials, tone: owner.tone, size: 24)
-                    }
-                    // Unassigned work is credited to the house and never given a face.
-                    Text(HouseholdWorkload.isSharedOwner(task.owner) ? "Ninguém ainda" : task.owner).ninaText(.label)
+            metaRow("Dono", value: HouseholdWorkload.isSharedOwner(task.owner) ? "Sem dono" : task.owner) {
+                // Unassigned work is credited to the house and never given a face.
+                if let owner {
+                    MemberAvatar(initials: owner.name.ninaInitials, tone: owner.tone, size: 24)
+                } else {
+                    metaGlyph("person")
                 }
             }
-            NinaDivider(inset: 0)
+            NinaDivider(inset: 36)
 
-            metaRow("Categoria") {
-                HStack(spacing: 8) {
-                    CategoryGlyph(systemName: task.category.symbolName, size: 17)
-                    Text(task.category.title).ninaText(.label)
-                }
+            metaRow("Categoria", value: task.category.title) {
+                metaGlyph(task.category.symbolName)
             }
 
             // What the editor asks for must be readable somewhere afterwards.
             if task.priority != .normal {
-                NinaDivider(inset: 0)
-                metaRow("Prioridade") {
-                    Text(task.priority.title).ninaText(.label)
+                NinaDivider(inset: 36)
+                metaRow("Prioridade", value: task.priority.title) {
+                    metaGlyph("flag")
                 }
             }
 
             if task.kind == .task, task.dueAt != nil {
-                NinaDivider(inset: 0)
-                metaRow("Aviso") {
-                    Text(task.reminderLead.title).ninaText(.label)
+                NinaDivider(inset: 36)
+                metaRow("Aviso", value: task.reminderLead.title) {
+                    metaGlyph("bell")
                 }
             }
         }
     }
 
-    private func metaRow<V: View>(_ label: String, @ViewBuilder value: () -> V) -> some View {
+    private func metaRow<Leading: View>(
+        _ label: String,
+        value: String,
+        isLate: Bool = false,
+        @ViewBuilder leading: () -> Leading
+    ) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            Text(label)
-                .ninaText(.caption, NinaTheme.muted)
-                .frame(width: 92, alignment: .leading)
-            value()
+            leading()
+                .frame(width: 24)
+            Text(value)
+                .ninaText(.label, isLate ? NinaTheme.terracotta : NinaTheme.ink, weight: isLate ? .semibold : .regular)
             Spacer(minLength: 0)
         }
         .frame(minHeight: 46)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(isLate ? "Atrasada, \(value)" : value)
+    }
+
+    private func metaGlyph(_ systemName: String) -> some View {
+        CategoryGlyph(systemName: systemName, size: 17, tint: NinaTheme.muted)
     }
 
     @ViewBuilder
@@ -192,7 +204,7 @@ struct TaskDetailView: View {
         let isPerson = store.familyGroup.members.contains {
             $0.name.caseInsensitiveCompare(task.createdBy) == .orderedSame
         }
-        guard isPerson else { return "Escrita à mão, aqui no app." }
+        guard isPerson else { return "Escrita à mão." }
         if let me = store.currentFamilyMember, me.name.caseInsensitiveCompare(task.createdBy) == .orderedSame {
             return "Você colocou isto aqui."
         }

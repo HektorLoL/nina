@@ -160,15 +160,6 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertTrue(task.belongsOnAgenda(for: now, calendar: calendar))
     }
 
-    func testTheCompletedListSaysItOnlyShowsTheWindowRetentionActuallyKeeps() {
-        XCTAssertTrue(
-            CompletedTaskRetention.disclosureNote
-                .contains("\(CompletedTaskRetention.visibleDays) dias")
-        )
-        XCTAssertTrue(CompletedTaskRetention.disclosureNote.contains("guardadas"))
-        XCTAssertFalse(CompletedTaskRetention.disclosureNote.contains("!"))
-    }
-
     func testASnoozedTaskShowsTheDateItWasMovedToAndNotTheOneItWasWrittenWith() {
         let due = date(year: 2026, month: 8, day: 8, hour: 9, minute: 0)
         let snoozedTo = date(year: 2026, month: 8, day: 20, hour: 9, minute: 0)

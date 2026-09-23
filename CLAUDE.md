@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-09-09
+Last updated: 2026-09-23
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -284,8 +284,16 @@ with `defer { finishSyncingHome(ifCurrent:) }` → re-check the token after each
 **Root routing** (`AppRootView.entryPhase`) evaluates in strict order:
 `signedOut` → `tutorial` → `homeLoading` → `invite` → then `homeAccessState`
 (`noHome` / `pendingApproval` / `unavailable` / `app`). Four tabs
-(Nina / Hoje / Tarefas / Casa) in a **custom pager, not `TabView`**, each with
-its own `RouterPath`.
+(Nina / Hoje / Tarefas / Casa) in a **custom container, not `TabView`**, each
+with its own `RouterPath`. **Tabs change only by tapping the bar** — the
+horizontal swipe between tabs was removed on 2026-09-23 because it caused
+mis-taps and stole the back gesture, and switching is instant, like
+`UITabBarController`. All four tabs stay mounted. **The system edge swipe-back
+works on every pushed screen, sheets included,** through the
+`UINavigationController` extension at the end of `AppRootView.swift`: the
+navigation bar is hidden app-wide, which otherwise disables
+`interactivePopGestureRecognizer`, and its `viewControllers.count > 1` guard is
+what keeps a swipe on a root screen from freezing the stack.
 
 **Models.** Every persisted/synced model has a hand-written `init(from:)` using
 `decodeIfPresent(...) ?? default`. New fields must be additive with a default,
@@ -367,6 +375,13 @@ only holds because list rows, chips and buttons size with `minHeight` and every
 user-facing string is metered through `.ninaText` — `.compose` (27pt sans) is
 the capture title's tier. A raw `.font(.system(size:))` on text is a regression;
 on an SF Symbol it is fine.
+
+**On-screen text follows `docs/text-rubric.md`** (2026-09-23, from ~90 Mobbin
+references): a header is the title only, a settings row has no description line,
+an empty state is one short headline, one short line and one action, and its §3
+lists the text that must never be cut (subscription terms, consent, deletion
+consequences, "Não ocupa vaga", "Para conversar, não para cobrar"). Run its §0
+audit on any new screen.
 
 **All UI strings are pt-BR literals inline in the view.** There is no
 `Localizable.strings`, no `.xcstrings`, no `LocalizedStringKey`. Introducing

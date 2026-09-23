@@ -54,8 +54,8 @@ struct MemberEditorSheet: View {
 
             if case .edit = mode, member == nil {
                 ZeroState(
-                    headline: "Essa pessoa não está mais na casa.",
-                    body_: "Alguém com permissão pode ter removido o perfil.",
+                    headline: "Essa pessoa não está mais aqui.",
+                    body_: "Alguém pode ter removido este perfil.",
                     showsMark: false
                 )
                 .padding(.horizontal, 20)
@@ -80,7 +80,7 @@ struct MemberEditorSheet: View {
                 removeMember()
             }
         } message: {
-            Text("A pessoa perde o acesso à casa. As tarefas já feitas continuam no histórico.")
+            Text("Perde o acesso à casa. As tarefas feitas ficam.")
         }
     }
 
@@ -119,14 +119,13 @@ struct MemberEditorSheet: View {
                     isAssistant: member?.role == .assistant
                 )
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(displayName).ninaText(.title)
-                    Text(statusLine).ninaText(.caption, NinaTheme.muted)
-                }
+                Text(displayName).ninaText(.title)
             }
 
             if isAdding {
-                Text(slotLine).ninaText(.caption, NinaTheme.muted)
+                Text("Os adultos cuidam deste perfil. Não usa o app.")
+                    .ninaText(.caption, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if !canEdit {
@@ -140,19 +139,14 @@ struct MemberEditorSheet: View {
     private var identityFields: some View {
         VStack(alignment: .leading, spacing: 10) {
             MemberField_(title: "Nome") {
-                TextField("Como a casa chama", text: $name)
+                TextField("", text: $name)
                     .focused($isNameFocused)
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
+                    .accessibilityLabel("Nome")
             }
             .disabled(isNameLocked)
             .opacity(isNameLocked ? 0.4 : 1)
-
-            if isNameLocked {
-                Text("O nome vem da conta desta pessoa.")
-                    .ninaText(.meta, NinaTheme.muted)
-                    .padding(.leading, 4)
-            }
 
             MemberField_(title: "Na casa") {
                 TextField("Filha, filho, cachorro", text: $relationship)
@@ -168,7 +162,7 @@ struct MemberEditorSheet: View {
         VStack(alignment: .leading, spacing: 18) {
             if member?.identityState != .claimed {
                 VStack(alignment: .leading, spacing: 8) {
-                    Eyebrow(text: "Tipo de perfil")
+                    Eyebrow(text: "Tipo")
 
                     HStack(spacing: 8) {
                         ForEach(availableHouseholdRoles) { role in
@@ -225,17 +219,13 @@ struct MemberEditorSheet: View {
     private var careFields: some View {
         if householdRole == .child || householdRole == .pet {
             VStack(alignment: .leading, spacing: 12) {
-                Eyebrow(text: householdRole == .pet ? "Cuidados do pet" : "Dados da criança")
-
                 Toggle(isOn: $hasBirthDate) {
-                    Text("Salvar data de nascimento").ninaText(.label)
+                    Text("Data de nascimento").ninaText(.label)
                 }
                 .tint(NinaTheme.ink)
 
                 if hasBirthDate {
                     HStack(spacing: 12) {
-                        Text("Nascimento").ninaText(.label, NinaTheme.muted)
-                        Spacer(minLength: 0)
                         DatePicker(
                             "",
                             selection: $birthDate,
@@ -245,6 +235,7 @@ struct MemberEditorSheet: View {
                         .labelsHidden()
                         .tint(NinaTheme.ink)
                         .accessibilityLabel("Data de nascimento")
+                        Spacer(minLength: 0)
                     }
                     .frame(minHeight: 44)
                 }
@@ -256,7 +247,7 @@ struct MemberEditorSheet: View {
                     }
 
                     MemberField_(title: "Raça") {
-                        TextField("Opcional", text: $petBreed)
+                        TextField("Vira-lata", text: $petBreed)
                             .submitLabel(.done)
                     }
                 }
@@ -269,13 +260,9 @@ struct MemberEditorSheet: View {
             .disabled(!canEdit)
             .opacity(canEdit ? 1 : 0.4)
         } else if member != nil {
-            VStack(alignment: .leading, spacing: 12) {
-                Eyebrow(text: "Contexto")
-
-                MemberField_(title: "O que a Nina lembra") {
-                    TextField(noteHint, text: $memoryNote, axis: .vertical)
-                        .lineLimit(3...6)
-                }
+            MemberField_(title: "O que a Nina lembra") {
+                TextField(noteHint, text: $memoryNote, axis: .vertical)
+                    .lineLimit(3...6)
             }
             .disabled(!canEdit)
             .opacity(canEdit ? 1 : 0.4)
@@ -284,28 +271,24 @@ struct MemberEditorSheet: View {
 
     @ViewBuilder
     private var permissionBlock: some View {
-        if let member, member.role != .assistant {
+        if let member, member.role != .assistant, member.identityState == .claimed {
             VStack(alignment: .leading, spacing: 10) {
                 Eyebrow(text: "Permissão")
 
-                if member.identityState == .claimed {
-                    // Owner is never offered here: no RPC can grant or revoke it.
-                    if store.canChangePermissionRole(for: member) {
-                        HStack(spacing: 8) {
-                            permissionChip(.admin)
-                            permissionChip(.member)
-                        }
-                    } else {
-                        Text(permissionRole.title).ninaText(.label)
+                // Owner is never offered here: no RPC can grant or revoke it.
+                if store.canChangePermissionRole(for: member) {
+                    HStack(spacing: 8) {
+                        permissionChip(.admin)
+                        permissionChip(.member)
                     }
 
-                    Text(permissionRole.summary)
-                        .ninaText(.caption, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if permissionRole == .admin {
+                        Text(permissionRole.summary)
+                            .ninaText(.caption, NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 } else {
-                    Text("Perfil da casa. Não entra no app e não usa a Nina.")
-                        .ninaText(.caption, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(permissionRole.title).ninaText(.label)
                 }
             }
         }
@@ -336,7 +319,7 @@ struct MemberEditorSheet: View {
             }
 
             if let member, store.canRemoveFamilyMember(member) {
-                NinaButton(title: "Remover da casa", kind: .quiet, isEnabled: !isSaving) {
+                NinaButton(title: "Remover", kind: .quiet, isEnabled: !isSaving) {
                     Haptics.warning()
                     isShowingRemoveConfirmation = true
                 }
@@ -405,43 +388,17 @@ struct MemberEditorSheet: View {
         switch householdRole {
         case .pet: "Rotina, comida, remédios"
         case .child: "Escola, rotina, o que ajuda"
-        case .adult, .assistant: "O que a casa precisa lembrar"
+        case .adult, .assistant: "Horários, preferências"
         }
-    }
-
-    private var statusLine: String {
-        if member?.role == .assistant {
-            return "IA da casa · não ocupa vaga"
-        }
-        if member?.identityState == .claimed {
-            return "\(permissionRole.title) · usa o app"
-        }
-        return "\(householdRole.title) · perfil da casa"
-    }
-
-    // A house of one still reads correctly: the counter branches on the number.
-    private var slotLine: String {
-        let people = store.familyPeopleCount
-        let peopleText = people == 1 ? "1 pessoa na casa" : "\(people) pessoas na casa"
-
-        let remaining = store.remainingFamilySlots
-        let remainingText: String
-        switch remaining {
-        case 0: remainingText = "Sem vaga livre"
-        case 1: remainingText = "Cabe mais 1"
-        default: remainingText = "Cabem mais \(remaining)"
-        }
-
-        return "\(peopleText). \(remainingText). A Nina não ocupa vaga."
     }
 
     private var lockedReason: String {
         if isAdding {
             return store.canInviteMorePeople
                 ? "Só quem cuida da casa adiciona perfis."
-                : "As 8 vagas estão ocupadas. Remova um perfil para abrir espaço."
+                : "As 8 vagas estão ocupadas."
         }
-        return "Você pode ver este perfil, mas não editar."
+        return "Você não pode editar este perfil."
     }
 
     private func loadIfNeeded() {
@@ -552,7 +509,7 @@ struct PendingJoinRequestCard: View {
         VStack(alignment: .leading, spacing: 14) {
             NinaRow(
                 title: request.requesterName,
-                subtitle: "Pediu entrada \(request.createdAt.formatted(.relative(presentation: .named)))"
+                subtitle: request.createdAt.formatted(.relative(presentation: .named))
             ) {
                 MemberAvatar(initials: request.requesterName.ninaInitials, tone: .mint)
             } trailing: {
@@ -567,20 +524,13 @@ struct PendingJoinRequestCard: View {
                         permissionChip(.member)
                         permissionChip(.admin)
                     }
+
+                    if permissionRole == .admin {
+                        Text(permissionRole.summary)
+                            .ninaText(.caption, NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-            }
-
-            Text(permissionRole.summary)
-                .ninaText(.caption, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !store.canInviteMorePeople {
-                Text("As 8 vagas da casa estão ocupadas. A Nina não ocupa vaga.")
-                    .ninaText(.caption, NinaTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-                    .ninaCard(fill: NinaTheme.grout, stroke: .clear)
             }
 
             HStack(spacing: 10) {
@@ -654,58 +604,58 @@ struct PendingHomeApprovalView: View {
     @State private var isCancelling = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 24)
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 24)
 
-            ZeroState(headline: "Pedido enviado.", body_: waitingBody, presence: .waiting) {
-                VStack(spacing: 10) {
-                    if let request = store.pendingJoinRequest {
-                        Text(request.status.title).ninaText(.meta, NinaTheme.muted)
+                    ZeroState(headline: "Pedido enviado.", body_: waitingBody, presence: .waiting) {
+                        VStack(spacing: 10) {
+                            if let message = store.syncErrorMessage ?? authSession.errorMessage {
+                                Text(message)
+                                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                                    .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            NinaButton(
+                                title: "Atualizar",
+                                systemName: "arrow.clockwise",
+                                fillsWidth: true,
+                                isEnabled: !store.isSyncingHome
+                            ) {
+                                Task {
+                                    await store.activateHomeContext(for: authSession.currentUser)
+                                }
+                            }
+
+                            NinaButton(
+                                title: "Cancelar pedido",
+                                kind: .quiet,
+                                isEnabled: !isCancelling && !store.isSyncingHome
+                            ) {
+                                cancelRequest()
+                            }
+                        }
+                        .frame(maxWidth: 320)
                     }
 
-                    if let message = store.syncErrorMessage ?? authSession.errorMessage {
-                        Text(message)
-                            .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    Spacer(minLength: 24)
 
-                    NinaButton(
-                        title: "Atualizar status",
-                        systemName: "arrow.clockwise",
-                        fillsWidth: true,
-                        isEnabled: !store.isSyncingHome
-                    ) {
+                    NinaButton(title: "Sair da conta", kind: .quiet) {
+                        Haptics.warning()
                         Task {
-                            await store.activateHomeContext(for: authSession.currentUser)
+                            onboardingStore.cancelReplay()
+                            await authSession.signOut()
                         }
                     }
-
-                    NinaButton(
-                        title: "Cancelar pedido",
-                        kind: .quiet,
-                        isEnabled: !isCancelling && !store.isSyncingHome
-                    ) {
-                        cancelRequest()
-                    }
+                    .padding(.bottom, 12)
                 }
-                .frame(maxWidth: 320)
+                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
-
-            Spacer(minLength: 24)
-
-            NinaButton(title: "Sair da conta", kind: .quiet) {
-                Haptics.warning()
-                Task {
-                    onboardingStore.cancelReplay()
-                    await authSession.signOut()
-                }
-            }
-            .padding(.bottom, 12)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .padding(.horizontal, 20)
-        .frame(maxWidth: 520)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ninaScreenBackground()
         // Nobody should have to tap "Atualizar" to learn they were let in.
         .task {
@@ -719,9 +669,8 @@ struct PendingHomeApprovalView: View {
 
     // Possessing the link grants nothing: the request waits for a person.
     private var waitingBody: String {
-        let house = store.pendingJoinRequest?.familyName ?? "esta casa"
-        return "Uma pessoa responsável por \(house) precisa aprovar sua entrada. "
-            + "Ter o link não dá acesso."
+        let house = store.pendingJoinRequest?.familyName ?? "A casa"
+        return "\(house) precisa aprovar sua entrada."
     }
 
     private func cancelRequest() {
@@ -744,56 +693,55 @@ struct FamilyAccessDecisionView: View {
     @State private var isAcknowledging = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 24)
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 24)
 
-            ZeroState(headline: title, body_: message, presence: .unavailable) {
-                VStack(spacing: 12) {
-                    if let decision = store.familyAccessDecision {
-                        Text(decisionLine(for: decision)).ninaText(.meta, NinaTheme.muted)
+                    ZeroState(headline: title, body_: message, presence: .unavailable) {
+                        VStack(spacing: 12) {
+                            if let decision = store.familyAccessDecision {
+                                Text(decisionLine(for: decision)).ninaText(.meta, NinaTheme.muted)
+                            }
+
+                            if let syncErrorMessage = store.syncErrorMessage ?? authSession.errorMessage {
+                                Text(syncErrorMessage)
+                                    .ninaText(.caption, NinaTheme.ink)
+                                    .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(14)
+                                    .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+                            }
+
+                            NinaButton(
+                                title: "Entendi",
+                                fillsWidth: true,
+                                isEnabled: !isAcknowledging && !store.isSyncingHome
+                            ) {
+                                acknowledge()
+                            }
+                            .padding(.top, 2)
+                        }
+                        .frame(maxWidth: 320)
                     }
 
-                    Text(nextStep)
-                        .ninaText(.caption, NinaTheme.muted)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 306)
+                    Spacer(minLength: 24)
 
-                    if let syncErrorMessage = store.syncErrorMessage ?? authSession.errorMessage {
-                        Text(syncErrorMessage)
-                            .ninaText(.caption, NinaTheme.ink)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity)
-                            .padding(14)
-                            .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+                    NinaButton(title: "Sair da conta", kind: .quiet) {
+                        Haptics.warning()
+                        Task {
+                            onboardingStore.cancelReplay()
+                            await authSession.signOut()
+                        }
                     }
-
-                    NinaButton(
-                        title: "Entendi",
-                        fillsWidth: true,
-                        isEnabled: !isAcknowledging && !store.isSyncingHome
-                    ) {
-                        acknowledge()
-                    }
-                    .padding(.top, 2)
+                    .padding(.bottom, 12)
                 }
-                .frame(maxWidth: 320)
+                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
-
-            Spacer(minLength: 24)
-
-            NinaButton(title: "Sair da conta", kind: .quiet) {
-                Haptics.warning()
-                Task {
-                    onboardingStore.cancelReplay()
-                    await authSession.signOut()
-                }
-            }
-            .padding(.bottom, 12)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .padding(.horizontal, 20)
-        .frame(maxWidth: 520)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ninaScreenBackground()
     }
 
@@ -810,28 +758,14 @@ struct FamilyAccessDecisionView: View {
 
     private var message: String {
         switch outcome {
-        case .declined:
-            "Essa casa não liberou sua entrada desta vez. A Nina não recebe o motivo, então não sabe te dizer."
-        case .removed:
-            "Seu acesso foi encerrado. As tarefas e as listas continuam com a casa."
-        }
-    }
-
-    private var nextStep: String {
-        switch outcome {
-        case .declined:
-            "Dá para pedir um convite novo para alguém de lá, ou começar a sua própria casa agora."
-        case .removed:
-            "Dá para voltar com um convite novo, ou começar a sua própria casa agora."
+        case .declined: "A Nina não recebe o motivo."
+        case .removed: "As tarefas e as listas ficam com a casa."
         }
     }
 
     private func decisionLine(for decision: FamilyAccessDecision) -> String {
         let day = decision.decidedAt.formatted(date: .abbreviated, time: .omitted)
-        switch decision.outcome {
-        case .declined: return "\(decision.familyName) · resposta em \(day)"
-        case .removed: return "\(decision.familyName) · acesso encerrado em \(day)"
-        }
+        return "\(decision.familyName) · \(day)"
     }
 
     private func acknowledge() {

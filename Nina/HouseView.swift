@@ -28,7 +28,6 @@ struct HouseView: View {
 
                 if isAloneInHouse {
                     dormantPortrait
-                    aloneReassurance
                 } else {
                     portraitStrip
                 }
@@ -45,12 +44,6 @@ struct HouseView: View {
                     digestPlaceholder
                 }
 
-                // While the house is one person the dormant-portrait card already
-                // carries the invite, and a second copy would put two cobalt
-                // controls on one screen for the same action.
-                if !isAloneInHouse {
-                    inviteCard
-                }
                 memoriesEntry
             }
             .padding(.horizontal, 20)
@@ -70,9 +63,8 @@ struct HouseView: View {
                         PremiumBadge()
                     }
                 }
-                // The singular branch is load-bearing: the counter used to read
-                // "1 pessoas" on the one screen a solo household sees most.
-                Text(slotLine).ninaText(.label, NinaTheme.muted)
+                Text("\(store.familyPeopleCount) de \(AppStore.maxFamilyPeople) pessoas")
+                    .ninaText(.label, NinaTheme.muted)
             }
 
             Spacer()
@@ -90,16 +82,6 @@ struct HouseView: View {
             .accessibilityLabel("Abrir ajustes")
             .padding(.top, 4)
         }
-    }
-
-    private var slotLine: String {
-        let count = store.familyPeopleCount
-        let remaining = store.remainingFamilySlots
-        let peoplePart = count == 1 ? "1 pessoa" : "\(count) pessoas"
-        guard remaining > 0 else { return "\(peoplePart). A casa está cheia." }
-        return remaining == 1
-            ? "\(peoplePart). Cabe mais 1."
-            : "\(peoplePart). Cabem mais \(remaining)."
     }
 
     private var members: some View {
@@ -132,7 +114,7 @@ struct HouseView: View {
             if let assistant {
                 NinaRow(
                     title: assistant.name,
-                    subtitle: "Mora aqui. Não ocupa vaga."
+                    subtitle: "Não ocupa vaga."
                 ) {
                     NinaMark(size: 40)
                 } trailing: {
@@ -140,40 +122,91 @@ struct HouseView: View {
                 }
             }
 
+            // Alone, the dormant portrait carries the invite, so the screen never offers it twice.
+            if !isAloneInHouse, store.canInviteMorePeople {
+                NinaDivider()
+
+                actionRow("Convidar alguém", systemName: "link") {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .inviteFamily
+                }
+            }
+
             if store.canManageFamily, store.canInviteMorePeople {
                 NinaDivider()
 
-                Button {
+                actionRow("Adicionar criança ou pet", systemName: "person.badge.plus") {
                     Haptics.lightImpact()
                     router.presentedSheet = .addMemberProfile
-                } label: {
-                    NinaRow(
-                        title: "Adicionar criança ou pet",
-                        subtitle: "Um perfil que os adultos cuidam. Não usa o app."
-                    ) {
-                        CategoryGlyph(systemName: "person.badge.plus", size: 18, tint: NinaTheme.ink)
-                    } trailing: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(NinaTheme.faint)
-                    }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+            }
+
+            if store.canManageFamily, !isAloneInHouse {
+                NinaDivider()
+
+                renewInviteRow
             }
         }
     }
 
     private func memberSubtitle(_ member: HouseholdMember) -> String {
-        var parts: [String] = []
-        if member.id == store.currentFamilyMember?.id {
-            parts.append("Você")
-        } else {
-            parts.append(member.role.title)
+        let role = member.permissionRole == .admin ? member.permissionRole.title : member.role.title
+        guard member.id == store.currentFamilyMember?.id else { return role }
+        return member.permissionRole == .admin ? "Você · \(role)" : "Você"
+    }
+
+    private func actionRow(
+        _ title: String,
+        systemName: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            NinaRow(title: title) {
+                CategoryGlyph(systemName: systemName, size: 18, tint: NinaTheme.ink)
+            } trailing: {
+                chevron
+            }
+            .contentShape(Rectangle())
         }
-        if member.role == .child { parts.append("não usa o app") }
-        else if member.permissionRole == .admin { parts.append("pode editar") }
-        return parts.joined(separator: " · ")
+        .buttonStyle(.plain)
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(NinaTheme.faint)
+    }
+
+    private var renewInviteRow: some View {
+        Button {
+            Haptics.warning()
+            isConfirmingRotation = true
+        } label: {
+            NinaRow(title: "Renovar o link") {
+                CategoryGlyph(systemName: "arrow.clockwise", size: 18, tint: NinaTheme.ink)
+            } trailing: {
+                EmptyView()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isRotatingInvite)
+        .opacity(isRotatingInvite ? 0.4 : 1)
+        .alert("Renovar o link?", isPresented: $isConfirmingRotation) {
+            Button("Renovar", role: .destructive) { rotateInvite() }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("O link antigo para de funcionar na hora.")
+        }
+    }
+
+    private func rotateInvite() {
+        isRotatingInvite = true
+        Task {
+            let rotated = await store.rotateFamilyInvite()
+            isRotatingInvite = false
+            rotated ? Haptics.success() : Haptics.error()
+        }
     }
 
     private var portraitStrip: some View {
@@ -189,9 +222,7 @@ struct HouseView: View {
                         : "Ainda sem retrato da casa")
                         .ninaText(.title)
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(NinaTheme.faint)
+                    chevron
                 }
             }
             .padding(18)
@@ -205,15 +236,12 @@ struct HouseView: View {
     private var dormantPortrait: some View {
         VStack(alignment: .leading, spacing: 10) {
             Eyebrow(text: "Sinal de sobrecarga")
-            Text("O retrato dorme até chegar mais gente.")
+            Text("Aparece quando o outro adulto entrar.")
                 .ninaText(.title)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("O sinal de sobrecarga é uma comparação. Com um adulto só na casa, não tem o que comparar — e a Nina prefere não desenhar nada a chutar.")
-                .ninaText(.label, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
 
             if store.canInviteMorePeople {
-                NinaButton(title: "Convidar o outro adulto", fillsWidth: true) {
+                NinaButton(title: "Convidar", fillsWidth: true) {
                     Haptics.lightImpact()
                     router.presentedSheet = .inviteFamily
                 }
@@ -256,53 +284,43 @@ struct HouseView: View {
     @ViewBuilder
     private var digestPlaceholder: some View {
         if store.householdPremium.isActive {
-            VStack(alignment: .leading, spacing: 6) {
-                Eyebrow(text: "Resumo semanal")
-                Text("O primeiro resumo chega em até 7 dias.")
-                    .ninaText(.label, NinaTheme.ink)
-                Text("Toda semana a Nina reúne o que ficou pendente, o que foi concluído e onde a casa está pesando mais.")
-                    .ninaText(.caption, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+            NinaRow(title: "Resumo semanal", subtitle: "O primeiro chega em até 7 dias.") {
+                CategoryGlyph(systemName: "calendar", size: 18, tint: NinaTheme.ink)
+            } trailing: {
+                EmptyView()
             }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
             .ninaCard()
+            .accessibilityElement(children: .combine)
         } else {
             Button {
                 Haptics.lightImpact()
                 router.presentedSheet = .premium
             } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Eyebrow(text: "Resumo semanal")
-                    HStack {
-                        Text("Vem no Premium.").ninaText(.title)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(NinaTheme.faint)
+                NinaRow(title: "Resumo semanal") {
+                    CategoryGlyph(systemName: "lock", size: 18, tint: NinaTheme.ink)
+                } trailing: {
+                    HStack(spacing: 10) {
+                        premiumTag
+                        chevron
                     }
-                    Text("Uma leitura curta da semana da casa, para todo mundo daqui.")
-                        .ninaText(.caption, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(18)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 18)
                 .ninaCard()
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Resumo semanal")
+            .accessibilityValue("Premium")
         }
     }
 
-    private var aloneReassurance: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "info.circle")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(NinaTheme.faint)
-            Text("Nada disso trava o resto. A Nina continua montando as tarefas, as compras e as sementes de uma casa de uma pessoa só.")
-                .ninaText(.caption, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+    private var premiumTag: some View {
+        Text("Premium")
+            .ninaText(.eyebrow, NinaTheme.muted, weight: .bold)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(NinaTheme.grout, in: Capsule())
     }
 
     private var pendingRequests: some View {
@@ -314,74 +332,27 @@ struct HouseView: View {
         }
     }
 
-    private var inviteCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Eyebrow(text: "Convidar")
-            // Possessing the link grants nothing: it opens a request an owner or
-            // admin approves. Saying so is the whole point of this card.
-            Text("O link não dá acesso. Ele pede entrada, e alguém da casa aprova.")
-                .ninaText(.label, NinaTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if store.canInviteMorePeople {
-                NinaButton(title: "Convidar alguém", fillsWidth: true) {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .inviteFamily
-                }
-            } else {
-                Text("A casa chegou no limite de 8 pessoas. A Nina não ocupa vaga.")
-                    .ninaText(.caption, NinaTheme.muted)
-            }
-
-            if store.canManageFamily {
-                NinaButton(title: "Renovar o link", kind: .quiet, isEnabled: !isRotatingInvite) {
-                    Haptics.warning()
-                    isConfirmingRotation = true
-                }
-            }
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .ninaCard()
-        .alert("Renovar o link?", isPresented: $isConfirmingRotation) {
-            Button("Renovar", role: .destructive) { rotateInvite() }
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("O link antigo para de funcionar na hora. Quem ainda não entrou vai precisar do novo.")
-        }
-    }
-
-    private func rotateInvite() {
-        isRotatingInvite = true
-        Task {
-            let rotated = await store.rotateFamilyInvite()
-            isRotatingInvite = false
-            rotated ? Haptics.success() : Haptics.error()
-        }
-    }
-
     private var memoriesEntry: some View {
         Button {
             Haptics.selection()
             router.navigate(to: .memories)
         } label: {
-            NinaRow(
-                title: "Memórias",
-                subtitle: store.ninaMemories.isEmpty
-                    ? "Nada guardado ainda"
-                    : "\(store.ninaMemories.count) guardadas"
-            ) {
+            NinaRow(title: "Memórias", subtitle: memoryCount) {
                 CategoryGlyph(systemName: "bookmark", size: 19, tint: NinaTheme.ink)
             } trailing: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(NinaTheme.faint)
+                chevron
             }
             .padding(.horizontal, 18)
             .ninaCard()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private var memoryCount: String? {
+        let count = store.ninaMemories.count
+        guard count > 0 else { return nil }
+        return count == 1 ? "1 guardada" : "\(count) guardadas"
     }
 }
 
@@ -406,30 +377,35 @@ struct MemoriesView: View {
             .accessibilityLabel("Voltar")
             .padding(.leading, 20)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("Memórias").ninaText(.screen)
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Text("Memórias").ninaText(.screen)
 
-                    if store.ninaMemories.isEmpty {
-                        ZeroState(
-                            headline: "Nada guardado ainda.",
-                            body_: "Uma memória nasce na conversa: conte algo à Nina que valha guardar e ela propõe. Memórias começam privadas; compartilhar com a casa é sempre uma escolha sua."
-                        ) {
-                            NinaButton(title: "Conversar com a Nina", kind: .outline) {
-                                Haptics.selection()
-                                NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
+                        if store.ninaMemories.isEmpty {
+                            Spacer(minLength: 12)
+                            ZeroState(
+                                headline: "Nada guardado ainda.",
+                                body_: "A Nina propõe guardar. Memórias começam privadas."
+                            ) {
+                                NinaButton(title: "Conversar com a Nina", kind: .outline) {
+                                    Haptics.selection()
+                                    NotificationCenter.default.post(name: .ninaSelectChatTab, object: nil)
+                                }
+                            }
+                            Spacer(minLength: 12)
+                        } else {
+                            ForEach(store.ninaMemories) { memory in
+                                MemoryCard(memory: memory)
                             }
                         }
-                        .padding(.top, 30)
-                    } else {
-                        ForEach(store.ninaMemories) { memory in
-                            MemoryCard(memory: memory)
-                        }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+                    .padding(.bottom, 40)
+                    .frame(minHeight: proxy.size.height, alignment: .top)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .padding(.bottom, 40)
+                .scrollBounceBehavior(.basedOnSize)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -472,7 +448,7 @@ private struct MemoryCard: View {
                     .frame(height: 44)
                     .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
 
-                TextField("O que a Nina deve lembrar", text: $draftBody, axis: .vertical)
+                TextField("Detalhe", text: $draftBody, axis: .vertical)
                     .ninaText(.label, NinaTheme.ink)
                     .lineLimit(2...6)
                     .padding(12)
@@ -544,15 +520,28 @@ private struct MemoryCard: View {
             }
             Button("Cancelar", role: .cancel) {}
         } message: {
-            Text("A Nina esquece isso na próxima conversa. Não dá para voltar.")
+            Text("A Nina esquece na próxima conversa. Não dá para desfazer.")
         }
         .alert("Compartilhar com a casa?", isPresented: $isConfirmingShare) {
             Button("Compartilhar", role: .destructive) { share() }
             Button("Cancelar", role: .cancel) {}
         } message: {
             // Sharing a private memory is the most irreversible act in the product.
-            Text("O outro adulto vai poder ler isto. Não dá para voltar a ser só sua.")
+            Text(shareWarning)
         }
+    }
+
+    private var shareWarning: String {
+        let others = store.familyGroup.members.filter {
+            $0.role == .adult && $0.id != store.currentFamilyMember?.id
+        }
+        if others.count == 1, let other = others.first, !other.name.firstWord.isEmpty {
+            return "\(other.name.firstWord) vai poder ler. Não dá para desfazer."
+        }
+        if others.isEmpty {
+            return "Quem entrar vai poder ler. Não dá para desfazer."
+        }
+        return "Os outros adultos vão poder ler. Não dá para desfazer."
     }
 
     private func save() {

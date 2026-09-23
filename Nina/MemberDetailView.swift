@@ -57,8 +57,10 @@ struct MemberDetailView: View {
 
                     if member.role != .assistant {
                         VStack(spacing: 0) {
-                            row("Na casa", member.relationship.isEmpty ? "—" : member.relationship)
-                            NinaDivider(inset: 0)
+                            if !member.relationship.isEmpty {
+                                row("Na casa", member.relationship)
+                                NinaDivider(inset: 0)
+                            }
                             row("Em aberto", "\(store.openTaskCount(for: member))")
                             if member.role == .pet, !member.petSpecies.isEmpty {
                                 NinaDivider(inset: 0)
@@ -88,7 +90,7 @@ struct MemberDetailView: View {
     }
 
     private var subtitle: String {
-        if member.role == .assistant { return "IA da casa · não ocupa vaga" }
+        if member.role == .assistant { return "Não ocupa vaga." }
         return member.role.title
     }
 

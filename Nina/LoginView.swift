@@ -5,82 +5,66 @@ struct LoginView: View {
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(InviteLinkStore.self) private var inviteLinkStore
 
-    @State private var email = ""
-    @State private var code = ""
-    @State private var localError: String?
     @State private var appleRawNonce: String?
-    @State private var isEmailFlowVisible = false
-    @FocusState private var focusedField: LoginField?
+    @State private var isEmailSheetPresented = false
 
-    private enum LoginField {
-        case email
-        case code
+    private var isInvited: Bool {
+        inviteLinkStore.pendingCode != nil
     }
 
-    private var isWaitingForCode: Bool {
-        authSession.pendingLoginEmail != nil
-    }
-
-    private var displayedError: String? {
-        localError ?? authSession.errorMessage
-    }
-
-    private var isDebugLoginEmail: Bool {
-        #if DEBUG
-        return DebugAuthAccount(email: email) != nil
-        #else
-        return false
-        #endif
+    // While the email sheet is open it owns the error line, so the welcome never re-flows behind it.
+    private var welcomeErrorMessage: String? {
+        isEmailSheetPresented ? nil : authSession.errorMessage
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
-                hero
-                form
-                footer
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 32)
+                    brandBlock
+                    Spacer(minLength: 32)
+                    actionGroup
+                    legalFootnote
+                        .padding(.top, 14)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
+                .frame(minHeight: proxy.size.height)
+                .animation(.easeInOut(duration: 0.18), value: welcomeErrorMessage)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 46)
-            .padding(.bottom, 34)
-            .frame(maxWidth: 520)
-            .frame(maxWidth: .infinity)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .scrollDismissesKeyboard(.interactively)
+        .ignoresSafeArea(.keyboard)
         .ninaScreenBackground()
-        .onChange(of: email) { _, _ in clearLocalError() }
-        .onChange(of: code) { _, newValue in
-            code = String(newValue.filter(\.isNumber).prefix(6))
-            clearLocalError()
+        .sheet(isPresented: $isEmailSheetPresented, onDismiss: clearEmailFlowError) {
+            EmailSignInSheet()
+                .presentationDetents([.medium, .large])
+                .presentationCornerRadius(NinaTheme.Radius.sheet)
+                .presentationDragIndicator(.visible)
         }
     }
 
-    private var hero: some View {
-        VStack(alignment: .leading, spacing: 18) {
+    private var brandBlock: some View {
+        VStack(spacing: 16) {
             NinaMark(size: 64)
 
-            VStack(alignment: .leading, spacing: 10) {
-                if inviteLinkStore.pendingCode != nil {
-                    Text("Você foi convidado para uma casa.")
-                        .ninaText(.display)
+            VStack(spacing: 8) {
+                Text(isInvited ? "Você tem um convite" : "Sua amiga Nina")
+                    .ninaText(.display)
 
-                    Text("Entre para pedir entrada. Quem convidou você aprova, e a Nina cuida do resto com vocês.")
-                        .ninaText(.label, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("Sua amiga Nina")
-                        .ninaText(.display)
-
-                    Text("Conta pra ela o que está pesando na casa. Ela monta as tarefas e espera você confirmar — nada entra sozinho.")
-                        .ninaText(.label, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                // A link grants nothing on its own, so the invited line always names who approves.
+                Text(isInvited ? "Quem convidou aprova sua entrada." : "Conta pra ela o que pesa.")
+                    .ninaText(.label, NinaTheme.muted)
             }
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity)
     }
 
-    private var form: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var actionGroup: some View {
+        VStack(spacing: 12) {
             SignInWithAppleButton(.continue) { request in
                 do {
                     let rawNonce = try AppleSignInNonce.make()
@@ -101,105 +85,41 @@ struct LoginView: View {
             .opacity(authSession.isSigningIn || !authSession.isBackendAvailable ? 0.4 : 1)
             .accessibilityIdentifier("apple-sign-in")
 
-            if isEmailFlowVisible {
-                emailFields
-            } else {
-                NinaButton(title: "Usar meu email", kind: .outline, fillsWidth: true) {
-                    Haptics.lightImpact()
-                    isEmailFlowVisible = true
-                    focusedField = .email
-                }
+            NinaButton(title: "Entrar com email", kind: .outline, fillsWidth: true) {
+                Haptics.lightImpact()
+                isEmailSheetPresented = true
             }
+            .fixedSize(horizontal: false, vertical: true)
 
-            if let displayedError {
+            if let errorMessage = welcomeErrorMessage {
                 // A failed sign-in is not lateness, so it never takes terracotta.
-                Text(displayedError)
-                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                Text(errorMessage)
+                    .ninaText(.meta, NinaTheme.ink, weight: .medium)
+                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("login-error")
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: isEmailFlowVisible)
-        .animation(.easeInOut(duration: 0.18), value: displayedError)
-        .animation(.easeInOut(duration: 0.2), value: isWaitingForCode)
     }
 
-    @ViewBuilder
-    private var emailFields: some View {
-        LoginField_(title: "Email") {
-            TextField("voce@exemplo.com", text: $email)
-                .keyboardType(.emailAddress)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .textContentType(.emailAddress)
-                .submitLabel(isWaitingForCode ? .next : .send)
-                .focused($focusedField, equals: .email)
-                .disabled(isWaitingForCode)
-                .opacity(isWaitingForCode ? 0.4 : 1)
-                .onSubmit {
-                    if isWaitingForCode {
-                        focusedField = .code
-                    } else {
-                        requestCode()
-                    }
-                }
-        }
-
-        if isWaitingForCode {
-            LoginField_(title: "Código") {
-                TextField("000000", text: $code)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .submitLabel(.go)
-                    .focused($focusedField, equals: .code)
-                    .onSubmit(verifyCode)
-            }
-
-            NinaButton(title: "Usar outro email", kind: .quiet) {
-                authSession.pendingLoginEmail = nil
-                code = ""
-                focusedField = .email
-            }
-        }
-
-        #if DEBUG
-        Text("Debug local: teste1@ninai.test ou teste2@ninai.test")
-            .ninaText(.meta, NinaTheme.muted)
-        #endif
-
-        NinaButton(
-            title: isLoadingAuth
-                ? (isWaitingForCode ? "Confirmando" : "Enviando")
-                : (isDebugLoginEmail
-                    ? "Entrar para testar"
-                    : (isWaitingForCode ? "Confirmar código" : "Enviar código")),
-            fillsWidth: true,
-            isEnabled: !isLoadingAuth && (authSession.isBackendAvailable || isDebugLoginEmail),
-            action: isWaitingForCode ? verifyCode : requestCode
-        )
-    }
-
-    private var isLoadingAuth: Bool {
-        authSession.isSigningIn || authSession.isRequestingCode
-    }
-
-    private var footer: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(
-                .init(
-                    "Ao continuar você aceita os [Termos](\(NinaLegalLinks.termsOfUse.absoluteString)) "
-                        + "e a [Política de Privacidade](\(NinaLegalLinks.privacyPolicy.absoluteString))."
-                )
+    private var legalFootnote: some View {
+        Text(
+            .init(
+                "Ao continuar, você aceita os [Termos](\(NinaLegalLinks.termsOfUse.absoluteString)) "
+                    + "e a [Política de Privacidade](\(NinaLegalLinks.privacyPolicy.absoluteString))."
             )
-            .ninaText(.meta, NinaTheme.muted)
-            .tint(NinaTheme.cobalt)
-
-            if !authSession.isBackendAvailable {
-                Text("Configure o projeto Supabase para habilitar o acesso.")
-                    .ninaText(.meta, NinaTheme.muted)
-            }
-        }
+        )
+        .ninaText(.meta, NinaTheme.muted)
+        .tint(NinaTheme.cobalt)
+        .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func clearEmailFlowError() {
+        guard authSession.isBackendAvailable else { return }
+        authSession.errorMessage = nil
     }
 
     private func handleAppleCompletion(_ result: Result<ASAuthorization, Error>) {
@@ -230,6 +150,185 @@ struct LoginView: View {
             }
         }
     }
+}
+
+private struct EmailSignInSheet: View {
+    @Environment(AuthSessionStore.self) private var authSession
+
+    @State private var email = ""
+    @State private var code = ""
+    @State private var localError: String?
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case email
+        case code
+    }
+
+    private var isWaitingForCode: Bool {
+        authSession.pendingLoginEmail != nil
+    }
+
+    private var displayedError: String? {
+        localError ?? authSession.errorMessage
+    }
+
+    private var isDebugLoginEmail: Bool {
+        #if DEBUG
+        return DebugAuthAccount(email: email) != nil
+        #else
+        return false
+        #endif
+    }
+
+    private var isLoadingAuth: Bool {
+        authSession.isSigningIn || authSession.isRequestingCode
+    }
+
+    private var primaryTitle: String {
+        if authSession.isRequestingCode {
+            return "Enviando"
+        }
+        if authSession.isSigningIn {
+            return "Confirmando"
+        }
+        if isDebugLoginEmail {
+            return "Entrar para testar"
+        }
+        return isWaitingForCode ? "Confirmar" : "Enviar código"
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+
+                if isWaitingForCode {
+                    codeField
+                } else {
+                    emailField
+                }
+
+                if let displayedError {
+                    Text(displayedError)
+                        .ninaText(.meta, NinaTheme.ink, weight: .medium)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("login-email-error")
+                }
+
+                #if DEBUG
+                if !isWaitingForCode {
+                    Text("Debug local: teste1@ninai.test ou teste2@ninai.test")
+                        .ninaText(.meta, NinaTheme.muted)
+                }
+                #endif
+
+                NinaButton(
+                    title: primaryTitle,
+                    fillsWidth: true,
+                    isEnabled: !isLoadingAuth && (authSession.isBackendAvailable || isDebugLoginEmail),
+                    action: isWaitingForCode ? verifyCode : requestCode
+                )
+
+                if isWaitingForCode {
+                    codeLinks
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 28)
+            .padding(.bottom, 20)
+            .animation(.easeInOut(duration: 0.18), value: displayedError)
+            .animation(.easeInOut(duration: 0.2), value: isWaitingForCode)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
+        .ninaSheetBackground()
+        .onChange(of: email) { _, _ in clearLocalError() }
+        .onChange(of: code) { _, newValue in
+            code = String(newValue.filter(\.isNumber).prefix(6))
+            clearLocalError()
+        }
+        .task {
+            email = authSession.pendingLoginEmail ?? email
+            if authSession.isBackendAvailable {
+                authSession.errorMessage = nil
+            }
+            await Task.yield()
+            focusedField = isWaitingForCode ? .code : .email
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(isWaitingForCode ? "Código enviado" : "Entrar com email")
+                .ninaText(.title)
+
+            if let pendingLoginEmail = authSession.pendingLoginEmail {
+                Text("Para " + pendingLoginEmail)
+                    .ninaText(.label, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var emailField: some View {
+        LoginInput {
+            TextField("voce@exemplo.com", text: $email)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textContentType(.emailAddress)
+                .submitLabel(.send)
+                .focused($focusedField, equals: .email)
+                .onSubmit(requestCode)
+                .accessibilityLabel("Email")
+        }
+    }
+
+    private var codeField: some View {
+        LoginInput {
+            TextField("000000", text: $code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .submitLabel(.go)
+                .focused($focusedField, equals: .code)
+                .onSubmit(verifyCode)
+                .accessibilityLabel("Código")
+        }
+    }
+
+    private var codeLinks: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                resendButton
+
+                Text("·")
+                    .ninaText(.body, NinaTheme.muted)
+                    .accessibilityHidden(true)
+
+                changeEmailButton
+            }
+
+            VStack(spacing: 0) {
+                resendButton
+                changeEmailButton
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var resendButton: some View {
+        NinaButton(
+            title: "Reenviar código",
+            kind: .quiet,
+            isEnabled: !isLoadingAuth && authSession.isBackendAvailable,
+            action: resendCode
+        )
+    }
+
+    private var changeEmailButton: some View {
+        NinaButton(title: "Trocar email", kind: .quiet, action: changeEmail)
+    }
 
     private func requestCode() {
         let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -243,8 +342,24 @@ struct LoginView: View {
         Task {
             if await authSession.requestEmailOTP(email: normalizedEmail) {
                 email = authSession.pendingLoginEmail ?? normalizedEmail
+                await Task.yield()
                 focusedField = .code
             }
+        }
+    }
+
+    private func resendCode() {
+        email = authSession.pendingLoginEmail ?? email
+        code = ""
+        requestCode()
+    }
+
+    private func changeEmail() {
+        authSession.pendingLoginEmail = nil
+        code = ""
+        Task {
+            await Task.yield()
+            focusedField = .email
         }
     }
 
@@ -267,24 +382,20 @@ struct LoginView: View {
     }
 }
 
-private struct LoginField_<Field: View>: View {
-    var title: String
-    @ViewBuilder var field: Field
+private struct LoginInput<Content: View>: View {
+    @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).ninaText(.meta, NinaTheme.muted)
-            field
-                .ninaText(.body, NinaTheme.ink)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
+        content
+            .ninaText(.body, NinaTheme.ink)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
     }
 }
 
 #Preview("Login") {
     LoginView()
         .environment(AuthSessionStore())
+        .environment(InviteLinkStore())
 }

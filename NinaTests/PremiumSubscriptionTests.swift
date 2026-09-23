@@ -550,7 +550,7 @@ final class PremiumSubscriptionTests: XCTestCase {
         ].joined(separator: " ")
 
         XCTAssertTrue(entitlement.statusTitle.contains("Confirmando"))
-        XCTAssertTrue(entitlement.renewalSummary.contains("servidor"))
+        XCTAssertTrue(entitlement.renewalSummary.contains("Registrando"))
         XCTAssertFalse(copy.lowercased().contains("inativo"))
         XCTAssertFalse(copy.lowercased().contains("erro"))
         XCTAssertFalse(copy.contains("!"))
