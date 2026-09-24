@@ -467,7 +467,10 @@ secret) and is revoked from every client role. pg_cron runs
 
 ## 7. Edge Functions
 
-Five Deno functions, all deployed to production as of 2026-09-04. `verify_jwt`
+Five Deno functions, all in production. `nina-chat` (v10) and `nina-maintenance`
+(v5) were redeployed on 2026-09-23 with the GPT-6 Luna switch — until then they
+still ran the 2026-06-15 build, so check `list_edge_functions` dates against
+`git log` before assuming the server runs what the repo says. `verify_jwt`
 per `supabase/config.toml`: **true** for `nina-chat`, `premium-subscription-sync`,
 and `delete-account`; **false** for `nina-maintenance` (shared-secret header) and
 `app-store-server-notifications` (Apple JWS chain is the only trust).
