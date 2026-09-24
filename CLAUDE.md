@@ -177,12 +177,30 @@ product regression, not a refactor.
   another adult's context, tools, or weekly insight.
 - **Memories start private.** Sharing is always a separate, explicit tap
   ("Guardar para mim" vs "Compartilhar com a casa"), never a single accept.
-- **`store: false` on every OpenAI call.** OpenAI retains nothing. Asserted by a
-  source-scanning test.
+- **`store: false` on every OpenAI call, and no prompt-cache write on
+  `gpt-6-luna`.** OpenAI stores no response. GPT-5.6 and later cache implicitly:
+  left alone, every request writes the whole prompt, household context and the
+  person's message included, to a prompt cache that lives at least 30 minutes
+  ("OpenAI may retain it longer") and is billed at 1.25× input. So every
+  `gpt-6-luna` call sends `prompt_cache_options: { mode: "explicit" }` and places
+  no breakpoint, which means no cache read and no cache write (verified live
+  2026-09-23: `cache_write_tokens: 0`). The prefix every turn shares
+  (instructions, tools, schema) is under the 1,024-token cache minimum, so the
+  cache was only ever read back inside a tool-call turn; repriced on the eval's
+  token counts, a turn is about 7% cheaper without it. `gpt-5.4-mini` answers
+  the parameter with 400 `invalid_parameter`, so the insight fallback does not
+  send it and keeps that model's older in-memory cache (minutes). Asserted by
+  source-scanning tests.
 - **The monthly budget is a database CHECK**, not application logic:
   `reserved_microusd + spent_microusd <= cap_microusd`, US$20/mo interactive +
   US$5/mo insights. Reserve-then-settle: failed runs must still book actual
   spend (`record_failed_nina_ai_run`), or induced failures run past the cap.
+  A reservation must never be smaller than the run it covers: GPT-5.6 and later
+  bill prompt-cache writes (`cache_write_tokens`) at 1.25× input, so
+  `estimateMaximumCostMicrousd` prices every input token at the higher of the
+  input and cache-write rates, and `calculateActualCostMicrousd` books writes at
+  their own rate. Nina's `gpt-6-luna` calls turn caching off (above), so writes
+  should read zero; the accounting stays so a regression is still paid for.
 - **A run settles against the month it reserved in**, read from
   `nina_ai_runs.budget_month_start`, never from `current_month_start()` at
   completion. `current_month_start()` belongs only on the two reservation paths.
@@ -462,11 +480,13 @@ platform bundler cannot resolve the import and the deploy fails with 400.
   test: adult gate → `begin_nina_chat_run` (idempotent on `message_id`, claims
   rate limits, reserves budget) → moderation → deterministic safety shortcuts →
   context → token pre-count → model + tool loop → `complete_nina_chat_run`.
-  Model `gpt-5.4-mini` via OpenAI Responses, strict `json_schema`, ≤3 proposals,
-  ≤2 extra tool rounds / ≤4 tool calls, 32k input cap, 35s timeout.
+  Model `gpt-6-luna` at reasoning effort `medium` (since 2026-09-23; low effort
+  lost two cases in the eval) via OpenAI Responses, strict `json_schema`,
+  ≤3 proposals, ≤2 extra tool rounds / ≤4 tool calls, 32k input cap, 35s timeout.
 - **`nina-maintenance`** — daily retention (`run_nina_retention`,
   `run_waitlist_retention`) *before* any AI work, then ≤25 weekly insights on
-  `gpt-5.5` with a `gpt-5.4-mini` fallback.
+  `gpt-6-luna` at effort `low` with a `gpt-5.4-mini` fallback (since
+  2026-09-23; `gpt-5.5` before).
 - **`delete-account`** — all logic is in `_shared/delete-account.ts` behind an
   injectable `DeleteAccountBackend`; `index.ts` is a thin adapter. Body must be
   exactly `{"confirmation":"delete"}`.
@@ -493,7 +513,9 @@ platform bundler cannot resolve the import and the deploy fails with 400.
 - Wire JSON is snake_case; TS identifiers are camelCase.
 - Money is always integer micro-USD, rounded with `Math.ceil`. Never floats.
 - Model ids are compile-time constants; only *pricing* is env-overridable, so a
-  deploy env cannot silently swap the model.
+  deploy env cannot silently swap the model. `pricingForModel` throws
+  `unpriced_model` for a model without its own branch rather than booking it at
+  another model's rates, so a new model needs its price before it can run.
 - Bodies are read through bounded stream readers, never `await request.json()`.
 
 `supabase/functions/_shared/nina-chat-policy.ts` holds the entire system prompt.
@@ -892,9 +914,16 @@ flag (ad-hoc signing is automatic). Also: one simulator at a time — a second
 session driving the same device produces phantom taps, and three booted
 devices wedged CoreSimulator on 2026-09-09.
 
-**`Tools/run_nina_ai_eval.mjs` mutates real project auth settings**, creates real
-Auth users, and deletes a real family. It defaults to the production project
-ref. **Never run it against production.**
+**`Tools/run_nina_ai_eval.mjs local` is the only way the eval runs.** It needs
+the local stack plus `functions serve`, refuses any API URL that is not
+loopback, seeds its fixtures with SQL, signs in through an admin magic link, and
+changes no Auth setting. Every other argument, a project ref included, is
+refused before anything runs: the remote path it had until 2026-09-23 turned on
+email auth, created real Auth users, and seeded then deleted a family in the
+project it named, and it was removed rather than repaired. It still calls OpenAI
+with the key in `supabase/.env.local`, so each run costs real money, and it
+writes to a temp directory, never over the committed report. **Never point an
+eval at production.**
 
 ---
 
@@ -993,10 +1022,35 @@ fix unprompted.
   and goes back to `production` before submission. Do not rebuild the website with
   `PUBLIC_NINA_APP_STORE_ID` until the app is actually live — the install badge
   would link to a store page that does not exist yet.
-- **The last AI eval is stale.** `evals/latest-report.json` is dated 2026-06-15,
-  ~7 weeks behind the working tree. It passed (schema 1.0, 0 unconfirmed
-  mutations, 0 private-data leaks, median turn US$0.0015) but with 92.3%
-  classification accuracy against a 90% bar — two failing cases.
+- **The AI eval sits right at its 90% classification bar, on either model.**
+  `evals/latest-report.json` is a *local* run of 2026-09-23 (`project_ref:
+  "local"`, fixtures seeded by SQL, never production) on `gpt-6-luna` at medium
+  effort against fixture version `2026-09-23`: 23/26 (88.5%), schema 1.0, 0
+  unconfirmed mutations, 0 private-data leaks, `passed: false`. Three medium
+  runs scored 23, 24 and 23; `gpt-5.4-mini` at its production settings until
+  that day (low effort) scored 22, 23 and 25 on the same fixture. Each model
+  passed once in three, both averaged 23.3, and every one of the six runs got
+  the task family right 26/26, so every miss is a kind confusion among task,
+  reminder and seed. Most of those involve seed, a kind added in August after
+  the June fixture was written: a medication reminder, or the reminder inside
+  the three-action message, often comes back as a seed. Nearly all the rest are
+  the boleto proposed as a reminder rather than a task. The switch was judged
+  as "no worse than today" at about a seventh of the price: a median US$0.00027
+  per model turn against US$0.0019 (US$0.0056 against US$0.044 per full run),
+  with prompt caching off, so the booked cost is the whole cost. The fixture
+  changed on 2026-09-23 in two cases: "Lembra do dentista mais para frente" now
+  expects a seed, because the prompt tells Nina to use one for an undated
+  intention, and the boleto now falls due "dia 20 do mês que vem". Its June
+  date, "20 de junho", had already passed, and at medium effort that case got
+  no proposal in 3 runs out of 3; with the relative date it got a dated
+  proposal in 3 out of 3. One gap is shared by both models and is not a
+  regression: "Me lembre da consulta na sexta às 14h" often yields a reminder
+  whose `due_at` is null (2 of 3 `gpt-6-luna` runs, 3 of 3 `gpt-5.4-mini`
+  runs). No case sends an attachment, so reading a photo or a PDF on
+  `gpt-6-luna` is unproven; prove one of each before `NINA_ATTACHMENTS_ENABLED`
+  turns on. The weekly insight on `gpt-6-luna` at low effort was 6/6
+  schema-valid with no blame, intent or health language, at about US$0.00016
+  per household against US$0.0085 on `gpt-5.5`.
 - **`supabase/templates/` auth emails are orphaned** — three bare unstyled pt-BR
   HTML files with no brand, and `config.toml` has no `[auth.email.template.*]`
   block wiring them up. They are copy-paste source for the dashboard only.

@@ -1,6 +1,6 @@
 # LGPD Launch Posture - Nina
 
-Last updated: 2026-08-03
+Last updated: 2026-09-23
 
 This is an engineering/privacy operations checklist for launch readiness. It is
 not a substitute for Brazilian legal review, but it documents the product
@@ -135,6 +135,13 @@ Current architecture:
 - The `nina-chat` Edge Function sends only the needed household context and
   attachments to OpenAI.
 - OpenAI Responses calls use `store: false` in the backend.
+- Calls on `gpt-6-luna` (the chat turn and the weekly insight) also send
+  `prompt_cache_options: { mode: "explicit" }` with no breakpoint, so no prompt
+  is written to OpenAI's prompt cache. Left at its default, that model caches
+  the whole prompt, household context included, for at least 30 minutes and
+  possibly longer. The `gpt-5.4-mini` insight fallback does not accept the
+  parameter and keeps that model's in-memory prompt cache, which OpenAI
+  describes as typically 5 to 10 minutes and at most one hour.
 - Confirmed memories are not auto-created; the user must accept a proposal.
 - Personal memories start private; sharing is an explicit visibility choice.
 

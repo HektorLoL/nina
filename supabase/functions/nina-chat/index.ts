@@ -869,9 +869,9 @@ Deno.serve(async (request: Request) => {
           input: conversationInput,
           store: false,
           include: ["reasoning.encrypted_content"],
-          reasoning: { effort: "low" },
+          reasoning: { effort: "medium" },
           max_output_tokens: maxInteractiveOutputTokens,
-          prompt_cache_key: "nina-household-assistant-v2",
+          prompt_cache_options: { mode: "explicit" },
         },
       );
 
@@ -960,6 +960,7 @@ Deno.serve(async (request: Request) => {
       latency_ms: latency,
       input_tokens: aggregateUsage.inputTokens,
       cached_input_tokens: aggregateUsage.cachedInputTokens,
+      cache_write_input_tokens: aggregateUsage.cacheWriteInputTokens,
       output_tokens: aggregateUsage.outputTokens,
       reasoning_tokens: aggregateUsage.reasoningTokens,
       actual_microusd: actualCost,

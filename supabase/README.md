@@ -243,12 +243,24 @@ database trigger repeats the idempotent preparation inside the Auth deletion
 transaction to close late-reference races. Failure logs contain only a request
 ID and stage.
 
-Interactive Nina chat uses `gpt-5.4-mini`. Model selection is fixed in the
-function so a deployment environment override cannot silently change the budget
-model or response behavior.
+Interactive Nina chat uses `gpt-6-luna` at reasoning effort `medium`, and the
+weekly insights use `gpt-6-luna` at effort `low` with a `gpt-5.4-mini` fallback
+(since 2026-09-23). Model selection is fixed in the function so a deployment
+environment override cannot silently change the budget model or response
+behavior. Only prices are overridable (`NINA_GPT_6_LUNA_*_USD_PER_M`,
+`NINA_GPT_5_4_MINI_*_USD_PER_M`), and a model with no price of its own is
+refused with `unpriced_model`. Cache writes, which `gpt-6-luna` bills at 1.25×
+input, are booked at their own rate and covered by every reservation, although
+Nina's calls should produce none (below).
 
 Household context required for each reply is sent from the Edge Function to
-OpenAI with API response storage disabled (`store: false`).
+OpenAI with API response storage disabled (`store: false`). Every `gpt-6-luna`
+call also sends `prompt_cache_options: { mode: "explicit" }` and places no
+breakpoint, which turns prompt caching off: left at the default, that model
+writes the whole prompt, household context included, to a cache that lives at
+least 30 minutes, at 1.25× the input price, and Nina's shared prefix is too
+short to ever be read back across turns. `gpt-5.4-mini` rejects the parameter
+with 400 `invalid_parameter`, so the insight fallback does not send it.
 
 The OpenAI project must have API billing or credits enabled. A valid key without
 available quota will return `429 insufficient_quota`.
@@ -274,18 +286,38 @@ npx deno check supabase/functions/nina-chat/index.ts
 npx deno test --allow-read supabase/functions/_shared/nina-ai.test.ts
 ```
 
-Run the live Portuguese evaluation against the linked test project:
+Run the live Portuguese evaluation against the local stack (`deno task db:up`,
+then `npx --yes supabase@2.110.0 functions serve --env-file supabase/.env.local`
+in another terminal):
 
 ```sh
-node Tools/run_nina_ai_eval.mjs apemftmlsjocvifbptum
+NINA_EVAL_REPORT_DIR=/tmp/nina-eval node Tools/run_nina_ai_eval.mjs local
 ```
 
-The evaluator creates disposable adults and a family, temporarily enables
-password auth only for those fixtures, runs every case in
-`functions/nina-chat/evals/pt-BR.json`, writes aggregate and per-case metadata
-to `functions/nina-chat/evals/latest-report.json`, and restores Auth settings
-and deletes all fixtures. It never stores assistant replies or household content
-in the report.
+The evaluator reads the endpoint and demo keys from `supabase status`, refuses any
+API URL that is not loopback, seeds disposable adults and a family with SQL in
+the local database container, signs in through an admin magic link (so no Auth
+setting changes), resets the local chat quota between cases, runs every case in
+`functions/nina-chat/evals/pt-BR.json` against the model named by
+`interactiveModel`, and deletes its fixtures. It calls OpenAI with the key in
+`supabase/.env.local`, so each run costs real money (about US$0.05 at
+`gpt-5.4-mini`, under US$0.01 at `gpt-6-luna`). The report goes to
+`NINA_EVAL_REPORT_PATH`, or `eval-<served model>.json` under
+`NINA_EVAL_REPORT_DIR`, never over the committed report; refreshing
+`functions/nina-chat/evals/latest-report.json` means naming it in
+`NINA_EVAL_REPORT_PATH` on purpose. A candidate model needs
+its own branch in `pricingForModel` before it can be evaluated: the server
+refuses an unpriced model rather than booking it at another model's rates.
+`NINA_EVAL_PRICE_USD_PER_M=input,cached,output` reprices the model turns from
+their token counts; it has no cache-write term, which is exact while caching
+stays off. The report never stores assistant replies or household content.
+
+`local` is the only target. Any other argument, a project ref included, is
+refused before anything runs. The remote path it replaced turned on email auth,
+created real Auth users, and seeded then deleted a family in whatever project
+it named, and against today's schema it could not finish a run (no consent
+grant, and a count of the dropped `reminders` table); it was removed on
+2026-09-23 rather than repaired.
 
 `NINA_AI_V2_ENABLED = YES` is the launch decision, taken 2026-09-04: Nina ships
 able to organize, not only to talk. The flag has one precondition that no build

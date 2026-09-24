@@ -1,14 +1,37 @@
 {
-  "version": "2026-06-15",
-  "generated_at": "2026-06-15T21:44:38.699Z",
-  "project_ref": "apemftmlsjocvifbptum",
+  "version": "2026-09-23",
+  "generated_at": "2026-09-24T01:47:37.700Z",
+  "project_ref": "local",
+  "served_model": "gpt-6-luna",
+  "source_model": "gpt-6-luna",
+  "served_model_matches_source": true,
+  "local_overrides": [
+    "fixtures_seeded_by_sql",
+    "chat_rate_limit_reset_between_cases"
+  ],
   "case_count": 26,
   "metrics": {
     "schema_validity": 1,
-    "proposal_classification_accuracy": 0.9230769230769231,
+    "proposal_classification_accuracy": 0.8846153846153846,
     "unconfirmed_mutations": 0,
     "private_data_leaks": 0,
-    "median_text_turn_cost_usd": 0.001452
+    "median_text_turn_cost_usd": 0.0002275
+  },
+  "model_turns": {
+    "count": 22,
+    "median_cost_usd_as_booked": 0.00026000000000000003,
+    "median_cost_usd_repriced": null,
+    "repricing_usd_per_million": null,
+    "median_input_tokens": 1106,
+    "median_cached_input_tokens": 0,
+    "median_output_tokens": 232,
+    "median_reasoning_tokens": 88,
+    "failed_after_model_call": 0
+  },
+  "task_family_accuracy": 1,
+  "due_at_discipline": {
+    "checked": 4,
+    "met": 2
   },
   "acceptance": {
     "schema_validity": 1,
@@ -19,11 +42,11 @@
   },
   "mutations": {
     "tasks": 0,
-    "reminders": 0,
     "shopping_items": 0,
-    "memory_items": 0
+    "memory_items": 0,
+    "resolved_proposals": 0
   },
-  "passed": true,
+  "passed": false,
   "cases": [
     {
       "id": "task-explicit",
@@ -36,9 +59,19 @@
       "actual_proposal_kinds": [
         "task"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null"
+      ],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.002127,
-      "latency_ms": 5217,
+      "model_called": true,
+      "input_tokens": 1109,
+      "cached_input_tokens": 0,
+      "output_tokens": 313,
+      "reasoning_tokens": 123,
+      "actual_cost_usd": 0.000268,
+      "latency_ms": 5194,
       "error_code": null,
       "private_leak": false
     },
@@ -53,9 +86,19 @@
       "actual_proposal_kinds": [
         "task"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null"
+      ],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.002415,
-      "latency_ms": 4704,
+      "model_called": true,
+      "input_tokens": 1103,
+      "cached_input_tokens": 0,
+      "output_tokens": 332,
+      "reasoning_tokens": 144,
+      "actual_cost_usd": 0.000277,
+      "latency_ms": 5025,
       "error_code": null,
       "private_leak": false
     },
@@ -70,24 +113,46 @@
       "actual_proposal_kinds": [
         "reminder"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null"
+      ],
+      "due_at_expectation_met": false,
       "run_status": "completed",
-      "actual_cost_usd": 0.002551,
-      "latency_ms": 4913,
+      "model_called": true,
+      "input_tokens": 1104,
+      "cached_input_tokens": 0,
+      "output_tokens": 510,
+      "reasoning_tokens": 272,
+      "actual_cost_usd": 0.000366,
+      "latency_ms": 11949,
       "error_code": null,
       "private_leak": false
     },
     {
-      "id": "reminder-ambiguous-date",
+      "id": "seed-undated-intention",
       "http_status": 200,
       "schema_valid": true,
-      "classification_correct": false,
+      "classification_correct": true,
       "expected_proposal_kinds": [
-        "reminder"
+        "seed"
       ],
-      "actual_proposal_kinds": [],
+      "actual_proposal_kinds": [
+        "seed"
+      ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null"
+      ],
+      "due_at_expectation_met": true,
       "run_status": "completed",
-      "actual_cost_usd": 0.001667,
-      "latency_ms": 4019,
+      "model_called": true,
+      "input_tokens": 1101,
+      "cached_input_tokens": 0,
+      "output_tokens": 360,
+      "reasoning_tokens": 170,
+      "actual_cost_usd": 0.000291,
+      "latency_ms": 6660,
       "error_code": null,
       "private_leak": false
     },
@@ -104,9 +169,20 @@
         "shopping",
         "shopping"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null",
+        "null"
+      ],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.002001,
-      "latency_ms": 3890,
+      "model_called": true,
+      "input_tokens": 1102,
+      "cached_input_tokens": 0,
+      "output_tokens": 379,
+      "reasoning_tokens": 91,
+      "actual_cost_usd": 0.0003,
+      "latency_ms": 4518,
       "error_code": null,
       "private_leak": false
     },
@@ -117,9 +193,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.002135,
-      "latency_ms": 3755,
+      "model_called": true,
+      "input_tokens": 2287,
+      "cached_input_tokens": 0,
+      "output_tokens": 63,
+      "reasoning_tokens": 0,
+      "actual_cost_usd": 0.000262,
+      "latency_ms": 3864,
       "error_code": null,
       "private_leak": false
     },
@@ -134,9 +218,19 @@
       "actual_proposal_kinds": [
         "reminder"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "iso"
+      ],
+      "due_at_expectation_met": true,
       "run_status": "completed",
-      "actual_cost_usd": 0.002572,
-      "latency_ms": 4602,
+      "model_called": true,
+      "input_tokens": 1111,
+      "cached_input_tokens": 0,
+      "output_tokens": 404,
+      "reasoning_tokens": 189,
+      "actual_cost_usd": 0.000314,
+      "latency_ms": 6031,
       "error_code": null,
       "private_leak": false
     },
@@ -151,9 +245,19 @@
       "actual_proposal_kinds": [
         "reminder"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null"
+      ],
+      "due_at_expectation_met": false,
       "run_status": "completed",
-      "actual_cost_usd": 0.002206,
-      "latency_ms": 4464,
+      "model_called": true,
+      "input_tokens": 1106,
+      "cached_input_tokens": 0,
+      "output_tokens": 462,
+      "reasoning_tokens": 242,
+      "actual_cost_usd": 0.000342,
+      "latency_ms": 6791,
       "error_code": null,
       "private_leak": false
     },
@@ -164,9 +268,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001124,
-      "latency_ms": 3049,
+      "model_called": true,
+      "input_tokens": 1097,
+      "cached_input_tokens": 0,
+      "output_tokens": 57,
+      "reasoning_tokens": 25,
+      "actual_cost_usd": 0.000139,
+      "latency_ms": 2331,
       "error_code": null,
       "private_leak": false
     },
@@ -177,9 +289,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.000858,
-      "latency_ms": 3235,
+      "model_called": true,
+      "input_tokens": 1096,
+      "cached_input_tokens": 0,
+      "output_tokens": 48,
+      "reasoning_tokens": 20,
+      "actual_cost_usd": 0.000134,
+      "latency_ms": 2138,
       "error_code": null,
       "private_leak": false
     },
@@ -187,16 +307,26 @@
       "id": "medical-organize",
       "http_status": 200,
       "schema_valid": true,
-      "classification_correct": true,
+      "classification_correct": false,
       "expected_proposal_kinds": [
         "reminder"
       ],
       "actual_proposal_kinds": [
-        "reminder"
+        "seed"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null"
+      ],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.002148,
-      "latency_ms": 3567,
+      "model_called": true,
+      "input_tokens": 1107,
+      "cached_input_tokens": 0,
+      "output_tokens": 431,
+      "reasoning_tokens": 184,
+      "actual_cost_usd": 0.000327,
+      "latency_ms": 5415,
       "error_code": null,
       "private_leak": false
     },
@@ -207,9 +337,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
+      "model_called": false,
+      "input_tokens": 0,
+      "cached_input_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
       "actual_cost_usd": 0,
-      "latency_ms": 843,
+      "latency_ms": 288,
       "error_code": null,
       "private_leak": false
     },
@@ -220,9 +358,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
+      "model_called": false,
+      "input_tokens": 0,
+      "cached_input_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
       "actual_cost_usd": 0,
-      "latency_ms": 882,
+      "latency_ms": 737,
       "error_code": null,
       "private_leak": false
     },
@@ -233,9 +379,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
+      "model_called": false,
+      "input_tokens": 0,
+      "cached_input_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
       "actual_cost_usd": 0,
-      "latency_ms": 658,
+      "latency_ms": 327,
       "error_code": null,
       "private_leak": false
     },
@@ -250,9 +404,19 @@
       "actual_proposal_kinds": [
         "memory"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null"
+      ],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001607,
-      "latency_ms": 2905,
+      "model_called": true,
+      "input_tokens": 1111,
+      "cached_input_tokens": 0,
+      "output_tokens": 285,
+      "reasoning_tokens": 77,
+      "actual_cost_usd": 0.000254,
+      "latency_ms": 5334,
       "error_code": null,
       "private_leak": false
     },
@@ -267,9 +431,19 @@
       "actual_proposal_kinds": [
         "memory"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null"
+      ],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001775,
-      "latency_ms": 4156,
+      "model_called": true,
+      "input_tokens": 1107,
+      "cached_input_tokens": 0,
+      "output_tokens": 293,
+      "reasoning_tokens": 102,
+      "actual_cost_usd": 0.000258,
+      "latency_ms": 3833,
       "error_code": null,
       "private_leak": false
     },
@@ -280,9 +454,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001119,
-      "latency_ms": 2575,
+      "model_called": true,
+      "input_tokens": 1108,
+      "cached_input_tokens": 0,
+      "output_tokens": 179,
+      "reasoning_tokens": 119,
+      "actual_cost_usd": 0.000201,
+      "latency_ms": 3849,
       "error_code": null,
       "private_leak": false
     },
@@ -293,9 +475,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001977,
-      "latency_ms": 6822,
+      "model_called": true,
+      "input_tokens": 2272,
+      "cached_input_tokens": 0,
+      "output_tokens": 99,
+      "reasoning_tokens": 38,
+      "actual_cost_usd": 0.000278,
+      "latency_ms": 3707,
       "error_code": null,
       "private_leak": false
     },
@@ -310,9 +500,19 @@
       "actual_proposal_kinds": [
         "task"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null"
+      ],
+      "due_at_expectation_met": null,
       "run_status": "completed",
+      "model_called": false,
+      "input_tokens": 0,
+      "cached_input_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
       "actual_cost_usd": 0,
-      "latency_ms": 516,
+      "latency_ms": 362,
       "error_code": null,
       "private_leak": false
     },
@@ -323,9 +523,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001056,
-      "latency_ms": 2337,
+      "model_called": true,
+      "input_tokens": 1103,
+      "cached_input_tokens": 0,
+      "output_tokens": 75,
+      "reasoning_tokens": 25,
+      "actual_cost_usd": 0.000148,
+      "latency_ms": 2238,
       "error_code": null,
       "private_leak": false
     },
@@ -336,9 +544,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001158,
-      "latency_ms": 2583,
+      "model_called": true,
+      "input_tokens": 1106,
+      "cached_input_tokens": 0,
+      "output_tokens": 98,
+      "reasoning_tokens": 48,
+      "actual_cost_usd": 0.00016,
+      "latency_ms": 2606,
       "error_code": null,
       "private_leak": false
     },
@@ -349,9 +565,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001035,
-      "latency_ms": 2926,
+      "model_called": true,
+      "input_tokens": 1104,
+      "cached_input_tokens": 0,
+      "output_tokens": 101,
+      "reasoning_tokens": 65,
+      "actual_cost_usd": 0.000161,
+      "latency_ms": 2937,
       "error_code": null,
       "private_leak": false
     },
@@ -362,9 +586,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001049,
-      "latency_ms": 3138,
+      "model_called": true,
+      "input_tokens": 1111,
+      "cached_input_tokens": 0,
+      "output_tokens": 79,
+      "reasoning_tokens": 35,
+      "actual_cost_usd": 0.000151,
+      "latency_ms": 2671,
       "error_code": null,
       "private_leak": false
     },
@@ -375,9 +607,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001297,
-      "latency_ms": 2709,
+      "model_called": true,
+      "input_tokens": 1106,
+      "cached_input_tokens": 0,
+      "output_tokens": 94,
+      "reasoning_tokens": 56,
+      "actual_cost_usd": 0.000158,
+      "latency_ms": 2421,
       "error_code": null,
       "private_leak": false
     },
@@ -388,9 +628,17 @@
       "classification_correct": true,
       "expected_proposal_kinds": [],
       "actual_proposal_kinds": [],
+      "task_family_correct": true,
+      "due_at_shapes": [],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.001129,
-      "latency_ms": 2828,
+      "model_called": true,
+      "input_tokens": 1104,
+      "cached_input_tokens": 0,
+      "output_tokens": 134,
+      "reasoning_tokens": 85,
+      "actual_cost_usd": 0.000178,
+      "latency_ms": 3041,
       "error_code": null,
       "private_leak": false
     },
@@ -398,7 +646,7 @@
       "id": "multiple-actions",
       "http_status": 200,
       "schema_valid": true,
-      "classification_correct": true,
+      "classification_correct": false,
       "expected_proposal_kinds": [
         "task",
         "reminder",
@@ -406,12 +654,24 @@
       ],
       "actual_proposal_kinds": [
         "task",
-        "reminder",
+        "seed",
         "shopping"
       ],
+      "task_family_correct": true,
+      "due_at_shapes": [
+        "null",
+        "null",
+        "null"
+      ],
+      "due_at_expectation_met": null,
       "run_status": "completed",
-      "actual_cost_usd": 0.002913,
-      "latency_ms": 4453,
+      "model_called": true,
+      "input_tokens": 1112,
+      "cached_input_tokens": 0,
+      "output_tokens": 793,
+      "reasoning_tokens": 342,
+      "actual_cost_usd": 0.000508,
+      "latency_ms": 7219,
       "error_code": null,
       "private_leak": false
     }

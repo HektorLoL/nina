@@ -3,6 +3,7 @@ import {
   assertEquals,
   assertFalse,
   assertStringIncludes,
+  assertThrows,
 } from "jsr:@std/assert@1";
 import {
   addUsage,
@@ -13,6 +14,9 @@ import {
   estimateInteractiveReservationMicrousd,
   extractOutputText,
   functionCalls,
+  insightFallbackModel,
+  insightModel,
+  interactiveModel,
   isStructuredOutput,
   isToolCallBatchAllowed,
   legacySuggestionFromProposals,
@@ -20,6 +24,9 @@ import {
   maxExtractedReadings,
   maxExtractedValueLength,
   maxInputTokens,
+  maxInsightOutputTokens,
+  maxInteractiveModelCalls,
+  maxInteractiveOutputTokens,
   maxRationaleLength,
   maxToolCalls,
   maxToolRounds,
@@ -28,6 +35,7 @@ import {
   proposalResponseSchema,
   safeErrorCode,
   shouldUseInsightFallback,
+  usageFromResponse,
 } from "./nina-ai.ts";
 import {
   attachmentMetadata,
@@ -89,17 +97,22 @@ Deno.test("request validation enforces attachment count, MIME, and total size", 
   }));
 });
 
-Deno.test("June 15 2026 pricing and reservations are deterministic", () => {
-  assertEquals(pricingVersion, "2026-06-15");
+Deno.test("September 23 2026 pricing and reservations are deterministic", () => {
+  assertEquals(pricingVersion, "2026-09-23");
+  assertEquals(interactiveModel, "gpt-6-luna");
+  assertEquals(insightModel, "gpt-6-luna");
+  assertEquals(insightFallbackModel, "gpt-5.4-mini");
   assertEquals(pricingForModel("gpt-5.4-mini"), {
     inputUsdPerMillion: 0.75,
     cachedInputUsdPerMillion: 0.075,
+    cacheWriteInputUsdPerMillion: 0.75,
     outputUsdPerMillion: 4.5,
   });
-  assertEquals(pricingForModel("gpt-5.5"), {
-    inputUsdPerMillion: 5,
-    cachedInputUsdPerMillion: 0.5,
-    outputUsdPerMillion: 30,
+  assertEquals(pricingForModel("gpt-6-luna"), {
+    inputUsdPerMillion: 0.1,
+    cachedInputUsdPerMillion: 0.01,
+    cacheWriteInputUsdPerMillion: 0.125,
+    outputUsdPerMillion: 0.5,
   });
   assertEquals(
     estimateMaximumCostMicrousd(
@@ -116,14 +129,21 @@ Deno.test("June 15 2026 pricing and reservations are deterministic", () => {
     88_200,
   );
   assertEquals(
+    estimateInteractiveReservationMicrousd(
+      pricingForModel(interactiveModel),
+    ),
+    13_800,
+  );
+  assertEquals(
     estimateInsightReservationMicrousd(maxInputTokens),
-    221_950,
+    33_500,
   );
   assertEquals(
     calculateActualCostMicrousd(
       {
         inputTokens: 1_000,
         cachedInputTokens: 400,
+        cacheWriteInputTokens: 0,
         outputTokens: 100,
         reasoningTokens: 20,
       },
@@ -136,12 +156,14 @@ Deno.test("June 15 2026 pricing and reservations are deterministic", () => {
       {
         inputTokens: 100,
         cachedInputTokens: 20,
+        cacheWriteInputTokens: 60,
         outputTokens: 10,
         reasoningTokens: 2,
       },
       {
         inputTokens: 200,
         cachedInputTokens: 30,
+        cacheWriteInputTokens: 150,
         outputTokens: 15,
         reasoningTokens: 3,
       },
@@ -149,6 +171,7 @@ Deno.test("June 15 2026 pricing and reservations are deterministic", () => {
     {
       inputTokens: 300,
       cachedInputTokens: 50,
+      cacheWriteInputTokens: 210,
       outputTokens: 25,
       reasoningTokens: 5,
     },
@@ -156,9 +179,109 @@ Deno.test("June 15 2026 pricing and reservations are deterministic", () => {
   assertEquals(emptyUsage(), {
     inputTokens: 0,
     cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
     outputTokens: 0,
     reasoningTokens: 0,
   });
+});
+
+Deno.test("every model Nina calls is booked at its own price and an unpriced one is refused", () => {
+  for (const model of [interactiveModel, insightModel, insightFallbackModel]) {
+    const pricing = pricingForModel(model);
+    assert(pricing.inputUsdPerMillion > 0, model);
+    assert(pricing.outputUsdPerMillion > 0, model);
+  }
+  assertThrows(() => pricingForModel("gpt-6-sol"), Error, "unpriced_model");
+  assertThrows(() => pricingForModel(""), Error, "unpriced_model");
+
+  assertEquals(
+    pricingForModel("gpt-6-luna", {
+      NINA_GPT_6_LUNA_INPUT_USD_PER_M: "0.2",
+      NINA_GPT_6_LUNA_CACHED_INPUT_USD_PER_M: "0.02",
+      NINA_GPT_6_LUNA_CACHE_WRITE_USD_PER_M: "0.25",
+      NINA_GPT_6_LUNA_OUTPUT_USD_PER_M: "1",
+    }),
+    {
+      inputUsdPerMillion: 0.2,
+      cachedInputUsdPerMillion: 0.02,
+      cacheWriteInputUsdPerMillion: 0.25,
+      outputUsdPerMillion: 1,
+    },
+  );
+  assertEquals(
+    pricingForModel("gpt-5.4-mini", {
+      NINA_GPT_5_4_MINI_INPUT_USD_PER_M: "0.8",
+    }).cacheWriteInputUsdPerMillion,
+    0.8,
+  );
+});
+
+Deno.test("a cache write is booked at its own rate and the reservation still covers it", () => {
+  const luna = pricingForModel("gpt-6-luna");
+
+  assertEquals(
+    usageFromResponse({
+      usage: {
+        input_tokens: 1_107,
+        input_tokens_details: { cached_tokens: 0, cache_write_tokens: 1_107 },
+        output_tokens: 215,
+        output_tokens_details: { reasoning_tokens: 76 },
+      },
+    }),
+    {
+      inputTokens: 1_107,
+      cachedInputTokens: 0,
+      cacheWriteInputTokens: 1_107,
+      outputTokens: 215,
+      reasoningTokens: 76,
+    },
+  );
+  assertEquals(usageFromResponse({}).cacheWriteInputTokens, 0);
+
+  const turn = {
+    inputTokens: 1_000,
+    cachedInputTokens: 200,
+    cacheWriteInputTokens: 700,
+    outputTokens: 300,
+    reasoningTokens: 80,
+  };
+  assertEquals(calculateActualCostMicrousd(turn, luna), 250);
+  assertEquals(
+    calculateActualCostMicrousd({ ...turn, cacheWriteInputTokens: 0 }, luna),
+    232,
+  );
+  assertEquals(
+    calculateActualCostMicrousd({
+      inputTokens: 100,
+      cachedInputTokens: 60,
+      cacheWriteInputTokens: 90,
+      outputTokens: 0,
+      reasoningTokens: 0,
+    }, luna),
+    6,
+  );
+
+  const everyInputTokenWritten = {
+    inputTokens: maxInputTokens,
+    cachedInputTokens: 0,
+    cacheWriteInputTokens: maxInputTokens,
+    outputTokens: maxInteractiveOutputTokens,
+    reasoningTokens: 0,
+  };
+  let worstTurn = 0;
+  for (let call = 0; call < maxInteractiveModelCalls; call += 1) {
+    worstTurn += calculateActualCostMicrousd(everyInputTokenWritten, luna);
+  }
+  assert(worstTurn <= estimateInteractiveReservationMicrousd(luna));
+
+  const worstInsight = calculateActualCostMicrousd({
+    ...everyInputTokenWritten,
+    outputTokens: maxInsightOutputTokens,
+  }, pricingForModel(insightModel)) + calculateActualCostMicrousd({
+    ...everyInputTokenWritten,
+    outputTokens: maxInsightOutputTokens,
+  }, pricingForModel(insightFallbackModel));
+  assert(worstInsight <= estimateInsightReservationMicrousd(maxInputTokens));
 });
 
 Deno.test("structured output accepts up to three confirmed-action proposals", () => {
@@ -666,7 +789,7 @@ Deno.test("production function keeps moderation, timeouts, and content-free logs
   assertStringIncludes(source, "omni-moderation-latest");
   assertStringIncludes(source, "AbortSignal.timeout");
   assertStringIncludes(source, "store: false");
-  assertStringIncludes(source, "reasoning: { effort: \"low\" }");
+  assertStringIncludes(source, "reasoning: { effort: \"medium\" }");
   assertStringIncludes(source, "aggregateUsage = addUsage");
   assertStringIncludes(source, "estimateInteractiveReservationMicrousd");
   assertStringIncludes(source, "record_failed_nina_ai_run");
@@ -685,6 +808,35 @@ Deno.test("production function keeps moderation, timeouts, and content-free logs
     assertFalse(logBody.includes("attachments"));
     assertFalse(logBody.includes("structured.reply"));
   }
+});
+
+Deno.test("no gpt-6-luna call writes household text to OpenAI's prompt cache", async () => {
+  const chat = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  const maintenance = await Deno.readTextFile(
+    new URL("../nina-maintenance/index.ts", import.meta.url),
+  );
+  const explicitWithoutBreakpoints =
+    "prompt_cache_options: { mode: \"explicit\" }";
+
+  assertEquals(interactiveModel, "gpt-6-luna");
+  assertEquals(insightModel, "gpt-6-luna");
+  for (const source of [chat, maintenance]) {
+    assertStringIncludes(source, "store: false");
+    assertStringIncludes(source, explicitWithoutBreakpoints);
+    assertFalse(source.includes("prompt_cache_breakpoint"));
+    assertFalse(source.includes("mode: \"implicit\""));
+  }
+
+  const fallbackStart = maintenance.indexOf("usedModel = insightFallbackModel");
+  assert(fallbackStart > 0);
+  assert(maintenance.indexOf(explicitWithoutBreakpoints) < fallbackStart);
+  assertEquals(
+    maintenance.indexOf(explicitWithoutBreakpoints, fallbackStart),
+    -1,
+    "gpt-5.4-mini answers prompt_cache_options with 400 invalid_parameter",
+  );
 });
 
 Deno.test("premium-only attachments are refused with a stable forbidden code", async () => {
@@ -771,6 +923,8 @@ Deno.test("maintenance always runs retention and surfaces cleanup failures", asy
     source,
     "retentionError || waitlistRetentionError ? 503 : 200",
   );
+  assertStringIncludes(source, "store: false");
+  assertStringIncludes(source, "reasoning: { effort: \"low\" }");
   assert(
     source.indexOf('"run_nina_retention"') <
       source.indexOf("if (!openAIKey)"),

@@ -3,6 +3,7 @@ export type NinaPurpose = "interactive" | "insights";
 export type NinaUsage = {
   inputTokens: number;
   cachedInputTokens: number;
+  cacheWriteInputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
 };
@@ -10,6 +11,7 @@ export type NinaUsage = {
 export type ModelPricing = {
   inputUsdPerMillion: number;
   cachedInputUsdPerMillion: number;
+  cacheWriteInputUsdPerMillion: number;
   outputUsdPerMillion: number;
 };
 
@@ -64,6 +66,7 @@ export type OpenAIResponsePayload = {
     input_tokens?: number;
     input_tokens_details?: {
       cached_tokens?: number;
+      cache_write_tokens?: number;
     };
     output_tokens?: number;
     output_tokens_details?: {
@@ -76,9 +79,9 @@ export type OpenAIResponsePayload = {
   };
 };
 
-export const pricingVersion = "2026-06-15";
-export const interactiveModel = "gpt-5.4-mini";
-export const insightModel = "gpt-5.5";
+export const pricingVersion = "2026-09-23";
+export const interactiveModel = "gpt-6-luna";
+export const insightModel = "gpt-6-luna";
 export const insightFallbackModel = "gpt-5.4-mini";
 export const maxInputTokens = 32_000;
 export const maxInteractiveOutputTokens = 1_200;
@@ -251,37 +254,48 @@ export function pricingForModel(
   model: string,
   env: Record<string, string | undefined> = {},
 ): ModelPricing {
-  if (model === "gpt-5.5") {
+  if (model === "gpt-6-luna") {
     return {
       inputUsdPerMillion: parsePositiveNumber(
-        env.NINA_GPT_5_5_INPUT_USD_PER_M,
-        5,
+        env.NINA_GPT_6_LUNA_INPUT_USD_PER_M,
+        0.1,
       ),
       cachedInputUsdPerMillion: parsePositiveNumber(
-        env.NINA_GPT_5_5_CACHED_INPUT_USD_PER_M,
-        0.5,
+        env.NINA_GPT_6_LUNA_CACHED_INPUT_USD_PER_M,
+        0.01,
+      ),
+      cacheWriteInputUsdPerMillion: parsePositiveNumber(
+        env.NINA_GPT_6_LUNA_CACHE_WRITE_USD_PER_M,
+        0.125,
       ),
       outputUsdPerMillion: parsePositiveNumber(
-        env.NINA_GPT_5_5_OUTPUT_USD_PER_M,
-        30,
+        env.NINA_GPT_6_LUNA_OUTPUT_USD_PER_M,
+        0.5,
       ),
     };
   }
 
-  return {
-    inputUsdPerMillion: parsePositiveNumber(
+  if (model === "gpt-5.4-mini") {
+    const inputUsdPerMillion = parsePositiveNumber(
       env.NINA_GPT_5_4_MINI_INPUT_USD_PER_M,
       0.75,
-    ),
-    cachedInputUsdPerMillion: parsePositiveNumber(
-      env.NINA_GPT_5_4_MINI_CACHED_INPUT_USD_PER_M,
-      0.075,
-    ),
-    outputUsdPerMillion: parsePositiveNumber(
-      env.NINA_GPT_5_4_MINI_OUTPUT_USD_PER_M,
-      4.5,
-    ),
-  };
+    );
+    return {
+      inputUsdPerMillion,
+      cachedInputUsdPerMillion: parsePositiveNumber(
+        env.NINA_GPT_5_4_MINI_CACHED_INPUT_USD_PER_M,
+        0.075,
+      ),
+      cacheWriteInputUsdPerMillion: inputUsdPerMillion,
+      outputUsdPerMillion: parsePositiveNumber(
+        env.NINA_GPT_5_4_MINI_OUTPUT_USD_PER_M,
+        4.5,
+      ),
+    };
+  }
+
+  // A model without its own price is refused, never booked at another model's rates.
+  throw new Error("unpriced_model");
 }
 
 export function estimateMaximumCostMicrousd(
@@ -289,8 +303,12 @@ export function estimateMaximumCostMicrousd(
   maxOutputTokens: number,
   pricing: ModelPricing,
 ): number {
+  const worstInputUsdPerMillion = Math.max(
+    pricing.inputUsdPerMillion,
+    pricing.cacheWriteInputUsdPerMillion,
+  );
   const usd = (
-    Math.max(inputTokens, 0) * pricing.inputUsdPerMillion
+    Math.max(inputTokens, 0) * worstInputUsdPerMillion
     + Math.max(maxOutputTokens, 0) * pricing.outputUsdPerMillion
   ) / 1_000_000;
 
@@ -326,6 +344,8 @@ export function addUsage(left: NinaUsage, right: NinaUsage): NinaUsage {
   return {
     inputTokens: left.inputTokens + right.inputTokens,
     cachedInputTokens: left.cachedInputTokens + right.cachedInputTokens,
+    cacheWriteInputTokens: left.cacheWriteInputTokens
+      + right.cacheWriteInputTokens,
     outputTokens: left.outputTokens + right.outputTokens,
     reasoningTokens: left.reasoningTokens + right.reasoningTokens,
   };
@@ -335,6 +355,7 @@ export function emptyUsage(): NinaUsage {
   return {
     inputTokens: 0,
     cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
     outputTokens: 0,
     reasoningTokens: 0,
   };
@@ -344,14 +365,20 @@ export function calculateActualCostMicrousd(
   usage: NinaUsage,
   pricing: ModelPricing,
 ): number {
+  const inputTokens = Math.max(usage.inputTokens, 0);
   const cachedTokens = Math.min(
     Math.max(usage.cachedInputTokens, 0),
-    Math.max(usage.inputTokens, 0),
+    inputTokens,
   );
-  const uncachedTokens = Math.max(usage.inputTokens - cachedTokens, 0);
+  const cacheWriteTokens = Math.min(
+    Math.max(usage.cacheWriteInputTokens, 0),
+    inputTokens - cachedTokens,
+  );
+  const ordinaryTokens = inputTokens - cachedTokens - cacheWriteTokens;
   const usd = (
-    uncachedTokens * pricing.inputUsdPerMillion
+    ordinaryTokens * pricing.inputUsdPerMillion
     + cachedTokens * pricing.cachedInputUsdPerMillion
+    + cacheWriteTokens * pricing.cacheWriteInputUsdPerMillion
     + Math.max(usage.outputTokens, 0) * pricing.outputUsdPerMillion
   ) / 1_000_000;
 
@@ -363,6 +390,8 @@ export function usageFromResponse(payload: OpenAIResponsePayload): NinaUsage {
     inputTokens: payload.usage?.input_tokens ?? 0,
     cachedInputTokens:
       payload.usage?.input_tokens_details?.cached_tokens ?? 0,
+    cacheWriteInputTokens:
+      payload.usage?.input_tokens_details?.cache_write_tokens ?? 0,
     outputTokens: payload.usage?.output_tokens ?? 0,
     reasoningTokens:
       payload.usage?.output_tokens_details?.reasoning_tokens ?? 0,
@@ -562,12 +591,14 @@ export function shouldUseInsightFallback(
 
 export function environmentPricing(): Record<string, string | undefined> {
   return {
-    NINA_GPT_5_5_INPUT_USD_PER_M:
-      Deno.env.get("NINA_GPT_5_5_INPUT_USD_PER_M"),
-    NINA_GPT_5_5_CACHED_INPUT_USD_PER_M:
-      Deno.env.get("NINA_GPT_5_5_CACHED_INPUT_USD_PER_M"),
-    NINA_GPT_5_5_OUTPUT_USD_PER_M:
-      Deno.env.get("NINA_GPT_5_5_OUTPUT_USD_PER_M"),
+    NINA_GPT_6_LUNA_INPUT_USD_PER_M:
+      Deno.env.get("NINA_GPT_6_LUNA_INPUT_USD_PER_M"),
+    NINA_GPT_6_LUNA_CACHED_INPUT_USD_PER_M:
+      Deno.env.get("NINA_GPT_6_LUNA_CACHED_INPUT_USD_PER_M"),
+    NINA_GPT_6_LUNA_CACHE_WRITE_USD_PER_M:
+      Deno.env.get("NINA_GPT_6_LUNA_CACHE_WRITE_USD_PER_M"),
+    NINA_GPT_6_LUNA_OUTPUT_USD_PER_M:
+      Deno.env.get("NINA_GPT_6_LUNA_OUTPUT_USD_PER_M"),
     NINA_GPT_5_4_MINI_INPUT_USD_PER_M:
       Deno.env.get("NINA_GPT_5_4_MINI_INPUT_USD_PER_M"),
     NINA_GPT_5_4_MINI_CACHED_INPUT_USD_PER_M:

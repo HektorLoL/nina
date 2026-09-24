@@ -228,7 +228,7 @@ Deno.serve(async (request: Request) => {
         store: false,
         reasoning: { effort: "low" },
         max_output_tokens: maxInsightOutputTokens,
-        prompt_cache_key: "nina-weekly-insights-v2",
+        prompt_cache_options: { mode: "explicit" },
       });
 
       const primaryUsage = usageFromResponse(generated.payload);
