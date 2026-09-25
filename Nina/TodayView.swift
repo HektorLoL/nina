@@ -113,30 +113,47 @@ struct TodayView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .center, spacing: 10) {
-                    Eyebrow(text: now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "pt_BR"))))
-                    if store.householdPremium.isActive {
-                        PremiumBadge()
-                    }
-                }
+        VStack(alignment: .leading, spacing: 3) {
+            dateLine
+
+            HStack(alignment: .center, spacing: 12) {
                 Text(greeting).ninaText(.screen)
-            }
 
-            Spacer()
+                Spacer(minLength: 0)
 
-            if let me = store.currentFamilyMember {
-                Button {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .settings
-                } label: {
-                    MemberAvatar(initials: me.name.ninaInitials, tone: me.tone, size: 36)
+                if let me = store.currentFamilyMember {
+                    Button {
+                        Haptics.lightImpact()
+                        router.presentedSheet = .settings
+                    } label: {
+                        MemberAvatar(initials: me.name.ninaInitials, tone: me.tone, size: 36)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Abrir ajustes")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Abrir ajustes")
-                .padding(.top, 6)
             }
+        }
+    }
+
+    // The date never wraps to make room for the badge; the badge drops below it instead.
+    @ViewBuilder
+    private var dateLine: some View {
+        let date = now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "pt_BR")))
+
+        if store.householdPremium.isActive {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 10) {
+                    Eyebrow(text: date).fixedSize()
+                    PremiumBadge().fixedSize()
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Eyebrow(text: date)
+                    PremiumBadge().fixedSize()
+                }
+            }
+        } else {
+            Eyebrow(text: date)
         }
     }
 

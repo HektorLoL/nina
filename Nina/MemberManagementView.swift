@@ -148,9 +148,11 @@ struct MemberEditorSheet: View {
             .disabled(isNameLocked)
             .opacity(isNameLocked ? 0.4 : 1)
 
-            MemberField_(title: "Na casa") {
-                TextField("Filha, filho, cachorro", text: $relationship)
-                    .submitLabel(.done)
+            if householdRole == .adult {
+                MemberField_(title: "Na casa") {
+                    TextField("Esposa, marido, avó", text: $relationship)
+                        .submitLabel(.done)
+                }
             }
         }
         .disabled(!canEdit)
@@ -343,7 +345,7 @@ struct MemberEditorSheet: View {
             id: member?.id ?? UUID(),
             userID: member?.userID,
             name: name.isEmpty ? defaultName : name,
-            relationship: relationship,
+            relationship: savedRelationship,
             role: householdRole,
             permissionRole: permissionRole,
             identityState: member?.identityState ?? .unclaimed,
@@ -354,6 +356,13 @@ struct MemberEditorSheet: View {
             petSpecies: householdRole == .pet ? petSpecies : "",
             petBreed: householdRole == .pet ? petBreed : ""
         )
+    }
+
+    // Nina reads a member's relationship, not the species field, so a pet's species travels in it.
+    private var savedRelationship: String {
+        let species = petSpecies.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard householdRole == .pet, let first = species.first else { return relationship }
+        return first.uppercased() + species.dropFirst()
     }
 
     private var availableHouseholdRoles: [HouseholdRole] {

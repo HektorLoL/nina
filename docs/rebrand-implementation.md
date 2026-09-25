@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-09-23
+Last updated: 2026-09-25
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -334,6 +334,26 @@ The deliberate departures from the boards:
 - **Vendor names left user copy:** no error string says "Supabase" or "backend".
 - **Removed with no reader left:** `CompletedTaskRetention` (the "Concluídas hoje"
   group only ever holds today, so its disclosure note said nothing).
+
+## 6e. What the 2026-09-25 "What I didn't like pt2" pass changed
+
+- **Hoje header:** the date never wraps. The avatar moved to the greeting's row,
+  which gives the date line the full width, and "Premium" sits beside the date.
+  If a phone is too narrow for both, the badge drops below the date
+  (`ViewThatFits`) instead of the date breaking in two.
+- **A jump from inside a screen travels; a tap on the bar does not.** "Conversar
+  com a Nina" (Hoje, Tarefas, Memórias) and the "Sem dono" shortcut now cross-fade
+  with a 32pt slide toward the destination tab's side. A tap on the tab bar still
+  switches instantly. With Reduce Motion on, the slide goes and the fade stays.
+- **"Na casa" is asked only for an adult.** For a child it repeated Tipo, and for
+  a pet it repeated Espécie. A child is saved as "Criança". A pet is saved with
+  its species ("Cachorro") as the relationship, because the relationship is what
+  Nina's chat context reads, not `pet_species`. A value typed before this change
+  is kept. The member screen hides a "Na casa" row that repeats another row.
+- **The status-bar cover works.** The 2026-09-08 mask was a 12pt strip that
+  `ignoresSafeArea` moved into the middle of the status bar, so scrolled text still
+  crossed the clock (audit finding V13). The glaze now fills the whole status bar
+  and softens only its last 6pt, so headers at rest are untouched.
 
 ## 7. Verified
 

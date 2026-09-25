@@ -125,6 +125,7 @@ private enum AppEntryPhase: Hashable {
 
 struct AppRootView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(OnboardingStore.self) private var onboardingStore
@@ -347,10 +348,10 @@ struct AppRootView: View {
         .background(NinaTheme.ground.ignoresSafeArea())
         .animation(.easeInOut(duration: 0.2), value: store.undoableCompletionID)
         .onReceive(NotificationCenter.default.publisher(for: .ninaSelectChatTab)) { _ in
-            selectTab(.nina)
+            travel(to: .nina)
         }
         .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
-            selectTab(.tasks)
+            travel(to: .tasks)
         }
     }
 
@@ -363,6 +364,7 @@ struct AppRootView: View {
                     tabContent(for: tab)
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .opacity(tab == selectedTab ? 1 : 0)
+                        .offset(x: restingOffset(for: tab))
                         .zIndex(tab == selectedTab ? 1 : 0)
                         .allowsHitTesting(tab == selectedTab)
                         .accessibilityHidden(tab != selectedTab)
@@ -398,6 +400,24 @@ struct AppRootView: View {
 
         Haptics.selection()
         selectedTab = tab
+    }
+
+    // A tap on the bar switches instantly; only a jump from inside a screen travels.
+    private func travel(to tab: AppTab) {
+        dismissKeyboard()
+        guard tab != selectedTab else { return }
+
+        Haptics.selection()
+        withAnimation(.smooth(duration: 0.36)) {
+            selectedTab = tab
+        }
+    }
+
+    private func restingOffset(for tab: AppTab) -> CGFloat {
+        guard tab != selectedTab, !reduceMotion else { return 0 }
+        let order = AppTab.allCases
+        let isBehind = (order.firstIndex(of: tab) ?? 0) < (order.firstIndex(of: selectedTab) ?? 0)
+        return isBehind ? -32 : 32
     }
 
     private func dismissKeyboard() {

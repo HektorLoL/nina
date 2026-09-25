@@ -180,15 +180,23 @@ extension View {
     // colliding with the clock; the glaze is painted over the status bar instead.
     func ninaStatusBarMask() -> some View {
         overlay(alignment: .top) {
-            LinearGradient(
-                colors: [NinaTheme.ground, NinaTheme.ground, NinaTheme.ground.opacity(0)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 12)
-            .ignoresSafeArea(edges: .top)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+            Color.clear
+                .frame(height: 0)
+                .background(alignment: .bottom) {
+                    VStack(spacing: 0) {
+                        NinaTheme.ground
+
+                        LinearGradient(
+                            colors: [NinaTheme.ground, NinaTheme.ground.opacity(0)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 6)
+                    }
+                    .ignoresSafeArea(edges: .top)
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 

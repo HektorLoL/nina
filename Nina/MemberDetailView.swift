@@ -57,8 +57,8 @@ struct MemberDetailView: View {
 
                     if member.role != .assistant {
                         VStack(spacing: 0) {
-                            if !member.relationship.isEmpty {
-                                row("Na casa", member.relationship)
+                            if let relationship = relationshipDetail {
+                                row("Na casa", relationship)
                                 NinaDivider(inset: 0)
                             }
                             row("Em aberto", "\(store.openTaskCount(for: member))")
@@ -87,6 +87,14 @@ struct MemberDetailView: View {
             }
         }
         .ninaScreenBackground()
+    }
+
+    private var relationshipDetail: String? {
+        let value = member.relationship.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repeatsAnotherRow = [member.role.title, member.petSpecies].contains {
+            $0.caseInsensitiveCompare(value) == .orderedSame
+        }
+        return value.isEmpty || repeatsAnotherRow ? nil : value
     }
 
     private var subtitle: String {

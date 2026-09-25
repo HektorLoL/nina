@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-09-23
+Last updated: 2026-09-25
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -305,8 +305,10 @@ with `defer { finishSyncingHome(ifCurrent:) }` → re-check the token after each
 (Nina / Hoje / Tarefas / Casa) in a **custom container, not `TabView`**, each
 with its own `RouterPath`. **Tabs change only by tapping the bar** — the
 horizontal swipe between tabs was removed on 2026-09-23 because it caused
-mis-taps and stole the back gesture, and switching is instant, like
-`UITabBarController`. All four tabs stay mounted. **The system edge swipe-back
+mis-taps and stole the back gesture, and a tap on the bar switches instantly,
+like `UITabBarController`. Only a jump from inside a screen ("Conversar com a
+Nina", the "Sem dono" shortcut) animates, through `travel(to:)`: a short
+cross-fade with a slide that Reduce Motion removes. All four tabs stay mounted. **The system edge swipe-back
 works on every pushed screen, sheets included,** through the
 `UINavigationController` extension at the end of `AppRootView.swift`: the
 navigation bar is hidden app-wide, which otherwise disables
