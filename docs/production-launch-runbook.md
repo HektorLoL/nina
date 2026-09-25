@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-09-04
+Last updated: 2026-09-25
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -186,6 +186,46 @@ manifest, compares every public release value with the approved inventory, scans
 the complete app payload for high-confidence server credentials, and checks the
 archive signing team and identity. A direct `.app` can be used during
 development, but produces a warning because it cannot prove archive signing.
+
+### Uploading a TestFlight build from the command line
+
+Raise `CURRENT_PROJECT_VERSION` above every build App Store Connect has seen,
+commit, push, then archive the pushed revision:
+
+```sh
+xcodebuild archive -project Nina.xcodeproj -scheme Nina -configuration Release \
+  -destination 'generic/platform=iOS' -archivePath /absolute/path/to/Nina.xcarchive
+```
+
+Run the artifact gate above against that archive. Then write the export options
+once and upload:
+
+```sh
+cat > /absolute/path/to/ExportOptions.plist <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>method</key><string>app-store-connect</string>
+  <key>destination</key><string>upload</string>
+  <key>teamID</key><string>97PL8KQA8L</string>
+  <key>signingStyle</key><string>automatic</string>
+  <key>uploadSymbols</key><true/>
+  <key>manageAppVersionAndBuildNumber</key><false/>
+</dict></plist>
+EOF
+xcodebuild -exportArchive -archivePath /absolute/path/to/Nina.xcarchive \
+  -exportOptionsPlist /absolute/path/to/ExportOptions.plist \
+  -exportPath /absolute/path/to/export -allowProvisioningUpdates
+```
+
+`Upload succeeded` and `EXPORT SUCCEEDED` mean App Store Connect has the build
+and is processing it. This Mac holds only an Apple Development identity: the
+export re-signs through Xcode's cloud-managed distribution certificate with the
+Apple ID signed in to Xcode, so a missing or expired Xcode login fails here, not
+at archive time. `manageAppVersionAndBuildNumber` is off so the uploaded build
+number is the committed one. Tag the revision `testflight-1.0-<build>` and move
+the archive to `~/Library/Developer/Xcode/Archives/` so the Organizer keeps it.
+Build 6 was uploaded this way on 2026-09-25.
 
 Run the release candidate through TestFlight on at least one current iPhone and
 one supported older device. Exercise:
