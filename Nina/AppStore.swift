@@ -211,6 +211,8 @@ final class AppStore {
     var isNinaResponding = false
     var ninaConnectionNotice: String?
     var taskEditConflict: TaskEditConflict?
+    // Only the hold or a change of account closes a child's list; losing the home for a moment never does.
+    var childDayPresentation: ChildDayPresentation?
     var aiMemoryConsent: AIMemoryConsentRecord?
     var notificationAuthorizationStatus: HomeNotificationAuthorizationStatus = .notDetermined
 
@@ -437,6 +439,9 @@ final class AppStore {
     }
 
     func activateHomeContext(for user: AuthUser?) async {
+        if user?.id != activeHomeUserID {
+            childDayPresentation = nil
+        }
         homeContextGeneration &+= 1
         remoteMutationTask?.cancel()
         remoteMutationTask = nil
@@ -1886,6 +1891,46 @@ final class AppStore {
         undoableCompletionID = nil
     }
 
+    func presentChildDay(for child: HouseholdMember, now: Date = .now) {
+        guard child.role == .child else { return }
+        childDayPresentation = ChildDayPresentation(
+            childID: child.id,
+            session: ChildDaySession(child: child, tasks: tasks, members: familyGroup.members, now: now)
+        )
+    }
+
+    func dismissChildDay() {
+        childDayPresentation = nil
+    }
+
+    // A child's list writes on its own path: no app-wide undo sits under the cover, a child never
+    // settles a conflict, and a failed write waits for the adult instead of buzzing in a child's hands.
+    func markChildTaskDone(
+        _ id: TaskItem.ID,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> ChildDayMark? {
+        guard let currentTask = tasks.first(where: { $0.id == id }),
+              let markedTask = ChildDay.markedDone(currentTask, now: now, calendar: calendar) else {
+            return nil
+        }
+        submitTaskUpdate(markedTask, basedOn: currentTask, for: .child)
+        guard let written = tasks.first(where: { $0.id == id }) else { return nil }
+        return ChildDayMark(baseline: currentTask, written: written, markedAt: now)
+    }
+
+    @discardableResult
+    func reopenChildTask(_ mark: ChildDayMark) -> Bool {
+        guard let currentTask = tasks.first(where: { $0.id == mark.written.id }),
+              mark.holds(on: currentTask) else { return false }
+        submitTaskUpdate(
+            ChildDay.reopened(currentTask, restoring: mark.baseline),
+            basedOn: currentTask,
+            for: .child
+        )
+        return true
+    }
+
     func snoozeTask(_ id: TaskItem.ID, until date: Date) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
         let currentTask = tasks[index]
@@ -2089,6 +2134,7 @@ final class AppStore {
 
     private func enqueueRemoteMutation(
         errorMessage: String,
+        signalsFailure: Bool = true,
         operation: @escaping (
             _ backend: any RemoteHomeBackend,
             _ familyID: UUID,
@@ -2121,7 +2167,9 @@ final class AppStore {
                       self.isCurrentHomeContext(contextToken),
                       self.activeHomeUserID == userID else { return }
                 self.syncErrorMessage = errorMessage
-                Haptics.error()
+                if signalsFailure {
+                    Haptics.error()
+                }
             }
         }
     }
@@ -2131,7 +2179,21 @@ final class AppStore {
         syncErrorMessage = nil
     }
 
-    private func submitTaskUpdate(_ proposedTask: TaskItem, basedOn baseTask: TaskItem) {
+    func reportSyncError(_ message: String) {
+        syncErrorMessage = message
+        Haptics.error()
+    }
+
+    private enum TaskUpdateAudience {
+        case adult
+        case child
+    }
+
+    private func submitTaskUpdate(
+        _ proposedTask: TaskItem,
+        basedOn baseTask: TaskItem,
+        for audience: TaskUpdateAudience = .adult
+    ) {
         guard let index = tasks.firstIndex(where: { $0.id == proposedTask.id }) else { return }
         let contextToken = currentHomeContextToken
 
@@ -2141,7 +2203,10 @@ final class AppStore {
         persistActivityLocally()
         synchronizeLocalNotifications()
 
-        enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar as alterações da tarefa.") {
+        enqueueRemoteMutation(
+            errorMessage: "Não foi possível sincronizar as alterações da tarefa.",
+            signalsFailure: audience == .adult
+        ) {
             [weak self] backend,
             familyID,
             _ in
@@ -2151,13 +2216,14 @@ final class AppStore {
                 familyID: familyID
             )
             guard let self, self.isCurrentHomeContext(contextToken) else { return }
-            self.applyTaskUpdateResult(result, optimisticTask: optimisticTask)
+            self.applyTaskUpdateResult(result, optimisticTask: optimisticTask, for: audience)
         }
     }
 
     private func applyTaskUpdateResult(
         _ result: TaskUpdateResult,
-        optimisticTask: TaskItem
+        optimisticTask: TaskItem,
+        for audience: TaskUpdateAudience
     ) {
         guard let index = tasks.firstIndex(where: { $0.id == optimisticTask.id }) else { return }
 
@@ -2168,10 +2234,12 @@ final class AppStore {
         case .conflict(let remoteTask):
             guard tasks[index].version <= optimisticTask.version else { return }
             tasks[index] = remoteTask
-            taskEditConflict = TaskEditConflict(
-                localTask: optimisticTask,
-                remoteTask: remoteTask
-            )
+            if audience == .adult {
+                taskEditConflict = TaskEditConflict(
+                    localTask: optimisticTask,
+                    remoteTask: remoteTask
+                )
+            }
         }
 
         cacheAppSnapshotLocally()

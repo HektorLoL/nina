@@ -69,6 +69,10 @@ struct MemberDetailView: View {
                         }
                     }
 
+                    if member.role == .child {
+                        ChildTodaySection(member: member)
+                    }
+
                     if !member.memoryNote.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Eyebrow(text: "O que a Nina lembra")

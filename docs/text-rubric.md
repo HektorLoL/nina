@@ -1,6 +1,6 @@
 # Nina: rubric for cutting on-screen text
 
-Last updated: 2026-09-23
+Last updated: 2026-09-25
 
 This rubric applies to every screen of the iOS app. A screen passes when it meets every rule in §1 and every rule in its surface section (§2), and when none of the text listed in §3 has been lost. The rules come from Mobbin research on about 90 iOS screens across six surfaces. The strongest references are cited inline.
 
@@ -449,6 +449,15 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Unbalanced message: "‹Nome› está com a parte mais pesada agora." A balanced house has no message.
   - Inconclusive message: "Preciso de \(minimumAssignedSample) tarefas com dono, entre \(minimumCarriers) pessoas." Keep the interpolated constants.
   - The shared row label becomes "Sem dono".
+- **H8. The child's day** (`ChildTodaySection` on a child's member screen, `ChildDayView`, the printed page and the shared text).
+  - A child's surface never shows lateness: no terracotta, no "atrasada", no date. An hour shows only for something that happens today.
+  - Never an article before the child's name: a child's gender is unknown, so write "Mostrar para Ana", never "a Ana".
+  - The child's name is the first word of the profile name, unless another person in the house has a name that starts the same way (Maria Clara and Maria Eduarda, or a father João and a son João Pedro). Then it is the shortest run of leading words nobody else's name starts with ("Maria Clara", "João Pedro"), so two printouts or two WhatsApp lists never carry the same name. Nina's own row does not count.
+  - Member screen: the eyebrow "Hoje · N" (rendered "HOJE · 3"), or "Hoje" alone when empty; the group-empty line "Nada para hoje." (G12); the buttons "Mostrar para ‹Nome›", "Imprimir" and "Compartilhar"; on a failed print, "Não deu para imprimir agora."
+  - Child's screen: the date eyebrow ("sexta-feira, 25 de setembro", rendered uppercase), then the child's name as the title, by the namesake rule above (G1: both are live data). "Segure para sair" is an allowed instruction, an exception to G4, because a non-standard gesture needs its label; its accessibility label is "Sair". A done card's accessibility value is "Feita".
+  - The celebration follows E3: "Tudo feito por hoje." + "Pode devolver o celular.", below the cards, mirroring Hoje's "Nada mais para hoje." / "Pode largar o celular." VoiceOver announces "Tudo feito por hoje." An empty list reads "Nada para hoje." + "Pode devolver o celular."
+  - Print: the date line uppercased, the child's name, and the pager "1 de 2" in `muted` only when there is more than one page. The print job is named "‹Nome› · ‹data›".
+  - Share: the header "‹Nome› · ‹data›", a blank line, then one line per task, "○ ‹título›" or "○ ‹título› · HH:mm". The subject is the same header. No markup (WhatsApp's `*bold*` shows literally everywhere else), no emoji, no owner, no category word, no branding.
 
 ---
 

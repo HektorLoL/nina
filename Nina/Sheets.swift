@@ -136,26 +136,6 @@ private struct InkButton: View {
     }
 }
 
-private struct ShareButtonFace: View {
-    var title: String
-    var isProminent: Bool = false
-
-    var body: some View {
-        Text(title)
-            .ninaText(.body, isProminent ? NinaTheme.onCobalt : NinaTheme.ink, weight: .semibold)
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .background(
-                isProminent ? NinaTheme.cobalt : Color.clear,
-                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
-                    .strokeBorder(isProminent ? Color.clear : NinaTheme.line, lineWidth: 1)
-            )
-    }
-}
-
 private struct SettingsSection<Content: View>: View {
     var title: String? = nil
     var footer: String? = nil
@@ -1094,7 +1074,7 @@ private struct PrivacyExportView: View {
 
                     if let exportURL {
                         ShareLink(item: exportURL) {
-                            ShareButtonFace(title: "Compartilhar")
+                            NinaButtonFace(title: "Compartilhar", kind: .outline, fillsWidth: true)
                         }
                         .buttonStyle(.plain)
                     }
@@ -3067,7 +3047,7 @@ struct InviteFamilySheet: View {
                         .ninaCard(fill: NinaTheme.grout, stroke: .clear)
 
                         ShareLink(item: inviteURL, message: Text(messageText)) {
-                            ShareButtonFace(title: "Enviar convite", isProminent: true)
+                            NinaButtonFace(title: "Enviar convite", kind: .primary, fillsWidth: true)
                         }
                         .buttonStyle(.plain)
                     } else {

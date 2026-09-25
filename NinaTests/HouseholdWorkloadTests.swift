@@ -298,6 +298,30 @@ final class HouseholdWorkloadTests: XCTestCase {
         XCTAssertEqual(heavy.entries.first(where: \.isShared)?.band, .heavier)
     }
 
+    func testTheChildsListAndTheOpenCountUseOneOwnershipRule() {
+        let mirna = member(named: "Mirna", tone: .coral)
+        let pedro = member(named: "Pedro", tone: .sky, role: .child)
+        let firstAna = member(named: "Ana", relationship: "Filha", tone: .amber, role: .child)
+        let secondAna = member(named: "Ana", relationship: "Sobrinha", tone: .lavender, role: .child)
+        let members = [mirna, pedro, firstAna, secondAna]
+        let byID = openTask(owner: "Pedro", ownerMemberID: pedro.id)
+        let legacy = openTask(owner: "pédro")
+        let house = openTask(owner: "Casa", ownerMemberID: pedro.id)
+        let mirnas = openTask(owner: "Mirna", ownerMemberID: mirna.id)
+        let legacyAna = openTask(owner: "Ana")
+        var done = openTask(owner: "Pedro", ownerMemberID: pedro.id)
+        done.isDone = true
+        let seed = openTask(owner: "Pedro", ownerMemberID: pedro.id, kind: .seed)
+        let tasks = [byID, legacy, house, mirnas, legacyAna, done, seed]
+
+        let assigned = HouseholdWorkload.assignedTasks(to: pedro, in: tasks, members: members)
+
+        XCTAssertEqual(Set(assigned.map(\.id)), [byID.id, legacy.id, done.id, seed.id])
+        XCTAssertEqual(HouseholdWorkload.openTaskCount(for: pedro, in: tasks, members: members), 2)
+        XCTAssertTrue(HouseholdWorkload.assignedTasks(to: firstAna, in: tasks, members: members).isEmpty)
+        XCTAssertTrue(HouseholdWorkload.assignedTasks(to: secondAna, in: tasks, members: members).isEmpty)
+    }
+
     private func openTask(owner: String, ownerMemberID: UUID? = nil, kind: TaskKind = .task) -> TaskItem {
         TaskItem(
             kind: kind,
@@ -315,12 +339,13 @@ final class HouseholdWorkloadTests: XCTestCase {
     private func member(
         named name: String,
         relationship: String = "",
-        tone: MemberTone
+        tone: MemberTone,
+        role: HouseholdRole = .adult
     ) -> HouseholdMember {
         HouseholdMember(
             name: name,
             relationship: relationship,
-            role: .adult,
+            role: role,
             tone: tone,
             taskCount: 0,
             memoryNote: ""

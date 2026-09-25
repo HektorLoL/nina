@@ -246,6 +246,13 @@ product regression, not a refactor.
 - **The raw client IP never leaves the Worker** — only `SHA-256(salt ‖ IP)`.
 - **Misconfiguration fails closed, never guesses.** No production fallback
   endpoint or key, anywhere.
+- **A child's list carries a task's title, hour and category glyph, nothing
+  else.** The child's full-screen list, the printed page and the shared text are
+  all built from `ChildDayRow`, which has no field for the task's detail line,
+  so a photographed boleto's reading can never reach a child, a printer or a
+  WhatsApp chat. Locked by
+  `ChildDayTests.testARowCarriesTheTitleTheHourAndTheGlyphAndNothingElse` and
+  `…testNothingFromATasksDetailReachesTheListThePrintoutOrTheSharedText`.
 
 ### Monetization
 
@@ -313,7 +320,14 @@ works on every pushed screen, sheets included,** through the
 `UINavigationController` extension at the end of `AppRootView.swift`: the
 navigation bar is hidden app-wide, which otherwise disables
 `interactivePopGestureRecognizer`, and its `viewControllers.count > 1` guard is
-what keeps a swipe on a root screen from freezing the stack.
+what keeps a swipe on a root screen from freezing the stack. A child's member
+screen can hand the phone over: `ChildTodaySection` sets
+`AppStore.childDayPresentation`, and `AppRootView` presents `ChildDayView` from
+its root as a `fullScreenCover`, so neither a lost home nor a tab reset can
+close it. It closes on a 2-second hold, or in one step through VoiceOver (the
+hold button's default action and the escape gesture), which must stay; it
+carries no share or print, and draws its own app-switcher cover (the same
+`AppLoadingScreen`) because the root one sits beneath it.
 
 **Models.** Every persisted/synced model has a hand-written `init(from:)` using
 `decodeIfPresent(...) ?? default`. New fields must be additive with a default,
@@ -788,6 +802,26 @@ now whenever `dueAt` is in the past, so a daily 21:00 task nobody tapped shows
 "ontem, 21:00" in terracotta while the scheduler still books tonight's alert.
 Screen and scheduler agree only when nothing was missed
 (`TaskAgendaTests.testAMissedDailyTaskReadsAsLateSinceItsLastOccurrence`).
+
+**The child's list never calls `toggleTask`.** `AppStore.markChildTaskDone`
+closes every occurrence through today (a daily task missed yesterday moves to
+tomorrow, where `toggleTask` would land it on tonight), offers no app-wide undo,
+and never raises the edit-conflict sheet — the house's version stands. A second
+tap only reopens what the first wrote, through its `ChildDayMark`; a mark the
+task no longer matches undoes nothing, and a tap within one second of a change
+is ignored. A failed write sets `syncErrorMessage` without the error haptic;
+the list hands it back, buzz included, when the adult holds to leave. The
+2-second "Segure para sair" hold is a speed bump, not a lock: the home gesture
+and other apps' banners still leave, VoiceOver and Switch Control leave in one
+step through the button's default action and the escape gesture (those exits
+must stay — they are the only ones those users can perform), and Guided Access
+is the real lock. What the hold does stop is the app dropping the child into
+the adult app on its own: the list is presented from the root and only an
+account change clears `childDayPresentation`, so an unverifiable refresh leaves
+it open over "Nada para hoje." until the hold. Locked by
+`ChildDayTests.testASecondTapOnADoneRepeatingRowReopensItAndNeverSkipsAnotherDay`,
+`AppStoreAuthorizationTests.testAChildsListNeverRaisesAnEditConflictAndTheHousesVersionStands`
+and `…testARefreshThatCannotVerifyTheHouseLeavesTheChildsListOpen`.
 
 **`Route` now has four cases and all of them are reachable** — `task`, `member`,
 `workload`, `memories`. This was fixed in the rebrand: `RouterPath.navigate(to:)`

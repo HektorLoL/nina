@@ -146,34 +146,52 @@ struct NinaButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                if isPending {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(foreground)
-                } else if let systemName {
-                    Image(systemName: systemName)
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                Text(title)
-                    .ninaText(.body, foreground, weight: .semibold)
-            }
-            .foregroundStyle(foreground)
-            .frame(maxWidth: fillsWidth ? .infinity : nil)
-            .frame(minHeight: kind == .quiet ? 26 : 50)
-            .padding(.horizontal, kind == .quiet ? 0 : 24)
-            .background(background, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
-                    .strokeBorder(kind == .outline ? NinaTheme.control : Color.clear, lineWidth: 1)
+            NinaButtonFace(
+                title: title,
+                kind: kind,
+                systemName: systemName,
+                fillsWidth: fillsWidth,
+                isPending: isPending
             )
-            // A quiet button keeps its 26pt look but answers to a 44pt finger.
-            .padding(.vertical, kind == .quiet ? 9 : 0)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled || isPending)
         .opacity(isEnabled || isPending ? 1 : 0.4)
+    }
+}
+
+struct NinaButtonFace: View {
+    var title: String
+    var kind: NinaButtonKind = .primary
+    var systemName: String?
+    var fillsWidth: Bool = false
+    var isPending: Bool = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if isPending {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(foreground)
+            } else if let systemName {
+                Image(systemName: systemName)
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            Text(title)
+                .ninaText(.body, foreground, weight: .semibold)
+        }
+        .foregroundStyle(foreground)
+        .frame(maxWidth: fillsWidth ? .infinity : nil)
+        .frame(minHeight: kind == .quiet ? 26 : 50)
+        .padding(.horizontal, kind == .quiet ? 0 : 24)
+        .background(background, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+                .strokeBorder(kind == .outline ? NinaTheme.control : Color.clear, lineWidth: 1)
+        )
+        // A quiet button keeps its 26pt look but answers to a 44pt finger.
+        .padding(.vertical, kind == .quiet ? 9 : 0)
+        .contentShape(Rectangle())
     }
 
     private var foreground: Color {

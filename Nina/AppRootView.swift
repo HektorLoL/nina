@@ -234,6 +234,17 @@ struct AppRootView: View {
             TaskEditConflictSheet(conflict: conflict)
                 .interactiveDismissDisabled()
         }
+        // Presented from the root: neither a lost home nor a tab reset can close a child's list without the hold.
+        .fullScreenCover(
+            item: Binding(
+                get: { store.childDayPresentation },
+                set: { presentation in
+                    if presentation == nil { store.dismissChildDay() }
+                }
+            )
+        ) { presentation in
+            ChildDayView(childID: presentation.childID, session: presentation.session)
+        }
     }
 
     private var entryPhase: AppEntryPhase {
@@ -782,7 +793,7 @@ private struct KeyboardAwareBottomTabBar: View {
     }
 }
 
-private struct AppLoadingScreen: View {
+struct AppLoadingScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isBreathing = false
 

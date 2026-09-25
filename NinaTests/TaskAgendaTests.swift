@@ -233,6 +233,83 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertNil(store.undoableCompletionID)
     }
 
+    func testMarkingAChildsTaskDoneNeitherOffersNorWithdrawsTheAppWideUndo() throws {
+        try withIsolatedStore { store in
+            let other = task(dueAt: date(year: 2026, month: 8, day: 8, hour: 18, minute: 0))
+            var childs = task(dueAt: date(year: 2026, month: 8, day: 8, hour: 16, minute: 0))
+            childs.title = "Dever de casa"
+            store.tasks = [other, childs]
+
+            store.toggleTask(other)
+            XCTAssertEqual(store.undoableCompletionID, other.id)
+
+            let mark = store.markChildTaskDone(childs.id, now: now, calendar: calendar)
+
+            XCTAssertNotNil(mark)
+            XCTAssertEqual(store.tasks.first { $0.id == childs.id }?.isDone, true)
+            // The undo toast sits under the child's cover; the adult's own undo must survive it.
+            XCTAssertEqual(store.undoableCompletionID, other.id)
+        }
+    }
+
+    func testReopeningAChildsRepeatingTaskPutsItBackOnTheOccurrenceItLeft() throws {
+        try withIsolatedStore { store in
+            var daily = task(dueAt: now.addingTimeInterval(2 * 60 * 60))
+            daily.recurrence = .daily
+            daily.dueLabel = "Hoje, 12:00"
+            store.tasks = [daily]
+
+            let mark = try XCTUnwrap(store.markChildTaskDone(daily.id, now: now, calendar: calendar))
+            XCTAssertTrue(store.reopenChildTask(mark))
+
+            let reopened = try XCTUnwrap(store.tasks.first { $0.id == daily.id })
+            XCTAssertEqual(reopened.dueAt, daily.dueAt)
+            XCTAssertEqual(reopened.dueLabel, daily.dueLabel)
+            XCTAssertEqual(reopened.snoozedUntil, daily.snoozedUntil)
+            XCTAssertTrue(reopened.belongsOnAgenda(for: now, calendar: calendar))
+            XCTAssertEqual(reopened.version, daily.version + 2)
+        }
+    }
+
+    func testReopeningAChildsTaskIsRefusedOnceTheTaskChangedElsewhere() throws {
+        try withIsolatedStore { store in
+            let oneOff = task(dueAt: date(year: 2026, month: 8, day: 8, hour: 16, minute: 0))
+            store.tasks = [oneOff]
+
+            let staleMark = try XCTUnwrap(store.markChildTaskDone(oneOff.id, now: now, calendar: calendar))
+            store.tasks[0].isDone = false
+            let changedElsewhere = store.tasks[0]
+
+            XCTAssertFalse(store.reopenChildTask(staleMark))
+            XCTAssertEqual(store.tasks[0], changedElsewhere)
+
+            let mark = try XCTUnwrap(store.markChildTaskDone(oneOff.id, now: now, calendar: calendar))
+            XCTAssertTrue(store.reopenChildTask(mark))
+            XCTAssertFalse(store.reopenChildTask(mark))
+        }
+    }
+
+    private func withIsolatedStore(_ body: (AppStore) throws -> Void) throws {
+        let suiteName = "TaskAgendaTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-task-agenda-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let store = AppStore(
+            defaults: defaults,
+            privateDataStore: ProtectedLocalDataStore(directoryURL: directory),
+            remoteHomeBackend: nil,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: NoopHomeNotificationScheduler()
+        )
+        try body(store)
+    }
+
     private func task(dueAt: Date?) -> TaskItem {
         TaskItem(
             title: "Pagar a conta de luz",

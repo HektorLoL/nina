@@ -1226,6 +1226,150 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testAChildsListNeverRaisesAnEditConflictAndTheHousesVersionStands() async throws {
+        let user = makeUser()
+        let taskID = UUID()
+        let initialTask = TaskItem(
+            id: taskID,
+            title: "Dever de casa",
+            subtitle: "",
+            owner: "Home",
+            dueLabel: "Today",
+            category: .school,
+            isDone: false,
+            createdBy: "Manual",
+            version: 1
+        )
+        let remoteTask = TaskItem(
+            id: taskID,
+            title: "Dever de casa de matemática",
+            subtitle: "",
+            owner: "Home",
+            dueLabel: "Tomorrow",
+            category: .school,
+            isDone: false,
+            createdBy: "Manual",
+            version: 2
+        )
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(tasks: [initialTask]),
+            conflictingTask: remoteTask
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        XCTAssertNotNil(store.markChildTaskDone(taskID))
+        await store.waitForPendingRemoteMutations()
+
+        // The conflict sheet sits under the child's full-screen cover, so nobody could ever answer it.
+        XCTAssertNil(store.taskEditConflict)
+        XCTAssertEqual(store.tasks.first, remoteTask)
+    }
+
+    @MainActor
+    func testMarkingAndReopeningAChildsTaskWritesTwoUpdatesInOrder() async throws {
+        let user = makeUser()
+        let taskID = UUID()
+        let initialTask = TaskItem(
+            id: taskID,
+            title: "Dever de casa",
+            subtitle: "",
+            owner: "Home",
+            dueLabel: "Today",
+            category: .school,
+            isDone: false,
+            createdBy: "Manual",
+            version: 1
+        )
+        let backend = RecordingHomeBackend(state: makeRemoteState(tasks: [initialTask]))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let mark = try XCTUnwrap(store.markChildTaskDone(taskID))
+        XCTAssertTrue(store.reopenChildTask(mark))
+        await store.waitForPendingRemoteMutations()
+        let updates = await backend.recordedTaskUpdates()
+
+        XCTAssertEqual(updates, [
+            RecordedTaskUpdate(id: taskID, isDone: true, expectedVersion: 1),
+            RecordedTaskUpdate(id: taskID, isDone: false, expectedVersion: 2)
+        ])
+        XCTAssertEqual(store.tasks.first { $0.id == taskID }?.isDone, false)
+    }
+
+    @MainActor
+    func testARefreshThatCannotVerifyTheHouseLeavesTheChildsListOpen() async throws {
+        let user = makeUser()
+        let child = HouseholdMember(
+            name: "Pedro",
+            relationship: "Filho",
+            role: .child,
+            tone: .sky,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let backend = ControlledRefreshHomeBackend(initialState: makeRemoteState(members: [child]))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        store.presentChildDay(for: child)
+        let presented = try XCTUnwrap(store.childDayPresentation)
+
+        let refreshTask = Task {
+            await store.refreshHomeFromRemote(for: user)
+        }
+        await backend.waitUntilRefreshStarted()
+        await backend.failRefresh()
+        await refreshTask.value
+
+        XCTAssertEqual(store.homeAccessState, .unavailable)
+        XCTAssertEqual(store.childDayPresentation?.id, presented.id)
+        XCTAssertEqual(store.childDayPresentation?.childID, child.id)
+    }
+
+    @MainActor
+    func testSigningOutClosesTheChildsListButRecheckingTheSameAccountDoesNot() async {
+        let user = makeUser()
+        let child = HouseholdMember(
+            name: "Pedro",
+            relationship: "Filho",
+            role: .child,
+            tone: .sky,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let backend = RecordingHomeBackend(state: makeRemoteState(members: [child]))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        store.presentChildDay(for: child)
+
+        await store.activateHomeContext(for: user)
+        XCTAssertNotNil(store.childDayPresentation)
+
+        await store.activateHomeContext(for: nil)
+        XCTAssertNil(store.childDayPresentation)
+    }
+
+    @MainActor
+    func testOnlyAChildsProfileOpensAChildsList() async {
+        let user = makeUser()
+        let adult = HouseholdMember(
+            name: "Heitor",
+            relationship: "Pai",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let backend = RecordingHomeBackend(state: makeRemoteState(members: [adult]))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        store.presentChildDay(for: adult)
+
+        XCTAssertNil(store.childDayPresentation)
+    }
+
+    @MainActor
     func testAttachmentOnlyMessageIsAcceptedAndStoredInConversation() async {
         let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
         store.attachmentGate = NinaAttachmentGate(isEnabled: true)
@@ -3317,6 +3461,12 @@ private enum RecordedHomeMutation: Equatable {
     case recordNinaAIConsent(Bool)
 }
 
+private struct RecordedTaskUpdate: Equatable {
+    let id: UUID
+    let isDone: Bool
+    let expectedVersion: Int
+}
+
 private struct NotificationSyncRecord {
     var tasks: [TaskItem]
     var familyID: UUID
@@ -3372,6 +3522,7 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
     private var state: RemoteHomeState
     private let conflictingTask: TaskItem?
     private var mutations: [RecordedHomeMutation] = []
+    private var taskUpdates: [RecordedTaskUpdate] = []
     private var realtimeContinuation: AsyncStream<HomeRealtimeEvent>.Continuation?
     private var realtimeSubscribed = false
     private var realtimeSubscribedContinuation: CheckedContinuation<Void, Never>?
@@ -3386,6 +3537,10 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
 
     func recordedMutations() -> [RecordedHomeMutation] {
         mutations
+    }
+
+    func recordedTaskUpdates() -> [RecordedTaskUpdate] {
+        taskUpdates
     }
 
     func confirmedPayload(for proposalID: UUID) -> NinaProposalPayload? {
@@ -3473,6 +3628,9 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         familyID: UUID
     ) async throws -> TaskUpdateResult {
         mutations.append(.updateTask(task.id))
+        taskUpdates.append(
+            RecordedTaskUpdate(id: task.id, isDone: task.isDone, expectedVersion: expectedVersion)
+        )
         if let conflictingTask {
             return .conflict(current: conflictingTask)
         }

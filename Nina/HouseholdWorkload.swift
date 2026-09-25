@@ -183,17 +183,22 @@ enum HouseholdWorkload {
         }
     }
 
+    static func assignedTasks(
+        to member: HouseholdMember,
+        in tasks: [TaskItem],
+        members: [HouseholdMember]
+    ) -> [TaskItem] {
+        guard member.role != .assistant else { return [] }
+        let resolver = TaskOwnerResolver(people: members.filter { $0.role != .assistant })
+        return tasks.filter { resolver.bucket(of: $0) == .member(member.id) }
+    }
+
     static func openTaskCount(
         for member: HouseholdMember,
         in tasks: [TaskItem],
         members: [HouseholdMember]
     ) -> Int {
-        guard member.role != .assistant else { return 0 }
-        let resolver = TaskOwnerResolver(people: members.filter { $0.role != .assistant })
-        return tasks.count { task in
-            guard !task.isDone, task.kind == .task else { return false }
-            return resolver.bucket(of: task) == .member(member.id)
-        }
+        assignedTasks(to: member, in: tasks, members: members).count { !$0.isDone && $0.kind == .task }
     }
 
     static func isSameOwner(_ lhs: String, _ rhs: String) -> Bool {
@@ -206,7 +211,7 @@ enum HouseholdWorkload {
         return owner.isEmpty || owner == normalized(sharedOwnerLabel)
     }
 
-    fileprivate static func normalized(_ value: String) -> String {
+    static func normalized(_ value: String) -> String {
         value
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pt_BR"))

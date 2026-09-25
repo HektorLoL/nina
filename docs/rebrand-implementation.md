@@ -355,6 +355,43 @@ The deliberate departures from the boards:
   crossed the clock (audit finding V13). The glaze now fills the whole status bar
   and softens only its last 6pt, so headers at rest are untouched.
 
+## 6f. The child's day (2026-09-25)
+
+No Paper board draws this surface. It is a product decision by Heitor: a child is
+a profile adults manage, never a user, so a child sees their tasks on an adult's
+phone, and the adult can print the list for the fridge or send it on WhatsApp.
+
+- **Entry: a "HOJE · N" block on a child's member screen, and nowhere else.** It
+  reuses `TaskRowView`, so the adult sees the same rows as Hoje, lateness
+  included. Under the rows sit one cobalt "Mostrar para ‹Nome›" and two outline
+  controls, "Imprimir" and "Compartilhar". With nothing today the block is the
+  eyebrow "HOJE" and "Nada para hoje.", with no actions.
+- **The child's screen** (`ChildDayView`, a `fullScreenCover` presented from the
+  app's root) is the child's name in Fraunces over big cards: a 44pt circle, the
+  title at the 27pt sans tier, the hour and the category glyph as a picture cue.
+  A tap turns a card moss in place; it never moves or leaves. "Tudo feito por
+  hoje." sits below the cards, and the list scrolls down to it when the last
+  card is marked, so a long list never hides the hand-back line. Its
+  app-switcher cover is the root's own `AppLoadingScreen`.
+- **"Segure para sair" is an allowed instruction string**, an exception to the
+  rubric's G4: a non-standard gesture needs its label. Leaving takes a 2-second
+  hold; the ring under the finger is the only feedback.
+- **No child surface shows lateness.** No terracotta, no "atrasada", no date. An
+  hour shows only for something that happens today.
+- **The printed page uses fixed raw type**, the one sanctioned raw `.font` use:
+  paper has no Dynamic Type. It has no background fill, so the paper stays white,
+  and its hairlines use `control`, because `line` drops out on most printers.
+- **`NinaButtonFace` was extracted from `NinaButton`** with no visual change, so
+  a `ShareLink` wears exactly the button's face. The private `ShareButtonFace`
+  twin in `Sheets.swift` is gone: the data-export and invite `ShareLink`s now
+  wear `NinaButtonFace` too, which moves the export button's stroke from `line`
+  (1.24:1, under the 3:1 floor) to `control` and its fixed 50pt height to a
+  50pt minimum.
+- **"Imprimir" and "Compartilhar" sit side by side only when both labels fit at
+  equal widths** (`EqualWidthRow` inside a `ViewThatFits`). A plain `HStack`
+  passed the fit check on a 402pt iPhone and then split the row in half, which
+  wrapped "Compartilhar" mid-word; there the pair now stacks.
+
 ## 7. Verified
 
 - `xcodebuild build` — succeeds.
