@@ -525,7 +525,7 @@ Other conventions:
   and `app_store_server_notifications` directly (select, insert, update,
   delete), and `nina-maintenance` stamps `nina_ai_runs` (select, update). Every
   other privileged server path is a SECURITY DEFINER RPC. Until migration
-  `202609260002` production's defaults had left it every privilege on every
+  `202609260002` (applied 2026-09-26) production's defaults had left it every privilege on every
   public table; the exact service_role table map in `rls_policies.test.sql` now
   fails on a grant extra or missing. If something fails with "permission denied … TO service_role",
   the fix is virtually always to call the RPC (or, in a test, `reset role`) —
