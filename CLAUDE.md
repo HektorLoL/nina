@@ -252,7 +252,7 @@ product regression, not a refactor.
   included, and the prompt constraint above meant nothing. The exact grant map in `rls_policies.test.sql` pins the grant,
   and a temporary re-grant there proves the policy alone still refuses.
 - **Only the server writes a chat line.** `chat_messages` rows come from
-  nina-chat's RPCs alone; migration `202609260004` (not yet in production)
+  nina-chat's RPCs alone; migration `202609260004` (applied 2026-09-26)
   leaves `authenticated` with `select` and drops the "Legacy chat messages
   remain family writable" `for all` policy. Before it, any member could insert
   a legacy row (`thread_id is null`) with `sender = 'nina'` and any text, or
@@ -263,8 +263,8 @@ product regression, not a refactor.
   `AppStoreAuthorizationTests.testALegacyTurnAndItsConfirmationStayOnThePhoneAndOnlyTheTaskReachesTheServer`
   and the grant map and re-grant in `rls_policies.test.sql`. TestFlight builds
   1–8 still send that confirmation when someone taps the card on an offline
-  reply; once the migration is in production that one write fails with "Não foi
-  possível sincronizar a confirmação da Nina." while the task itself syncs.
+  reply; that one write now fails with "Não foi possível sincronizar a
+  confirmação da Nina." while the task itself syncs.
 - **A portrait the snapshot refused to conclude is never drawn.** `HouseholdWorkload`
   returns an inconclusive snapshot below 6 assigned open tasks or 2 carriers, but
   that snapshot still carries a fully populated `entries` array — so both render
