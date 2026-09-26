@@ -113,7 +113,10 @@ new object in `public`, because that is what the production project did when it
 was created, and a fresh Supabase database does not. Without it, a migration
 that revoked a function only `from public` looked closed here and was open in
 production. Migration `202609260001` removes those defaults again, so objects
-created after it start with no API grant in both places.
+created after it start with no API grant in both places. Migration
+`202609260002` then takes back what the defaults had given `service_role` on
+every existing table, keeping only the four tables an Edge Function writes
+directly.
 
 ```sh
 deno task db:reset && deno task db:test

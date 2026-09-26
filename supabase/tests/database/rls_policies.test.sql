@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(54);
+select plan(55);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -452,6 +452,27 @@ select set_eq(
     'tasks SELECT,INSERT,UPDATE,DELETE'
   ],
   'signed-in clients hold exactly the table privileges their policies were written for'
+);
+
+select set_eq(
+  $$
+    select tables.relname || ' ' || string_agg(privileges.name, ',' order by privileges.position)
+    from pg_catalog.pg_class as tables
+    cross join unnest(
+      array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']
+    ) with ordinality as privileges(name, position)
+    where tables.relnamespace = 'public'::regnamespace
+      and tables.relkind in ('r', 'p', 'v', 'm', 'f')
+      and has_table_privilege('service_role', tables.oid, privileges.name)
+    group by tables.relname
+  $$,
+  array[
+    'app_store_server_notifications SELECT,INSERT,UPDATE,DELETE',
+    'nina_ai_runs SELECT,UPDATE',
+    'premium_subscription_transactions SELECT,INSERT,UPDATE,DELETE',
+    'premium_subscriptions SELECT,INSERT,UPDATE,DELETE'
+  ],
+  'the server key holds exactly the table privileges the Edge Functions use directly'
 );
 
 select is(

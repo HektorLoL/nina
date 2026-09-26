@@ -96,7 +96,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 17+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (37 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (38 files) |
 | Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -466,7 +466,7 @@ audit on any new screen.
 
 ## 6. Database
 
-37 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+38 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order.
 
 **House style for every new object:**
@@ -520,9 +520,14 @@ Other conventions:
   production's grants, and that migration then removes the defaults in both
   places. The file does nothing on a database that already has migration
   history, so `db push --include-roles` cannot widen production again.
-- **`service_role` holds almost no table grants, by design.** Every privileged
-  server path is a SECURITY DEFINER RPC, so the Edge Functions never need direct
-  table access. If something fails with "permission denied … TO service_role",
+- **`service_role` holds four table grants, by design.** The two App Store
+  functions upsert `premium_subscriptions`, `premium_subscription_transactions`
+  and `app_store_server_notifications` directly (select, insert, update,
+  delete), and `nina-maintenance` stamps `nina_ai_runs` (select, update). Every
+  other privileged server path is a SECURITY DEFINER RPC. Until migration
+  `202609260002` production's defaults had left it every privilege on every
+  public table; the exact service_role table map in `rls_policies.test.sql` now
+  fails on a grant extra or missing. If something fails with "permission denied … TO service_role",
   the fix is virtually always to call the RPC (or, in a test, `reset role`) —
   not to add the grant.
 
