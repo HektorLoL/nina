@@ -311,7 +311,8 @@ product regression, not a refactor.
   rather than degrading. A sandbox receipt covers only its buyer's house
   (`appAccountToken`), is recorded with `environment = 'Sandbox'`, and lapses
   on Apple's accelerated test clock; the cost is free premium for every tester,
-  so TestFlight stays invite-only. `environment.app-store-mode` fails the
+  so a public TestFlight link always carries a tester limit and is turned off
+  when the round ends. `environment.app-store-mode` fails the
   preflight if the variable is set at all. The reasoning is in
   `docs/premium-flow.md` §6.
 

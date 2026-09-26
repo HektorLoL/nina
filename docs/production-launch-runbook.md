@@ -78,8 +78,9 @@ read it on the next request, with no redeploy:
 npx supabase secrets unset NINA_APP_STORE_ENVIRONMENT --project-ref <project-ref>
 ```
 
-Keep TestFlight to invited testers. Every sandbox purchase covers its buyer's
-house for free, so a public TestFlight link would hand premium to anyone.
+Every sandbox purchase covers its buyer's house for free, and a public
+TestFlight link reaches whoever it is forwarded to. Give that link a tester
+limit and turn it off when the round of testing ends.
 
 ### Sign-in providers: Apple only
 

@@ -104,9 +104,9 @@ to see premium work. Four things keep that from reaching a real household in a
 harmful way:
 
 - **Only people Heitor lets in can make one.** A sandbox receipt for
-  `com.heitor.nina` comes from a sandbox tester he created, a TestFlight tester
-  he invited, or App Review. Apple signs it on the same chain as production,
-  so it cannot be forged.
+  `com.heitor.nina` comes from a sandbox tester he created, someone who joined
+  TestFlight through his invite or his public link, or App Review. Apple signs
+  it on the same chain as production, so it cannot be forged.
 - **It covers only its buyer's house.** `premium-subscription-sync` still
   refuses any receipt whose `appAccountToken` is not the caller, so a sandbox
   receipt cannot be handed to another account.
@@ -120,9 +120,11 @@ harmful way:
   without a notification.
 
 The cost is that every tester, and the reviewer, gets the premium tiers free,
-drawing on the one global AI budget. With invited testers that is small. A
-public TestFlight link would make it anyone's, renewable by buying again, so
-TestFlight stays invite-only.
+renewable by buying again, drawing on the one global AI budget. With a few
+friends that is small. A public TestFlight link reaches whoever it is forwarded
+to, so it always carries a tester limit (App Store Connect → TestFlight → the
+group → Public Link → tester limit) and is turned off when that round of
+testing ends.
 
 Locked by `Tools/production_preflight.test.ts` ("a verifier pinned to one App
 Store environment fails the gate, because App Review buys in sandbox") and
