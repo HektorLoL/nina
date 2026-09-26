@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(48);
+select plan(54);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -300,6 +300,171 @@ select is(
   ),
   4,
   'signed-in clients keep execute on the membership predicates every content policy evaluates'
+);
+
+-- supabase/roles.sql replays production's original default privileges before
+-- the migrations, so every object below was created holding the grants it was
+-- created with there. These maps are exact: a grant a migration forgot to
+-- revoke and a grant it forgot to give both change them.
+select set_eq(
+  $$
+    select routines.proname || '(' || pg_catalog.oidvectortypes(routines.proargtypes) || ')'
+    from pg_catalog.pg_proc as routines
+    where routines.pronamespace = 'public'::regnamespace
+      and routines.prorettype <> 'pg_catalog.trigger'::regtype
+      and not exists (
+        select 1
+        from pg_catalog.pg_depend as dependencies
+        where dependencies.classid = 'pg_catalog.pg_proc'::regclass
+          and dependencies.objid = routines.oid
+          and dependencies.deptype = 'e'
+      )
+      and has_function_privilege('authenticated', routines.oid, 'execute')
+  $$,
+  array[
+    'acknowledge_family_access_decision(uuid)',
+    'activate_family(uuid)',
+    'add_unclaimed_family_member(uuid, text, text, text, text, text, date, text, text)',
+    'approve_family_join_request(uuid, text)',
+    'begin_nina_chat_run(uuid, uuid, text, jsonb, text, bigint, date)',
+    'can_manage_family(uuid, uuid)',
+    'cancel_family_join_request(uuid)',
+    'create_family(text)',
+    'decline_family_join_request(uuid)',
+    'delete_current_nina_chat_history(uuid)',
+    'delete_nina_memory(uuid)',
+    'delete_task_section(uuid, text)',
+    'ensure_current_profile(text)',
+    'get_current_home_context()',
+    'get_current_nina_state(uuid)',
+    'get_current_premium_status()',
+    'get_family_access_decision()',
+    'get_family_invite_preview(text)',
+    'get_nina_chat_result(uuid)',
+    'get_pending_family_join_request()',
+    'is_family_creator(uuid, uuid)',
+    'is_family_member(uuid, uuid)',
+    'join_family_by_invite(text)',
+    'record_nina_ai_consent(text, boolean)',
+    'remove_family_member(uuid)',
+    'request_family_join(text)',
+    'resolve_nina_proposal(uuid, text, jsonb, text)',
+    'rotate_family_invite_code(uuid)',
+    'shares_family_with(uuid, uuid)',
+    'update_family_member(uuid, text, text, text, text, text, text, date, text, text)',
+    'update_family_settings(uuid, text)',
+    'update_family_settings(uuid, text, boolean)',
+    'update_nina_memory(uuid, text, text, text)'
+  ],
+  'signed-in clients execute exactly the client RPCs and the policy predicates'
+);
+
+select set_eq(
+  $$
+    select routines.proname || '(' || pg_catalog.oidvectortypes(routines.proargtypes) || ')'
+    from pg_catalog.pg_proc as routines
+    where routines.pronamespace = 'public'::regnamespace
+      and routines.prorettype <> 'pg_catalog.trigger'::regtype
+      and not exists (
+        select 1
+        from pg_catalog.pg_depend as dependencies
+        where dependencies.classid = 'pg_catalog.pg_proc'::regclass
+          and dependencies.objid = routines.oid
+          and dependencies.deptype = 'e'
+      )
+      and has_function_privilege('service_role', routines.oid, 'execute')
+  $$,
+  array[
+    'complete_nina_chat_run(uuid, uuid, text, jsonb, integer, integer, integer, integer, bigint, integer)',
+    'complete_nina_insight_run(uuid, jsonb, integer, integer, integer, integer, bigint, integer)',
+    'fail_nina_ai_run(uuid, text, integer)',
+    'get_nina_weekly_candidates()',
+    'list_waitlist_recipients(text)',
+    'prepare_account_deletion(uuid)',
+    'record_failed_nina_ai_run(uuid, text, integer, integer, integer, integer, bigint, integer)',
+    'record_waitlist_delivery(text, text, text)',
+    'register_waitlist_signup(text, text, boolean, text, text, text, text)',
+    'reserve_nina_insight_run(uuid, text, bigint, date)',
+    'run_nina_retention()',
+    'run_waitlist_retention()',
+    'unsubscribe_waitlist_signup(text)',
+    'verify_nina_maintenance_secret(text)',
+    'waitlist_healthcheck()'
+  ],
+  'the server key executes exactly the server RPCs'
+);
+
+select hasnt_function(
+  'public',
+  'update_family_settings',
+  array['uuid', 'text', 'text'],
+  'the settings overload that stored a chosen invite code is gone'
+);
+
+select is(
+  (
+    select coalesce(string_agg(objects.relname, ', ' order by objects.relname), '')
+    from pg_catalog.pg_class as objects
+    where objects.relnamespace = 'public'::regnamespace
+      and objects.relkind in ('r', 'p', 'v', 'm', 'f', 'S')
+      and case
+        when objects.relkind = 'S' then
+          has_sequence_privilege('anon', objects.oid, 'USAGE, SELECT, UPDATE')
+        else
+          has_table_privilege(
+            'anon',
+            objects.oid,
+            'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN'
+          )
+          or has_any_column_privilege('anon', objects.oid, 'SELECT, INSERT, UPDATE, REFERENCES')
+      end
+  ),
+  '',
+  'an anonymous client holds no privilege on any table or sequence in public'
+);
+
+select set_eq(
+  $$
+    select tables.relname || ' ' || string_agg(privileges.name, ',' order by privileges.position)
+    from pg_catalog.pg_class as tables
+    cross join unnest(
+      array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']
+    ) with ordinality as privileges(name, position)
+    where tables.relnamespace = 'public'::regnamespace
+      and tables.relkind in ('r', 'p', 'v', 'm', 'f')
+      and has_table_privilege('authenticated', tables.oid, privileges.name)
+    group by tables.relname
+  $$,
+  array[
+    'chat_messages SELECT,INSERT,UPDATE,DELETE',
+    'family_members SELECT',
+    'family_snapshots SELECT',
+    'household_insights SELECT,INSERT,UPDATE,DELETE',
+    'memory_items SELECT,UPDATE,DELETE',
+    'nina_proposals SELECT',
+    'nina_threads SELECT',
+    'premium_subscription_transactions SELECT',
+    'premium_subscriptions SELECT',
+    'profiles SELECT,INSERT,UPDATE',
+    'shopping_items SELECT,INSERT,UPDATE,DELETE',
+    'task_categories SELECT,INSERT,UPDATE,DELETE',
+    'task_sections SELECT,INSERT,UPDATE,DELETE',
+    'tasks SELECT,INSERT,UPDATE,DELETE'
+  ],
+  'signed-in clients hold exactly the table privileges their policies were written for'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from pg_catalog.pg_default_acl as defaults
+    cross join lateral aclexplode(defaults.defaclacl) as grants
+    where defaults.defaclrole = 'postgres'::regrole
+      and defaults.defaclnamespace in (0::oid, 'public'::regnamespace::oid)
+      and grants.grantee in ('anon'::regrole, 'authenticated'::regrole, 'service_role'::regrole)
+  ),
+  0,
+  'an object created in public later starts with no grant to any API role'
 );
 
 set local role authenticated;

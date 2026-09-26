@@ -1,6 +1,6 @@
 # Running the Database Locally
 
-Last updated: 2026-08-10
+Last updated: 2026-09-26
 
 The database is the one layer whose gate used to live only in CI. Every
 migration, RPC, policy, and grant was verified by pushing to `main` and reading
@@ -104,3 +104,22 @@ that runs a different CLI than CI is worse than no local gate, because it
 produces confident green runs that CI then contradicts. The CLI itself will
 periodically suggest upgrading; when taking that suggestion, change both places
 in the same commit.
+
+## 7. Why the replay starts with production's default privileges
+
+`supabase/roles.sql` runs before the first migration on every fresh local or CI
+database. It gives `anon`, `authenticated` and `service_role` everything on each
+new object in `public`, because that is what the production project did when it
+was created, and a fresh Supabase database does not. Without it, a migration
+that revoked a function only `from public` looked closed here and was open in
+production. Migration `202609260001` removes those defaults again, so objects
+created after it start with no API grant in both places.
+
+```sh
+deno task db:reset && deno task db:test
+```
+
+The exact grant maps in `supabase/tests/database/rls_policies.test.sql` fail
+when a migration leaves a default grant in place or forgets a grant it needs.
+The file changes nothing on a database that already has migration history, so
+it is safe even if someone passes `--include-roles` to `supabase db push`.

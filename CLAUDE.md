@@ -96,7 +96,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 17+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (34 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (37 files) |
 | Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -466,7 +466,7 @@ audit on any new screen.
 
 ## 6. Database
 
-34 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+37 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order.
 
 **House style for every new object:**
@@ -510,6 +510,16 @@ Other conventions:
   `grant` denies every access — which is exactly what happened to
   `public.profiles` until 2026-08-08. Any table with a policy `to authenticated`
   needs a matching `grant`, and the grant should be no wider than the policies.
+- **Production was created with the opposite defaults.** Until migration
+  `202609260001` every new public table, function and sequence there granted
+  `anon`, `authenticated` and `service_role` everything, so a migration that
+  revoked only `from public` left the object open to the publishable key:
+  `register_waitlist_signup` and 19 other functions were, while every local
+  test passed. `supabase/roles.sql` replays those defaults before the
+  migrations on a fresh local or CI database, so the replay reproduces
+  production's grants, and that migration then removes the defaults in both
+  places. The file does nothing on a database that already has migration
+  history, so `db push --include-roles` cannot widen production again.
 - **`service_role` holds almost no table grants, by design.** Every privileged
   server path is a SECURITY DEFINER RPC, so the Edge Functions never need direct
   table access. If something fails with "permission denied … TO service_role",
@@ -722,8 +732,10 @@ never delete it.
 - AppStore/Auth/Profile/config/model change → a `@MainActor func test…()` in the
   matching existing `NinaTests/` file; reuse or extend the fakes already there.
 - Migration/RPC/policy/grant → assertions in the topical pgTAP file **and bump
-  its `plan(N)`**. A new public table must be added to the explicit 21-name list
-  in `rls_policies.test.sql` or the RLS canary silently passes.
+  its `plan(N)`**. A new public table must be added to the explicit 27-name list
+  in `rls_policies.test.sql` or the RLS canary silently passes. A new grant to
+  `anon`, `authenticated` or `service_role` must be added to the exact grant
+  maps in the same file, which fail on a grant missing and on a grant extra.
 - Edge Function logic → put it in `_shared/<name>.ts` behind an injectable
   interface, test in `_shared/<name>.test.ts`, add `index.ts` to `deno.json`'s
   `check` task.
