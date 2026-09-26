@@ -1239,7 +1239,6 @@ final class AppStore {
         }
 
         let response: NinaEngineResponse
-        var shouldPersistLegacyTurn = false
 
         do {
             let usesLocalEngine = usesLocalDebugBackend(for: activeUser)
@@ -1253,7 +1252,6 @@ final class AppStore {
                 messageID: userMessage.id
             )
             guard isCurrentHomeContext(contextToken) else { return }
-            shouldPersistLegacyTurn = !response.serverPersisted
             ninaConnectionNotice = nil
         } catch let engineError as NinaEngineError where engineError != .unavailable {
             guard isCurrentHomeContext(contextToken) else { return }
@@ -1262,7 +1260,6 @@ final class AppStore {
                 suggestion: nil
             )
             ninaConnectionNotice = nil
-            shouldPersistLegacyTurn = false
         } catch {
             guard isCurrentHomeContext(contextToken) else { return }
             let fallbackResponse = try? await fallbackNinaEngine.respond(
@@ -1277,7 +1274,6 @@ final class AppStore {
                     suggestion: nil
                 )
             ninaConnectionNotice = "Sem conexão. Esta resposta veio do aparelho."
-            shouldPersistLegacyTurn = false
             Haptics.error()
         }
         guard isCurrentHomeContext(contextToken) else { return }
@@ -1306,14 +1302,6 @@ final class AppStore {
                     familyID: familyID,
                     ownerUserID: ownerID
                 )
-            }
-        } else if shouldPersistLegacyTurn {
-            enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar a conversa com a Nina.") {
-                backend,
-                familyID,
-                user in
-                try await backend.createChatMessage(userMessage, familyID: familyID, currentUser: user)
-                try await backend.createChatMessage(ninaMessage, familyID: familyID, currentUser: user)
             }
         }
     }
@@ -1361,6 +1349,7 @@ final class AppStore {
             messages[index].suggestion = nil
         }
 
+        // Nina's voice reaches the server only through nina-chat, so this line stays on the phone.
         let confirmation = ChatMessage(
             sender: .nina,
             text: "Você confirmou. Está na casa agora.",
@@ -1368,12 +1357,6 @@ final class AppStore {
         )
         messages.append(confirmation)
         persistActivityLocally()
-        enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar a confirmação da Nina.") {
-            backend,
-            familyID,
-            user in
-            try await backend.createChatMessage(confirmation, familyID: familyID, currentUser: user)
-        }
     }
 
     @discardableResult

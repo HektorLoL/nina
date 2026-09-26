@@ -130,7 +130,6 @@ protocol RemoteHomeBackend {
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws
     func deleteShoppingItem(_ itemID: UUID, familyID: UUID) async throws
-    func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws
     func resolveNinaProposal(
         _ proposalID: UUID,
         decision: NinaProposalDecision,
@@ -745,22 +744,6 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                 .delete()
                 .eq("id", value: itemID)
                 .eq("family_id", value: familyID)
-                .execute()
-            return ()
-        }
-    }
-
-    func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {
-        try await perform(operation: "chat_messages.insert") {
-            _ = try await client
-                .from("chat_messages")
-                .insert(
-                    ChatMessageInsertRow(
-                        message: message,
-                        familyID: familyID,
-                        currentUserID: UUID(uuidString: currentUser.id)
-                    )
-                )
                 .execute()
             return ()
         }
@@ -1699,45 +1682,6 @@ private struct ShoppingItemUpdateRow: Encodable {
         try container.encode(ownerLabel, forKey: .ownerLabel)
         try container.encode(ownerMemberID, forKey: .ownerMemberID)
         try container.encode(isChecked, forKey: .isChecked)
-    }
-}
-
-struct ChatMessageInsertRow: Encodable {
-    var id: UUID
-    var familyID: UUID
-    var sender: String
-    var text: String
-    var suggestion: NinaSuggestion?
-    var attachments: [ChatAttachment]
-    var createdBy: UUID?
-    var createdAt: Date
-
-    private enum CodingKeys: String, CodingKey {
-        case id
-        case familyID = "family_id"
-        case sender
-        case text
-        case suggestion
-        case attachments
-        case createdBy = "created_by"
-        case createdAt = "created_at"
-    }
-
-    // The rendered thumbnail of a photographed boleto is a device-local artifact that nothing on the
-    // server ever reads back, so only the metadata begin_nina_chat_run itself writes goes up.
-    init(message: ChatMessage, familyID: UUID, currentUserID: UUID?) {
-        id = message.id
-        self.familyID = familyID
-        sender = message.sender.rawValue
-        text = message.text
-        suggestion = message.suggestion
-        attachments = message.attachments.map { attachment in
-            var uploaded = attachment
-            uploaded.thumbnailData = nil
-            return uploaded
-        }
-        createdBy = message.sender == .user ? currentUserID : nil
-        createdAt = message.timestamp
     }
 }
 

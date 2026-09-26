@@ -931,7 +931,6 @@ private actor HouseholdPremiumHomeBackend: RemoteHomeBackend {
     func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
-    func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {}
 
     private func currentState() -> RemoteHomeState {
         RemoteHomeState(
@@ -982,5 +981,4 @@ private struct UnreachableHomeBackend: RemoteHomeBackend {
     func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
-    func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {}
 }

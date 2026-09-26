@@ -77,31 +77,6 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(decoded, original)
     }
 
-    func testThePhotographedDocumentNeverRidesUpWithTheLegacyChatInsert() throws {
-        let message = ChatMessage(
-            sender: .user,
-            text: "Segue o boleto",
-            timestamp: Date(timeIntervalSince1970: 1_785_000_000),
-            attachments: [
-                ChatAttachment(
-                    kind: .image,
-                    filename: "foto-1.jpg",
-                    mimeType: "image/jpeg",
-                    byteCount: 412_000,
-                    thumbnailData: Data("thumbnail-do-boleto".utf8)
-                )
-            ]
-        )
-
-        let row = ChatMessageInsertRow(message: message, familyID: UUID(), currentUserID: UUID())
-        let encoded = try XCTUnwrap(String(data: JSONEncoder().encode(row), encoding: .utf8))
-
-        XCTAssertFalse(encoded.contains("thumbnail_data"))
-        XCTAssertFalse(encoded.contains(Data("thumbnail-do-boleto".utf8).base64EncodedString()))
-        XCTAssertTrue(encoded.contains("foto-1.jpg"))
-        XCTAssertTrue(encoded.contains("412000"))
-    }
-
     func testATaskCachedByAnOlderBuildWithoutAnOwnerMemberIDStillDecodes() throws {
         let legacy = """
         {"id":"3F1A0000-0000-4000-8000-00000000AAAA","title":"Pagar a conta de luz",

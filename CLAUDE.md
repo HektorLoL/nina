@@ -96,7 +96,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 17+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (39 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (40 files) |
 | Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -251,6 +251,20 @@ product regression, not a refactor.
   forge or rewrite the weekly insight the other reads as Nina's, blame
   included, and the prompt constraint above meant nothing. The exact grant map in `rls_policies.test.sql` pins the grant,
   and a temporary re-grant there proves the policy alone still refuses.
+- **Only the server writes a chat line.** `chat_messages` rows come from
+  nina-chat's RPCs alone; migration `202609260004` (not yet in production)
+  leaves `authenticated` with `select` and drops the "Legacy chat messages
+  remain family writable" `for all` policy. Before it, any member could insert
+  a legacy row (`thread_id is null`) with `sender = 'nina'` and any text, or
+  rewrite and delete another member's.
+  The app no longer writes one: a turn the server did not record and the
+  "Você confirmou" line from `applySuggestion` stay on the phone, and
+  `RemoteHomeBackend` has no chat write at all. Locked by
+  `AppStoreAuthorizationTests.testALegacyTurnAndItsConfirmationStayOnThePhoneAndOnlyTheTaskReachesTheServer`
+  and the grant map and re-grant in `rls_policies.test.sql`. TestFlight builds
+  1–8 still send that confirmation when someone taps the card on an offline
+  reply; once the migration is in production that one write fails with "Não foi
+  possível sincronizar a confirmação da Nina." while the task itself syncs.
 - **A portrait the snapshot refused to conclude is never drawn.** `HouseholdWorkload`
   returns an inconclusive snapshot below 6 assigned open tasks or 2 carriers, but
   that snapshot still carries a fully populated `entries` array — so both render
@@ -473,7 +487,7 @@ audit on any new screen.
 
 ## 6. Database
 
-39 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+40 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order.
 
 **House style for every new object:**

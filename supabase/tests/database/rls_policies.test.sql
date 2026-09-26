@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(61);
+select plan(68);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -436,7 +436,7 @@ select set_eq(
     group by tables.relname
   $$,
   array[
-    'chat_messages SELECT,INSERT,UPDATE,DELETE',
+    'chat_messages SELECT',
     'family_members SELECT',
     'family_snapshots SELECT',
     'household_insights SELECT',
@@ -678,6 +678,78 @@ select is(
   ),
   1,
   'the household still holds exactly the insight Nina wrote'
+);
+
+set local role authenticated;
+
+select throws_ok(
+  $$insert into public.chat_messages (family_id, sender, text)
+    values ('30000000-0000-0000-0000-000000000001', 'nina', 'Forged reply')$$,
+  '42501',
+  null,
+  'a member cannot write a chat line in Nina''s voice'
+);
+
+select throws_ok(
+  $$update public.chat_messages
+    set text = 'Forged line'
+    where id = '53000000-0000-0000-0000-000000000001'$$,
+  '42501',
+  null,
+  'a member cannot rewrite another member''s chat line'
+);
+
+select throws_ok(
+  $$delete from public.chat_messages
+    where id = '53000000-0000-0000-0000-000000000001'$$,
+  '42501',
+  null,
+  'a member cannot erase another member''s chat line'
+);
+
+-- The policy is the second layer: even with the write grant back, it lets no member write.
+reset role;
+grant insert, update, delete on table public.chat_messages to authenticated;
+set local role authenticated;
+
+select throws_ok(
+  $$insert into public.chat_messages (family_id, sender, text)
+    values ('30000000-0000-0000-0000-000000000001', 'nina', 'Forged reply')$$,
+  '42501',
+  null,
+  'the chat policy alone lets no member write a line in Nina''s voice'
+);
+
+select is(
+  pg_temp.affected_rows(
+    $$update public.chat_messages
+      set text = 'Forged line'
+      where id = '53000000-0000-0000-0000-000000000001'$$
+  ),
+  0,
+  'the chat policy alone lets no member rewrite a chat line'
+);
+
+select is(
+  pg_temp.affected_rows(
+    $$delete from public.chat_messages
+      where id = '53000000-0000-0000-0000-000000000001'$$
+  ),
+  0,
+  'the chat policy alone lets no member erase a chat line'
+);
+
+reset role;
+revoke insert, update, delete on table public.chat_messages from authenticated;
+
+select is(
+  (
+    select array_agg(sender || ' ' || text order by id)
+    from public.chat_messages
+    where family_id = '30000000-0000-0000-0000-000000000001'
+  ),
+  array['user Owner Message'],
+  'the household still holds exactly the chat line its member wrote'
 );
 
 set local role authenticated;

@@ -2130,16 +2130,55 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
         await store.activateHomeContext(for: user)
         await store.grantAIMemoryConsent()
+        await store.waitForPendingRemoteMutations()
+        let mutationsBeforeTurn = await backend.recordedMutations()
 
         await store.sendMessage("Organize a conta")
         await store.waitForPendingRemoteMutations()
 
         let mutations = await backend.recordedMutations()
-        XCTAssertFalse(mutations.contains { mutation in
-            if case .createChatMessage = mutation { return true }
-            return false
-        })
+        XCTAssertEqual(mutations, mutationsBeforeTurn)
         XCTAssertEqual(store.messages.last?.id, assistantID)
+    }
+
+    @MainActor
+    func testALegacyTurnAndItsConfirmationStayOnThePhoneAndOnlyTheTaskReachesTheServer() async throws {
+        let user = makeUser()
+        let adultMember = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember])
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        await store.grantAIMemoryConsent()
+        await store.waitForPendingRemoteMutations()
+        let mutationsBeforeTurn = await backend.recordedMutations()
+        let taskIDsBeforeTurn = Set(store.tasks.map(\.id))
+
+        await store.sendMessage("Marcar veterinário do Thor")
+        let suggestion = try XCTUnwrap(store.messages.last?.suggestion)
+        store.applySuggestion(suggestion)
+        await store.waitForPendingRemoteMutations()
+
+        let created = try XCTUnwrap(store.tasks.first { !taskIDsBeforeTurn.contains($0.id) })
+        let mutations = await backend.recordedMutations()
+        XCTAssertEqual(
+            Array(mutations.dropFirst(mutationsBeforeTurn.count)),
+            [.createTask(created.id)]
+        )
+        XCTAssertEqual(
+            store.messages.suffix(3).map(\.sender),
+            [.user, .nina, .nina]
+        )
+        XCTAssertEqual(store.messages.last?.text, "Você confirmou. Está na casa agora.")
     }
 
     @MainActor
@@ -3341,7 +3380,6 @@ private actor HomeLifecycleBackend: RemoteHomeBackend {
     func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
-    func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {}
 }
 
 private actor AccessDecisionBackend: RemoteHomeBackend {
@@ -3404,7 +3442,6 @@ private actor AccessDecisionBackend: RemoteHomeBackend {
     func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
-    func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {}
 }
 
 private struct FailingHomeBackend: RemoteHomeBackend {
@@ -3443,7 +3480,6 @@ private struct FailingHomeBackend: RemoteHomeBackend {
     func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
-    func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {}
 }
 
 private enum RecordedHomeMutation: Equatable {
@@ -3455,7 +3491,6 @@ private enum RecordedHomeMutation: Equatable {
     case deleteTask(UUID)
     case createShoppingItem(UUID)
     case updateShoppingItem(UUID)
-    case createChatMessage(UUID)
     case resolveNinaProposal(UUID, NinaProposalDecision)
     case deleteNinaChatHistory(UUID)
     case recordNinaAIConsent(Bool)
@@ -3649,10 +3684,6 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         mutations.append(.updateShoppingItem(item.id))
     }
 
-    func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {
-        mutations.append(.createChatMessage(message.id))
-    }
-
     func resolveNinaProposal(
         _ proposalID: UUID,
         decision: NinaProposalDecision,
@@ -3786,5 +3817,4 @@ private actor ControlledRefreshHomeBackend: RemoteHomeBackend {
     func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
-    func createChatMessage(_ message: ChatMessage, familyID: UUID, currentUser: AuthUser) async throws {}
 }
