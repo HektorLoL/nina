@@ -511,7 +511,7 @@ Other conventions:
   `public.profiles` until 2026-08-08. Any table with a policy `to authenticated`
   needs a matching `grant`, and the grant should be no wider than the policies.
 - **Production was created with the opposite defaults.** Until migration
-  `202609260001` every new public table, function and sequence there granted
+  `202609260001` (applied 2026-09-26) every new public table, function and sequence there granted
   `anon`, `authenticated` and `service_role` everything, so a migration that
   revoked only `from public` left the object open to the publishable key:
   `register_waitlist_signup` and 19 other functions were, while every local
@@ -937,6 +937,12 @@ the detail ever returns. There is still no preview-redaction control, so the
 **`dueLabel` and `dueAt` can drift.** `inferredDueAt(from:)` parses only a narrow
 set of pt-BR forms; anything else yields `nil` and the task shows a due label but
 never fires a notification.
+
+**The Supabase MCP `apply_migration` records its own version.** It writes a
+14-digit timestamp to `supabase_migrations.schema_migrations`, not the
+filename's `YYYYMMDDNNNN`, and `supabase db push` then refuses the history
+until it is repaired. After applying through it, set that row's `version` to
+the filename's number, as was done for `202609260001`.
 
 **`deno task db:test` runs against the database as it stands, not against the
 migrations.** It never applies anything. Editing a migration and re-running only
