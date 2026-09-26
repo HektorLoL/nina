@@ -246,10 +246,10 @@ product regression, not a refactor.
   weapon; the prompt is where that is prevented.
 - **Only Nina writes an insight.** `household_insights` rows come from
   `complete_nina_insight_run` alone; `authenticated` holds `select` and the one
-  policy is `for select`. Until 2026-09-26 a member held full DML under a
-  `for all` policy, so either adult could forge or rewrite the weekly insight
-  the other reads as Nina's, blame included, and the prompt constraint above
-  meant nothing. The exact grant map in `rls_policies.test.sql` pins the grant,
+  policy is `for select` (migration `202609260003`, applied 2026-09-26). Until
+  then a member held full DML under a `for all` policy, so either adult could
+  forge or rewrite the weekly insight the other reads as Nina's, blame
+  included, and the prompt constraint above meant nothing. The exact grant map in `rls_policies.test.sql` pins the grant,
   and a temporary re-grant there proves the policy alone still refuses.
 - **A portrait the snapshot refused to conclude is never drawn.** `HouseholdWorkload`
   returns an inconclusive snapshot below 6 assigned open tasks or 2 carriers, but
