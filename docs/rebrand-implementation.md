@@ -416,33 +416,41 @@ phone, and the adult can print the list for the fridge or send it on WhatsApp.
   never reaches her daughter Clara. A name two people share credits nobody, and
   neither does Nina's own. The name in the empty line follows H8's namesake
   rule, except that Nina's row counts ("Nina Rosa", never "Nina").
-- **Google is a third door on the welcome, between Apple and email.** No board
-  draws it. "Continuar com o Google" is an outline button with Google's G, the
-  same face as "Entrar com email", so the welcome still has no cobalt control.
-  Google's rules ask for its unmodified G on a white or light field and a light
-  stroke; the outline face over `ground` gives both, with `NinaTheme.control` as
-  the stroke. The button shows only while the project reports Google on, so
-  production, which reports it off, looks exactly as before.
-- **The welcome decides on Google once, before its buttons can be tapped.**
-  Adding the row lifts the Apple button 62pt, so it never comes or goes under a
-  finger. A cached answer draws at once. With none, the buttons stay invisible
-  until the first check answers or 1.5 seconds pass, then fade in together, and
-  a later answer waits for the next time the welcome opens.
-- **The G is the one colour outside the palette.** Google forbids recolouring its
-  mark, so `Assets.xcassets/GoogleG.imageset` is the unmodified vector, drawn
-  with `.renderingMode(.original)`.
-- **`NinaButton` gained `assetName`**, an image from the asset catalog in the
-  glyph slot. Every other button draws exactly as before.
-- **A new address in "Entrar com email" is told where to go.** The dead end
-  "Esse email ainda não está vinculado a uma conta Nina." became "Esse email não
-  tem conta. Continue com a Apple.", and "…Continue com a Apple ou o Google."
-  while the Google button is on screen. Email still signs in existing accounts
-  only.
-- **"Adicionar email" names the right provider.** For an account that signed in
-  with Google, the footer reads "Com um email, você entra por código, sem o
-  Google."
-- **The profile's email field names Google too.** The provider note under the
-  address now shows for Apple and Google accounts alike, and never for email.
+- **Sign in with Google, and the new-address line in the email sheet, were built
+  in this pass and removed the same day** (§6h). Both reached TestFlight build 7
+  (tag `testflight-1.0-7`): the Google row hidden because production reports
+  `google:false`, and the new-address line in its email sheet. The next build
+  carries neither.
+
+## 6h. Apple only (2026-09-26)
+
+Heitor's decision: no email login and no Google login; Sign in with Apple is
+the only way in. No board changes, because the boards draw an Apple button, but
+the welcome and Ajustes lose surfaces earlier passes had added.
+
+- **The welcome has one door.** The brand block, the black "Continuar com a
+  Apple" button and the legal line. "Entrar com email", its sheet (email and
+  code steps) and the Google row are gone, and so is the fade that waited for
+  Google's availability check: the button is there from the first frame. The
+  welcome is 9 authored words, 20 with the legal line.
+- **The error line stays** inside the action group, in ink, for an Apple failure
+  or an unreachable backend.
+- **Ajustes loses "Email de acesso" / "Adicionar email".** The account row still
+  shows the address Apple shared, and the profile's Email field stays read-only
+  with the "Apple" note. Nothing links or changes a sign-in email.
+- **A Debug build keeps two test doors.** One quiet row, "Teste 1 · Teste 2",
+  under the Apple button signs in the local test accounts (local home, no
+  backend). It is compiled only under `#if DEBUG`, and the release preflight's
+  `artifact.debug-sign-in` fails if their addresses reach the bundle.
+- **The one door is pinned.** The repository preflight's
+  `repository.apple-only-sign-in` fails if any app source calls an email code,
+  magic link, password, OAuth or non-Apple ID-token sign-in, or changes a
+  sign-in email; the online `deployment.sign-in-providers` fails while
+  production Auth has any provider but Apple on.
+- **`NinaButton` lost `assetName`** and `Assets.xcassets/GoogleG.imageset` is
+  gone, so `Theme.swift` is again the only source of colour.
+- **The premium line for an account that cannot buy** reads "Entre com a Apple
+  para assinar."
 
 ## 7. Verified
 

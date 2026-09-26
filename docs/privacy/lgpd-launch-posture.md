@@ -21,9 +21,9 @@ Official references:
 
 Nina processes:
 
-- Account data: Supabase Auth ID, Apple or Google identity provider metadata
-  (for Google, the name and profile-picture URL it returns), linked email,
-  display name.
+- Account data: Supabase Auth ID, Apple identity provider metadata, the email
+  Apple shares at sign-in (a private-relay address when the person hides
+  theirs), display name.
 - Profile data: role, phone, birthday label, availability, communication
   preference, memory note, avatar/photo.
 - Household data: family name, invite links, participants, roles, children/pets

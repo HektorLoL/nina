@@ -29,33 +29,6 @@ final class AuthSessionTests: XCTestCase {
     }
 
     @MainActor
-    func testEmailOTPRequestNormalizesAddressAndTracksPendingState() async {
-        let client = AuthClientSpy()
-        let store = AuthSessionStore(authClient: client)
-
-        let requested = await store.requestEmailOTP(email: " Owner@Example.COM ")
-
-        XCTAssertTrue(requested)
-        XCTAssertEqual(client.lastRequestedEmail, "owner@example.com")
-        XCTAssertEqual(store.pendingLoginEmail, "owner@example.com")
-    }
-
-    #if DEBUG
-    @MainActor
-    func testDebugEmailSignsInWithoutRequestingOTP() async {
-        let client = AuthClientSpy()
-        let store = AuthSessionStore(authClient: client)
-
-        let requested = await store.requestEmailOTP(email: " Teste1@NINAI.test ")
-
-        XCTAssertTrue(requested)
-        XCTAssertEqual(store.currentUser, DebugAuthAccount.testOne.user)
-        XCTAssertNil(store.pendingLoginEmail)
-        XCTAssertNil(client.lastRequestedEmail)
-    }
-    #endif
-
-    @MainActor
     func testRestorationUsesOnlyClientSession() async {
         let expectedUser = AuthUser(
             id: "restored",
@@ -169,8 +142,6 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertTrue(deleted)
         XCTAssertEqual(client.deleteAccountCallCount, 1)
         XCTAssertNil(store.currentUser)
-        XCTAssertNil(store.pendingLoginEmail)
-        XCTAssertNil(store.pendingEmailChange)
     }
 
     func testDeleteAccountRequestCarriesExplicitDestructiveConfirmation() throws {
@@ -214,572 +185,171 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(result.linked, [.email, .apple])
     }
 
-    func testProviderResolverReadsAGoogleOnlyAccountAsGoogle() {
+    func testANewAppleSignInIsReadAsAppleEvenWhenTheAccountAlsoHasAnEmailIdentity() {
         let result = AuthProviderResolver.resolve(
-            identityProviders: ["google"],
-            metadataProvider: nil
-        )
-
-        XCTAssertEqual(result.primary, .google)
-        XCTAssertEqual(result.linked, [.google])
-    }
-
-    func testProviderResolverTrustsTheGoogleMetadataProvider() {
-        let result = AuthProviderResolver.resolve(
-            identityProviders: ["apple", "google"],
-            metadataProvider: "google"
-        )
-
-        XCTAssertEqual(result.primary, .google)
-        XCTAssertEqual(result.linked, [.apple, .google])
-    }
-
-    func testProviderResolverPrefersAppleOverGoogleWhenBothAreLinked() {
-        let result = AuthProviderResolver.resolve(
-            identityProviders: ["google", "apple"],
-            metadataProvider: nil
+            identityProviders: ["email", "apple"],
+            metadataProvider: "email",
+            preferredProvider: .apple
         )
 
         XCTAssertEqual(result.primary, .apple)
-        XCTAssertEqual(result.linked, [.apple, .google])
+        XCTAssertEqual(result.linked, [.email, .apple])
     }
 
-    func testProviderResolverPrefersGoogleOverEmailWithoutMetadata() {
+    func testARestoredAccountWithAnAppleIdentityReadsAsAppleWhateverItFirstSignedInWith() {
         let result = AuthProviderResolver.resolve(
-            identityProviders: ["email", "google"],
-            metadataProvider: nil
+            identityProviders: ["email", "apple"],
+            metadataProvider: "email"
         )
 
-        XCTAssertEqual(result.primary, .google)
-        XCTAssertEqual(result.linked, [.email, .google])
+        XCTAssertEqual(result.primary, .apple)
+        XCTAssertEqual(result.linked, [.email, .apple])
     }
 
-    func testTheSettingsPayloadOffersGoogleWhenTheProjectHasItOn() {
-        XCTAssertEqual(
-            GoogleSignIn.availability(statusCode: 200, body: settingsPayload(google: "true")),
-            true
+    func testALegacyEmailOnlyAccountStillResolvesToEmailRatherThanFailing() {
+        let emailOnly = AuthProviderResolver.resolve(
+            identityProviders: ["email"],
+            metadataProvider: "email"
         )
+        XCTAssertEqual(emailOnly.primary, .email)
+        XCTAssertEqual(emailOnly.linked, [.email])
+
+        let noIdentity = AuthProviderResolver.resolve(identityProviders: [], metadataProvider: nil)
+        XCTAssertEqual(noIdentity.primary, .email)
+        XCTAssertEqual(noIdentity.linked, [.email])
+
+        let retiredProvider = AuthProviderResolver.resolve(
+            identityProviders: ["google"],
+            metadataProvider: "google"
+        )
+        XCTAssertEqual(retiredProvider.primary, .email)
+        XCTAssertEqual(retiredProvider.linked, [.email])
     }
 
-    func testASettingsPayloadWithGoogleOffIsADefiniteNo() {
-        XCTAssertEqual(
-            GoogleSignIn.availability(statusCode: 200, body: settingsPayload(google: "false")),
-            false
+    func testALegacyEmailProviderUserStillEncodesAndDecodes() throws {
+        let user = AuthUser(
+            id: UUID().uuidString,
+            displayName: "Conta antiga",
+            email: "antiga@example.invalid",
+            provider: .email,
+            isEmailVerified: true,
+            linkedProviders: [.apple, .email]
         )
+
+        let decoded = try JSONDecoder().decode(AuthUser.self, from: JSONEncoder().encode(user))
+
+        XCTAssertEqual(decoded, user)
+        XCTAssertEqual(decoded.provider, .email)
+        XCTAssertEqual(decoded.linkedProviders, [.apple, .email])
+        XCTAssertEqual(decoded.email, "antiga@example.invalid")
     }
 
-    func testASettingsPayloadWithoutAGoogleKeyReadsAsOff() {
-        XCTAssertEqual(
-            GoogleSignIn.availability(statusCode: 200, body: settingsPayload(google: nil)),
-            false
+    @MainActor
+    func testAFailedAppleExchangeShowsTheGenericLineAndSignsNobodyIn() async {
+        let client = AuthClientSpy()
+        client.appleSignInError = URLError(.notConnectedToInternet)
+        let store = AuthSessionStore(authClient: client)
+
+        await store.signInWithApple(
+            credential: AppleSignInCredential(identityToken: "token", rawNonce: "nonce", fullName: nil)
         )
-        XCTAssertEqual(
-            GoogleSignIn.availability(statusCode: 200, body: settingsPayload(google: "null")),
-            false
-        )
+
+        XCTAssertNil(store.currentUser)
+        XCTAssertEqual(store.errorMessage, AuthFlowError.unavailable.userMessage)
+        XCTAssertFalse(store.isSigningIn)
     }
 
-    func testARefusedOrUnreadableSettingsAnswerIsUnknownRatherThanOff() {
-        let oversized = settingsPayload(google: "true")
-            + Data(repeating: 0x20, count: GoogleSignIn.maximumSettingsBytes + 1 - settingsPayload(google: "true").count)
-        XCTAssertEqual(oversized.count, GoogleSignIn.maximumSettingsBytes + 1)
+    @MainActor
+    func testACancelledAppleExchangeShowsNoError() async {
+        let client = AuthClientSpy()
+        client.appleSignInError = CancellationError()
+        let store = AuthSessionStore(authClient: client)
 
-        let unknowns: [(Int, Data)] = [
-            (401, Data(#"{"message":"No API key found in request"}"#.utf8)),
-            (500, settingsPayload(google: "true")),
-            (200, Data(#"{"external":{"google":tr"#.utf8)),
-            (200, Data(#"{"disable_signup":false}"#.utf8)),
-            (200, Data(#"{"external":{"google":"true"}}"#.utf8)),
-            (200, oversized)
+        await store.signInWithApple(
+            credential: AppleSignInCredential(identityToken: "token", rawNonce: "nonce", fullName: nil)
+        )
+
+        XCTAssertNil(store.currentUser)
+        XCTAssertNil(store.errorMessage)
+        XCTAssertFalse(store.isSigningIn)
+    }
+
+    func testNoSignInLineNamesAnotherDoor() {
+        let errors: [AuthFlowError] = [
+            .deletionFailed,
+            .appleCredentialInvalid,
+            .configurationMissing,
+            .unavailable
         ]
 
-        for (statusCode, body) in unknowns {
-            XCTAssertNil(
-                GoogleSignIn.availability(statusCode: statusCode, body: body),
-                "status \(statusCode), \(body.count) bytes"
-            )
-        }
-    }
-
-    @MainActor
-    func testWithoutACachedAnswerTheLoginScreenHidesGoogle() throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let store = AuthSessionStore(
-            authClient: AuthClientSpy(projectHost: "project.supabase.co", googleAvailability: true),
-            defaults: defaults
-        )
-
-        XCTAssertFalse(store.isGoogleSignInAvailable)
-        XCTAssertFalse(store.isSignInChoiceSettled)
-    }
-
-    @MainActor
-    func testACachedYesShowsGoogleAtLaunchBeforeAnyNetworkAnswer() throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: GoogleSignIn.cacheKey(projectHost: "project.supabase.co"))
-        let client = AuthClientSpy(projectHost: "project.supabase.co")
-
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-
-        XCTAssertTrue(store.isGoogleSignInAvailable)
-        XCTAssertTrue(store.isSignInChoiceSettled)
-        XCTAssertEqual(client.googleAvailabilityCallCount, 0)
-    }
-
-    @MainActor
-    func testWithoutACachedAnswerTheFirstAnswerSettlesTheWelcome() async throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let client = AuthClientSpy(projectHost: "project.supabase.co", googleAvailability: true)
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-
-        await store.refreshGoogleSignInAvailability()
-
-        XCTAssertTrue(store.isSignInChoiceSettled)
-        XCTAssertTrue(store.isGoogleSignInAvailable)
-        XCTAssertTrue(AuthSessionStore(authClient: client, defaults: defaults).isGoogleSignInAvailable)
-    }
-
-    @MainActor
-    func testAFailedFirstCheckSettlesTheWelcomeWithoutGoogleAtOnceAndCachesNothing() async throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let client = AuthClientSpy(projectHost: "project.supabase.co", googleAvailability: nil)
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-
-        await store.refreshGoogleSignInAvailability()
-
-        XCTAssertTrue(store.isSignInChoiceSettled)
-        XCTAssertFalse(store.isGoogleSignInAvailable)
-        XCTAssertNil(defaults.object(forKey: GoogleSignIn.cacheKey(projectHost: "project.supabase.co")))
-    }
-
-    @MainActor
-    func testAFreshAnswerReplacesTheCacheInBothDirections() async throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let client = AuthClientSpy(projectHost: "project.supabase.co", googleAvailability: true)
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-
-        await store.refreshGoogleSignInAvailability()
-        XCTAssertTrue(AuthSessionStore(authClient: client, defaults: defaults).isGoogleSignInAvailable)
-
-        client.googleAvailability = false
-        await store.refreshGoogleSignInAvailability()
-        XCTAssertFalse(AuthSessionStore(authClient: client, defaults: defaults).isGoogleSignInAvailable)
-
-        client.googleAvailability = true
-        await store.refreshGoogleSignInAvailability()
-        XCTAssertTrue(AuthSessionStore(authClient: client, defaults: defaults).isGoogleSignInAvailable)
-        XCTAssertEqual(client.googleAvailabilityCallCount, 3)
-    }
-
-    @MainActor
-    func testARefreshAfterTheWelcomeSettledWritesTheCacheButLeavesTheShownRow() async throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let key = GoogleSignIn.cacheKey(projectHost: "project.supabase.co")
-        defaults.set(true, forKey: key)
-        let client = AuthClientSpy(projectHost: "project.supabase.co", googleAvailability: false)
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-
-        await store.refreshGoogleSignInAvailability()
-
-        XCTAssertTrue(store.isGoogleSignInAvailable)
-        XCTAssertEqual(defaults.object(forKey: key) as? Bool, false)
-
-        store.prepareSignInChoice()
-
-        XCTAssertFalse(store.isGoogleSignInAvailable)
-        XCTAssertTrue(store.isSignInChoiceSettled)
-
-        client.googleAvailability = true
-        await store.refreshGoogleSignInAvailability()
-
-        XCTAssertFalse(store.isGoogleSignInAvailable)
-        XCTAssertEqual(defaults.object(forKey: key) as? Bool, true)
-    }
-
-    @MainActor
-    func testAnUnansweredCheckPersistsNothingAndLeavesTheSettledRow() async throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: GoogleSignIn.cacheKey(projectHost: "project.supabase.co"))
-        let client = AuthClientSpy(projectHost: "project.supabase.co", googleAvailability: nil)
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-        XCTAssertTrue(store.isGoogleSignInAvailable)
-
-        await store.refreshGoogleSignInAvailability()
-
-        XCTAssertTrue(store.isGoogleSignInAvailable)
-        XCTAssertTrue(store.isSignInChoiceSettled)
-        XCTAssertEqual(client.googleAvailabilityCallCount, 1)
-        XCTAssertTrue(AuthSessionStore(authClient: client, defaults: defaults).isGoogleSignInAvailable)
-    }
-
-    @MainActor
-    func testTheDeadlineSettlesTheWelcomeWithoutGoogleAndALateYesWaitsForTheNextWelcome() async throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let client = AuthClientSpy(projectHost: "project.supabase.co")
-        client.suspendsGoogleAvailability = true
-        let suspended = expectation(description: "the check is in flight")
-        client.onGoogleAvailabilitySuspended = { suspended.fulfill() }
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-        XCTAssertFalse(store.isSignInChoiceSettled)
-
-        let check = Task { await store.refreshGoogleSignInAvailability() }
-        await fulfillment(of: [suspended], timeout: 2)
-        store.closeSignInChoice()
-
-        XCTAssertTrue(store.isSignInChoiceSettled)
-        XCTAssertFalse(store.isGoogleSignInAvailable)
-
-        client.resumeGoogleAvailability(with: true)
-        await check.value
-
-        XCTAssertFalse(store.isGoogleSignInAvailable)
-        XCTAssertEqual(
-            defaults.object(forKey: GoogleSignIn.cacheKey(projectHost: "project.supabase.co")) as? Bool,
-            true
-        )
-
-        store.prepareSignInChoice()
-
-        XCTAssertTrue(store.isGoogleSignInAvailable)
-        XCTAssertTrue(store.isSignInChoiceSettled)
-    }
-
-    @MainActor
-    func testSettlingRevealsTheWelcomeAtTheDeadlineEvenWhenTheCheckNeverAnswers() async throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let client = AuthClientSpy(projectHost: "project.supabase.co")
-        client.suspendsGoogleAvailability = true
-        let suspended = expectation(description: "the check is in flight")
-        client.onGoogleAvailabilitySuspended = { suspended.fulfill() }
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-
-        await store.settleSignInChoice(within: .milliseconds(20))
-
-        XCTAssertTrue(store.isSignInChoiceSettled)
-        XCTAssertFalse(store.isGoogleSignInAvailable)
-
-        await fulfillment(of: [suspended], timeout: 2)
-        client.resumeGoogleAvailability(with: nil)
-    }
-
-    @MainActor
-    func testAClientWithoutAProjectNeverOffersGoogle() async throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: GoogleSignIn.cacheKey(projectHost: "other.supabase.co"))
-        let client = AuthClientSpy(projectHost: nil, googleAvailability: true)
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-
-        await store.refreshGoogleSignInAvailability()
-        await store.settleSignInChoice()
-
-        XCTAssertFalse(store.isGoogleSignInAvailable)
-        XCTAssertTrue(store.isSignInChoiceSettled)
-        XCTAssertEqual(client.googleAvailabilityCallCount, 0)
-    }
-
-    @MainActor
-    func testACachedAnswerBelongsToTheProjectThatGaveIt() throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: GoogleSignIn.cacheKey(projectHost: "project-a.supabase.co"))
-
-        let storeA = AuthSessionStore(
-            authClient: AuthClientSpy(projectHost: "PROJECT-A.supabase.co"),
-            defaults: defaults
-        )
-        let storeB = AuthSessionStore(
-            authClient: AuthClientSpy(projectHost: "project-b.supabase.co"),
-            defaults: defaults
-        )
-
-        XCTAssertTrue(storeA.isGoogleSignInAvailable)
-        XCTAssertFalse(storeB.isGoogleSignInAvailable)
-    }
-
-    func testTheMockAndUnavailableClientsNeverOfferGoogle() async {
-        let clients: [any AuthClient] = [MockAuthClient(), UnavailableAuthClient()]
-
-        for client in clients {
-            XCTAssertNil(client.projectHost)
-            let availability = await client.googleSignInAvailability()
-            XCTAssertNil(availability)
-            do {
-                _ = try await client.signInWithGoogle()
-                XCTFail("\(type(of: client)) signed in with Google")
-            } catch {
-                XCTAssertEqual(error as? AuthFlowError, .unavailable)
+        for error in errors {
+            let line = error.userMessage.lowercased()
+            for forbidden in ["email", "código", "google", "!"] {
+                XCTAssertFalse(line.contains(forbidden), "\(error) says \(forbidden)")
             }
         }
     }
 
+    #if DEBUG
     @MainActor
-    func testAnAvailabilityCheckNeverStartsDuringASignIn() async throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(true, forKey: GoogleSignIn.cacheKey(projectHost: "project.supabase.co"))
-        let client = AuthClientSpy(projectHost: "project.supabase.co", googleAvailability: nil)
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-        store.isSigningIn = true
+    func testTheDebugTestAccountsSignInLocallyWithoutTouchingTheBackend() async {
+        let client = AuthClientSpy()
+        let store = AuthSessionStore(authClient: client)
+        store.isBackendAvailable = false
+        store.errorMessage = "x"
 
-        await store.refreshGoogleSignInAvailability()
+        store.signIn(as: .testTwo)
 
-        XCTAssertEqual(client.googleAvailabilityCallCount, 0)
-        XCTAssertTrue(store.isGoogleSignInAvailable)
-    }
-
-    @MainActor
-    func testACheckThatLandsDuringASignInNeverChangesTheShownRowOrTheCache() async throws {
-        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let key = GoogleSignIn.cacheKey(projectHost: "project.supabase.co")
-        defaults.set(true, forKey: key)
-        let client = AuthClientSpy(projectHost: "project.supabase.co")
-        client.suspendsGoogleAvailability = true
-        let suspended = expectation(description: "the check is in flight")
-        client.onGoogleAvailabilitySuspended = { suspended.fulfill() }
-        let store = AuthSessionStore(authClient: client, defaults: defaults)
-
-        let check = Task { await store.refreshGoogleSignInAvailability() }
-        await fulfillment(of: [suspended], timeout: 2)
-        store.isSigningIn = true
-        client.resumeGoogleAvailability(with: nil)
-        await check.value
-
-        XCTAssertTrue(store.isGoogleSignInAvailable)
-        XCTAssertTrue(store.isSignInChoiceSettled)
-        XCTAssertEqual(defaults.object(forKey: key) as? Bool, true)
-        XCTAssertEqual(client.googleAvailabilityCallCount, 1)
-    }
-
-    @MainActor
-    func testGoogleSignInSignsInAsAGoogleUser() async {
-        let store = AuthSessionStore(authClient: AuthClientSpy())
-
-        await store.signInWithGoogle()
-
-        XCTAssertEqual(store.currentUser?.provider, .google)
-        XCTAssertFalse(store.isSigningIn)
+        XCTAssertEqual(store.currentUser, DebugAuthAccount.testTwo.user)
+        XCTAssertTrue(store.isBackendAvailable)
         XCTAssertNil(store.errorMessage)
-    }
+        XCTAssertNil(client.lastAppleCredential)
 
-    @MainActor
-    func testCancellingTheGoogleSheetShowsNoError() async {
-        let store = AuthSessionStore(
-            authClient: AuthClientSpy(googleSignInResult: .failure(CancellationError()))
-        )
+        await store.restoreSession()
+        XCTAssertEqual(store.currentUser, DebugAuthAccount.testTwo.user)
+        XCTAssertEqual(client.restoreCallCount, 0)
 
-        await store.signInWithGoogle()
-
+        let signedOut = await store.signOut()
+        XCTAssertTrue(signedOut)
+        XCTAssertEqual(client.signOutCallCount, 0)
         XCTAssertNil(store.currentUser)
-        XCTAssertNil(store.errorMessage)
-        XCTAssertFalse(store.isSigningIn)
     }
 
-    @MainActor
-    func testAFailedGoogleSignInShowsTheGenericLine() async {
-        let store = AuthSessionStore(
-            authClient: AuthClientSpy(
-                googleSignInResult: .failure(URLError(.notConnectedToInternet))
-            )
-        )
+    func testEachDebugTestAccountIsADistinctLocalAccountOnAReservedDomain() {
+        let users = DebugAuthAccount.allCases.map(\.user)
 
-        await store.signInWithGoogle()
-
-        XCTAssertNil(store.currentUser)
-        XCTAssertEqual(store.errorMessage, AuthFlowError.unavailable.userMessage)
-    }
-
-    func testTheSheetsCancelAndGooglesDenyBothReadAsCancellation() {
-        XCTAssertTrue(
-            GoogleSignIn.isCancellation(
-                NSError(
-                    domain: ASWebAuthenticationSessionError.errorDomain,
-                    code: ASWebAuthenticationSessionError.canceledLogin.rawValue
-                )
-            )
-        )
-        XCTAssertTrue(GoogleSignIn.isCancellation(ASWebAuthenticationSessionError(.canceledLogin)))
-        XCTAssertFalse(
-            GoogleSignIn.isCancellation(
-                NSError(domain: ASWebAuthenticationSessionError.errorDomain, code: 2)
-            )
-        )
-        XCTAssertFalse(GoogleSignIn.isCancellation(URLError(.cancelled)))
-
-        XCTAssertTrue(GoogleSignIn.isCancellation(oauthErrorCode: "access_denied"))
-        XCTAssertFalse(GoogleSignIn.isCancellation(oauthErrorCode: "server_error"))
-        XCTAssertFalse(GoogleSignIn.isCancellation(oauthErrorCode: nil))
-    }
-
-    func testTheGoogleNameHintPrefersTheFullNameAndSkipsBlanks() {
-        XCTAssertEqual(
-            GoogleSignIn.displayNameHint(displayName: nil, fullName: " ", name: "Ana"),
-            "Ana"
-        )
-        XCTAssertEqual(
-            GoogleSignIn.displayNameHint(displayName: nil, fullName: " Ana Souza ", name: "Ana"),
-            "Ana Souza"
-        )
-        XCTAssertNil(GoogleSignIn.displayNameHint(displayName: "", fullName: nil, name: "\n"))
-    }
-
-    func testTheGoogleNameHintKeepsTheNameAlreadyOnTheAccount() {
-        XCTAssertEqual(
-            GoogleSignIn.displayNameHint(
-                displayName: "Heitor",
-                fullName: "Heitor C. França",
-                name: "Heitor C. França"
-            ),
-            "Heitor"
-        )
-    }
-
-    func testTheGoogleCallbackIsTheBundleSchemeTheAuthAllowListCarries() throws {
-        let callback = try XCTUnwrap(GoogleSignIn.callbackURL)
-
-        XCTAssertEqual(callback.scheme, "com.heitor.nina")
-        XCTAssertEqual(callback.host, "login-callback")
-        XCTAssertEqual(callback.absoluteString, "com.heitor.nina://login-callback")
-    }
-
-    @MainActor
-    func testANewAddressIsToldToContinueWithAppleWhileGoogleIsOff() async {
-        let store = AuthSessionStore(
-            authClient: AuthClientSpy(emailOTPError: AuthFlowError.emailNotLinked)
-        )
-
-        let requested = await store.requestEmailOTP(email: "nova@example.com")
-
-        XCTAssertFalse(requested)
-        XCTAssertNil(store.pendingLoginEmail)
-        XCTAssertEqual(store.errorMessage, "Esse email não tem conta. Continue com a Apple.")
-    }
-
-    @MainActor
-    func testANewAddressIsOfferedGoogleOnlyWhileTheGoogleButtonIsShown() async {
-        let store = AuthSessionStore(
-            authClient: AuthClientSpy(emailOTPError: AuthFlowError.emailNotLinked)
-        )
-        store.isGoogleSignInAvailable = true
-
-        await store.requestEmailOTP(email: "nova@example.com")
-
-        XCTAssertEqual(
-            store.errorMessage,
-            "Esse email não tem conta. Continue com a Apple ou o Google."
-        )
-    }
-
-    func testTheContextFreeEmailNotLinkedLineNeverMentionsGoogle() {
-        XCTAssertEqual(
-            AuthFlowError.emailNotLinked.userMessage,
-            AuthFlowError.emailNotLinked.userMessage(offersGoogle: false)
-        )
-        XCTAssertFalse(AuthFlowError.emailNotLinked.userMessage.contains("Google"))
-        for offersGoogle in [false, true] {
-            XCTAssertFalse(AuthFlowError.emailNotLinked.userMessage(offersGoogle: offersGoogle).contains("!"))
+        XCTAssertEqual(Set(users.map(\.id)).count, DebugAuthAccount.allCases.count)
+        for user in users {
+            XCTAssertTrue(user.isDebugAccount)
+            XCTAssertNil(UUID(uuidString: user.id))
+            XCTAssertTrue(user.email?.hasSuffix(".test") == true)
         }
     }
-
-    private func settingsPayload(google: String?) -> Data {
-        let googleEntry = google.map { #","google":\#($0)"# } ?? ""
-        return Data(
-            (#"{"external":{"anonymous_users":false,"apple":true,"azure":false,"email":true"#
-                + googleEntry
-                + #","phone":false},"disable_signup":false,"mailer_autoconfirm":false,"#
-                + #""phone_autoconfirm":false,"sms_provider":"twilio","saml_enabled":false}"#).utf8
-        )
-    }
+    #endif
 }
 
 private final class AuthClientSpy: AuthClient, @unchecked Sendable {
     var restoration: AuthSessionRestoration
     var lastAppleCredential: AppleSignInCredential?
-    var lastRequestedEmail: String?
+    var appleSignInError: Error?
     var deleteAccountCallCount = 0
-    var projectHost: String?
-    var googleAvailability: Bool?
-    var googleAvailabilityCallCount = 0
-    var googleSignInResult: Result<AuthUser, Error>
-    var emailOTPError: Error?
-    var suspendsGoogleAvailability = false
-    var onGoogleAvailabilitySuspended: (() -> Void)?
-    private let pendingGoogleAvailabilityLock = NSLock()
-    private var pendingGoogleAvailability: CheckedContinuation<Bool?, Never>?
+    var restoreCallCount = 0
+    var signOutCallCount = 0
 
-    init(
-        restoration: AuthSessionRestoration = .signedOut,
-        projectHost: String? = nil,
-        googleAvailability: Bool? = nil,
-        googleSignInResult: Result<AuthUser, Error> = .success(
-            AuthUser(
-                id: "google-user",
-                displayName: "Google User",
-                email: "google@example.com",
-                provider: .google,
-                isEmailVerified: true
-            )
-        ),
-        emailOTPError: Error? = nil
-    ) {
+    init(restoration: AuthSessionRestoration = .signedOut) {
         self.restoration = restoration
-        self.projectHost = projectHost
-        self.googleAvailability = googleAvailability
-        self.googleSignInResult = googleSignInResult
-        self.emailOTPError = emailOTPError
-    }
-
-    func googleSignInAvailability() async -> Bool? {
-        googleAvailabilityCallCount += 1
-        guard suspendsGoogleAvailability else { return googleAvailability }
-        return await withCheckedContinuation { continuation in
-            pendingGoogleAvailabilityLock.withLock { pendingGoogleAvailability = continuation }
-            onGoogleAvailabilitySuspended?()
-        }
-    }
-
-    func resumeGoogleAvailability(with answer: Bool?) {
-        let continuation = pendingGoogleAvailabilityLock.withLock {
-            defer { pendingGoogleAvailability = nil }
-            return pendingGoogleAvailability
-        }
-        continuation?.resume(returning: answer)
-    }
-
-    func signInWithGoogle() async throws -> AuthUser {
-        try googleSignInResult.get()
     }
 
     func restoreSession() async -> AuthSessionRestoration {
-        restoration
+        restoreCallCount += 1
+        return restoration
     }
 
     func signInWithApple(credential: AppleSignInCredential) async throws -> AuthUser {
         lastAppleCredential = credential
+        if let appleSignInError {
+            throw appleSignInError
+        }
         return AuthUser(
             id: "apple-user",
             displayName: credential.fullName ?? "Apple User",
@@ -788,33 +358,11 @@ private final class AuthClientSpy: AuthClient, @unchecked Sendable {
         )
     }
 
-    func requestEmailOTP(email: String) async throws {
-        lastRequestedEmail = email
-        if let emailOTPError {
-            throw emailOTPError
-        }
-    }
-
-    func verifyEmailOTP(email: String, code: String) async throws -> AuthUser {
-        AuthUser(
-            id: "email-user",
-            displayName: "Email User",
-            email: email,
-            provider: .email,
-            isEmailVerified: true,
-            linkedProviders: [.apple, .email]
-        )
-    }
-
-    func requestEmailChange(email: String) async throws {}
-
-    func verifyEmailChange(email: String, code: String) async throws -> AuthUser {
-        try await verifyEmailOTP(email: email, code: code)
-    }
-
     func deleteCurrentAccount() async throws {
         deleteAccountCallCount += 1
     }
 
-    func signOut() async throws {}
+    func signOut() async throws {
+        signOutCallCount += 1
+    }
 }

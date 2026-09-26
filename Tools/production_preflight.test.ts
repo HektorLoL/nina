@@ -1,16 +1,20 @@
 import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import {
+  containsDebugSignIn,
   deploymentChecks,
   iosArtifactChecks,
   type IOSArtifactSnapshot,
+  isAppleOnlySignIn,
   isPublishableSupabaseKey,
   isSecretSupabaseKey,
+  nonAppleSignInCalls,
   parseEnvironmentFile,
   pinnedSupabaseCLIVersions,
   type PreflightEnvironment,
   premiumTransactionFinishes,
   productionEnvironmentChecks,
   type RepositoryFacts,
+  signInProviderCheck,
 } from "./production_preflight.ts";
 
 const facts: RepositoryFacts = {
@@ -87,6 +91,7 @@ function validArtifact(): IOSArtifactSnapshot {
     isArchive: true,
     scanComplete: true,
     containsServerCredential: false,
+    containsDebugSignIn: false,
   };
 }
 
@@ -216,6 +221,75 @@ Deno.test("iOS artifact rejects unresolved settings, drift, and server credentia
   assert(failedIDs.includes("artifact.ai-release-decision"));
   assert(failedIDs.includes("artifact.resolved-settings"));
   assert(failedIDs.includes("artifact.credential-scan"));
+});
+
+Deno.test("a build that still carries the DEBUG test accounts fails the artifact check", () => {
+  const artifact = validArtifact();
+  artifact.containsDebugSignIn = true;
+
+  const failedIDs = iosArtifactChecks(artifact, validEnvironment(), facts)
+    .filter((result) => result.status === "failure")
+    .map((result) => result.id);
+
+  assertEquals(failedIDs, ["artifact.debug-sign-in"]);
+  assert(containsDebugSignIn("Teste 1\0teste1@ninai.test\0"));
+  assert(containsDebugSignIn("debug:test-two"));
+  assertFalse(containsDebugSignIn("https://ninai.app/privacidade/"));
+});
+
+Deno.test("the shipped app signs in with Apple and calls no other sign-in door", async () => {
+  const paths = [
+    "../Nina/SupabaseAuthClient.swift",
+    "../Nina/AuthSession.swift",
+    "../Nina/LoginView.swift",
+  ];
+  const sources = await Promise.all(
+    paths.map((path) => Deno.readTextFile(new URL(path, import.meta.url))),
+  );
+
+  for (const source of sources) {
+    assertEquals(nonAppleSignInCalls(source), []);
+  }
+  assert(sources[0].includes("provider: .apple"));
+});
+
+Deno.test("an email code, magic link, password, OAuth or non-Apple ID token reads as another door", () => {
+  assertEquals(
+    nonAppleSignInCalls(
+      "try await client.auth.signInWithOTP(email: email, shouldCreateUser: false)",
+    ),
+    ["signInWithOTP"],
+  );
+  assertEquals(
+    nonAppleSignInCalls(
+      "try await client.auth.verifyOTP(email: e, token: t, type: .email)",
+    ),
+    ["verifyOTP"],
+  );
+  assertEquals(
+    nonAppleSignInCalls(
+      "try await client.auth.signInWithOAuth(provider: .google)",
+    ),
+    ["signInWithOAuth"],
+  );
+  assertEquals(
+    nonAppleSignInCalls(
+      "try await client.auth.update(user: UserAttributes(email: next))",
+    ),
+    ["UserAttributes(email"],
+  );
+  assertEquals(
+    nonAppleSignInCalls(
+      "OpenIDConnectCredentials(\n    provider: .google,\n    idToken: token\n)",
+    ),
+    ["OpenIDConnectCredentials"],
+  );
+  assertEquals(
+    nonAppleSignInCalls(
+      "OpenIDConnectCredentials(\n    provider: .apple,\n    idToken: token\n)",
+    ),
+    [],
+  );
 });
 
 Deno.test("the shipped premium store finishes a purchase only after the server records it", async () => {
@@ -355,4 +429,126 @@ Deno.test("online deployment checks fail closed on degraded health", async () =>
   const checks = await deploymentChecks(environment, facts, fetcher);
   const health = checks.find((result) => result.id === "deployment.health");
   assertEquals(health?.status, "failure");
+});
+
+function productionAuthSettings(
+  overrides: {
+    external?: Record<string, boolean>;
+    [key: string]: unknown;
+  } = {},
+): Record<string, unknown> {
+  const { external, ...topLevel } = overrides;
+  return {
+    external: {
+      anonymous_users: false,
+      apple: true,
+      azure: false,
+      email: false,
+      github: false,
+      google: false,
+      phone: false,
+      ...external,
+    },
+    disable_signup: false,
+    mailer_autoconfirm: false,
+    phone_autoconfirm: false,
+    sms_provider: "twilio",
+    saml_enabled: false,
+    passkeys_enabled: false,
+    ...topLevel,
+  };
+}
+
+Deno.test("the online sign-in check passes only when Apple is the one provider on", async () => {
+  const environment = validEnvironment();
+  const requests: string[] = [];
+  const fetcher = (
+    input: string | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const url = new URL(input);
+    requests.push(url.href);
+    assertEquals(url.host, "project-ref.supabase.co");
+    assertEquals(url.pathname, "/auth/v1/settings");
+    assertEquals(
+      new Headers(init?.headers).get("apikey"),
+      environment.NINA_SUPABASE_PUBLISHABLE_KEY,
+    );
+    return Promise.resolve(Response.json(productionAuthSettings()));
+  };
+
+  const result = await signInProviderCheck(environment, fetcher);
+
+  assertEquals(result.id, "deployment.sign-in-providers");
+  assertEquals(result.status, "pass");
+  assertEquals(requests.length, 1);
+  assertFalse(
+    result.message.includes(environment.NINA_SUPABASE_PUBLISHABLE_KEY!),
+  );
+});
+
+Deno.test("the online sign-in check fails closed while email, Google, passkeys or any other door is on, or the answer is unreadable", async () => {
+  const answering = (body: unknown, status = 200) => (): Promise<Response> =>
+    Promise.resolve(Response.json(body, { status }));
+  const cases: Array<
+    [string, (input: string | URL, init?: RequestInit) => Promise<Response>]
+  > = [
+    [
+      "email on",
+      answering(productionAuthSettings({ external: { email: true } })),
+    ],
+    [
+      "google on",
+      answering(productionAuthSettings({ external: { google: true } })),
+    ],
+    [
+      "apple off",
+      answering(productionAuthSettings({ external: { apple: false } })),
+    ],
+    [
+      "phone on",
+      answering(productionAuthSettings({ external: { phone: true } })),
+    ],
+    [
+      "anonymous on",
+      answering(
+        productionAuthSettings({ external: { anonymous_users: true } }),
+      ),
+    ],
+    [
+      "passkeys on",
+      answering(productionAuthSettings({ passkeys_enabled: true })),
+    ],
+    ["saml on", answering(productionAuthSettings({ saml_enabled: true }))],
+    [
+      "signup closed",
+      answering(productionAuthSettings({ disable_signup: true })),
+    ],
+    ["status 500", answering(productionAuthSettings(), 500)],
+    [
+      "not json",
+      () => Promise.resolve(new Response("<html>maintenance</html>")),
+    ],
+    ["no external block", answering({ disable_signup: false })],
+    ["network failure", () => Promise.reject(new TypeError("offline"))],
+  ];
+
+  for (const [label, fetcher] of cases) {
+    const result = await signInProviderCheck(validEnvironment(), fetcher);
+    assertEquals(result.status, "failure", label);
+  }
+
+  const placeholder = validEnvironment();
+  placeholder.NINA_SUPABASE_URL = "https://your-project-ref.supabase.co";
+  let placeholderRequests = 0;
+  const result = await signInProviderCheck(placeholder, () => {
+    placeholderRequests += 1;
+    return Promise.resolve(Response.json(productionAuthSettings()));
+  });
+  assertEquals(result.status, "failure");
+  assertEquals(placeholderRequests, 0);
+
+  assertFalse(isAppleOnlySignIn(undefined));
+  assertFalse(isAppleOnlySignIn("apple"));
+  assert(isAppleOnlySignIn(productionAuthSettings()));
 });

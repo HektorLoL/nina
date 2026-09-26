@@ -79,9 +79,10 @@ from the client.
 
 When Supabase is configured, Nina now uses:
 
-- Native Sign in with Apple as the only account-creation path.
-- Six-digit email OTP as a secondary login after the address is linked from
-  Settings.
+- Native Sign in with Apple as the only way to sign in or create an account.
+  The app has no email, code or OAuth path, and Email and every other provider
+  must be off in the dashboard (see Configure Auth below, and runbook §2,
+  checked by `deployment.sign-in-providers`).
 - `profiles` for profile metadata.
 - `families`, `family_members`, and server-managed `invites` for home creation,
   expiring/revocable invite links, joining, and membership access.
@@ -151,22 +152,17 @@ variables. The RPC is not executable by `anon` or `authenticated`.
 In the Supabase Dashboard:
 
 1. Enable Apple and register the native client ID `com.heitor.nina`.
-2. Keep email enabled, but disable email account creation.
-3. Set the Magic Link/OTP and email-change templates to use `{{ .Token }}`.
-4. Use a 6-digit OTP, 1-hour expiry, and 60-second request cooldown.
-5. Disable double-confirm email changes so the new address confirms the change;
-   keep the old-address security notification enabled.
-6. Configure custom SMTP before production. Supabase's default sender is only
-   suitable for development.
+2. Turn Email and every other provider off; the app has no email, code or OAuth
+   path.
+3. Keep "Allow new users to sign up" on: Apple is the door that creates
+   accounts.
+4. Turn custom SMTP off under Authentication → Emails: email login was its only
+   consumer, and it holds a copy of the sending-only Resend key.
 
 The checked-in `config.toml` contains the provider-independent Auth settings.
 After linking the intended project, review the diff and apply them with
-`supabase config push`.
-
-The ready-to-use HTML bodies live in `templates/`. Supabase free-tier projects
-using the default email provider reject custom template updates, so configure
-custom SMTP first, then install these bodies in the Dashboard's Email Templates
-and Security Notifications pages.
+`supabase config push`. Its `[auth.email]` block stays because the AI eval
+signs in on the local stack through an admin magic link.
 
 ## Deploy Premium verification
 

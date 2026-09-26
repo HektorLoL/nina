@@ -49,7 +49,7 @@ This rubric applies to every screen of the iOS app. A screen passes when it meet
 - **G9. Each reassurance appears once per flow**, not once per screen.
 - **G10. Buttons are a verb of 1–2 words, with a hard maximum of 3.**
   - Add the noun only when the screen does not already name the object. A proposal card uses "Criar tarefa"; a sheet already titled "Nova tarefa" uses "Criar".
-  - The system Apple button label and Google's approved "Continuar com o Google" are exempt.
+  - The system Apple button label is exempt.
 - **G11. One word per act.** A verb used for one action is never reused for another. "Plantar" means giving a semente a date; creating a semente is "Nova semente".
 - **G12. Empty and blocked states.**
   - At most one mark, a headline of 6 words or fewer, at most one line of 10 words or fewer, and at most one action.
@@ -60,7 +60,7 @@ This rubric applies to every screen of the iOS app. A screen passes when it meet
   - The message is 10 words or fewer, or absent. It states only a consequence, and never repeats the title or the button.
   - The destructive button is the verb alone.
   - Precedent: [Vocabulary account deletion](https://mobbin.com/flows/979ec144-9635-428a-b171-3d0223fa30c6).
-- **G14. No vendor names, configuration instructions or error codes.** "Supabase", "configure o projeto" and similar never appear. Technical nouns are allowed only inside a protected privacy line from §3. "Apple", "App Store" and "Google" are allowed where the system, a purchase or a sign-in provider requires them.
+- **G14. No vendor names, configuration instructions or error codes.** "Supabase", "configure o projeto" and similar never appear. Technical nouns are allowed only inside a protected privacy line from §3. "Apple" and "App Store" are allowed where the system or the purchase requires them.
 - **G15. Composition.**
   - Free space sits above the actions, never below them.
   - A single block (an empty state, the brand block, a gate) is centered vertically in the space it has.
@@ -81,7 +81,6 @@ These count authored words only, as defined in §0 step 4.
 | Surface | Budget |
 |---|---|
 | Welcome / login | ≤ 28 including button labels and legal; ≤ 16 without the legal line |
-| Email or code step (sheet) | ≤ 15 |
 | Settings root | ≤ 50, and 1 second line in total (the account row) |
 | Settings sub-screen | ≤ 40, plus protected footers |
 | Tutorial | ≤ 3 screens, ≤ 120 words in total, ≤ 45 per screen |
@@ -118,9 +117,7 @@ These count authored words only, as defined in §0 step 4.
 │    Conta pra ela o que pesa.   │  .ninaText(.label, muted), centered
 │ (flexible spacer, min 32)      │
 │ [    Continuar com a Apple   ] │  system button, black, 52pt
-│ [ G  Continuar com o Google  ] │  outline + Google's G, only when the project has Google on
-│ [      Entrar com email      ] │  outline, 52pt, 12pt gap
-│        error line (if any)     │  .meta, ink, centered
+│        error line (if any)     │  .meta, ink, centered, 12pt gap
 │ Ao continuar, você aceita os   │  .meta muted, centered, 14pt below
 │ Termos e a Política de Priv.   │  links tinted
 │ 16pt bottom inset              │
@@ -134,7 +131,7 @@ GeometryReader { proxy in
             Spacer(minLength: 32)
             brandBlock                    // VStack(spacing: 14), .multilineTextAlignment(.center)
             Spacer(minLength: 32)
-            actionGroup                   // VStack(spacing: 12): Apple, Google (when on), email, error line
+            actionGroup                   // VStack(spacing: 12): Apple, error line
             legalFootnote.padding(.top, 14)
         }
         .padding(.horizontal, 20)
@@ -156,18 +153,12 @@ The two equal spacers center the brand block in the space above the actions. On 
 - **L3.** The tagline is one line of 6 words or fewer.
   - The login screen never explains how the product works. That is the tutorial's job.
   - Only 4 of 16 references add a second line, and none explains the product.
-- **L4.** At most three buttons: Apple first (black, system label), Google second (outline with the G, only when the project has Google on), email last (outline).
-  - There is no cobalt fill on the welcome screen. The screen's single cobalt control lives in the email sheet.
-  - Word count: Apple's system label is not counted, because the system draws it (§0 step 4 counts what the app writes). "Continuar com o Google" is counted, because the app draws it. With Google shown, the welcome is 16 words without the legal line (the limit) and 27 with it (limit 28). There is no room left for another word.
-  - The Google row never appears or disappears once the buttons can be tapped. With no cached answer, the buttons stay invisible until the first check answers or 1.5 seconds pass, then fade in together; a later answer waits for the next time the welcome opens.
-- **L5.** Choosing email never re-flows the welcome screen. It opens a sheet (`.presentationDetents([.medium, .large])`, radius 28).
-  - Precedents: [Luma](https://mobbin.com/screens/5b0e502b-47ea-45a2-975b-0a70be09c657), and the [Claude flow](https://mobbin.com/flows/34ee8283-6a62-4b6e-b6d2-970e86c495ee), where the brand block never moves.
-  - Focus the field with `.task { await Task.yield(); focusedField = .email }`.
-  - Opening the sheet keeps `Haptics.lightImpact()`.
-- **L6. The code step says what happened, echoes the address, and offers a resend.**
-  - Precedents: [Brick](https://mobbin.com/flows/3f721b3f-5cc4-427a-8635-36668bad5963) and [TikTok](https://mobbin.com/flows/ce10d6cb-7a46-4501-847a-44f487d76171). 7 of the 8 code screens reviewed echo the address.
-  - The field has no caption above it, because its placeholder or content already says what it is.
-- **L7. The legal footnote** is centered, 1–2 lines, in the `.meta` tier, 14pt under the last button. It appears on the welcome screen only, not again in the sheet.
+- **L4.** One button: Apple (black, system label, 52pt). There is no cobalt fill on the welcome screen and no other door; email, code and Google sign-in were removed on 2026-09-26.
+  - Word count: Apple's system label is not counted, because the system draws it (§0 step 4 counts what the app writes). The welcome is 9 words without the legal line and 20 with it.
+  - A Debug build adds one quiet row, "Teste 1 · Teste 2", under the Apple button for the local test accounts. It is compiled out of Release, so no budget here counts it.
+- **L5.** Retired 2026-09-26: there is no email sheet.
+- **L6.** Retired 2026-09-26: there is no code step.
+- **L7. The legal footnote** is centered, 1–2 lines, in the `.meta` tier, 14pt under the last button. It appears on the welcome screen only.
 - **L8.** The error line sits inside the action group, centered, in ink (never terracotta). One state gets one sentence.
 
 **Target strings**
@@ -176,11 +167,7 @@ The two equal spacers center the brand block in the space above the actions. On 
 |---|---|---|
 | Welcome tagline | 20-word, two-sentence subtitle | "Conta pra ela o que pesa." |
 | Invite variant | "Você foi convidado para uma casa." plus a subtitle | Title "Você tem um convite"; tagline "Quem convidou aprova sua entrada." The line is protected (§3). The new title is also gender-neutral. |
-| Email button | "Usar meu email" | "Entrar com email". Email only signs in existing accounts (`shouldCreateUser: false`). |
-| Google button | none | "Continuar com o Google", with Google's G, shown only while the project has Google on. |
-| Email not linked | "Esse email ainda não está vinculado a uma conta Nina." | "Esse email não tem conta. Continue com a Apple." While the Google button is shown: "Esse email não tem conta. Continue com a Apple ou o Google." Two sentences, like "Esse código venceu ou não bate. Peça um novo.": what happened, then the way out. The Google variant puts the email step at 18 words, 3 over its budget. That is an allowed exception, because the line is the only way out of a dead end. |
-| Email step | "Email" caption plus the field | Title "Entrar com email"; field placeholder "voce@exemplo.com" with no caption; button "Enviar código" |
-| Code step | "Código" caption and "Confirmar código" | Title "Código enviado"; muted line "Para ‹email›"; a `.oneTimeCode` field; button "Confirmar"; one row of quiet links "Reenviar código" · "Trocar email" |
+| Email and Google buttons | "Entrar com email", "Continuar com o Google" | None. Apple is the only door (2026-09-26). |
 | Legal footnote | no comma after "Ao continuar" | "Ao continuar, você aceita os Termos e a Política de Privacidade." |
 | Backend unavailable | "Configure o projeto Supabase…" plus the error line | Delete the footer sentence. `configurationMissing` becomes "Não dá para entrar agora. Tente mais tarde." |
 
@@ -229,10 +216,9 @@ Evidence: 9 reference settings roots show about 77 rows, and none of them has a 
 - **S8.** A status card appears only when the person has to act (notifications denied by iOS). A healthy state shows nothing.
 - **S9.** A destructive screen has noun lists of 3–5 words per item, one friction gate and one confirm button. No lead paragraph, and no second cancel button when a back control already exists.
 
-**Target root** (owner, free house; about 45 words)
+**Target root** (owner, free house; about 42 words)
 
 - Account row: name and email.
-- `Email de acesso ›` (or `Adicionar email ›` when no email is linked)
 - `Nina Premium   R$ 24,90/mês ›`
 - **Nina group**
   - `Avisos   Ligados|Desligados|Bloqueados ›`
@@ -263,10 +249,6 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Show the status card only when iOS has denied notifications: "O iPhone bloqueou os avisos." with the button "Abrir Ajustes do iPhone".
   - Toggle "Avisos", with the footer "Tarefas urgentes ganham um segundo aviso uma hora depois."
   - "Silenciar à noite" loses its subtitle, because the Começa and Termina rows already show the hours. Its footer becomes "No silêncio, o aviso chega na hora, sem som." (protected).
-- **Email de acesso**
-  - Delete the intro sentence.
-  - When an email is linked, show the value row "Email atual" with the address.
-  - When none is linked, add the footer "Com um email, você entra por código, sem a Apple." For an account that signed in with Google, it reads "…sem o Google."
 - **Apagar conta**
   - Eyebrow "Some para sempre": "Sua conversa com a Nina", "Suas memórias privadas", "Seu perfil e sua foto", "Seu acesso a ‹casa›".
   - Eyebrow "Fica na casa": "Tarefas que você criou, sem dono", "Compras", "Memórias compartilhadas".

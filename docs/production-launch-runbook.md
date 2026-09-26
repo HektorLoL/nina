@@ -17,8 +17,8 @@ npx deno task preflight:repo
 
 This verifies release identity/version settings, StoreKit product identifiers,
 Universal Links, the privacy manifest, ignored local configuration, tracked
-credential patterns, protected local-data and erasure invariants,
-legal-metadata wiring, and CI enforcement. It never prints credential values.
+credential patterns, protected local-data and erasure invariants, an app that
+calls no sign-in but Apple's, legal-metadata wiring, and CI enforcement. It never prints credential values.
 CI runs the same gate on every pull request and push to `main`.
 
 ## 2. Prepare the release environment
@@ -37,7 +37,6 @@ Distribute only the relevant values:
 | Supabase Edge Function secrets | `OPENAI_API_KEY`, `NINA_APP_BUNDLE_ID`, `NINA_APP_APPLE_ID`, `NINA_PREMIUM_PRODUCT_IDS`, `NINA_APP_STORE_ENVIRONMENT`, `NINA_APP_STORE_ONLINE_CHECKS` |
 | Operator machine only          | `NINA_RESEND_API_KEY` (sending-only), read by `deno task waitlist:send`                                                                               |
 | Release records only           | `NINA_APPLE_TEAM_ID`, `NINA_PUBLIC_BASE_URL`                                                                                                          |
-| Supabase Auth dashboard only   | Google OAuth client ID and secret (never in an xcconfig, `production.env`, or the repository)                                                         |
 
 Do not upload the complete inventory to any one platform. In particular, never
 place `NINA_SUPABASE_SECRET_KEY` or `OPENAI_API_KEY` in an Astro `PUBLIC_*`
@@ -56,51 +55,37 @@ The command checks key roles without printing keys, requires a production App
 Store verifier, compares product/team/bundle identifiers with source control,
 and fails on incomplete controller, DPO, or mailbox values.
 
-### Sign in with Google (dashboard only)
+### Sign-in providers: Apple only
 
-The app already carries the "Continuar com o Google" button. It stays hidden
-until the production project reports Google as enabled, so turning it on is a
-dashboard change with no rebuild. Google Cloud OAuth and the Supabase Google
-provider cost nothing on the current plans.
-
-1. Google Cloud → Google Auth Platform → **Branding**: app name "Nina", a
-   support email, and the logo. Home page `https://ninai.app`, privacy policy
-   `https://ninai.app/privacidade`, terms `https://ninai.app/termos`. Authorized
-   domains: `ninai.app` and `apemftmlsjocvifbptum.supabase.co`.
-2. **Audience**: user type External, then **Publish app** so the status reads
-   "In production". While it stays in Testing, Google blocks everyone who is not
-   a listed test user. The scopes are openid, email and profile, which are
-   non-sensitive, so publishing needs no Google review.
-3. **Clients → Create client**, type "Web application", with the authorized
-   redirect URI `https://apemftmlsjocvifbptum.supabase.co/auth/v1/callback`.
-4. Supabase → Authentication → Sign In / Providers → **Google**: enable it and
-   paste the client ID and secret. They live only there.
-5. Supabase → Authentication → URL Configuration → **Redirect URLs**: add
-   `com.heitor.nina://login-callback`. Without it, Auth falls back to the Site
-   URL and the sign-in sheet never returns to the app. The allow-listed custom
-   scheme lets another app on the phone start its own Google sheet and obtain a
-   Nina session if the person signs in there. This is user-assisted phishing,
-   the same class as tricking someone into typing an email code, and PKCE does
-   not prevent it; the HTTPS-callback upgrade is in `CLAUDE.md` §12.
-6. Verify:
+Nina signs in with Apple and nothing else. In Supabase → Authentication →
+Sign In / Providers, keep **Apple** on (client ID `com.heitor.nina`) and turn
+**Email** and every other provider off. Keep "Allow new users to sign up" on:
+Apple is the door that creates accounts. Turning Email off is the one step the
+repository cannot perform; do it once, before the first Apple-only build reaches
+testers. If `com.heitor.nina://login-callback` was ever added under URL
+Configuration → Redirect URLs, remove it. In Authentication → Emails → SMTP
+Settings, turn custom SMTP off: since 2026-09-09 it holds a copy of the
+sending-only Resend key, and email login was its only consumer. Turning it off
+is what makes `NINA_RESEND_API_KEY` "Operator machine only", as the table above
+says. Rotate the key only if that copy is thought exposed; if SMTP stays on,
+record the copy as a Supabase Auth destination in the table instead.
 
 ```sh
-curl -s -H "apikey: $NINA_SUPABASE_PUBLISHABLE_KEY" "$NINA_SUPABASE_URL/auth/v1/settings" | grep -o '"google":[a-z]*'
+curl -s -H "apikey: $NINA_SUPABASE_PUBLISHABLE_KEY" "$NINA_SUPABASE_URL/auth/v1/settings" | grep -oE '"(apple|email|google|phone)":[a-z]+|"passkeys_enabled":[a-z]+'
 ```
 
-`"google":true` means the provider is on, with no rebuild. `"google":false`
-means it is still off. The login screen decides once, before its buttons can be
-tapped, and never adds or removes the button while it is open. A new install
-waits up to 1.5 seconds for the first answer. A phone that already cached an
-answer uses it at once and saves the fresh one for the next time the login
-screen opens, so a phone that saw `false` shows the button one login screen
-later.
-
-Google's own account page will most likely say it continues to
-`apemftmlsjocvifbptum.supabase.co` rather than "Nina": brand verification needs
-proof of ownership for every authorized domain, and the supabase.co host cannot
-be proved. Only a Supabase custom domain changes that, and it is a paid add-on on
-a paid plan.
+It must read `"apple":true` with `"email"`, `"google"`, `"phone"` and
+`passkeys_enabled` all `false`. The online preflight checks the same answer
+(`deployment.sign-in-providers`). With Email off, a TestFlight build of 7 or
+earlier that still shows "Entrar com email" answers an address that has an
+account with "Não foi possível entrar agora. Tente de novo." and a new address
+with its own no-account line ("Esse email não tem conta. Continue com a Apple."
+on build 7, "Esse email ainda não está vinculado a uma conta Nina." before it).
+Either way no code is sent, and its Apple button keeps working. Build 7 also
+carries a hidden "Continuar com o Google" row that appears if Google is ever
+turned on, so keep Google off. Turning Email off most likely does not end
+sessions that were already signed in by code; they last until that person signs
+out.
 
 ## 3. Database and Edge Functions
 
@@ -206,7 +191,8 @@ npx deno task preflight:production --env-file config/production.env --online
 ```
 
 Online mode performs read-only probes of the landing page, security headers,
-`/api/health`, privacy metadata, unsubscribe indexing policy, and the AASA file.
+`/api/health`, privacy metadata, unsubscribe indexing policy, the AASA file, and
+the Supabase Auth provider list (Apple on, every other door off).
 `/api/health` in turn probes the public invite RPC and the service-only current
 waitlist schema contract with bounded requests. All checks must pass. A `503`
 health response is a release blocker, even when the environment variables look
@@ -277,9 +263,8 @@ Build 6 was uploaded this way on 2026-09-25.
 Run the release candidate through TestFlight on at least one current iPhone and
 one supported older device. Exercise:
 
-- first launch, Apple sign-in, Google sign-in (when the provider is on), OTP for
-  an existing address and the "não tem conta" line for a new one, sign-out, and
-  session restoration;
+- first launch, Apple sign-in (including an account that hides its email behind
+  Apple's private relay), sign-out, and session restoration;
 - home creation, invitation acceptance/revocation/expiry, and member removal;
 - task/reminder recurrence, notifications, offline edits, and conflict repair;
 - Nina consent, attachments, proposal confirmation, privacy export, history

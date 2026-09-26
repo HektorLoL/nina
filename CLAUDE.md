@@ -101,10 +101,8 @@ Four surfaces, one product.
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
 **Only third-party iOS dependency: `supabase-swift` 2.46.0.** One bundled font
-(Fraunces, OFL, subset to 45 KB — the web serves a byte-identical copy), one
-vector asset, Google's unmodified G (`Assets.xcassets/GoogleG.imageset`) for the
-sign-in button, and no other asset dependency. Google sign-in is a web flow
-through Supabase Auth, not Google's SDK. No analytics SDK,
+(Fraunces, OFL, subset to 45 KB — the web serves a byte-identical copy) and no
+other asset dependency. No analytics SDK,
 no crash reporter, no ad SDK — that absence is the mechanical proof behind the
 App Store "Data Used to Track You: No" label. Do not add one without revisiting
 `docs/privacy/app-store-privacy-labels.md`.
@@ -150,26 +148,23 @@ product regression, not a refactor.
   *pending* request; an owner/admin approves. Both the app and the public web
   invite page state this. Invite tokens are `casa-` + 128 bits of
   `gen_random_bytes(16)`, one active invite per family, 7-day expiry, ≤7 uses.
-- **Google sign-in appears only when the project says so, and never appears or
-  disappears once the welcome can be tapped.** `LoginView` shows "Continuar com
-  o Google" only while `AuthSessionStore.isGoogleSignInAvailable`, decided once
-  each time the welcome appears (`prepareSignInChoice`) from the last real answer
-  of `GET /auth/v1/settings` (`external.google`, publishable key as `apikey`),
-  cached per project host in `UserDefaults`. With nothing cached, the actions
-  stay invisible and untappable (`isSignInChoiceSettled`) until the first check
-  answers or `GoogleSignIn.choiceDeadline` (1.5 s) passes; a timeout or a failed
-  check settles hidden. After that every check, the foreground re-check
-  included, only writes the cache, so a late answer, a failed check or a new
-  `false` takes effect the next time the welcome appears. Inserting the row
-  lifts the Apple button 62pt, and a tap on the wrong door can make a second,
-  empty account (§12). An unanswered check never overwrites the cache; a client
-  with no project (mock) never shows the button. Email signs in existing
-  accounts only (`shouldCreateUser: false`): Apple and Google are the doors that
-  create an account, and the `emailNotLinked` line names only the doors actually
-  on screen. Locked by
-  `AuthSessionTests.testARefreshAfterTheWelcomeSettledWritesTheCacheButLeavesTheShownRow`,
-  `…testTheDeadlineSettlesTheWelcomeWithoutGoogleAndALateYesWaitsForTheNextWelcome`
-  and `…testANewAddressIsOfferedGoogleOnlyWhileTheGoogleButtonIsShown`.
+- **Sign in with Apple is the only way in (decided 2026-09-26).** No email
+  code, no magic link, no Google, no password: `AuthClient` has one sign-in
+  method, `signInWithApple`, and the welcome shows one black Apple button over
+  the legal line. The email an account carries is the one Apple shares (a
+  private relay address when the person hides theirs), shown read-only in
+  Ajustes and the profile; nothing links or changes a sign-in email. The only
+  other door, `DebugAuthAccount` (teste1/teste2@ninai.test, local home, no
+  backend), exists only under `#if DEBUG`, and `artifact.debug-sign-in` fails
+  the release preflight if its addresses reach the bundle. Production Auth must
+  answer `/auth/v1/settings` with Apple on and Email, Google, passkeys and every
+  other provider off; `deployment.sign-in-providers` fails the online preflight
+  otherwise. On the client, `repository.apple-only-sign-in` fails the repository
+  preflight if any tracked `Nina/` Swift source calls an OTP, magic-link, password,
+  OAuth or non-Apple ID-token sign-in or changes a sign-in email (pinned by
+  `"the shipped app signs in with Apple and calls no other sign-in door"`), and
+  `AuthSessionTests.testNoSignInLineNamesAnotherDoor` keeps every sign-in error
+  line from naming an email, a code or Google.
 - **8 non-assistant people per home**, enforced in three places (trigger,
   `request_family_join` count, remaining-slot arithmetic) under a family
   advisory lock taken *before* any row lock.
@@ -384,9 +379,7 @@ and **every departure the build makes from the boards is in
 **`Nina/Theme.swift` is the only source of color, and the palette is light-only.**
 `NinaApp` pins `.preferredColorScheme(.light)`: the glaze has no designed dark
 counterpart, so there is no `dynamic(light:dark:)` layer and no colorScheme
-branching anywhere. The one colour outside `Theme.swift` is Google's G on the
-sign-in button (`NinaButton(assetName:)`, drawn `.renderingMode(.original)`):
-Google forbids recolouring its mark.
+branching anywhere.
 
 - `ground #FBFCFD` every screen · `grout #EDF0F4` fields and inactive chips ·
   `line #DFE4EB` hairlines and card strokes · `ink` · `muted` · `faint`
@@ -980,64 +973,34 @@ consumes quota. This ordering is deliberate and asserted by a test — do not
 "optimize" it. Note that document attachments are never moderated; only text and
 images are.
 
-**Three production auth settings silently broke email login until 2026-09-09.**
-Found while proving premium on a simulator: the email provider was disabled
-(`external_email_enabled = false`, so "Usar meu email" could never work), the
-SMTP password was a deleted Resend key ("Error sending magic link email"), and
-`rate_limit_email_sent` was Supabase's built-in-mail default of **2 per hour
-for the whole project**. All three were fixed through the Management API
-(`PATCH /v1/projects/{ref}/config/auth`; the rate limit only accepts a PATCH
-that carries the full SMTP block). Raise the hourly cap again before real
-families sign up, and check `rate_limit_*` whenever a login "fails for no
-reason".
+**Production Auth must have one provider on: Apple.** Email is still on until
+the runbook §2 dashboard step is done (§13). Email login existed until
+2026-09-26 and was fragile: on 2026-09-09 the email provider was found off, the
+SMTP password was a deleted Resend key, and `rate_limit_email_sent` was 2 per
+hour for the whole project. None of that is on a sign-in path any more: the app
+never asks Auth for an OTP, a magic link or an email change. What matters is the
+provider list: Apple on, Email off (`docs/production-launch-runbook.md` §2). A
+TestFlight build of 7 or earlier still shows "Entrar com email"; with Email off
+an address that has an account gets the generic "Não foi possível entrar agora.
+Tente de novo.", a new address gets that build's no-account line, no code is
+sent either way, and its Apple button keeps working. Build 7 also carries a
+hidden "Continuar com o Google" row that appears if Google is ever enabled, so
+keep Google off; `deployment.sign-in-providers` fails the online preflight if
+it is on. The local stack keeps `[auth.email]` because the AI eval signs in
+through an admin magic link.
 
-**An unsigned simulator build cannot use the Keychain.** Building with
-`CODE_SIGNING_ALLOWED=NO` makes every `SecItem` call fail with `-34018`; the
-Supabase SDK logs "Failed to store session" only through its optional logger,
-so sign-in looks like "Não foi possível entrar agora" after a *correct* code
-and nothing persists. For any simulator check that signs in, build without that
-flag (ad-hoc signing is automatic). Also: one simulator at a time — a second
-session driving the same device produces phantom taps, and three booted
-devices wedged CoreSimulator on 2026-09-09.
-
-**Sign in with Google has five quiet ways to go wrong.** Supabase links a Google
-identity to an existing account only when the verified emails match, so a
-Hide-My-Email Apple account plus Google makes two Nina accounts, and the second
-has no home. Without `com.heitor.nina://login-callback` in Auth → URL
-Configuration → Redirect URLs, GoTrue falls back to the Site URL and the web
-sheet never returns to the app; the scheme is deliberately *not* in
-`CFBundleURLTypes`, because `ASWebAuthenticationSession` catches the callback
-itself, so nothing needs it registered (and `NinaApp.onOpenURL` would drop such
-a URL anyway: `InviteLinkParser` reads only `nina://` and ninai.app links).
-The sheet is ephemeral on purpose (no system consent alert, no cookie shared
-with Safari), at the cost of typing the Google account each time. A cached "yes"
-that went stale shows GoTrue's JSON 400 inside the sheet until the person
-cancels, and the button stays for the rest of that welcome. And the
-display-name hint follows `auth_user_display_name`'s order (`display_name`,
-`full_name`, `name`), because any non-empty hint overrides an auth-sourced
-profile name: in another order, a Google sign-in would rename an auto-linked
-Apple account. A cancel is silent on screen but is logged as a failed
-`auth.sign_in_google` in diagnostics.
-
-**The allow-listed custom scheme is an accepted risk.** `ASWebAuthenticationSession`
-does not check that a custom `callbackURLScheme` belongs to the app that asked,
-so another app on the phone can open its own Google sheet on
-`/auth/v1/authorize?provider=google&redirect_to=com.heitor.nina://login-callback`,
-with its own PKCE verifier or none, exchange the result with the public
-publishable key, and obtain a Nina session if the person signs in to Google
-there. Nina's own sheet is ephemeral and names the supabase.co host too, so the
-two look the same. This is user-assisted phishing, the same class as tricking
-someone into typing an email code, and PKCE does not prevent it: it protects
-only a flow Nina started itself (RFC 8252 §8.6). Apple has no such path: it is
-native-only (`[auth.external.apple] secret = ""`) and its identity token is
-bound to the bundle ID. The upgrade is an HTTPS callback:
-`signInWithOAuth(provider:redirectTo:launchFlow:)` (in supabase-swift 2.46)
-driving `ASWebAuthenticationSession(url:callback: .https(host: "ninai.app",
-path: "/auth/callback"))`. That initializer needs iOS 17.4, so an `#available`
-gate or a raised deployment target (17.0 today), plus the
-`webcredentials:ninai.app` associated domain and an `apple-app-site-association`
-file served by the Worker. Only that HTTPS URL would then stay in the Redirect
-URLs.
+**An unsigned simulator build cannot sign in.** With `CODE_SIGNING_ALLOWED=NO`
+the build carries no entitlements, Sign in with Apple included, so the Apple
+request fails at once (`AuthorizationError` 1000) with the generic "Não foi
+possível entrar agora". Even a successful sign-in could not persist: every
+`SecItem` call fails with `-34018`, which the Supabase SDK logs as "Failed to
+store session" only through its optional logger. For any simulator check that
+signs in, build without that flag (ad-hoc signing is automatic). A UI check against production
+now signs in with Apple, which needs an Apple Account signed in to the
+simulator; the throwaway-email OTP route is gone, and the DEBUG test accounts
+reach only the local home. Also: one simulator at a time — a second session
+driving the same device produces phantom taps, and three booted devices wedged
+CoreSimulator on 2026-09-09.
 
 **`Tools/run_nina_ai_eval.mjs local` is the only way the eval runs.** It needs
 the local stack plus `functions serve`, refuses any API URL that is not
@@ -1176,13 +1139,11 @@ fix unprompted.
   turns on. The weekly insight on `gpt-6-luna` at low effort was 6/6
   schema-valid with no blame, intent or health language, at about US$0.00016
   per household against US$0.0085 on `gpt-5.5`.
-- **`supabase/templates/` auth emails are orphaned** — three bare unstyled pt-BR
-  HTML files with no brand, and `config.toml` has no `[auth.email.template.*]`
-  block wiring them up. They are copy-paste source for the dashboard only.
-- **Sign in with Google is built (2026-09-26) and dark until Heitor enables the
-  provider** (`docs/production-launch-runbook.md` §2). Production answers
-  `"google":false` today, so no build shows the button until then, and turning
-  it on needs no rebuild.
+- **Email is still on in production Auth until Heitor turns it off**
+  (`docs/production-launch-runbook.md` §2, decided 2026-09-26). No build from
+  source asks for a code, but the provider answering `"email":true` means
+  `deployment.sign-in-providers` fails the online preflight until that one
+  dashboard step is done.
 - **TOTP MFA is enabled server-side with zero client support**
   (`[auth.mfa.totp]` in `config.toml`; nothing in `Nina/` references it).
 - **iPhone only, decided 2026-09-04.** `TARGETED_DEVICE_FAMILY = 1` on every

@@ -310,9 +310,8 @@ enum BackendServices {
 
     static func makeAuthClient(diagnostics: BackendDiagnosticsStore? = nil) -> any AuthClient {
         #if canImport(Supabase)
-        if let client = SupabaseClientFactory.shared,
-           let configuration = SupabaseConfiguration.fromBundle() {
-            return SupabaseAuthClient(client: client, configuration: configuration, diagnostics: diagnostics)
+        if let client = SupabaseClientFactory.shared {
+            return SupabaseAuthClient(client: client, diagnostics: diagnostics)
         }
         #endif
 

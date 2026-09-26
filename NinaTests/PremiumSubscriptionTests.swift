@@ -311,6 +311,13 @@ final class PremiumSubscriptionTests: XCTestCase {
         XCTAssertFalse(message.contains("!"))
     }
 
+    func testAnAccountThatCannotBuyIsSentToAppleAndNeverToEmail() {
+        let message = PremiumPurchaseError.onlineAccountRequired.errorDescription
+
+        XCTAssertEqual(message, "Entre com a Apple para assinar.")
+        XCTAssertFalse(message?.lowercased().contains("email") ?? true)
+    }
+
     @MainActor
     func testASubscriberWhoseSyncNeverReachedTheServerIsRepairedInsteadOfDowngradedToInactive() async {
         let environment = TestEnvironment(function: #function)

@@ -238,7 +238,7 @@ enum PremiumPurchaseError: LocalizedError {
         case .notSignedIn:
             "Entre na sua conta para assinar."
         case .onlineAccountRequired:
-            "Entre com Apple ou email para assinar."
+            "Entre com a Apple para assinar."
         case .unverifiedTransaction:
             "A App Store não confirmou a compra."
         }

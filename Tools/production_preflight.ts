@@ -20,6 +20,7 @@ export interface IOSArtifactSnapshot {
   isArchive: boolean;
   scanComplete: boolean;
   containsServerCredential: boolean;
+  containsDebugSignIn: boolean;
 }
 
 export interface PreflightEnvironment {
@@ -40,6 +41,19 @@ const localSecretPaths = [
 ];
 
 const premiumRecordedSaleGuard = "if didRecord {";
+
+const debugSignInMarkers = ["@ninai.test", "debug:test-"];
+
+const nonAppleSignInMarkers = [
+  "signInWithOTP",
+  "verifyOTP",
+  "signInWithOAuth",
+  "signInWithPassword",
+  "signInAnonymously",
+  ".signUp(",
+  "UserAttributes(email",
+  "requestEmail",
+];
 
 const databaseGateCommands = [
   "db lint --local --fail-on error",
@@ -487,6 +501,14 @@ export function iosArtifactChecks(
         ? "The app bundle contains a high-confidence server credential; rotate and remove it."
         : "The app bundle credential scan exceeded its safety limit and is incomplete.",
     ),
+    check(
+      "artifact.debug-sign-in",
+      artifact.scanComplete && !artifact.containsDebugSignIn,
+      "The app bundle carries no DEBUG test-account sign-in.",
+      artifact.scanComplete
+        ? "The app bundle carries the DEBUG test accounts; archive the Release configuration."
+        : "The app bundle scan exceeded its safety limit, so the DEBUG test-account check is incomplete.",
+    ),
   ];
 
   if (artifact.isArchive) {
@@ -541,6 +563,20 @@ function looksLikeSecret(value: string): boolean {
   return jwtMatches.some((candidate) =>
     decodedJWTRole(candidate) === "service_role"
   );
+}
+
+export function containsDebugSignIn(value: string): boolean {
+  return debugSignInMarkers.some((marker) => value.includes(marker));
+}
+
+export function nonAppleSignInCalls(source: string): string[] {
+  const found = nonAppleSignInMarkers.filter((marker) =>
+    source.includes(marker)
+  );
+  if (/OpenIDConnectCredentials\(\s*provider:\s*\.(?!apple\b)/.test(source)) {
+    found.push("OpenIDConnectCredentials");
+  }
+  return found;
 }
 
 async function plistJSON(path: string): Promise<Record<string, unknown>> {
@@ -604,12 +640,18 @@ async function firstApplicationInArchive(archivePath: string): Promise<string> {
 async function collectArtifactFiles(
   root: string,
 ): Promise<
-  { files: string[]; scanComplete: boolean; containsServerCredential: boolean }
+  {
+    files: string[];
+    scanComplete: boolean;
+    containsServerCredential: boolean;
+    containsDebugSignIn: boolean;
+  }
 > {
   const files: string[] = [];
   let scannedBytes = 0;
   let scanComplete = true;
   let containsServerCredential = false;
+  let carriesDebugSignIn = false;
   const maximumScannedBytes = 256 * 1024 * 1024;
 
   async function visit(directory: string, prefix = ""): Promise<void> {
@@ -620,7 +662,9 @@ async function collectArtifactFiles(
         await visit(absolutePath, relativePath);
       } else if (entry.isFile) {
         files.push(relativePath);
-        if (containsServerCredential || !scanComplete) continue;
+        if (
+          (containsServerCredential && carriesDebugSignIn) || !scanComplete
+        ) continue;
         const metadata = await Deno.stat(absolutePath);
         if (scannedBytes + metadata.size > maximumScannedBytes) {
           scanComplete = false;
@@ -630,13 +674,21 @@ async function collectArtifactFiles(
         const text = new TextDecoder().decode(
           await Deno.readFile(absolutePath),
         );
-        if (looksLikeSecret(text)) containsServerCredential = true;
+        if (!containsServerCredential && looksLikeSecret(text)) {
+          containsServerCredential = true;
+        }
+        if (containsDebugSignIn(text)) carriesDebugSignIn = true;
       }
     }
   }
 
   await visit(root);
-  return { files, scanComplete, containsServerCredential };
+  return {
+    files,
+    scanComplete,
+    containsServerCredential,
+    containsDebugSignIn: carriesDebugSignIn,
+  };
 }
 
 export async function loadIOSArtifactSnapshot(
@@ -674,6 +726,7 @@ export async function loadIOSArtifactSnapshot(
     isArchive,
     scanComplete: scan.scanComplete,
     containsServerCredential: scan.containsServerCredential,
+    containsDebugSignIn: scan.containsDebugSignIn,
   };
 }
 
@@ -742,12 +795,19 @@ export async function repositoryChecks(
   );
 
   const secretBearingFiles: string[] = [];
+  const nonAppleSignInFiles: string[] = [];
   for (const path of files) {
     try {
       const metadata = await Deno.stat(joinPath(root, path));
       if (metadata.size > 2_000_000) continue;
       const source = await Deno.readTextFile(joinPath(root, path));
       if (looksLikeSecret(source)) secretBearingFiles.push(path);
+      if (
+        /^Nina\/.+\.swift$/.test(path) &&
+        nonAppleSignInCalls(source).length > 0
+      ) {
+        nonAppleSignInFiles.push(path);
+      }
     } catch {
       // Binary, removed, or unreadable tracked files are covered by path checks.
     }
@@ -854,6 +914,14 @@ export async function repositoryChecks(
       "No high-confidence server credentials were found in tracked text files.",
       `Rotate and remove credentials found in: ${
         secretBearingFiles.join(", ")
+      }`,
+    ),
+    check(
+      "repository.apple-only-sign-in",
+      nonAppleSignInFiles.length === 0,
+      "The app signs in with Apple and calls no email, code, password or OAuth door.",
+      `Sign in with Apple is the only way in; remove the other sign-in call from: ${
+        nonAppleSignInFiles.join(", ")
       }`,
     ),
     check(
@@ -1045,6 +1113,74 @@ export async function deploymentChecks(
   ];
 }
 
+export function isAppleOnlySignIn(settings: unknown): boolean {
+  const record = recordValue(settings);
+  const external = recordValue(record?.external);
+  if (!record || !external || external.apple !== true) return false;
+
+  const anotherProviderIsOn = Object.entries(external).some((
+    [provider, enabled],
+  ) => provider !== "apple" && enabled === true);
+  return !anotherProviderIsOn &&
+    record.saml_enabled !== true &&
+    record.passkeys_enabled !== true &&
+    record.disable_signup !== true;
+}
+
+export async function signInProviderCheck(
+  environment: PreflightEnvironment,
+  fetcher: Fetcher = fetch,
+): Promise<CheckResult> {
+  const id = "deployment.sign-in-providers";
+  const supabaseURL = environment.NINA_SUPABASE_URL?.trim();
+  const publishableKey = environment.NINA_SUPABASE_PUBLISHABLE_KEY?.trim();
+  if (
+    !isRootHTTPSURL(supabaseURL) || !isPublishableSupabaseKey(publishableKey)
+  ) {
+    return {
+      id,
+      status: "failure",
+      message:
+        "A root HTTPS Supabase URL and a publishable key are required to read the sign-in providers.",
+    };
+  }
+
+  let settings: unknown;
+  try {
+    const response = await fetcher(
+      new URL("/auth/v1/settings", supabaseURL),
+      {
+        headers: {
+          apikey: publishableKey!,
+          "User-Agent": "Nina-Production-Preflight/1.0",
+        },
+        redirect: "error",
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    const body = await response.text();
+    if (response.ok) settings = JSON.parse(body);
+  } catch {
+    settings = undefined;
+  }
+
+  if (settings === undefined) {
+    return {
+      id,
+      status: "failure",
+      message:
+        "Could not read the production Auth provider list from /auth/v1/settings.",
+    };
+  }
+
+  return check(
+    id,
+    isAppleOnlySignIn(settings),
+    "Production Auth offers Sign in with Apple and no other door.",
+    "Production Auth must have Apple on and Email, Google, passkeys and every other provider off (runbook §2).",
+  );
+}
+
 function printResults(results: CheckResult[]): void {
   for (const result of results) {
     const label = result.status === "pass"
@@ -1113,7 +1249,10 @@ async function main(): Promise<void> {
       ));
     }
     if (args.includes("--online")) {
-      results.push(...await deploymentChecks(environment, repository.facts));
+      results.push(
+        ...await deploymentChecks(environment, repository.facts),
+        await signInProviderCheck(environment),
+      );
     } else {
       results.push(warning(
         "deployment.online",
