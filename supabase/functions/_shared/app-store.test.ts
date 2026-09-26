@@ -7,6 +7,8 @@ import {
 import {
   appAccountTokenMatches,
   appStoreVerificationEnvironments,
+  buildSubscriptionUpsert,
+  buildTransactionLedgerUpsert,
   entitlementFromSubscription,
   isAppStoreNotificationRequest,
   isPremiumSyncRequest,
@@ -111,6 +113,49 @@ Deno.test("local App Store environments require explicit configuration", () => {
     Error,
     "invalid_app_store_environment",
   );
+});
+
+Deno.test("the launch server tries production first and still accepts App Review's sandbox purchase", () => {
+  const production = appStoreVerificationEnvironments("production")[0];
+  const sandbox = appStoreVerificationEnvironments("sandbox")[0];
+
+  assertEquals(appStoreVerificationEnvironments(), [production, sandbox]);
+  assertEquals(appStoreVerificationEnvironments(" "), [production, sandbox]);
+  assertFalse(appStoreVerificationEnvironments("production").includes(sandbox));
+});
+
+Deno.test("a sandbox purchase is recorded as Sandbox and bound to the account that bought it", () => {
+  const userID = "7e3fb20b-4cdb-47cc-936d-99d65f608138";
+  const transaction = {
+    originalTransactionId: "2000000000000001",
+    transactionId: "2000000000000002",
+    productId: "com.heitor.nina.premium.monthly",
+    bundleId: "com.heitor.nina",
+    type: "Auto-Renewable Subscription",
+    environment: "Sandbox",
+    appAccountToken: userID,
+    purchaseDate: Date.now(),
+    expiresDate: Date.now() + 300_000,
+  } as unknown as Parameters<typeof buildSubscriptionUpsert>[0]["transaction"];
+  const signedTransactionInfo = "header.payload.signature";
+
+  const subscription = buildSubscriptionUpsert({
+    userID,
+    signedTransactionInfo,
+    transaction,
+    source: "purchase",
+  });
+  const ledger = buildTransactionLedgerUpsert({
+    userID,
+    signedTransactionInfo,
+    transaction,
+    source: "purchase",
+  });
+
+  assertEquals(subscription.environment, "Sandbox");
+  assertEquals(ledger.environment, "Sandbox");
+  assertEquals(subscription.user_id, userID);
+  assertEquals(subscription.app_account_token, userID);
 });
 
 Deno.test("App Store JSON requests require bounded application/json bodies", async () => {

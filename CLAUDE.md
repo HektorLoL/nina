@@ -302,9 +302,18 @@ product regression, not a refactor.
   gates both feeders (`latestUsableLocalTransaction` and the
   `Transaction.updates` listener). Locked by
   `PremiumSubscriptionTests.testAFamilySharedTransactionIsNeverSentToTheServerAndNeverReadsAsPremium`.
-- **`NINA_APP_STORE_ENVIRONMENT=production` in production.** Xcode and
-  LocalTesting chains are never accepted implicitly; an unrecognized value
-  throws rather than degrading.
+- **Production verifies production first, then sandbox — never pinned to
+  `production` (decided 2026-09-26).** `NINA_APP_STORE_ENVIRONMENT` stays
+  unset, at launch and after it: App Review buys with the release build in
+  Apple's sandbox, so a production-only server refuses the reviewer's purchase
+  and fails Guideline 2.1. Xcode and LocalTesting receipts carry no Apple
+  signature and are never accepted implicitly; an unrecognized value throws
+  rather than degrading. A sandbox receipt covers only its buyer's house
+  (`appAccountToken`), is recorded with `environment = 'Sandbox'`, and lapses
+  on Apple's accelerated test clock; the cost is free premium for every tester,
+  so TestFlight stays invite-only. `environment.app-store-mode` fails the
+  preflight if the variable is set at all. The reasoning is in
+  `docs/premium-flow.md` §6.
 
 ---
 
@@ -1106,8 +1115,8 @@ fix unprompted.
   uploaded to TestFlight on 2026-09-04**, archived from the sources tagged
   `testflight-1.0-1`; nothing has been released. The archive passed every
   artifact check of the production preflight; the App Store verifier is
-  deliberately unset (production + sandbox accepted) for the TestFlight phase
-  and goes back to `production` before submission. Do not rebuild the website with
+  unset (production first, then sandbox) and stays that way through
+  submission, because App Review buys in sandbox (§4). Do not rebuild the website with
   `PUBLIC_NINA_APP_STORE_ID` until the app is actually live — the install badge
   would link to a store page that does not exist yet.
 - **The AI eval sits right at its 90% classification bar, on either model.**

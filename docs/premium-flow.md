@@ -1,6 +1,6 @@
 # Premium, end to end
 
-Last updated: 2026-09-07
+Last updated: 2026-09-26
 
 What happens between "Assinar o Premium" on a phone and "Premium ativo para a
 casa inteira" on every phone in the house, where it broke on the first real
@@ -84,8 +84,53 @@ Two smaller findings from the same analysis:
 
 - **Apple's server notifications arrive and are applied.** Confirmed 2026-09-09: both URL fields in App Store Connect hold the function's address, and `app_store_server_notifications` holds a `DID_CHANGE_RENEWAL_STATUS` (`AUTO_RENEW_DISABLED`, 2026-09-07 01:37 UTC) and an `EXPIRED` (`VOLUNTARY`, 2026-09-07 20:24 UTC), both processed; the subscription row carries `latest_notification_type = EXPIRED`, `status = expired`, `is_active = false`. A cancellation therefore reaches Nina from Apple, not only from the phone's next sync.
 - **Sandbox timing** is not production timing: a monthly plan renews every few minutes and expires within the hour, so "Restaurar compras" hours later finds nothing usable on the device and sends nothing. That is sandbox behaviour, not a defect.
-- **Before submission** set `NINA_APP_STORE_ENVIRONMENT=production` again (unset during TestFlight so sandbox receipts verify) and paste the OpenAI key into `config/production.env` so the release gate goes fully green.
+- **Before submission** paste the OpenAI key into `config/production.env` so the release gate goes fully green. The App Store verifier stays as it is: production, then sandbox (§6).
 - **Denials are still plain chat lines**: a free household that hits a ceiling gets a sentence from Nina, not a button to the paywall. Recorded in `CLAUDE.md` §13.
+
+## 6. Sandbox receipts on the production server
+
+Decided 2026-09-26. Production leaves `NINA_APP_STORE_ENVIRONMENT` unset, so
+`appStoreVerificationEnvironments` tries Production first and Sandbox second,
+and never Xcode or Local Testing, whose receipts carry no Apple signature. This
+is the launch configuration, not a TestFlight-only state. Until this date the
+plan was to pin `production` before submission. That would have refused App
+Review: the reviewer buys with the release build in Apple's sandbox, the server
+would answer `400 transaction_verification_failed`, the paywall would stay on
+"Confirmando sua assinatura", and the review fails under Guideline 2.1. Apple
+gives a production server the same advice: production first, then sandbox.
+
+A sandbox purchase covers the house like a paid one, because the reviewer has
+to see premium work. Four things keep that from reaching a real household in a
+harmful way:
+
+- **Only people Heitor lets in can make one.** A sandbox receipt for
+  `com.heitor.nina` comes from a sandbox tester he created, a TestFlight tester
+  he invited, or App Review. Apple signs it on the same chain as production,
+  so it cannot be forged.
+- **It covers only its buyer's house.** `premium-subscription-sync` still
+  refuses any receipt whose `appAccountToken` is not the caller, so a sandbox
+  receipt cannot be handed to another account.
+- **It is labelled.** `premium_subscriptions`,
+  `premium_subscription_transactions` and `app_store_server_notifications` all
+  record `environment = 'Sandbox'`. Anything that counts revenue counts
+  `Production` only.
+- **It runs out by itself.** Apple renews sandbox and TestFlight subscriptions
+  on an accelerated test clock and stops after a few renewals, and
+  `private.family_has_premium` checks `expires_at`, so the cover lapses even
+  without a notification.
+
+The cost is that every tester, and the reviewer, gets the premium tiers free,
+drawing on the one global AI budget. With invited testers that is small. A
+public TestFlight link would make it anyone's, renewable by buying again, so
+TestFlight stays invite-only.
+
+Locked by `Tools/production_preflight.test.ts` ("a verifier pinned to one App
+Store environment fails the gate, because App Review buys in sandbox") and
+`_shared/app-store.test.ts` ("the launch server tries production first and
+still accepts App Review's sandbox purchase", "a sandbox purchase is recorded
+as Sandbox and bound to the account that bought it"). On 2026-09-26
+`supabase secrets list` for production showed no `NINA_APP_STORE_ENVIRONMENT`,
+so the deployed functions already run this rule.
 
 ## App-side proof, 2026-09-09
 

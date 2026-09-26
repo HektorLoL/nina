@@ -341,12 +341,13 @@ export function productionEnvironmentChecks(
       "Premium product identifiers match the iOS release configuration.",
       "Make NINA_PREMIUM_PRODUCT_IDS exactly match the iOS product identifiers.",
     ),
+    // App Review buys in sandbox with the release build, so a verifier pinned to production refuses the reviewer.
     check(
       "environment.app-store-mode",
-      value("NINA_APP_STORE_ENVIRONMENT") === "production" &&
+      !value("NINA_APP_STORE_ENVIRONMENT") &&
         value("NINA_APP_STORE_ONLINE_CHECKS") === "true",
-      "App Store verification is production-only with online checks enabled.",
-      "Set App Store environment to production and online checks to true.",
+      "App Store verification tries production, then sandbox, never Xcode, with online checks enabled.",
+      "Leave NINA_APP_STORE_ENVIRONMENT unset so production and sandbox both verify, and set online checks to true.",
     ),
     check(
       "environment.ai-release-decision",

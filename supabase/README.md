@@ -178,7 +178,7 @@ Copy `supabase/.env.example` to the ignored `supabase/.env.local` and configure:
 - `NINA_APP_BUNDLE_ID=com.heitor.nina`
 - `NINA_APP_APPLE_ID`: the positive numeric Apple ID from App Store Connect
 - `NINA_PREMIUM_PRODUCT_IDS`: the exact monthly/yearly product identifiers
-- `NINA_APP_STORE_ENVIRONMENT=production`
+- `NINA_APP_STORE_ENVIRONMENT` left unset (see below)
 - `NINA_APP_STORE_ONLINE_CHECKS=true` — validity is checked against the clock
   rather than the payload's signing date; revocation (OCSP) is never consulted
 
@@ -190,11 +190,15 @@ npx supabase functions deploy premium-subscription-sync --project-ref <project-r
 npx supabase functions deploy app-store-server-notifications --project-ref <project-ref> --use-api
 ```
 
-Production must use the explicit `production` environment. Use a separate
-Supabase test project configured as `sandbox`, `xcode`, or `local_testing`;
-never enable those values in the public production project. If the environment
-is omitted, the verifier accepts only Apple's public Production and Sandbox
-chains, never Xcode or Local Testing. Invalid values fail closed.
+Production leaves `NINA_APP_STORE_ENVIRONMENT` unset. The verifier then tries
+Apple's Production environment first and Sandbox second, and never Xcode or
+Local Testing, whose receipts carry no Apple signature. This is Apple's own
+advice for a production server: App Review buys with the release build in the
+sandbox, so a server pinned to `production` refuses the reviewer's purchase.
+A sandbox receipt is still Apple-signed, still bound to the buyer's
+`appAccountToken`, and recorded with `environment = 'Sandbox'`
+(`docs/premium-flow.md` §6). Set `xcode` or `local_testing` only in a separate
+Supabase test project, never in production. Invalid values fail closed.
 
 Keep online certificate checks enabled. The functions accept only bounded JSON
 bodies and valid compact-JWS shapes, limit verification time, and fetch Apple's

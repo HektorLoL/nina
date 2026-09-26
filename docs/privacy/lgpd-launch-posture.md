@@ -166,8 +166,9 @@ automatically. See `docs/production-launch-runbook.md` for ownership and order.
   `status = 'subscribed'` rows at send time, and provider-side scheduled sends
   honor withdrawals.
 - Create the Premium subscription group and products in App Store Connect,
-  deploy both subscription Edge Functions with production-only App Store
-  verification, configure the Server Notifications V2 production URL, and
+  deploy both subscription Edge Functions with App Store verification that
+  tries production first and then sandbox (App Review buys in sandbox; never
+  Xcode or Local Testing), configure the Server Notifications V2 production URL, and
   confirm Apple's test notification is persisted successfully.
 - Apply the transactional account-deletion migration before deploying the
   `delete-account` Edge Function. Keep its Supabase service role key only in

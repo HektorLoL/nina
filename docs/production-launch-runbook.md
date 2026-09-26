@@ -34,7 +34,7 @@ Distribute only the relevant values:
 | iOS release xcconfig           | `NINA_SUPABASE_URL`, `NINA_SUPABASE_PUBLISHABLE_KEY`, `NINA_AI_V2_ENABLED`, `NINA_ATTACHMENTS_ENABLED`                                                                            |
 | Cloudflare Worker runtime      | `NINA_SUPABASE_URL`, `NINA_SUPABASE_PUBLISHABLE_KEY`, `NINA_SUPABASE_SECRET_KEY`, `NINA_WAITLIST_HASH_SALT`                                           |
 | Astro production build         | All `PUBLIC_NINA_*` values                                                                                                                            |
-| Supabase Edge Function secrets | `OPENAI_API_KEY`, `NINA_APP_BUNDLE_ID`, `NINA_APP_APPLE_ID`, `NINA_PREMIUM_PRODUCT_IDS`, `NINA_APP_STORE_ENVIRONMENT`, `NINA_APP_STORE_ONLINE_CHECKS` |
+| Supabase Edge Function secrets | `OPENAI_API_KEY`, `NINA_APP_BUNDLE_ID`, `NINA_APP_APPLE_ID`, `NINA_PREMIUM_PRODUCT_IDS`, `NINA_APP_STORE_ONLINE_CHECKS` (and never `NINA_APP_STORE_ENVIRONMENT`, below) |
 | Operator machine only          | `NINA_RESEND_API_KEY` (sending-only), read by `deno task waitlist:send`                                                                               |
 | Release records only           | `NINA_APPLE_TEAM_ID`, `NINA_PUBLIC_BASE_URL`                                                                                                          |
 
@@ -51,9 +51,35 @@ Validate the inventory before deployment:
 npx deno task preflight:production --env-file config/production.env
 ```
 
-The command checks key roles without printing keys, requires a production App
-Store verifier, compares product/team/bundle identifiers with source control,
-and fails on incomplete controller, DPO, or mailbox values.
+The command checks key roles without printing keys, requires an App Store
+verifier that accepts production and sandbox, compares product/team/bundle
+identifiers with source control, and fails on incomplete controller, DPO, or
+mailbox values.
+
+### App Store verifier: production, then sandbox
+
+`NINA_APP_STORE_ENVIRONMENT` stays unset in production, at launch and after it.
+The server then verifies a receipt as Production first and as Sandbox second,
+and never as Xcode or Local Testing. App Review buys with the release build in
+Apple's sandbox, so a server pinned to `production` refuses the reviewer's
+purchase and the review fails under Guideline 2.1. Why a sandbox purchase on
+the production server is safe, and what it costs, is in `docs/premium-flow.md`
+§6. The inventory check `environment.app-store-mode` fails if the variable is
+set to anything. Check the deployed secret too:
+
+```sh
+npx supabase secrets list --project-ref <project-ref> | grep NINA_APP_STORE_ENVIRONMENT
+```
+
+It must print nothing. If it prints a line, remove the secret; the functions
+read it on the next request, with no redeploy:
+
+```sh
+npx supabase secrets unset NINA_APP_STORE_ENVIRONMENT --project-ref <project-ref>
+```
+
+Keep TestFlight to invited testers. Every sandbox purchase covers its buyer's
+house for free, so a public TestFlight link would hand premium to anyone.
 
 ### Sign-in providers: Apple only
 
@@ -116,6 +142,8 @@ Before production, prove:
 - every household table remains isolated by RLS;
 - the AI budget and retention jobs enforce their hard limits;
 - Apple's Notifications V2 test returns `200` and is persisted;
+- a TestFlight purchase is recorded with `environment = 'Sandbox'` and covers
+  the buyer's house, which is how App Review's purchase will arrive;
 - subscription purchase, restore, renewal, expiration, cancellation, and
   billing-retry states synchronize correctly.
 

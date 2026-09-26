@@ -54,7 +54,6 @@ function validEnvironment(): PreflightEnvironment {
     NINA_APP_APPLE_ID: "1234567890",
     PUBLIC_NINA_APP_STORE_ID: "1234567890",
     NINA_PREMIUM_PRODUCT_IDS: facts.productIDs.join(","),
-    NINA_APP_STORE_ENVIRONMENT: "production",
     NINA_APP_STORE_ONLINE_CHECKS: "true",
     NINA_AI_V2_ENABLED: "NO",
     NINA_ATTACHMENTS_ENABLED: "NO",
@@ -186,6 +185,28 @@ Deno.test("the website install link must name the same app the server verifies",
 
   assert(failedIDs.includes("environment.app-store-id-parity"));
   assertFalse(failedIDs.includes("environment.apple-id"));
+});
+
+Deno.test("a verifier pinned to one App Store environment fails the gate, because App Review buys in sandbox", () => {
+  for (const pinned of ["production", "sandbox", "xcode", "local_testing"]) {
+    const environment = validEnvironment();
+    environment.NINA_APP_STORE_ENVIRONMENT = pinned;
+
+    const failedIDs = productionEnvironmentChecks(environment, facts)
+      .filter((result) => result.status === "failure")
+      .map((result) => result.id);
+
+    assertEquals(failedIDs, ["environment.app-store-mode"], pinned);
+  }
+
+  const offline = validEnvironment();
+  offline.NINA_APP_STORE_ONLINE_CHECKS = "false";
+  assert(
+    productionEnvironmentChecks(offline, facts).some((result) =>
+      result.id === "environment.app-store-mode" &&
+      result.status === "failure"
+    ),
+  );
 });
 
 Deno.test("iOS artifact accepts a matching signed release archive", () => {
