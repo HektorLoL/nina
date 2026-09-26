@@ -2509,32 +2509,8 @@ struct TaskEditorSheet: View {
     }
 
     private static func date(fromDueLabel label: String) -> Date {
-        let normalized = label
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-
-        if normalized.contains("amanha"),
-           let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: .now) {
-            return tomorrow
-        }
-
-        if normalized.contains("hoje") {
-            return .now
-        }
-
-        if let date = dueDateFormatter.date(from: label) {
-            return date
-        }
-
-        return .now
+        AppStore.inferredDueAt(from: label) ?? Self.defaultDueDate()
     }
-
-    private static let dueDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "pt_BR")
-        formatter.dateFormat = "dd/MM/yyyy"
-        return formatter
-    }()
 
 }
 

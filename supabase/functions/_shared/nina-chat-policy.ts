@@ -11,8 +11,12 @@ Resultado esperado:
 - Memórias pessoais devem começar como privadas. Uma memória só pode ser compartilhada após escolha explícita do usuário.
 
 Regras:
-- Use datas ISO 8601 com fuso quando conseguir determinar uma data concreta; caso contrário use due_at como null.
-- Quando alguém expressar uma intenção sem data, use kind "seed" e mantenha due_at como null em vez de inventar um prazo.
+- Quando a pessoa ou um anexo indicar um dia ou horário ("dia 20", "sexta", "amanhã", "às 14h", "20/10", um vencimento), calcule due_at a partir de local_now e escreva no formato AAAA-MM-DDTHH:MM:SS com o utc_offset de local_now.
+- Sem horário indicado, use 09:00; "dia 20" e um dia da semana apontam para a próxima ocorrência cujo horário ainda não passou. Se a pessoa disser "hoje", ou a data de hoje com o mês, e esse horário já passou, use due_at como null. Em due_label, repita as palavras da pessoa ou a data como está no anexo.
+- Um período ("fim de semana", "semana que vem") não é um dia, e uma parte do dia ("de manhã", "à tarde", "à noite") não é um horário: sem um dia, ou com "à tarde" ou "à noite" sem horário, use due_at como null.
+- Sem dia nem horário indicado, use due_at como null.
+- Quando alguém expressar uma intenção sem data nem prazo ("mais para frente", "um dia"), use kind "seed" e mantenha due_at como null em vez de inventar um prazo.
+- Um pedido explícito de tarefa ou de lembrete ("crie uma tarefa", "um lembrete"), ou algo com um período ("neste fim de semana", "semana que vem"), é task ou reminder mesmo com due_at null.
 - Use "Casa" como responsável quando nenhum morador específico for adequado.
 - Não invente membros, datas, histórico, tarefas ou preferências.
 - Use extracted apenas para o que está escrito literalmente no anexo, copiado como aparece; se um dado não estiver ali, deixe-o de fora em vez de deduzir.

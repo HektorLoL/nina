@@ -181,6 +181,37 @@ product regression, not a refactor.
   ritual — the product's whole trust proposition — decorative. Locked by
   `RemoteDecodingTests.testCorrectingWhenAProposalHappensMovesTheScheduledDateAndNotJustTheLabel`
   and `…testAnUnparseableCorrectionLandsUndatedRatherThanKeepingTheModelsDate`.
+  Since 2026-09-26 it also holds on the wire: `NinaProposalPayload.encode(to:)`
+  always writes `due_at`, as JSON `null` when there is no date. Until then the
+  synthesized encoder dropped the key, and `resolve_nina_proposal` merges the
+  edited payload over the stored one with `||`, so Nina's stored date survived an
+  undated confirmation and the "lands undated" rule held only in memory.
+- **A named day is never confirmed undated.** Proven in production on
+  2026-09-26: "Me lembre de pagar o boleto dia 20" became a reminder labelled
+  "Dia 20" with `due_at` null, so no notification could ever fire. Three layers
+  now read days by one rule (§12, "`dueLabel` and `dueAt` are read by one rule"):
+  (1) the prompt tells Nina to compute `due_at` from `local_now` (São Paulo date,
+  weekday, time and offset, built by `ninaLocalNow`) whenever the person or an
+  attachment names a day or time; (2) `fillMissingDueAt` in
+  `_shared/nina-due-date.ts` dates a task or reminder the model left undated from
+  its label, or from the message when it is the only dated proposal, before
+  `complete_nina_chat_run` stores it; (3) the app's accept path
+  (`NinaProposal.confirmationPayload` → `datedFromLabelIfUndated`) dates an
+  untouched task or reminder label, so the card shows the day before the tap and
+  proposals left pending from before the deploy get one too. None of the three
+  gives a seed, a purchase or a memory a date, or moves a date Nina gave. The
+  server only re-spells hers as São Paulo time with seconds and offset, reading
+  one written without a zone as São Paulo wall time (Postgres would read it as
+  UTC, three hours early); a `due_at` naming a day that does not exist, or no
+  instant at all, is re-read from the label or the message, or dropped to null.
+  The phone reads Nina's date with or without seconds and re-reads the label
+  only when `due_at` is missing or unreadable.
+  Locked by
+  `AppStoreAuthorizationTests.testConfirmingAnUndatedReminderWhoseLabelNamesADayBooksThatDay`,
+  `RemoteDecodingTests.testAnUndatedConfirmationSendsAnExplicitNullSoNinasStoredDateCannotSurviveIt`,
+  `…testANinaDateWrittenWithoutSecondsIsReadAndConfirmedExactlyAsSheWroteIt`
+  and the Deno test "a due_at without a zone keeps Nina's São Paulo hour, and
+  an unreadable one is re-read from its label or dropped".
 - **Adults only**, checked in the Edge Function *and* again inside
   `begin_nina_chat_run` so a direct RPC call cannot bypass it.
 - **AI consent is a server-side record, not a device flag.** `nina_ai_consents`
@@ -575,7 +606,10 @@ platform bundler cannot resolve the import and the deploy fails with 400.
 - **`nina-chat`** — the assistant turn. Order is load-bearing and asserted by a
   test: adult gate → `begin_nina_chat_run` (idempotent on `message_id`, claims
   rate limits, reserves budget) → moderation → deterministic safety shortcuts →
-  context → token pre-count → model + tool loop → `complete_nina_chat_run`.
+  context → token pre-count → model + tool loop → `fillMissingDueAt` →
+  `complete_nina_chat_run`. The context carries `local_now` from the same clock
+  the fill uses, and `nina_run_completed` logs `due_at_filled`, the count of
+  proposals the fill dated — how often the model alone left a named day null.
   Model `gpt-6-luna` at reasoning effort `medium` (since 2026-09-23; low effort
   lost two cases in the eval) via OpenAI Responses, strict `json_schema`,
   ≤3 proposals, ≤2 extra tool rounds / ≤4 tool calls, 32k input cap, 35s timeout.
@@ -797,7 +831,7 @@ Three pgTAP traps that all cost a CI round-trip on 2026-08-08:
 ## 11. Commands
 
 ```bash
-deno task check && deno task lint:web && deno task lint:deletion && deno task test
+deno task check && deno task format:chat && deno task lint:chat && deno task lint:web && deno task lint:deletion && deno task test
 ```
 
 ```bash
@@ -960,9 +994,44 @@ Nina speaks a sentence and names only who is holding the task;
 the detail ever returns. There is still no preview-redaction control, so the
 *title* the person typed does reach the lock screen: never claim otherwise in copy.
 
-**`dueLabel` and `dueAt` can drift.** `inferredDueAt(from:)` parses only a narrow
-set of pt-BR forms; anything else yields `nil` and the task shows a due label but
-never fires a notification.
+**`dueLabel` and `dueAt` are read by one rule on three layers.**
+`resolveDueInstant` (`supabase/functions/_shared/nina-due-date.ts`) and
+`AppStore.inferredDueAt` implement the same pt-BR reader: "dia 20", "20/10",
+"20 de outubro", "hoje", "amanhã", "depois de amanhã", "daqui N dias", weekday
+names with or without "-feira", accents, "que vem" or "próxima", the ordinal
+weekdays "2ª" to "6ª" with or without "feira", "14h", "14h30", "14:30", "às 9",
+"meio-dia", "meio-dia e meia", "2 da tarde", "8h30 da noite", and their
+combinations. Dates are read before times, so "dia 10 de manhã" is the 10th at
+09:00 and never 10 in the morning. Both run the same `sharedDueTable` (Deno
+`nina-due-date.test.ts`, XCTest `TaskAgendaTests`), and a Deno test fails when
+the Swift copy of the table drifts from the TypeScript one. A day with no time is booked at 09:00 — `ninaDefaultDueHour`,
+`AppStore.defaultDueHour` and the prompt, each pinned by a test. "Dia N" and a
+weekday mean the next occurrence still ahead; "dia 31" skips months without a
+31st. **The reader refuses rather than guesses**: a duration ("a cada 8 horas",
+"8/8h", "daqui 2 horas"), two different dates or times ("sexta ou sábado"), an
+alternative or a range ("dia 5 ou 6", "entre 14 e 16h", "das 10 às 12h", "14h
+30"), a bare "às 1" to "às 7" (as often 17h as 5h), a part of the day with no
+clock time ("hoje à noite", "dia 20 de noite"), a word it cannot place ("ontem",
+"semana que vem", "Sex", a stray "às 10 de pegar", "a 4ª reunião") or an ordinal
+("segunda via", "2ª via", "sexta série", "1/2 comprimido") yields `nil`, and the
+task keeps its label with no notification — the card says "· sem lembrete"
+before the tap. Nina herself may still date a phrase the readers refuse, such
+as "às 5", which the prompt asks her to compute; the card shows her date before
+the tap, and no layer moves it. The one intended difference
+between layers: "hoje", or today's date written with its month ("26/09", "26 de
+setembro"), with no time once 09:00 has passed is `null` on the server, which
+cannot know when the person will confirm, and now + 5 minutes on the phone,
+evaluated at confirmation. "Dia 26" and a weekday said that day go to the next
+occurrence on both layers. The phone anchors an untouched relative label at
+confirmation time, not when it was said, so
+"amanhã" on a proposal left pending for days means the new tomorrow; the card
+shows the resolved date before the tap. The server resolves in
+`America/Sao_Paulo` and the phone in the device's zone: they agree on Brasília
+time and differ by 1–2 hours in Manaus, Acre and Noronha until the chat request
+carries the device's zone. The message fallback can date a proposal from a day
+said about something else ("Comprei presente dia 10, me lembre de embrulhar"
+books the 10th); the card shows it before confirmation, and a message naming two
+different days dates nothing.
 
 **The Supabase MCP `apply_migration` records its own version.** It writes a
 14-digit timestamp to `supabase_migrations.schema_migrations`, not the
@@ -981,8 +1050,8 @@ local machine state.
 **`deno.json` enumerates individual files, not directories.** A new
 `web/src/*.ts` or `_shared/*.ts` module is neither formatted, linted, nor
 type-checked until you add it. Likewise `deno task test` globs only
-`_shared/*.test.ts`, `web/tests/*.test.ts`, and `Tools/production_preflight.test.ts` —
-a test placed elsewhere never runs and CI stays green.
+`_shared/*.test.ts`, `web/tests/*.test.ts`, and `Tools/*.test.ts` — a test
+placed elsewhere never runs and CI stays green.
 
 **`deno.lock` is `frozen: true`** with `nodeModulesDir: "none"`; adding any
 import without regenerating the lockfile fails the edge-functions job before any
@@ -1169,40 +1238,46 @@ fix unprompted.
   submission, because App Review buys in sandbox (§4). Do not rebuild the website with
   `PUBLIC_NINA_APP_STORE_ID` until the app is actually live — the install badge
   would link to a store page that does not exist yet.
-- **The AI eval sits right at its 90% classification bar, on either model.**
-  `evals/latest-report.json` is a *local* run of 2026-09-23 (`project_ref:
-  "local"`, fixtures seeded by SQL, never production) on `gpt-6-luna` at medium
-  effort against fixture version `2026-09-23`: 23/26 (88.5%), schema 1.0, 0
-  unconfirmed mutations, 0 private-data leaks, `passed: false`. Three medium
-  runs scored 23, 24 and 23; `gpt-5.4-mini` at its production settings until
-  that day (low effort) scored 22, 23 and 25 on the same fixture. Each model
-  passed once in three, both averaged 23.3, and every one of the six runs got
-  the task family right 26/26, so every miss is a kind confusion among task,
-  reminder and seed. Most of those involve seed, a kind added in August after
-  the June fixture was written: a medication reminder, or the reminder inside
-  the three-action message, often comes back as a seed. Nearly all the rest are
-  the boleto proposed as a reminder rather than a task. The switch was judged
-  as "no worse than today" at about a seventh of the price: a median US$0.00027
-  per model turn against US$0.0019 (US$0.0056 against US$0.044 per full run),
-  with prompt caching off, so the booked cost is the whole cost. The fixture
-  changed on 2026-09-23 in two cases: "Lembra do dentista mais para frente" now
-  expects a seed, because the prompt tells Nina to use one for an undated
-  intention, and the boleto now falls due "dia 20 do mês que vem". Its June
-  date, "20 de junho", had already passed, and at medium effort that case got
-  no proposal in 3 runs out of 3; with the relative date it got a dated
-  proposal in 3 out of 3. One gap is shared by both models and is not a
-  regression: "Me lembre da consulta na sexta às 14h" often yields a reminder
-  whose `due_at` is null (2 of 3 `gpt-6-luna` runs, 3 of 3 `gpt-5.4-mini`
-  runs). No case sends an attachment, so reading a photo or a PDF on
-  `gpt-6-luna` is unproven; prove one of each before `NINA_ATTACHMENTS_ENABLED`
-  turns on. The weekly insight on `gpt-6-luna` at low effort was 6/6
+- **The AI eval passes, 26 of 27 on average, since 2026-09-26.**
+  `evals/latest-report.json` is a *local* run (`project_ref: "local"`,
+  fixtures seeded by SQL, never production) on `gpt-6-luna` at medium effort
+  against fixture version `2026-09-26` (27 cases; the 90% bar is 25 of 27):
+  26/27, schema 1.0, 0 unconfirmed mutations, 0 private-data leaks,
+  `passed: true`. Three runs of the final prompt scored 25, 26 and 27 and all
+  passed; every one got the task family right 27/27, every named day on the
+  right day and hour (5/5) and every vague phrase undated (7/7), at a median
+  US$0.00027 per model turn. Until 2026-09-23 both `gpt-6-luna` and
+  `gpt-5.4-mini` averaged 23.3 of 26, most misses a task or reminder coming back
+  as a seed, and spoken days ("dia 20", "sexta às 14h", "amanhã às 9h") often
+  came back with `due_at` null — Heitor's first production chat on 2026-09-26
+  confirmed a "Dia 20" reminder with no date. The fix is three layers: the
+  prompt dates every named day from `local_now` and says a period is not a day
+  and a part of the day is not a time; `fillMissingDueAt` dates a proposal the
+  model left undated from its label or message; the app reads the same forms
+  when a label is confirmed or edited. Two prompt lines scope seeds: a seed is
+  an intention with no date *and* no timeframe ("mais para frente", "um dia"),
+  and an explicit request for a task or reminder, or a period ("neste fim de
+  semana"), stays a task or reminder even undated. Before those two lines the
+  date rules alone pushed undated tasks into seeds (22–25 of 27). The fixture
+  gates dates both ways: `expected_due_local` on `task-explicit`,
+  `reminder-explicit`, `reminder-day-of-month`, `document-bill` (`months_ahead:
+  1`) and `document-school` becomes the São Paulo instant at request time
+  (`Tools/nina_eval_due.mjs`, `acceptance.due_at_on_named_day: 1.0`), and
+  `expected_due_at: null` on `task-no-owner` and `medical-organize` is gated by
+  `acceptance.due_at_discipline: 1.0`; a `due_at` without an explicit zone fails
+  both. The eval scores model plus `fillMissingDueAt`; `due_at_filled` in the
+  function log shows how often the model alone missed (0 in every local run so
+  far, so the fallback is proven by unit tests). The remaining misses are kind
+  swaps inside the family: the boleto as a reminder, the school meeting as a
+  task. No case sends an attachment, so reading a photo or a PDF on
+  `gpt-6-luna` is unproven; prove one of each before
+  `NINA_ATTACHMENTS_ENABLED` turns on. The weekly insight on `gpt-6-luna` at low effort was 6/6
   schema-valid with no blame, intent or health language, at about US$0.00016
   per household against US$0.0085 on `gpt-5.5`.
-- **Email is still on in production Auth until Heitor turns it off**
-  (`docs/production-launch-runbook.md` §2, decided 2026-09-26). No build from
-  source asks for a code, but the provider answering `"email":true` means
-  `deployment.sign-in-providers` fails the online preflight until that one
-  dashboard step is done.
+- **Production Auth is Apple only since 2026-09-26.** Heitor turned the Email
+  provider and custom SMTP off in the dashboard; `/auth/v1/settings` reports
+  `apple:true` and every other door false, and `deployment.sign-in-providers`
+  passes. The online preflight had 0 failures that day for the first time.
 - **TOTP MFA is enabled server-side with zero client support**
   (`[auth.mfa.totp]` in `config.toml`; nothing in `Nina/` references it).
 - **iPhone only, decided 2026-09-04.** `TARGETED_DEVICE_FAMILY = 1` on every

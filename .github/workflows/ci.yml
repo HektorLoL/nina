@@ -65,11 +65,17 @@ jobs:
       - name: Check account deletion formatting
         run: deno task format:deletion
 
+      - name: Check Nina chat formatting
+        run: deno task format:chat
+
       - name: Lint web runtime
         run: deno task lint:web
 
       - name: Lint account deletion runtime
         run: deno task lint:deletion
+
+      - name: Lint Nina chat runtime
+        run: deno task lint:chat
 
       - name: Type-check runtime entry points
         run: deno task check

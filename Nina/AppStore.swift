@@ -2603,56 +2603,60 @@ final class AppStore {
             .joined(separator: "-")
     }
 
-    nonisolated static func inferredDueAt(from label: String, now: Date = .now) -> Date? {
-        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+    // The prompt and the server book a day without a time at this same hour.
+    nonisolated static let defaultDueHour = 9
 
-        let normalized = trimmed
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .lowercased()
-        let calendar = Calendar.current
+    nonisolated static func inferredDueAt(
+        from label: String,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard let words = Self.dueWords(in: label) else { return nil }
+        let components = calendar.dateComponents([.year, .month, .day, .weekday], from: now)
+        guard let year = components.year,
+              let month = components.month,
+              let day = components.day,
+              let weekday = components.weekday else {
+            return nil
+        }
+        let today = DueDay(year: year, month: month, day: day)
+        let time = words.time ?? DueClockTime(hour: Self.defaultDueHour, minute: 0)
 
-        if let explicitTime = Self.timeFormatter.date(from: normalized) {
-            let timeComponents = calendar.dateComponents([.hour, .minute], from: explicitTime)
-            var dateComponents = calendar.dateComponents([.year, .month, .day], from: now)
-            dateComponents.hour = timeComponents.hour
-            dateComponents.minute = timeComponents.minute
-            guard var date = calendar.date(from: dateComponents) else { return nil }
-            if date <= now {
-                date = calendar.date(byAdding: .day, value: 1, to: date) ?? date
+        if words.dates.isEmpty {
+            if let todayAt = Self.dueInstant(on: today, at: time, calendar: calendar), todayAt > now {
+                return todayAt
             }
-            return date
+            guard let tomorrow = Self.dueDay(today, adding: 1, calendar: calendar) else { return nil }
+            return Self.dueInstant(on: tomorrow, at: time, calendar: calendar)
         }
 
-        if let offset = Self.dayOffset(from: normalized),
-           let date = calendar.date(byAdding: .day, value: offset, to: now) {
-            return reminderDate(onSameDayAs: date, now: now)
+        let resolved = words.dates.map { word in
+            Self.resolveDueWord(
+                word,
+                today: today,
+                todayWeekday: weekday,
+                time: time,
+                timeStated: words.time != nil,
+                now: now,
+                calendar: calendar
+            )
         }
-
-        if normalized.contains("amanha"),
-           let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) {
-            return reminderDate(onSameDayAs: tomorrow, now: now)
-        }
-
-        if normalized.contains("hoje") {
-            return reminderDate(onSameDayAs: now, now: now)
-        }
-
-        if let absoluteDate = Self.shortDateFormatter.date(from: normalized) {
-            return reminderDate(onSameDayAs: absoluteDate, now: now)
-        }
-
-        return nil
+        guard let first = resolved.first, resolved.allSatisfy({ $0 == first }) else { return nil }
+        return first
     }
 
-    nonisolated static func reminderDate(onSameDayAs date: Date, now: Date = .now) -> Date? {
-        var components = Calendar.current.dateComponents([.year, .month, .day], from: date)
-        components.hour = 9
+    nonisolated static func reminderDate(
+        onSameDayAs date: Date,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Date? {
+        var components = calendar.dateComponents([.year, .month, .day], from: date)
+        components.hour = Self.defaultDueHour
         components.minute = 0
 
-        guard let defaultDate = Calendar.current.date(from: components) else { return nil }
-        if Calendar.current.isDate(defaultDate, inSameDayAs: now), defaultDate <= now {
-            return Calendar.current.date(byAdding: .minute, value: 5, to: now)
+        guard let defaultDate = calendar.date(from: components) else { return nil }
+        if calendar.isDate(defaultDate, inSameDayAs: now), defaultDate <= now {
+            return calendar.date(byAdding: .minute, value: 5, to: now)
         }
         return defaultDate
     }
@@ -2687,31 +2691,387 @@ final class AppStore {
         return formatter.string(from: date)
     }
 
-    nonisolated private static func dayOffset(from label: String) -> Int? {
-        guard let range = label.range(of: #"daqui\s+(\d+)\s+dias?"#, options: .regularExpression) else {
-            return nil
+    nonisolated private static func resolveDueWord(
+        _ word: DueDateWord,
+        today: DueDay,
+        todayWeekday: Int,
+        time: DueClockTime,
+        timeStated: Bool,
+        now: Date,
+        calendar: Calendar
+    ) -> Date? {
+        func instant(_ day: DueDay) -> Date? {
+            Self.dueInstant(on: day, at: time, calendar: calendar)
+        }
+        func pinnedDay(_ day: DueDay) -> Date? {
+            guard let pinned = instant(day) else { return nil }
+            if pinned > now {
+                return pinned
+            }
+            guard !timeStated, day == today else { return nil }
+            return Self.reminderDate(onSameDayAs: now, now: now, calendar: calendar)
         }
 
-        let match = String(label[range])
-        guard let numberRange = match.range(of: #"\d+"#, options: .regularExpression) else {
+        switch word {
+        case .pinned(let days):
+            guard days <= 366, let day = Self.dueDay(today, adding: days, calendar: calendar) else {
+                return nil
+            }
+            return pinnedDay(day)
+        case .dayOfMonth(let dayNumber, let nextMonth):
+            guard (1...31).contains(dayNumber) else { return nil }
+            for step in (nextMonth ? 1 : 0)..<13 {
+                let year = today.year + (today.month - 1 + step) / 12
+                let month = (today.month - 1 + step) % 12 + 1
+                let fits = dayNumber <= Self.daysInMonth(year: year, month: month, calendar: calendar)
+                let day = DueDay(year: year, month: month, day: dayNumber)
+                if nextMonth {
+                    return fits ? instant(day) : nil
+                }
+                if fits, let candidate = instant(day), candidate > now {
+                    return candidate
+                }
+            }
             return nil
+        case .monthDay(let dayNumber, let month, let year):
+            guard (1...12).contains(month), dayNumber >= 1 else { return nil }
+            if let year {
+                guard dayNumber <= Self.daysInMonth(year: year, month: month, calendar: calendar) else {
+                    return nil
+                }
+                return pinnedDay(DueDay(year: year, month: month, day: dayNumber))
+            }
+            if month == today.month, dayNumber == today.day {
+                return pinnedDay(today)
+            }
+            for year in today.year..<(today.year + 9)
+            where dayNumber <= Self.daysInMonth(year: year, month: month, calendar: calendar) {
+                if let candidate = instant(DueDay(year: year, month: month, day: dayNumber)),
+                   candidate > now {
+                    return candidate
+                }
+            }
+            return nil
+        case .weekday(let weekday, let notToday):
+            var days = (weekday - todayWeekday + 7) % 7
+            let todayIsStillAhead = instant(today).map { $0 > now } ?? false
+            if days == 0, notToday || !todayIsStillAhead {
+                days = 7
+            }
+            guard let day = Self.dueDay(today, adding: days, calendar: calendar) else { return nil }
+            return instant(day)
         }
-        return Int(match[numberRange])
     }
 
-    nonisolated private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "pt_BR")
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
+    nonisolated private static func dueInstant(
+        on day: DueDay,
+        at time: DueClockTime,
+        calendar: Calendar
+    ) -> Date? {
+        var components = DateComponents()
+        components.year = day.year
+        components.month = day.month
+        components.day = day.day
+        components.hour = time.hour
+        components.minute = time.minute
+        components.second = 0
+        return calendar.date(from: components)
+    }
 
-    nonisolated private static let shortDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "pt_BR")
-        formatter.dateFormat = "dd/MM/yyyy"
-        return formatter
-    }()
+    nonisolated private static func dueDay(_ day: DueDay, adding days: Int, calendar: Calendar) -> DueDay? {
+        let noonTime = DueClockTime(hour: 12, minute: 0)
+        guard let noon = Self.dueInstant(on: day, at: noonTime, calendar: calendar),
+              let shifted = calendar.date(byAdding: .day, value: days, to: noon) else {
+            return nil
+        }
+        let components = calendar.dateComponents([.year, .month, .day], from: shifted)
+        guard let year = components.year, let month = components.month, let dayNumber = components.day else {
+            return nil
+        }
+        return DueDay(year: year, month: month, day: dayNumber)
+    }
+
+    nonisolated private static func daysInMonth(year: Int, month: Int, calendar: Calendar) -> Int {
+        let firstDay = DueDay(year: year, month: month, day: 1)
+        let noonTime = DueClockTime(hour: 12, minute: 0)
+        guard let noon = Self.dueInstant(on: firstDay, at: noonTime, calendar: calendar),
+              let days = calendar.range(of: .day, in: .month, for: noon) else {
+            return 0
+        }
+        return days.count
+    }
+
+    nonisolated private static func foldedDueText(_ label: String) -> String {
+        label.precomposedStringWithCanonicalMapping
+            .lowercased()
+            .replacingOccurrences(of: "º", with: "")
+            .replacingOccurrences(of: "°", with: "")
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pt_BR"))
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    nonisolated private static func dueWords(in label: String) -> DueWords? {
+        guard let durationPattern = Self.dueDurationPattern,
+              let alternativePattern = Self.dueAlternativePattern,
+              let noonPattern = Self.dueNoonPattern,
+              let partOfDayTimePattern = Self.duePartOfDayTimePattern,
+              let hourMinutePattern = Self.dueHourMinutePattern,
+              let wholeHourPattern = Self.dueWholeHourPattern,
+              let bareHourPattern = Self.dueBareHourPattern,
+              let afterTomorrowPattern = Self.dueAfterTomorrowPattern,
+              let tomorrowPattern = Self.dueTomorrowPattern,
+              let todayPattern = Self.dueTodayPattern,
+              let daysAheadPattern = Self.dueDaysAheadPattern,
+              let numericDatePattern = Self.dueNumericDatePattern,
+              let namedMonthPattern = Self.dueNamedMonthPattern,
+              let dayOfMonthPattern = Self.dueDayOfMonthPattern,
+              let weekdayPattern = Self.dueWeekdayPattern,
+              let ordinalWeekdayPattern = Self.dueOrdinalWeekdayPattern,
+              let ordinalNounPattern = Self.dueOrdinalNounPattern,
+              let weekdayTimePattern = Self.dueWeekdayTimePattern,
+              let strayHourPattern = Self.dueStrayHourPattern,
+              let periodWordPattern = Self.duePeriodWordPattern,
+              let partOfDayPattern = Self.duePartOfDayPattern else {
+            return nil
+        }
+
+        let folded = Self.foldedDueText(label)
+        let foldedText = folded as NSString
+        let foldedRange = NSRange(location: 0, length: foldedText.length)
+        if durationPattern.firstMatch(in: folded, range: foldedRange) != nil
+            || alternativePattern.firstMatch(in: folded, range: foldedRange) != nil {
+            return nil
+        }
+
+        var text = folded
+        var invalid = false
+        var times: [DueClockTime] = []
+        var dates: [DueDateWord] = []
+
+        func consume(_ pattern: NSRegularExpression, _ read: ([String?]) -> Void) {
+            let source = text as NSString
+            let matches = pattern.matches(in: text, range: NSRange(location: 0, length: source.length))
+            guard !matches.isEmpty else { return }
+            let consumed = NSMutableString(string: source)
+            for match in matches {
+                read((0..<match.numberOfRanges).map { index in
+                    let range = match.range(at: index)
+                    return range.location == NSNotFound ? nil : source.substring(with: range)
+                })
+                consumed.replaceCharacters(
+                    in: match.range,
+                    with: String(repeating: " ", count: match.range.length)
+                )
+            }
+            text = consumed as String
+        }
+        func number(_ groups: [String?], _ index: Int) -> Int? {
+            groups.indices.contains(index) ? groups[index].flatMap { Int($0) } : nil
+        }
+        func pushTime(_ hour: Int?, _ minute: Int?) {
+            if let hour, let minute, (0...23).contains(hour), (0...59).contains(minute) {
+                times.append(DueClockTime(hour: hour, minute: minute))
+            } else {
+                invalid = true
+            }
+        }
+
+        consume(noonPattern) { groups in pushTime(12, groups[1] == nil ? 0 : 30) }
+        consume(numericDatePattern) { groups in
+            let marked = groups[1] == "dia" || groups[1] == "no dia"
+            let year = number(groups, 4).map { groups[4]?.count == 2 ? $0 + 2000 : $0 }
+            // A word that is also an ordinal, a fraction or an article counts as a date only in a date's context.
+            guard marked || year != nil || (groups[3]?.count ?? 0) >= 2 else { return }
+            dates.append(.monthDay(day: number(groups, 2) ?? 0, month: number(groups, 3) ?? 0, year: year))
+        }
+        consume(namedMonthPattern) { groups in
+            dates.append(.monthDay(
+                day: number(groups, 1) ?? 0,
+                month: groups[2].flatMap { Self.dueMonthNumbers[$0] } ?? 0,
+                year: number(groups, 3)
+            ))
+        }
+        consume(dayOfMonthPattern) { groups in
+            dates.append(.dayOfMonth(day: number(groups, 1) ?? 0, nextMonth: groups[2] != nil))
+        }
+        consume(partOfDayTimePattern) { groups in
+            guard let hour = number(groups, 1) else {
+                invalid = true
+                return
+            }
+            let minute = number(groups, 2) ?? number(groups, 3) ?? 0
+            if groups[4] == "manha" {
+                pushTime(hour, minute)
+            } else if (1...11).contains(hour) {
+                pushTime(hour + 12, minute)
+            } else if (13...23).contains(hour) {
+                pushTime(hour, minute)
+            } else {
+                invalid = true
+            }
+        }
+        consume(hourMinutePattern) { groups in pushTime(number(groups, 1), number(groups, 2)) }
+        consume(wholeHourPattern) { groups in pushTime(number(groups, 1), 0) }
+        consume(bareHourPattern) { groups in
+            let hour = number(groups, 1)
+            // A bare "às 5" means 17h as often as 5h, so an hour from one to seven is never guessed.
+            if let hour, (1...7).contains(hour) {
+                invalid = true
+            } else {
+                pushTime(hour, 0)
+            }
+        }
+
+        consume(afterTomorrowPattern) { _ in dates.append(.pinned(days: 2)) }
+        consume(tomorrowPattern) { _ in dates.append(.pinned(days: 1)) }
+        consume(todayPattern) { _ in dates.append(.pinned(days: 0)) }
+        consume(daysAheadPattern) { groups in dates.append(.pinned(days: number(groups, 1) ?? Int.max)) }
+
+        var unplacedWeekday = false
+        func readWeekday(
+            _ match: NSTextCheckingResult,
+            weekday: Int?,
+            hasFeira: Bool,
+            hasQueVem: Bool,
+            alwaysPlaced: Bool
+        ) {
+            let before = foldedText.substring(to: match.range.location)
+                .trimmingCharacters(in: .whitespaces)
+            let previous = before.split(separator: " ").last.map(String.init) ?? ""
+            let after = foldedText.substring(from: NSMaxRange(match.range))
+            let afterRange = NSRange(location: 0, length: (after as NSString).length)
+            // A word that is also an ordinal, a fraction or an article counts as a date only in a date's context.
+            if !hasFeira, ordinalNounPattern.firstMatch(in: after, range: afterRange) != nil {
+                return
+            }
+            let placed = alwaysPlaced || hasFeira || hasQueVem
+                || Self.dueWeekdayMarkers.contains(previous)
+                || before.isEmpty
+                || weekdayTimePattern.firstMatch(in: after, range: afterRange) != nil
+            guard placed, let weekday else {
+                unplacedWeekday = true
+                return
+            }
+            dates.append(.weekday(weekday, notToday: hasQueVem || previous.hasPrefix("proxim")))
+        }
+        func captured(_ match: NSTextCheckingResult, _ index: Int) -> Bool {
+            match.range(at: index).location != NSNotFound
+        }
+        for match in weekdayPattern.matches(in: folded, range: foldedRange) {
+            let name = foldedText.substring(with: match.range(at: 1))
+            readWeekday(
+                match,
+                weekday: Self.dueWeekdayNumbers[name],
+                hasFeira: captured(match, 2),
+                hasQueVem: captured(match, 3),
+                alwaysPlaced: name == "sabado" || name == "domingo"
+            )
+        }
+        for match in ordinalWeekdayPattern.matches(in: folded, range: foldedRange) {
+            readWeekday(
+                match,
+                weekday: Int(foldedText.substring(with: match.range(at: 1))),
+                hasFeira: captured(match, 2) || captured(match, 3),
+                hasQueVem: captured(match, 4),
+                alwaysPlaced: false
+            )
+        }
+
+        let remaining = NSRange(location: 0, length: (text as NSString).length)
+        func remains(_ pattern: NSRegularExpression) -> Bool {
+            pattern.firstMatch(in: text, range: remaining) != nil
+        }
+        // A date or time word the reader cannot place refuses the whole text; it never falls back to today.
+        if invalid || unplacedWeekday || times.count > 1
+            || remains(strayHourPattern) || remains(periodWordPattern)
+            || (times.isEmpty && remains(partOfDayPattern)) {
+            return nil
+        }
+        guard !dates.isEmpty || !times.isEmpty else { return nil }
+        return DueWords(dates: dates, time: times.first)
+    }
+
+    nonisolated private static let dueMonthNumbers: [String: Int] = [
+        "janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
+        "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+        "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+        "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12
+    ]
+
+    nonisolated private static let dueWeekdayNumbers: [String: Int] = [
+        "domingo": 1, "segunda": 2, "terca": 3, "quarta": 4, "quinta": 5, "sexta": 6, "sabado": 7
+    ]
+
+    nonisolated private static let dueWeekdayMarkers: Set<String> = [
+        "na", "no", "nesta", "neste", "nessa", "nesse", "esta", "este", "essa", "esse",
+        "desta", "deste", "dessa", "desse", "de", "pra", "para", "proxima", "proximo",
+        "ate", "toda", "todo"
+    ]
+
+    nonisolated private static let dueDurationPattern = try? NSRegularExpression(
+        pattern: #"\b(?:a cada|cada|daqui(?: a)?|em|por|durante|ha|faz|dentro de|umas?|uns)\s+\d{1,3}\s*(?:h|hs|horas?|min|minutos?)\b|\bde\s+\d{1,3}\s+horas?\b|\b\d{1,2}\s*/\s*\d{1,2}\s*h\b|\b\d{1,3}\s*(?:h|hs|horas?)\s+(?:antes|depois|seguidas|por dia)\b"#
+    )
+    nonisolated private static let dueAlternativePattern = try? NSRegularExpression(
+        pattern: #"\bdia \d{1,2} (?:ou|e|a|ate) \d{1,2}(?!\d)|\b\d{1,2}(?:h\d{0,2})? ?(?:ou|e|a|ate) (?:as )?\d{1,2} ?(?:h|horas?)\b|\bentre (?:as |os dias |o dia |dia )?\d{1,2}(?!\d)|\bdas \d{1,2}(?:h\d{0,2})? (?:as|a|ate) \d{1,2}(?!\d)|\b\d{1,2}h \d{2}\b"#
+    )
+    nonisolated private static let dueNoonPattern = try? NSRegularExpression(
+        pattern: #"\bmeio[- ]?dia( e meia)?\b"#
+    )
+    nonisolated private static let duePartOfDayTimePattern = try? NSRegularExpression(
+        pattern: #"\b(\d{1,2})(?:h(\d{2})?|:(\d{2}))?(?:min)?\s*(?:horas?\s*)?d[ae] (manha|tarde|noite)\b"#
+    )
+    nonisolated private static let dueHourMinutePattern = try? NSRegularExpression(
+        pattern: #"\b(\d{1,2})(?:h|:)(\d{2})(?:h|min)?\b"#
+    )
+    nonisolated private static let dueWholeHourPattern = try? NSRegularExpression(
+        pattern: #"\b(\d{1,2}) ?(?:hs?|horas?)\b"#
+    )
+    nonisolated private static let dueBareHourPattern = try? NSRegularExpression(
+        pattern: #"\bas (\d{1,2})\b(?=\s*(?:$|[,.;!?)]|(?:de |da )?(?:hoje|amanha|depois|dia|na|no|nesta|neste|nessa|nesse|esta|este|proxim[ao]|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b))"#
+    )
+    nonisolated private static let dueAfterTomorrowPattern = try? NSRegularExpression(
+        pattern: #"\bdepois de amanha\b"#
+    )
+    nonisolated private static let dueTomorrowPattern = try? NSRegularExpression(
+        pattern: #"\bamanha\b"#
+    )
+    nonisolated private static let dueTodayPattern = try? NSRegularExpression(
+        pattern: #"\bhoje\b"#
+    )
+    nonisolated private static let dueDaysAheadPattern = try? NSRegularExpression(
+        pattern: #"\b(?:daqui (?:a )?|em )(\d{1,3}) dias?\b"#
+    )
+    nonisolated private static let dueNumericDatePattern = try? NSRegularExpression(
+        pattern: #"\b(?:(dia|em|ate|para|no dia) )?(\d{1,2})o?/(\d{1,2})(?:/(\d{4}|\d{2}))?\b"#
+    )
+    nonisolated private static let dueNamedMonthPattern = try? NSRegularExpression(
+        pattern: #"\b(?:dia )?(\d{1,2})o? (?:de )?(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b\.?(?: de (\d{4}))?"#
+    )
+    nonisolated private static let dueDayOfMonthPattern = try? NSRegularExpression(
+        pattern: #"\bdia (\d{1,2})o?\b( do (?:mes que vem|proximo mes))?"#
+    )
+    nonisolated private static let dueWeekdayPattern = try? NSRegularExpression(
+        pattern: #"\b(domingo|segunda|terca|quarta|quinta|sexta|sabado)(-feira| feira)?( que vem)?\b"#
+    )
+    nonisolated private static let dueOrdinalWeekdayPattern = try? NSRegularExpression(
+        pattern: #"\b([2-6])(?:ª([ -]?feira)?|a([ -]?feira))( que vem)?(?=$|[\s,.;!?)])"#
+    )
+    nonisolated private static let dueOrdinalNounPattern = try? NSRegularExpression(
+        pattern: #"^ (?:via|vez|serie|ano|parcela|parte|dose|opcao|etapa|fase|prestacao|mensalidade|semana|turma|chamada|colocad[ao]|lugar|edicao|chance|mao)\b"#
+    )
+    nonisolated private static let dueWeekdayTimePattern = try? NSRegularExpression(
+        pattern: #"^,? (?:as \d{1,2}|\d{1,2} ?(?:hs?\b|h\d|:|horas?\b|da ))"#
+    )
+    nonisolated private static let dueStrayHourPattern = try? NSRegularExpression(
+        pattern: #"\bas \d{1,2}\b"#
+    )
+    nonisolated private static let duePeriodWordPattern = try? NSRegularExpression(
+        pattern: #"\b(?:ontem|anteontem|semana|mes|quinzena|feriado|seg|qua|qui|sex|sab|dom)\b"#
+    )
+    nonisolated private static let duePartOfDayPattern = try? NSRegularExpression(
+        pattern: #"\b(?:tarde|noite|madrugada)\b"#
+    )
 
     private static func householdMember(
         for user: AuthUser?,
@@ -2742,6 +3102,29 @@ final class AppStore {
             memoryNote: "Aprende a dinâmica familiar e transforma lembranças soltas em organização."
         )
     }
+}
+
+private struct DueDay: Equatable {
+    var year: Int
+    var month: Int
+    var day: Int
+}
+
+private struct DueClockTime {
+    var hour: Int
+    var minute: Int
+}
+
+private enum DueDateWord {
+    case pinned(days: Int)
+    case monthDay(day: Int, month: Int, year: Int?)
+    case dayOfMonth(day: Int, nextMonth: Bool)
+    case weekday(Int, notToday: Bool)
+}
+
+private struct DueWords {
+    var dates: [DueDateWord]
+    var time: DueClockTime?
 }
 
 enum PreviewData {

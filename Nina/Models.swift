@@ -1117,6 +1117,25 @@ struct NinaProposalPayload: Codable, Hashable {
         deduplicationKey = try container.decodeIfPresent(String.self, forKey: .deduplicationKey) ?? ""
     }
 
+    // due_at is always written, so an undated confirmation overrides the date stored with the proposal.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(title, forKey: .title)
+        try container.encode(detail, forKey: .detail)
+        try container.encode(owner, forKey: .owner)
+        try container.encode(dueLabel, forKey: .dueLabel)
+        try container.encode(dueAt, forKey: .dueAt)
+        try container.encode(categoryID, forKey: .categoryID)
+        try container.encode(symbolName, forKey: .symbolName)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(extracted, forKey: .extracted)
+        try container.encode(rationale, forKey: .rationale)
+        try container.encodeIfPresent(source, forKey: .source)
+        try container.encodeIfPresent(visibility, forKey: .visibility)
+        try container.encodeIfPresent(confidence, forKey: .confidence)
+        try container.encode(deduplicationKey, forKey: .deduplicationKey)
+    }
+
     var category: TaskCategory {
         TaskCategory.allCases.first(where: { $0.id == categoryID })
             ?? .custom(id: categoryID, title: categoryID.capitalized, tone: .lavender)
@@ -1130,9 +1149,19 @@ struct NinaProposalPayload: Codable, Hashable {
         return formatter
     }()
 
+    private static let minuteDueAtFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mmXXXXX"
+        return formatter
+    }()
+
     var scheduledDate: Date? {
         guard let dueAt else { return nil }
-        return Self.dueAtFormatter.date(from: dueAt) ?? Self.fractionalDueAtFormatter.date(from: dueAt)
+        return Self.dueAtFormatter.date(from: dueAt)
+            ?? Self.fractionalDueAtFormatter.date(from: dueAt)
+            ?? Self.minuteDueAtFormatter.date(from: dueAt)
     }
 
     // Confirming a corrected label has to move the scheduled date with it, and a correction
@@ -1143,7 +1172,8 @@ struct NinaProposalPayload: Codable, Hashable {
         owner: String,
         dueLabel: String,
         amount: String,
-        now: Date = .now
+        now: Date = .now,
+        calendar: Calendar = .current
     ) -> NinaProposalPayload {
         var result = self
         result.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1153,11 +1183,19 @@ struct NinaProposalPayload: Codable, Hashable {
 
         let trimmedDueLabel = dueLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedDueLabel != self.dueLabel {
-            result.dueAt = AppStore.inferredDueAt(from: trimmedDueLabel, now: now)
+            result.dueAt = AppStore.inferredDueAt(from: trimmedDueLabel, now: now, calendar: calendar)
                 .map(Self.dueAtFormatter.string(from:))
         }
         result.dueLabel = trimmedDueLabel
 
+        return result
+    }
+
+    func datedFromLabelIfUndated(now: Date = .now, calendar: Calendar = .current) -> NinaProposalPayload {
+        guard scheduledDate == nil else { return self }
+        var result = self
+        result.dueAt = AppStore.inferredDueAt(from: dueLabel, now: now, calendar: calendar)
+            .map(Self.dueAtFormatter.string(from:))
         return result
     }
 }
@@ -1239,7 +1277,8 @@ struct NinaProposal: Identifiable, Codable, Hashable {
         owner: String,
         dueLabel: String,
         amount: String,
-        now: Date = .now
+        now: Date = .now,
+        calendar: Calendar = .current
     ) -> NinaProposalPayload {
         var resolved = payload.edited(
             title: title,
@@ -1247,7 +1286,8 @@ struct NinaProposal: Identifiable, Codable, Hashable {
             owner: owner,
             dueLabel: dueLabel,
             amount: amount,
-            now: now
+            now: now,
+            calendar: calendar
         )
         if resolved.title.isEmpty {
             resolved.title = self.title
@@ -1264,6 +1304,9 @@ struct NinaProposal: Identifiable, Codable, Hashable {
         if kind == .seed {
             resolved.dueLabel = "Sem data"
             resolved.dueAt = nil
+        } else if kind == .task || kind == .reminder {
+            // A label that names a day never confirms undated: the card shows, and the server books, that day.
+            resolved = resolved.datedFromLabelIfUndated(now: now, calendar: calendar)
         }
         return resolved
     }

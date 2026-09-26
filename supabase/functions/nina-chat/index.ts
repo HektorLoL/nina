@@ -29,6 +29,7 @@ import {
   NinaChatRequest,
 } from "../_shared/nina-chat-request.ts";
 import { ninaSystemPrompt } from "../_shared/nina-chat-policy.ts";
+import { fillMissingDueAt, ninaLocalNow } from "../_shared/nina-due-date.ts";
 import { houseWorkloadKey, summarizeWorkload } from "../_shared/nina-workload.ts";
 import { minimizeMembersForModel } from "../_shared/nina-member-context.ts";
 
@@ -744,10 +745,9 @@ Deno.serve(async (request: Request) => {
     recentMessages.pop();
   }
 
+  const turnClock = new Date();
   const householdContext = {
-    local_time: new Date().toLocaleString("pt-BR", {
-      timeZone: "America/Sao_Paulo",
-    }),
+    local_now: ninaLocalNow(turnClock),
     family: familyResult.data,
     current_user: profileResult.data,
     members: minimizeMembersForModel(membersResult.data ?? []),
@@ -927,9 +927,10 @@ Deno.serve(async (request: Request) => {
       throw new Error("invalid_assistant_response");
     }
 
+    const datedProposals = fillMissingDueAt(structured.proposals, body.message, turnClock);
     const latency = Math.round(performance.now() - startedAt);
     const assistantMessageID = crypto.randomUUID();
-    const persistedProposals = structured.proposals.map((proposal) => ({
+    const persistedProposals = datedProposals.proposals.map((proposal) => ({
       ...proposal,
       id: crypto.randomUUID(),
     }));
@@ -965,6 +966,7 @@ Deno.serve(async (request: Request) => {
       reasoning_tokens: aggregateUsage.reasoningTokens,
       actual_microusd: actualCost,
       tool_calls: totalToolCalls,
+      due_at_filled: datedProposals.filled,
     }));
 
     return jsonResponse(

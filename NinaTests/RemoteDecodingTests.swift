@@ -604,4 +604,118 @@ final class RemoteDecodingTests: XCTestCase {
 
         XCTAssertEqual(edited.amount, "2 pacotes")
     }
+
+    func testANinaDateWrittenWithoutSecondsIsReadAndConfirmedExactlyAsSheWroteIt() {
+        let undatedLabel = Self.proposal(
+            kind: .reminder,
+            dueLabel: "No vencimento",
+            dueAt: "2026-10-20T09:00-03:00"
+        )
+        let dayOnlyLabel = Self.proposal(kind: .task, dueLabel: "Dia 20", dueAt: "2026-10-20T14:00-03:00")
+
+        let shownUndated = Self.confirmedUntouched(undatedLabel)
+        let shownDayOnly = Self.confirmedUntouched(dayOnlyLabel)
+
+        XCTAssertEqual(
+            undatedLabel.payload.scheduledDate,
+            ISO8601DateFormatter().date(from: "2026-10-20T12:00:00Z")
+        )
+        XCTAssertEqual(shownUndated.dueLabel, "No vencimento")
+        XCTAssertEqual(shownUndated.dueAt, "2026-10-20T09:00-03:00")
+        XCTAssertEqual(shownDayOnly.dueAt, "2026-10-20T14:00-03:00")
+        XCTAssertEqual(shownDayOnly.scheduledDate, ISO8601DateFormatter().date(from: "2026-10-20T17:00:00Z"))
+    }
+
+    func testAProposalDateThePhoneCannotReadIsReplacedByTheDayItsLabelNames() {
+        let proposal = Self.proposal(kind: .reminder, dueLabel: "Dia 20", dueAt: "20/10/2026")
+
+        let shown = Self.confirmedUntouched(proposal)
+
+        XCTAssertNil(proposal.payload.scheduledDate)
+        XCTAssertEqual(shown.dueLabel, "Dia 20")
+        XCTAssertEqual(shown.dueAt, "2026-10-20T12:00:00Z")
+    }
+
+    func testAnUnreadableProposalDateWithALabelThatNamesNoDayConfirmsUndated() {
+        let proposal = Self.proposal(kind: .task, dueLabel: "Sem data", dueAt: "amanhã")
+
+        let shown = Self.confirmedUntouched(proposal)
+
+        XCTAssertEqual(shown.dueLabel, "Sem data")
+        XCTAssertNil(shown.dueAt)
+    }
+
+    func testASeedWhoseLabelNamesADayStillConfirmsUndated() {
+        let proposal = Self.proposal(kind: .seed, dueLabel: "Dia 20", dueAt: nil)
+
+        let shown = Self.confirmedUntouched(proposal)
+
+        XCTAssertEqual(shown.dueLabel, "Sem data")
+        XCTAssertNil(shown.dueAt)
+    }
+
+    func testAnUntouchedLabelDatesOnlyATaskOrAReminderAtConfirmation() {
+        for kind in [NinaProposalKind.task, .reminder] {
+            let shown = Self.confirmedUntouched(Self.proposal(kind: kind, dueLabel: "amanhã", dueAt: nil))
+            XCTAssertEqual(shown.dueAt, "2026-09-27T12:00:00Z", kind.rawValue)
+        }
+        for kind in [NinaProposalKind.shopping, .memory] {
+            let shown = Self.confirmedUntouched(Self.proposal(kind: kind, dueLabel: "amanhã", dueAt: nil))
+            XCTAssertNil(shown.dueAt, kind.rawValue)
+        }
+    }
+
+    func testAnUndatedConfirmationSendsAnExplicitNullSoNinasStoredDateCannotSurviveIt() throws {
+        let proposed = NinaProposalPayload(
+            title: "Renovar o seguro",
+            detail: "",
+            dueLabel: "sexta, 09:00",
+            dueAt: "2026-08-14T12:00:00Z"
+        )
+        let corrected = proposed.edited(
+            title: proposed.title,
+            detail: proposed.detail,
+            owner: proposed.owner,
+            dueLabel: "quando der",
+            amount: ""
+        )
+
+        let wire = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(corrected)) as? [String: Any]
+        )
+
+        XCTAssertNil(corrected.dueAt)
+        XCTAssertTrue(wire.keys.contains("due_at"))
+        XCTAssertTrue(wire["due_at"] is NSNull)
+        XCTAssertEqual(wire["due_label"] as? String, "quando der")
+    }
+
+    private static func proposal(kind: NinaProposalKind, dueLabel: String, dueAt: String?) -> NinaProposal {
+        NinaProposal(
+            kind: kind,
+            title: "Anotei para a casa",
+            detail: "",
+            actionTitle: "Confirmar",
+            payload: NinaProposalPayload(
+                title: "Pagar o boleto",
+                detail: "",
+                dueLabel: dueLabel,
+                dueAt: dueAt
+            )
+        )
+    }
+
+    private static func confirmedUntouched(_ proposal: NinaProposal) -> NinaProposalPayload {
+        var saoPaulo = Calendar(identifier: .gregorian)
+        saoPaulo.timeZone = TimeZone(identifier: "America/Sao_Paulo") ?? .gmt
+        return proposal.confirmationPayload(
+            title: proposal.payload.title,
+            detail: proposal.payload.detail,
+            owner: proposal.payload.owner,
+            dueLabel: proposal.payload.dueLabel,
+            amount: proposal.payload.amount,
+            now: ISO8601DateFormatter().date(from: "2026-09-26T10:15:00-03:00") ?? .distantPast,
+            calendar: saoPaulo
+        )
+    }
 }

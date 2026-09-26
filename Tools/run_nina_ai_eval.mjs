@@ -4,6 +4,10 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
+import {
+  dueAtExpectationMet,
+  dueAtOnExpectedLocalTime,
+} from "./nina_eval_due.mjs";
 
 const pinnedSupabaseCLI = ["--yes", "supabase@2.110.0"];
 const cliArguments = process.argv.slice(2);
@@ -166,24 +170,6 @@ function schemaIsValid(payload) {
       && proposal?.payload
       && typeof proposal.payload === "object"
     );
-}
-
-function dueAtExpectationMet(evalCase, schemaValid, proposals) {
-  if (evalCase.must_include_due_at === true) {
-    return schemaValid
-      && proposals.length > 0
-      && proposals.every((proposal) =>
-        typeof proposal.payload?.due_at === "string"
-        && !Number.isNaN(Date.parse(proposal.payload.due_at))
-      );
-  }
-  if (Object.hasOwn(evalCase, "expected_due_at")) {
-    return schemaValid
-      && proposals.every((proposal) =>
-        (proposal.payload?.due_at ?? null) === evalCase.expected_due_at
-      );
-  }
-  return null;
 }
 
 function dueAtShape(proposal) {
@@ -434,6 +420,8 @@ try {
   let resolvedProposals = 0;
   let dueAtChecked = 0;
   let dueAtMet = 0;
+  let dueNamedChecked = 0;
+  let dueNamedMet = 0;
 
   for (const evalCase of fixture.cases) {
     resetChatQuota(firstUser.id);
@@ -442,6 +430,7 @@ try {
     let payload = null;
     let status = 0;
     let errorCode = null;
+    const requestedAt = new Date();
 
     try {
       const result = await request(
@@ -485,6 +474,15 @@ try {
       dueAtChecked += 1;
       if (dueAtMetForCase) dueAtMet += 1;
     }
+    const dueNamedMetForCase = dueAtOnExpectedLocalTime(
+      evalCase,
+      proposals,
+      requestedAt,
+    );
+    if (dueNamedMetForCase !== null) {
+      dueNamedChecked += 1;
+      if (dueNamedMetForCase) dueNamedMet += 1;
+    }
 
     const serialized = JSON.stringify(payload ?? "").toLocaleLowerCase("pt-BR");
     const privateLeak = serialized.includes(privateMarker.toLocaleLowerCase("pt-BR"));
@@ -510,6 +508,7 @@ try {
       task_family_correct: familyCorrect,
       due_at_shapes: proposals.map(dueAtShape),
       due_at_expectation_met: dueAtMetForCase,
+      due_at_on_named_day_met: dueNamedMetForCase,
       run_status: run?.status ?? null,
       model_called: modelCalled,
       input_tokens: run?.input_tokens ?? null,
@@ -587,6 +586,10 @@ try {
       checked: dueAtChecked,
       met: dueAtMet,
     },
+    due_at_on_named_day: {
+      checked: dueNamedChecked,
+      met: dueNamedMet,
+    },
     acceptance: fixture.acceptance,
     mutations: { ...mutations, resolved_proposals: resolvedProposals },
     passed: schemaValidCount === fixture.cases.length
@@ -594,7 +597,16 @@ try {
         >= fixture.acceptance.proposal_classification_accuracy
       && unconfirmedMutations === fixture.acceptance.unconfirmed_mutations
       && privateLeakCount === fixture.acceptance.private_data_leaks
-      && median(costs) <= fixture.acceptance.median_text_turn_cost_usd_max,
+      && median(costs) <= fixture.acceptance.median_text_turn_cost_usd_max
+      && (
+        dueAtChecked === 0
+        || dueAtMet / dueAtChecked >= fixture.acceptance.due_at_discipline
+      )
+      && (
+        dueNamedChecked === 0
+        || dueNamedMet / dueNamedChecked
+          >= fixture.acceptance.due_at_on_named_day
+      ),
     cases,
   };
 
@@ -612,6 +624,7 @@ try {
       ...metrics,
       task_family_accuracy: report.task_family_accuracy,
       due_at_discipline: report.due_at_discipline,
+      due_at_on_named_day: report.due_at_on_named_day,
       model_turns: report.model_turns,
     },
     null,

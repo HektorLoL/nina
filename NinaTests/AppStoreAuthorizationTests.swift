@@ -2632,6 +2632,45 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testConfirmingAnUndatedReminderWhoseLabelNamesADayBooksThatDay() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let saturdayMorning = ISO8601DateFormatter().date(from: "2026-09-26T10:15:00-03:00") ?? .distantPast
+        var saoPaulo = Calendar(identifier: .gregorian)
+        saoPaulo.timeZone = TimeZone(identifier: "America/Sao_Paulo") ?? .gmt
+        let proposal = NinaProposal(
+            kind: .reminder,
+            title: "Pagar o boleto",
+            detail: "",
+            actionTitle: "Criar lembrete",
+            payload: NinaProposalPayload(
+                title: "Pagar o boleto",
+                detail: "",
+                dueLabel: "Dia 20",
+                dueAt: nil
+            )
+        )
+
+        let shown = proposal.confirmationPayload(
+            title: proposal.payload.title,
+            detail: proposal.payload.detail,
+            owner: proposal.payload.owner,
+            dueLabel: proposal.payload.dueLabel,
+            amount: proposal.payload.amount,
+            now: saturdayMorning,
+            calendar: saoPaulo
+        )
+        let didAccept = await store.resolveProposal(proposal, decision: .accept, editedPayload: shown)
+        let confirmed = await backend.confirmedPayload(for: proposal.id)
+
+        XCTAssertTrue(didAccept)
+        XCTAssertEqual(confirmed?.dueLabel, "Dia 20")
+        XCTAssertEqual(confirmed?.dueAt, "2026-10-20T12:00:00Z")
+    }
+
+    @MainActor
     func testConfirmingAMemoryCarriesOnlyTheVisibilityTheUserTapped() async {
         let user = makeUser()
         let backend = RecordingHomeBackend(state: makeRemoteState())
