@@ -96,7 +96,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 17+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (38 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (39 files) |
 | Server logic | 5 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -244,6 +244,13 @@ product regression, not a refactor.
 - **Insight prompt constraint:** *"Não atribua culpa, intenção, saúde mental ou
   valor moral."* You cannot show a couple a fairness chart without it becoming a
   weapon; the prompt is where that is prevented.
+- **Only Nina writes an insight.** `household_insights` rows come from
+  `complete_nina_insight_run` alone; `authenticated` holds `select` and the one
+  policy is `for select`. Until 2026-09-26 a member held full DML under a
+  `for all` policy, so either adult could forge or rewrite the weekly insight
+  the other reads as Nina's, blame included, and the prompt constraint above
+  meant nothing. The exact grant map in `rls_policies.test.sql` pins the grant,
+  and a temporary re-grant there proves the policy alone still refuses.
 - **A portrait the snapshot refused to conclude is never drawn.** `HouseholdWorkload`
   returns an inconclusive snapshot below 6 assigned open tasks or 2 carriers, but
   that snapshot still carries a fully populated `entries` array — so both render
@@ -466,7 +473,7 @@ audit on any new screen.
 
 ## 6. Database
 
-38 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+39 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order.
 
 **House style for every new object:**

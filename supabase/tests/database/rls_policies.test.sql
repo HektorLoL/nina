@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(55);
+select plan(61);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -439,7 +439,7 @@ select set_eq(
     'chat_messages SELECT,INSERT,UPDATE,DELETE',
     'family_members SELECT',
     'family_snapshots SELECT',
-    'household_insights SELECT,INSERT,UPDATE,DELETE',
+    'household_insights SELECT',
     'memory_items SELECT,UPDATE,DELETE',
     'nina_proposals SELECT',
     'nina_threads SELECT',
@@ -615,6 +615,72 @@ select lives_ok(
   $$insert into public.shopping_items (family_id, title) values ('30000000-0000-0000-0000-000000000001', 'Member Item')$$,
   'regular member can add family shopping items'
 );
+
+select throws_ok(
+  $$insert into public.household_insights (family_id, title, message)
+    values ('30000000-0000-0000-0000-000000000001', 'Forged Insight', 'Forged blame')$$,
+  '42501',
+  null,
+  'a member cannot write an insight in Nina''s voice'
+);
+
+select throws_ok(
+  $$update public.household_insights
+    set message = 'Forged blame'
+    where id = '55000000-0000-0000-0000-000000000001'$$,
+  '42501',
+  null,
+  'a member cannot rewrite Nina''s weekly insight'
+);
+
+select throws_ok(
+  $$delete from public.household_insights
+    where id = '55000000-0000-0000-0000-000000000001'$$,
+  '42501',
+  null,
+  'a member cannot erase Nina''s weekly insight'
+);
+
+-- The policy is the second layer: even with the write grant back, it lets no member write.
+reset role;
+grant update, delete on table public.household_insights to authenticated;
+set local role authenticated;
+
+select is(
+  pg_temp.affected_rows(
+    $$update public.household_insights
+      set message = 'Forged blame'
+      where id = '55000000-0000-0000-0000-000000000001'$$
+  ),
+  0,
+  'the insight policy alone lets no member rewrite an insight'
+);
+
+select is(
+  pg_temp.affected_rows(
+    $$delete from public.household_insights
+      where id = '55000000-0000-0000-0000-000000000001'$$
+  ),
+  0,
+  'the insight policy alone lets no member erase an insight'
+);
+
+reset role;
+revoke update, delete on table public.household_insights from authenticated;
+
+select is(
+  (
+    select count(*)::integer
+    from public.household_insights
+    where family_id = '30000000-0000-0000-0000-000000000001'
+      and title = 'Owner Insight'
+      and message = ''
+  ),
+  1,
+  'the household still holds exactly the insight Nina wrote'
+);
+
+set local role authenticated;
 
 select is(
   (select count(*)::integer from public.premium_subscriptions),
