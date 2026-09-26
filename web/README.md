@@ -38,6 +38,12 @@ sozinha. As diferenças em relação às pranchas do Paper estão em
 - Variáveis:
   - `NINA_SUPABASE_URL`
   - `NINA_SUPABASE_PUBLISHABLE_KEY`
+- Variáveis de build (identidade legal, publicada desde 2026-09-26):
+  `PUBLIC_NINA_LEGAL_ENTITY_NAME`, `PUBLIC_NINA_LEGAL_ENTITY_DOCUMENT`,
+  `PUBLIC_NINA_DPO_NAME`, `PUBLIC_NINA_PRIVACY_CONTACT_EMAIL` e
+  `PUBLIC_NINA_DPO_CONTACT_EMAIL`. Os valores ficam só no Cloudflare e em
+  `config/production.env`, nunca no repositório, que é público. Um build sem
+  eles publica a página de privacidade como incompleta.
 - Segredo:
   - `NINA_SUPABASE_SECRET_KEY`: chave `sb_secret_...` dedicada ao Worker, usada
     somente pelos RPCs da lista de espera.

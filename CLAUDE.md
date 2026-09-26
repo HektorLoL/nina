@@ -1122,13 +1122,18 @@ fix unprompted.
   opening the management screen (screenshot in `docs/premium-flow.md`). Sandbox
   subscriptions expire in minutes, so "Restaurar compras" hours later finds no
   usable receipt on the device and sends nothing — sandbox, not a bug.
-- **Legal identity is deliberately blank.** `PUBLIC_NINA_LEGAL_ENTITY_NAME`,
-  `…DOCUMENT`, `PUBLIC_NINA_DPO_NAME` are all `replace_with_…`. The privacy page
-  self-declares `data-legal-status="incomplete"` and the online preflight fails
-  until they are real. **Nina cannot legally launch until a Brazilian legal
-  entity with a CNPJ and a named DPO exists** — that is a company-formation task,
-  not an engineering one. Brazilian counsel must also approve the child/sensitive-data
-  wording.
+- **Legal identity is a person's, published 2026-09-26.** Heitor chose to act
+  as controller and DPO under his own name and CPF rather than wait for a CNPJ.
+  The five values (`PUBLIC_NINA_LEGAL_ENTITY_NAME`, `…_DOCUMENT`,
+  `PUBLIC_NINA_DPO_NAME`, `PUBLIC_NINA_PRIVACY_CONTACT_EMAIL`,
+  `PUBLIC_NINA_DPO_CONTACT_EMAIL`) live only in the Cloudflare Workers Builds
+  build variables and the untracked `config/production.env` — **never in the
+  repo, which is public on GitHub.** `legal.ts` freezes them at build time, so a
+  site built anywhere without those variables (a local `wrangler deploy`, a new
+  Cloudflare project) publishes `data-legal-status="incomplete"` again and the
+  online preflight's `deployment.privacy` turns red. Moving to a company later
+  means swapping the CPF for a CNPJ in both places. Brazilian counsel must still
+  approve the child/sensitive-data wording.
 - **The App Store Connect record exists since 2026-09-03**: Apple ID
   `6808423946`, listed as "Nina: sua amiga da casa" because the bare name was
   taken. The number is public (it is the `apps.apple.com/br/app/id…` path) and
