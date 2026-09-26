@@ -73,17 +73,7 @@ struct MemberDetailView: View {
                         ChildTodaySection(member: member)
                     }
 
-                    if !member.memoryNote.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Eyebrow(text: "O que a Nina lembra")
-                            Text(member.memoryNote)
-                                .ninaText(.label, NinaTheme.ink)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(18)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
-                    }
+                    memoryCard
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
@@ -91,6 +81,53 @@ struct MemberDetailView: View {
             }
         }
         .ninaScreenBackground()
+    }
+
+    @ViewBuilder
+    private var memoryCard: some View {
+        if MemberRecollection.replacesNote(for: member.role) {
+            recollectionCard(store.recollection(for: member))
+        } else if !member.memoryNote.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Eyebrow(text: "O que a Nina lembra")
+                Text(member.memoryNote)
+                    .ninaText(.label, NinaTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+        }
+    }
+
+    private func recollectionCard(_ summary: MemberRecollectionSummary) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Eyebrow(text: "O que a Nina lembra")
+            if summary.isEmpty {
+                Text(summary.emptyLine)
+                    .ninaText(.label, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(summary.lines) { line in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(line.text)
+                            .ninaText(.label, NinaTheme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if line.isPrivate {
+                            Image(systemName: "lock")
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundStyle(NinaTheme.faint)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityValue(line.isPrivate ? "Só você vê" : "")
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
     }
 
     private var relationshipDetail: String? {

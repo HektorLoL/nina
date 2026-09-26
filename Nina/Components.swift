@@ -138,6 +138,7 @@ struct NinaButton: View {
     var title: String
     var kind: NinaButtonKind = .primary
     var systemName: String?
+    var assetName: String? = nil
     var fillsWidth: Bool = false
     var isEnabled: Bool = true
     // Pending is not disabled: the label stays legible while the work happens.
@@ -150,6 +151,7 @@ struct NinaButton: View {
                 title: title,
                 kind: kind,
                 systemName: systemName,
+                assetName: assetName,
                 fillsWidth: fillsWidth,
                 isPending: isPending
             )
@@ -164,6 +166,7 @@ struct NinaButtonFace: View {
     var title: String
     var kind: NinaButtonKind = .primary
     var systemName: String?
+    var assetName: String? = nil
     var fillsWidth: Bool = false
     var isPending: Bool = false
 
@@ -173,6 +176,14 @@ struct NinaButtonFace: View {
                 ProgressView()
                     .controlSize(.small)
                     .tint(foreground)
+            } else if let assetName {
+                // A brand mark keeps its own colours; the face's tint never reaches it.
+                Image(assetName)
+                    .renderingMode(.original)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+                    .accessibilityHidden(true)
             } else if let systemName {
                 Image(systemName: systemName)
                     .font(.system(size: 16, weight: .semibold))

@@ -1,11 +1,27 @@
 import Foundation
 
 #if canImport(Supabase)
+import AuthenticationServices
 import Supabase
 
 struct SupabaseAuthClient: AuthClient {
     var client: SupabaseClient
+    var configuration: SupabaseConfiguration
     var diagnostics: BackendDiagnosticsStore? = nil
+
+    var projectHost: String? {
+        configuration.url.host
+    }
+
+    private static let settingsSession: URLSession = {
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.timeoutIntervalForRequest = GoogleSignIn.settingsTimeout
+        sessionConfiguration.timeoutIntervalForResource = GoogleSignIn.settingsTimeout + 2
+        sessionConfiguration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        sessionConfiguration.urlCache = nil
+        sessionConfiguration.httpCookieStorage = nil
+        return URLSession(configuration: sessionConfiguration)
+    }()
 
     func restoreSession() async -> AuthSessionRestoration {
         guard let storedSession = client.auth.currentSession else {
@@ -79,6 +95,85 @@ struct SupabaseAuthClient: AuthClient {
         ) ?? session.user
         let profile = try await ensureProfile(displayNameHint: credential.fullName)
         return AuthUser(supabaseUser: refreshedUser, profile: profile, preferredProvider: .apple)
+    }
+
+    func googleSignInAvailability() async -> Bool? {
+        let endpoint = configuration.url
+            .appendingPathComponent("auth")
+            .appendingPathComponent("v1")
+            .appendingPathComponent("settings")
+        var request = URLRequest(
+            url: endpoint,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: GoogleSignIn.settingsTimeout
+        )
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(configuration.publishableKey, forHTTPHeaderField: "apikey")
+
+        do {
+            return try await BackendRequestLogger.perform(
+                component: "auth",
+                operation: "load_provider_settings",
+                diagnostics: diagnostics
+            ) { () async throws -> Bool? in
+                let (bytes, response) = try await Self.settingsSession.bytes(for: request)
+                guard let httpResponse = response as? HTTPURLResponse,
+                      httpResponse.expectedContentLength <= Int64(GoogleSignIn.maximumSettingsBytes) else {
+                    return nil
+                }
+
+                var body = Data()
+                for try await byte in bytes {
+                    guard body.count < GoogleSignIn.maximumSettingsBytes else { return nil }
+                    body.append(byte)
+                }
+                return GoogleSignIn.availability(statusCode: httpResponse.statusCode, body: body)
+            }
+        } catch {
+            return nil
+        }
+    }
+
+    func signInWithGoogle() async throws -> AuthUser {
+        guard let redirectURL = GoogleSignIn.callbackURL else {
+            throw AuthFlowError.configurationMissing
+        }
+
+        let session: Session
+        do {
+            session = try await BackendRequestLogger.perform(
+                component: "auth",
+                operation: "sign_in_google",
+                diagnostics: diagnostics
+            ) {
+                try await client.auth.signInWithOAuth(
+                    provider: .google,
+                    redirectTo: redirectURL,
+                    configure: { webSession in
+                        webSession.prefersEphemeralWebBrowserSession = true
+                    }
+                )
+            }
+        } catch {
+            if GoogleSignIn.isCancellation(error) {
+                throw CancellationError()
+            }
+            if let authError = error as? AuthError,
+               case let .pkceGrantCodeExchange(_, oauthError, _) = authError,
+               GoogleSignIn.isCancellation(oauthErrorCode: oauthError) {
+                throw CancellationError()
+            }
+            throw AuthFlowError.unavailable
+        }
+
+        let metadata = session.user.userMetadata
+        let hint = GoogleSignIn.displayNameHint(
+            displayName: metadata["display_name"]?.stringValue,
+            fullName: metadata["full_name"]?.stringValue,
+            name: metadata["name"]?.stringValue
+        )
+        let profile = try await ensureProfile(displayNameHint: hint)
+        return AuthUser(supabaseUser: session.user, profile: profile, preferredProvider: .google)
     }
 
     func requestEmailOTP(email: String) async throws {

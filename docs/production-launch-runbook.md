@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-09-25
+Last updated: 2026-09-26
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -37,6 +37,7 @@ Distribute only the relevant values:
 | Supabase Edge Function secrets | `OPENAI_API_KEY`, `NINA_APP_BUNDLE_ID`, `NINA_APP_APPLE_ID`, `NINA_PREMIUM_PRODUCT_IDS`, `NINA_APP_STORE_ENVIRONMENT`, `NINA_APP_STORE_ONLINE_CHECKS` |
 | Operator machine only          | `NINA_RESEND_API_KEY` (sending-only), read by `deno task waitlist:send`                                                                               |
 | Release records only           | `NINA_APPLE_TEAM_ID`, `NINA_PUBLIC_BASE_URL`                                                                                                          |
+| Supabase Auth dashboard only   | Google OAuth client ID and secret (never in an xcconfig, `production.env`, or the repository)                                                         |
 
 Do not upload the complete inventory to any one platform. In particular, never
 place `NINA_SUPABASE_SECRET_KEY` or `OPENAI_API_KEY` in an Astro `PUBLIC_*`
@@ -54,6 +55,52 @@ npx deno task preflight:production --env-file config/production.env
 The command checks key roles without printing keys, requires a production App
 Store verifier, compares product/team/bundle identifiers with source control,
 and fails on incomplete controller, DPO, or mailbox values.
+
+### Sign in with Google (dashboard only)
+
+The app already carries the "Continuar com o Google" button. It stays hidden
+until the production project reports Google as enabled, so turning it on is a
+dashboard change with no rebuild. Google Cloud OAuth and the Supabase Google
+provider cost nothing on the current plans.
+
+1. Google Cloud → Google Auth Platform → **Branding**: app name "Nina", a
+   support email, and the logo. Home page `https://ninai.app`, privacy policy
+   `https://ninai.app/privacidade`, terms `https://ninai.app/termos`. Authorized
+   domains: `ninai.app` and `apemftmlsjocvifbptum.supabase.co`.
+2. **Audience**: user type External, then **Publish app** so the status reads
+   "In production". While it stays in Testing, Google blocks everyone who is not
+   a listed test user. The scopes are openid, email and profile, which are
+   non-sensitive, so publishing needs no Google review.
+3. **Clients → Create client**, type "Web application", with the authorized
+   redirect URI `https://apemftmlsjocvifbptum.supabase.co/auth/v1/callback`.
+4. Supabase → Authentication → Sign In / Providers → **Google**: enable it and
+   paste the client ID and secret. They live only there.
+5. Supabase → Authentication → URL Configuration → **Redirect URLs**: add
+   `com.heitor.nina://login-callback`. Without it, Auth falls back to the Site
+   URL and the sign-in sheet never returns to the app. The allow-listed custom
+   scheme lets another app on the phone start its own Google sheet and obtain a
+   Nina session if the person signs in there. This is user-assisted phishing,
+   the same class as tricking someone into typing an email code, and PKCE does
+   not prevent it; the HTTPS-callback upgrade is in `CLAUDE.md` §12.
+6. Verify:
+
+```sh
+curl -s -H "apikey: $NINA_SUPABASE_PUBLISHABLE_KEY" "$NINA_SUPABASE_URL/auth/v1/settings" | grep -o '"google":[a-z]*'
+```
+
+`"google":true` means the provider is on, with no rebuild. `"google":false`
+means it is still off. The login screen decides once, before its buttons can be
+tapped, and never adds or removes the button while it is open. A new install
+waits up to 1.5 seconds for the first answer. A phone that already cached an
+answer uses it at once and saves the fresh one for the next time the login
+screen opens, so a phone that saw `false` shows the button one login screen
+later.
+
+Google's own account page will most likely say it continues to
+`apemftmlsjocvifbptum.supabase.co` rather than "Nina": brand verification needs
+proof of ownership for every authorized domain, and the supabase.co host cannot
+be proved. Only a Supabase custom domain changes that, and it is a paid add-on on
+a paid plan.
 
 ## 3. Database and Edge Functions
 
@@ -230,7 +277,9 @@ Build 6 was uploaded this way on 2026-09-25.
 Run the release candidate through TestFlight on at least one current iPhone and
 one supported older device. Exercise:
 
-- first launch, Apple sign-in, OTP fallback, sign-out, and session restoration;
+- first launch, Apple sign-in, Google sign-in (when the provider is on), OTP for
+  an existing address and the "não tem conta" line for a new one, sign-out, and
+  session restoration;
 - home creation, invitation acceptance/revocation/expiry, and member removal;
 - task/reminder recurrence, notifications, offline edits, and conflict repair;
 - Nina consent, attachments, proposal confirmation, privacy export, history

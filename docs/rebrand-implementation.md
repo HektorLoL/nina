@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-09-25
+Last updated: 2026-09-26
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -391,6 +391,58 @@ phone, and the adult can print the list for the fridge or send it on WhatsApp.
   equal widths** (`EqualWidthRow` inside a `ViewThatFits`). A plain `HStack`
   passed the fit check on a 402pt iPhone and then split the row in half, which
   wrapped "Compartilhar" mid-word; there the pair now stacks.
+
+## 6g. What the 2026-09-26 pass changed
+
+- **A child's or pet's profile asks for no note.** The "O que a Nina lembra"
+  field is gone from the add and edit sheets for both; an adult's stays. Saving
+  a child or pet clears any note typed before, because a pet's note went to Nina
+  with every message and nothing on screen showed it any more.
+- **"O que a Nina lembra" on a child's or pet's screen is a summary built on the
+  phone.** No board draws it.
+  - It shows up to three memories that name the member, as each memory's title,
+    newest first. A memory only this adult can read ends in a lock.
+  - It then shows up to three repeating tasks with their rhythm ("Natação · toda
+    terça, 18:00").
+  - With nothing found, it is one muted line: "A Nina aprende sobre ‹Nome› nas
+    conversas." This is an allowed exception to the rubric's 4-word group line.
+  - There is no AI call and no server change. It reads only what this adult
+    already sees in Memórias and Tarefas, and never a memory's body or a task's
+    detail line.
+- **Whose memory is it.** A name counts as whole words, without accents or
+  capitals, and the longest household name wins, so "João Pedro" is never
+  credited to the father João. A full name counts too: when the father is João
+  Pedro Silva, his "João Pedro" never reaches his son Pedro, and Ana Clara's
+  never reaches her daughter Clara. A name two people share credits nobody, and
+  neither does Nina's own. The name in the empty line follows H8's namesake
+  rule, except that Nina's row counts ("Nina Rosa", never "Nina").
+- **Google is a third door on the welcome, between Apple and email.** No board
+  draws it. "Continuar com o Google" is an outline button with Google's G, the
+  same face as "Entrar com email", so the welcome still has no cobalt control.
+  Google's rules ask for its unmodified G on a white or light field and a light
+  stroke; the outline face over `ground` gives both, with `NinaTheme.control` as
+  the stroke. The button shows only while the project reports Google on, so
+  production, which reports it off, looks exactly as before.
+- **The welcome decides on Google once, before its buttons can be tapped.**
+  Adding the row lifts the Apple button 62pt, so it never comes or goes under a
+  finger. A cached answer draws at once. With none, the buttons stay invisible
+  until the first check answers or 1.5 seconds pass, then fade in together, and
+  a later answer waits for the next time the welcome opens.
+- **The G is the one colour outside the palette.** Google forbids recolouring its
+  mark, so `Assets.xcassets/GoogleG.imageset` is the unmodified vector, drawn
+  with `.renderingMode(.original)`.
+- **`NinaButton` gained `assetName`**, an image from the asset catalog in the
+  glyph slot. Every other button draws exactly as before.
+- **A new address in "Entrar com email" is told where to go.** The dead end
+  "Esse email ainda não está vinculado a uma conta Nina." became "Esse email não
+  tem conta. Continue com a Apple.", and "…Continue com a Apple ou o Google."
+  while the Google button is on screen. Email still signs in existing accounts
+  only.
+- **"Adicionar email" names the right provider.** For an account that signed in
+  with Google, the footer reads "Com um email, você entra por código, sem o
+  Google."
+- **The profile's email field names Google too.** The provider note under the
+  address now shows for Apple and Google accounts alike, and never for email.
 
 ## 7. Verified
 

@@ -4,9 +4,12 @@ import SwiftUI
 struct LoginView: View {
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(InviteLinkStore.self) private var inviteLinkStore
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var appleRawNonce: String?
     @State private var isEmailSheetPresented = false
+    @State private var isGoogleSignInPending = false
+    @State private var hasPreparedSignInChoice = false
 
     private var isInvited: Bool {
         inviteLinkStore.pendingCode != nil
@@ -25,6 +28,11 @@ struct LoginView: View {
                     brandBlock
                     Spacer(minLength: 32)
                     actionGroup
+                        .animation(.easeOut(duration: 0.18)) { content in
+                            content.opacity(authSession.isSignInChoiceSettled ? 1 : 0)
+                        }
+                        .allowsHitTesting(authSession.isSignInChoiceSettled)
+                        .accessibilityHidden(!authSession.isSignInChoiceSettled)
                     legalFootnote
                         .padding(.top, 14)
                 }
@@ -37,6 +45,20 @@ struct LoginView: View {
         }
         .ignoresSafeArea(.keyboard)
         .ninaScreenBackground()
+        .onAppear {
+            guard !hasPreparedSignInChoice else { return }
+            hasPreparedSignInChoice = true
+            authSession.prepareSignInChoice()
+        }
+        .task {
+            await authSession.settleSignInChoice()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task {
+                await authSession.refreshGoogleSignInAvailability()
+            }
+        }
         .sheet(isPresented: $isEmailSheetPresented, onDismiss: clearEmailFlowError) {
             EmailSignInSheet()
                 .presentationDetents([.medium, .large])
@@ -85,6 +107,20 @@ struct LoginView: View {
             .opacity(authSession.isSigningIn || !authSession.isBackendAvailable ? 0.4 : 1)
             .accessibilityIdentifier("apple-sign-in")
 
+            if authSession.isGoogleSignInAvailable {
+                NinaButton(
+                    title: "Continuar com o Google",
+                    kind: .outline,
+                    assetName: "GoogleG",
+                    fillsWidth: true,
+                    isEnabled: !authSession.isSigningIn && authSession.isBackendAvailable,
+                    isPending: isGoogleSignInPending,
+                    action: signInWithGoogle
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("google-sign-in")
+            }
+
             NinaButton(title: "Entrar com email", kind: .outline, fillsWidth: true) {
                 Haptics.lightImpact()
                 isEmailSheetPresented = true
@@ -115,6 +151,15 @@ struct LoginView: View {
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity)
+    }
+
+    private func signInWithGoogle() {
+        Haptics.lightImpact()
+        isGoogleSignInPending = true
+        Task {
+            await authSession.signInWithGoogle()
+            isGoogleSignInPending = false
+        }
     }
 
     private func clearEmailFlowError() {
@@ -399,3 +444,39 @@ private struct LoginInput<Content: View>: View {
         .environment(AuthSessionStore())
         .environment(InviteLinkStore())
 }
+
+#if DEBUG
+#Preview("Login com Google") {
+    LoginView()
+        .environment(AuthSessionStore(authClient: GoogleOnPreviewAuthClient()))
+        .environment(InviteLinkStore())
+}
+
+private struct GoogleOnPreviewAuthClient: AuthClient {
+    private let mock = MockAuthClient()
+
+    var projectHost: String? { "preview.supabase.co" }
+
+    func googleSignInAvailability() async -> Bool? { true }
+
+    func restoreSession() async -> AuthSessionRestoration { await mock.restoreSession() }
+
+    func signInWithApple(credential: AppleSignInCredential) async throws -> AuthUser {
+        try await mock.signInWithApple(credential: credential)
+    }
+
+    func requestEmailOTP(email: String) async throws { try await mock.requestEmailOTP(email: email) }
+
+    func verifyEmailOTP(email: String, code: String) async throws -> AuthUser {
+        try await mock.verifyEmailOTP(email: email, code: code)
+    }
+
+    func requestEmailChange(email: String) async throws { try await mock.requestEmailChange(email: email) }
+
+    func verifyEmailChange(email: String, code: String) async throws -> AuthUser {
+        try await mock.verifyEmailChange(email: email, code: code)
+    }
+
+    func signOut() async throws { try await mock.signOut() }
+}
+#endif

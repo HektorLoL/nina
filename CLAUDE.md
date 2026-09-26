@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-09-25
+Last updated: 2026-09-26
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -101,8 +101,10 @@ Four surfaces, one product.
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
 **Only third-party iOS dependency: `supabase-swift` 2.46.0.** One bundled font
-(Fraunces, OFL, subset to 45 KB — the web serves a byte-identical copy) and no
-other asset dependency. No analytics SDK,
+(Fraunces, OFL, subset to 45 KB — the web serves a byte-identical copy), one
+vector asset, Google's unmodified G (`Assets.xcassets/GoogleG.imageset`) for the
+sign-in button, and no other asset dependency. Google sign-in is a web flow
+through Supabase Auth, not Google's SDK. No analytics SDK,
 no crash reporter, no ad SDK — that absence is the mechanical proof behind the
 App Store "Data Used to Track You: No" label. Do not add one without revisiting
 `docs/privacy/app-store-privacy-labels.md`.
@@ -148,6 +150,26 @@ product regression, not a refactor.
   *pending* request; an owner/admin approves. Both the app and the public web
   invite page state this. Invite tokens are `casa-` + 128 bits of
   `gen_random_bytes(16)`, one active invite per family, 7-day expiry, ≤7 uses.
+- **Google sign-in appears only when the project says so, and never appears or
+  disappears once the welcome can be tapped.** `LoginView` shows "Continuar com
+  o Google" only while `AuthSessionStore.isGoogleSignInAvailable`, decided once
+  each time the welcome appears (`prepareSignInChoice`) from the last real answer
+  of `GET /auth/v1/settings` (`external.google`, publishable key as `apikey`),
+  cached per project host in `UserDefaults`. With nothing cached, the actions
+  stay invisible and untappable (`isSignInChoiceSettled`) until the first check
+  answers or `GoogleSignIn.choiceDeadline` (1.5 s) passes; a timeout or a failed
+  check settles hidden. After that every check, the foreground re-check
+  included, only writes the cache, so a late answer, a failed check or a new
+  `false` takes effect the next time the welcome appears. Inserting the row
+  lifts the Apple button 62pt, and a tap on the wrong door can make a second,
+  empty account (§12). An unanswered check never overwrites the cache; a client
+  with no project (mock) never shows the button. Email signs in existing
+  accounts only (`shouldCreateUser: false`): Apple and Google are the doors that
+  create an account, and the `emailNotLinked` line names only the doors actually
+  on screen. Locked by
+  `AuthSessionTests.testARefreshAfterTheWelcomeSettledWritesTheCacheButLeavesTheShownRow`,
+  `…testTheDeadlineSettlesTheWelcomeWithoutGoogleAndALateYesWaitsForTheNextWelcome`
+  and `…testANewAddressIsOfferedGoogleOnlyWhileTheGoogleButtonIsShown`.
 - **8 non-assistant people per home**, enforced in three places (trigger,
   `request_family_join` count, remaining-slot arithmetic) under a family
   advisory lock taken *before* any row lock.
@@ -177,6 +199,20 @@ product regression, not a refactor.
   another adult's context, tools, or weekly insight.
 - **Memories start private.** Sharing is always a separate, explicit tap
   ("Guardar para mim" vs "Compartilhar com a casa"), never a single accept.
+- **A child's or pet's "O que a Nina lembra" is read, never typed.** The member
+  editor collects no note for either, and saving one writes `memory_note = ''`.
+  A typed note about a pet therefore stops reaching `nina-chat`; a child's never
+  did (`minimizeMembersForModel`). The card is `MemberRecollection.summary`,
+  built on the device from what this viewer can already read: memories whose
+  title or body name the member, and the member's open repeating tasks with
+  their rhythm. It never shows a memory's body or `task.subtitle`, and never
+  another adult's private memory, even one left in the cache. A name matches as
+  whole words with accents and case folded, and the longest household name
+  wins, a person's full name included: the father João Pedro Silva's "João
+  Pedro" never reaches his son Pedro. A name two people share credits nobody,
+  and neither does Nina's own.
+  Locked by `MemberRecollectionTests.testNothingFromATasksDetailReachesTheSummary`
+  and `…testAnotherAdultsPrivateMemoryNeverReachesTheSummaryEvenWhenItIsOnTheDevice`.
 - **`store: false` on every OpenAI call, and no prompt-cache write on
   `gpt-6-luna`.** OpenAI stores no response. GPT-5.6 and later cache implicitly:
   left alone, every request writes the whole prompt, household context and the
@@ -348,7 +384,9 @@ and **every departure the build makes from the boards is in
 **`Nina/Theme.swift` is the only source of color, and the palette is light-only.**
 `NinaApp` pins `.preferredColorScheme(.light)`: the glaze has no designed dark
 counterpart, so there is no `dynamic(light:dark:)` layer and no colorScheme
-branching anywhere.
+branching anywhere. The one colour outside `Theme.swift` is Google's G on the
+sign-in button (`NinaButton(assetName:)`, drawn `.renderingMode(.original)`):
+Google forbids recolouring its mark.
 
 - `ground #FBFCFD` every screen · `grout #EDF0F4` fields and inactive chips ·
   `line #DFE4EB` hairlines and card strokes · `ink` · `muted` · `faint`
@@ -823,6 +861,15 @@ it open over "Nada para hoje." until the hold. Locked by
 `AppStoreAuthorizationTests.testAChildsListNeverRaisesAnEditConflictAndTheHousesVersionStands`
 and `…testARefreshThatCannotVerifyTheHouseLeavesTheChildsListOpen`.
 
+**Child and pet notes typed before 2026-09-26 are still on the server.** Nothing
+shows them any more, but `family_members.memory_note` keeps each one until
+someone saves that profile. Until then, a pet's note still reaches the model in
+`nina-chat`. Clearing them all is a one-off server statement for Heitor to run,
+not an app change. Name matching in `MemberRecollection` is also literal. A pet
+or child whose name is a common word (Café, Mel, Clara, Rosa) collects every
+visible memory that uses the word, and "Pedrinho" or a middle name never
+matches. Both only rearrange what the viewer can already read in Memórias.
+
 **`Route` now has four cases and all of them are reachable** — `task`, `member`,
 `workload`, `memories`. This was fixed in the rebrand: `RouterPath.navigate(to:)`
 used to have zero call sites, so `task.createdBy` was captured on every task and
@@ -952,6 +999,45 @@ and nothing persists. For any simulator check that signs in, build without that
 flag (ad-hoc signing is automatic). Also: one simulator at a time — a second
 session driving the same device produces phantom taps, and three booted
 devices wedged CoreSimulator on 2026-09-09.
+
+**Sign in with Google has five quiet ways to go wrong.** Supabase links a Google
+identity to an existing account only when the verified emails match, so a
+Hide-My-Email Apple account plus Google makes two Nina accounts, and the second
+has no home. Without `com.heitor.nina://login-callback` in Auth → URL
+Configuration → Redirect URLs, GoTrue falls back to the Site URL and the web
+sheet never returns to the app; the scheme is deliberately *not* in
+`CFBundleURLTypes`, because `ASWebAuthenticationSession` catches the callback
+itself, so nothing needs it registered (and `NinaApp.onOpenURL` would drop such
+a URL anyway: `InviteLinkParser` reads only `nina://` and ninai.app links).
+The sheet is ephemeral on purpose (no system consent alert, no cookie shared
+with Safari), at the cost of typing the Google account each time. A cached "yes"
+that went stale shows GoTrue's JSON 400 inside the sheet until the person
+cancels, and the button stays for the rest of that welcome. And the
+display-name hint follows `auth_user_display_name`'s order (`display_name`,
+`full_name`, `name`), because any non-empty hint overrides an auth-sourced
+profile name: in another order, a Google sign-in would rename an auto-linked
+Apple account. A cancel is silent on screen but is logged as a failed
+`auth.sign_in_google` in diagnostics.
+
+**The allow-listed custom scheme is an accepted risk.** `ASWebAuthenticationSession`
+does not check that a custom `callbackURLScheme` belongs to the app that asked,
+so another app on the phone can open its own Google sheet on
+`/auth/v1/authorize?provider=google&redirect_to=com.heitor.nina://login-callback`,
+with its own PKCE verifier or none, exchange the result with the public
+publishable key, and obtain a Nina session if the person signs in to Google
+there. Nina's own sheet is ephemeral and names the supabase.co host too, so the
+two look the same. This is user-assisted phishing, the same class as tricking
+someone into typing an email code, and PKCE does not prevent it: it protects
+only a flow Nina started itself (RFC 8252 §8.6). Apple has no such path: it is
+native-only (`[auth.external.apple] secret = ""`) and its identity token is
+bound to the bundle ID. The upgrade is an HTTPS callback:
+`signInWithOAuth(provider:redirectTo:launchFlow:)` (in supabase-swift 2.46)
+driving `ASWebAuthenticationSession(url:callback: .https(host: "ninai.app",
+path: "/auth/callback"))`. That initializer needs iOS 17.4, so an `#available`
+gate or a raised deployment target (17.0 today), plus the
+`webcredentials:ninai.app` associated domain and an `apple-app-site-association`
+file served by the Worker. Only that HTTPS URL would then stay in the Redirect
+URLs.
 
 **`Tools/run_nina_ai_eval.mjs local` is the only way the eval runs.** It needs
 the local stack plus `functions serve`, refuses any API URL that is not
@@ -1093,6 +1179,10 @@ fix unprompted.
 - **`supabase/templates/` auth emails are orphaned** — three bare unstyled pt-BR
   HTML files with no brand, and `config.toml` has no `[auth.email.template.*]`
   block wiring them up. They are copy-paste source for the dashboard only.
+- **Sign in with Google is built (2026-09-26) and dark until Heitor enables the
+  provider** (`docs/production-launch-runbook.md` §2). Production answers
+  `"google":false` today, so no build shows the button until then, and turning
+  it on needs no rebuild.
 - **TOTP MFA is enabled server-side with zero client support**
   (`[auth.mfa.totp]` in `config.toml`; nothing in `Nina/` references it).
 - **iPhone only, decided 2026-09-04.** `TARGETED_DEVICE_FAMILY = 1` on every

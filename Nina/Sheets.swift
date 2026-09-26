@@ -826,9 +826,13 @@ private struct EmailAccessView: View {
                         .opacity(isWaitingForCode ? 0.4 : 1)
 
                         if !hasLinkedEmail {
-                            Text("Com um email, você entra por código, sem a Apple.")
-                                .ninaText(.meta, NinaTheme.muted)
-                                .fixedSize(horizontal: false, vertical: true)
+                            Text(
+                                authSession.currentUser?.provider == .google
+                                    ? "Com um email, você entra por código, sem o Google."
+                                    : "Com um email, você entra por código, sem a Apple."
+                            )
+                            .ninaText(.meta, NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
                         }
                     }
 

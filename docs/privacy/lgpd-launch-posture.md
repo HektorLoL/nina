@@ -1,6 +1,6 @@
 # LGPD Launch Posture - Nina
 
-Last updated: 2026-09-23
+Last updated: 2026-09-26
 
 This is an engineering/privacy operations checklist for launch readiness. It is
 not a substitute for Brazilian legal review, but it documents the product
@@ -21,8 +21,9 @@ Official references:
 
 Nina processes:
 
-- Account data: Supabase Auth ID, Apple identity provider metadata, linked
-  email, display name.
+- Account data: Supabase Auth ID, Apple or Google identity provider metadata
+  (for Google, the name and profile-picture URL it returns), linked email,
+  display name.
 - Profile data: role, phone, birthday label, availability, communication
   preference, memory note, avatar/photo.
 - Household data: family name, invite links, participants, roles, children/pets

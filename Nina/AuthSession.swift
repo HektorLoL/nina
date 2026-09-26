@@ -1,3 +1,4 @@
+import AuthenticationServices
 import CryptoKit
 import Foundation
 import Observation
@@ -6,18 +7,13 @@ import Security
 enum AuthProvider: String, Codable, Hashable {
     case email
     case apple
+    case google
 
     var title: String {
         switch self {
         case .email: "Email"
         case .apple: "Apple"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .email: "envelope.fill"
-        case .apple: "apple.logo"
+        case .google: "Google"
         }
     }
 }
@@ -32,7 +28,8 @@ enum AuthProviderResolver {
         let metadata = metadataProvider.flatMap(AuthProvider.init(rawValue:))
         let primary = preferredProvider
             ?? metadata
-            ?? (linked.contains(.apple) ? .apple : .email)
+            ?? [AuthProvider.apple, .google].first(where: linked.contains)
+            ?? .email
 
         return (primary, linked.isEmpty ? [primary] : linked)
     }
@@ -169,6 +166,52 @@ enum AppleSignInNonce {
     }
 }
 
+enum GoogleSignIn {
+    static let callbackURL = URL(string: "com.heitor.nina://login-callback")
+    static let settingsTimeout: TimeInterval = 6
+    static let choiceDeadline: Duration = .milliseconds(1_500)
+    static let maximumSettingsBytes = 16_384
+
+    // nil means unknown: it hides the button but never overwrites the last real answer.
+    static func availability(statusCode: Int, body: Data) -> Bool? {
+        guard (200..<300).contains(statusCode),
+              body.count <= maximumSettingsBytes,
+              let settings = try? JSONDecoder().decode(Settings.self, from: body) else {
+            return nil
+        }
+        return settings.external.google == true
+    }
+
+    static func cacheKey(projectHost: String) -> String {
+        "nina.auth.googleSignInEnabled.\(projectHost.lowercased())"
+    }
+
+    static func isCancellation(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == ASWebAuthenticationSessionError.errorDomain
+            && nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue
+    }
+
+    static func isCancellation(oauthErrorCode: String?) -> Bool {
+        oauthErrorCode == "access_denied"
+    }
+
+    // Same order as auth_user_display_name, so a Google sign-in never renames a linked Apple account.
+    static func displayNameHint(displayName: String?, fullName: String?, name: String?) -> String? {
+        [displayName, fullName, name]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
+
+    private struct Settings: Decodable {
+        struct External: Decodable {
+            var google: Bool?
+        }
+
+        var external: External
+    }
+}
+
 enum AuthFlowError: Error {
     case invalidEmail
     case invalidCode
@@ -182,6 +225,11 @@ enum AuthFlowError: Error {
     case unavailable
 
     var userMessage: String {
+        userMessage(offersGoogle: false)
+    }
+
+    // Email never creates an account, so a new address is sent only to the doors on screen.
+    func userMessage(offersGoogle: Bool) -> String {
         switch self {
         case .invalidEmail:
             "Use um email válido."
@@ -190,7 +238,9 @@ enum AuthFlowError: Error {
         case .codeRejected:
             "Esse código venceu ou não bate. Peça um novo."
         case .emailNotLinked:
-            "Esse email ainda não está vinculado a uma conta Nina."
+            offersGoogle
+                ? "Esse email não tem conta. Continue com a Apple ou o Google."
+                : "Esse email não tem conta. Continue com a Apple."
         case .emailAlreadyUsed:
             "Esse email já está em outra conta Nina."
         case .emailChangeFailed:
@@ -224,10 +274,25 @@ protocol AuthClient {
     func verifyEmailChange(email: String, code: String) async throws -> AuthUser
     func deleteCurrentAccount() async throws
     func signOut() async throws
+    var projectHost: String? { get }
+    func googleSignInAvailability() async -> Bool?
+    func signInWithGoogle() async throws -> AuthUser
 }
 
 extension AuthClient {
     func deleteCurrentAccount() async throws {
+        throw AuthFlowError.unavailable
+    }
+
+    var projectHost: String? {
+        nil
+    }
+
+    func googleSignInAvailability() async -> Bool? {
+        nil
+    }
+
+    func signInWithGoogle() async throws -> AuthUser {
         throw AuthFlowError.unavailable
     }
 }
@@ -323,15 +388,25 @@ final class AuthSessionStore {
     var pendingEmailChange: String?
     var errorMessage: String?
     var isBackendAvailable = true
+    var isGoogleSignInAvailable: Bool
+    private(set) var isSignInChoiceSettled: Bool
 
     var isSignedIn: Bool {
         currentUser != nil
     }
 
     @ObservationIgnored private var authClient: any AuthClient
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private var isCheckingGoogleSignIn = false
 
-    init(authClient: any AuthClient = MockAuthClient()) {
+    init(authClient: any AuthClient = MockAuthClient(), defaults: UserDefaults = .standard) {
         self.authClient = authClient
+        self.defaults = defaults
+        let cached = authClient.projectHost.flatMap {
+            defaults.object(forKey: GoogleSignIn.cacheKey(projectHost: $0)) as? Bool
+        }
+        isGoogleSignInAvailable = cached ?? false
+        isSignInChoiceSettled = authClient.projectHost == nil || cached != nil
     }
 
     func restoreSession() async {
@@ -366,6 +441,51 @@ final class AuthSessionStore {
         await performSignIn {
             try await authClient.signInWithApple(credential: credential)
         }
+    }
+
+    func signInWithGoogle() async {
+        await performSignIn {
+            try await authClient.signInWithGoogle()
+        }
+    }
+
+    func prepareSignInChoice() {
+        guard let host = authClient.projectHost else {
+            isGoogleSignInAvailable = false
+            isSignInChoiceSettled = true
+            return
+        }
+        let cached = defaults.object(forKey: GoogleSignIn.cacheKey(projectHost: host)) as? Bool
+        isGoogleSignInAvailable = cached ?? false
+        isSignInChoiceSettled = cached != nil
+    }
+
+    func settleSignInChoice(within deadline: Duration = GoogleSignIn.choiceDeadline) async {
+        Task { await refreshGoogleSignInAvailability() }
+        guard !isSignInChoiceSettled else { return }
+        try? await Task.sleep(for: deadline)
+        closeSignInChoice()
+    }
+
+    func closeSignInChoice() {
+        guard !isSignInChoiceSettled else { return }
+        isGoogleSignInAvailable = false
+        isSignInChoiceSettled = true
+    }
+
+    // Once the welcome's doors can be tapped a check only writes the cache, so the Google row never moves under a finger.
+    func refreshGoogleSignInAvailability() async {
+        guard let host = authClient.projectHost, !isCheckingGoogleSignIn, !isSigningIn else { return }
+        isCheckingGoogleSignIn = true
+        defer { isCheckingGoogleSignIn = false }
+
+        let answer = await authClient.googleSignInAvailability()
+        if let answer {
+            defaults.set(answer, forKey: GoogleSignIn.cacheKey(projectHost: host))
+        }
+        guard !isSignInChoiceSettled else { return }
+        isGoogleSignInAvailable = answer ?? false
+        isSignInChoiceSettled = true
     }
 
     @discardableResult
@@ -562,7 +682,7 @@ final class AuthSessionStore {
     }
 
     private func setError(_ error: AuthFlowError) {
-        errorMessage = error.userMessage
+        errorMessage = error.userMessage(offersGoogle: isGoogleSignInAvailable)
         Haptics.error()
     }
 

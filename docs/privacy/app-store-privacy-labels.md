@@ -1,6 +1,6 @@
 # App Store Privacy Labels - Nina
 
-Last updated: 2026-08-03
+Last updated: 2026-09-26
 
 Use this as the App Store Connect privacy questionnaire source of truth for the current codebase. Re-check it before every submission because labels must match the shipped binary, backend functions, SDKs, and website data collection.
 
@@ -26,11 +26,15 @@ These categories are linked to a user account, family, or household context.
 
 | Apple Category | Nina Data | Purposes | Notes |
 | --- | --- | --- | --- |
-| Contact Info | Email address, display name | App Functionality, Account Management | Email is used for OTP login and account/profile support. |
+| Contact Info | Email address, display name | App Functionality, Account Management | Email identifies the account and signs in existing accounts by code. It comes from Sign in with Apple (possibly a private-relay address), from Sign in with Google, or from the address a person types for an email code (existing accounts only). |
 | User Content | Chat messages, tasks, reminders, shopping items, household members, profile photo, document/image attachments, confirmed memories | App Functionality | This is the core household data. |
 | Sensitive Info | Health hints, medication/school/child routine details, emotional pattern notes when users enter them | App Functionality | The app does not require these fields, but users can submit them in messages/documents/memories. Use the conservative label. |
-| Identifiers | Supabase Auth user ID, family ID, invite tokens | App Functionality, Account Management | Used for login, authorization, sync, and household isolation. |
+| Identifiers | Supabase Auth user ID, the Apple or Google account identifier Supabase Auth keeps for the linked identity, family ID, invite tokens | App Functionality, Account Management | Used for login, authorization, sync, and household isolation. |
 | Diagnostics | Backend operation metadata, AI run status/cost/token metadata, rate-limit counters | App Functionality, Analytics | Operational logs should remain content-free. If additional analytics SDKs are added, update this row. |
+
+Supabase Auth also stores the name and profile-picture URL Google returns in the
+account's auth metadata. Nina reads the name to prefill the profile and never
+reads or shows the picture.
 
 The website launch waitlist separately collects an email address, optional
 first name, consent metadata, locale, and signup source. This website collection
@@ -107,7 +111,9 @@ The app target includes `Nina/PrivacyInfo.xcprivacy`.
 Current required-reason API declaration:
 
 - `NSPrivacyAccessedAPICategoryUserDefaults` with reason `CA92.1`, because Nina
-  stores app preferences, onboarding state, and notification settings there.
+  stores app preferences, onboarding state, notification settings, and whether
+  the sign-in screen offers Google (a per-project yes/no, no personal data)
+  there.
   Reads of older consent/invite/profile/household values exist only for the
   one-time migration into protected, backup-excluded files; the legacy value is
   removed only after that write succeeds.

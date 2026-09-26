@@ -342,6 +342,16 @@ final class AppStore {
         HouseholdWorkload.openTaskCount(for: member, in: tasks, members: familyGroup.members)
     }
 
+    func recollection(for member: HouseholdMember) -> MemberRecollectionSummary {
+        MemberRecollection.summary(
+            for: member,
+            members: familyGroup.members,
+            memories: ninaMemories,
+            tasks: tasks,
+            viewerUserID: activeUser.flatMap { UUID(uuidString: $0.id) }
+        )
+    }
+
     func tasks(in sectionID: String) -> [TaskItem] {
         tasks.filter { $0.sectionID == sectionID }
     }
@@ -2787,7 +2797,7 @@ enum PreviewData {
                 role: .child,
                 tone: .amber,
                 taskCount: 4,
-                memoryNote: "Tem rotina de escola, mochila e atividades da semana."
+                memoryNote: ""
             ),
             HouseholdMember(
                 id: thorID,
@@ -2796,7 +2806,7 @@ enum PreviewData {
                 role: .pet,
                 tone: .lavender,
                 taskCount: 3,
-                memoryNote: "Veterinário e ração precisam entrar na rotina."
+                memoryNote: ""
             ),
             HouseholdMember(
                 id: ninaID,

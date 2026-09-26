@@ -253,17 +253,12 @@ struct MemberEditorSheet: View {
                             .submitLabel(.done)
                     }
                 }
-
-                MemberField_(title: "O que a Nina lembra") {
-                    TextField(noteHint, text: $memoryNote, axis: .vertical)
-                        .lineLimit(3...6)
-                }
             }
             .disabled(!canEdit)
             .opacity(canEdit ? 1 : 0.4)
         } else if member != nil {
             MemberField_(title: "O que a Nina lembra") {
-                TextField(noteHint, text: $memoryNote, axis: .vertical)
+                TextField("Horários, preferências", text: $memoryNote, axis: .vertical)
                     .lineLimit(3...6)
             }
             .disabled(!canEdit)
@@ -351,7 +346,7 @@ struct MemberEditorSheet: View {
             identityState: member?.identityState ?? .unclaimed,
             tone: tone,
             taskCount: member?.taskCount ?? 0,
-            memoryNote: memoryNote,
+            memoryNote: MemberRecollection.storedNote(memoryNote, for: householdRole),
             birthDate: hasBirthDate ? birthDate : nil,
             petSpecies: householdRole == .pet ? petSpecies : "",
             petBreed: householdRole == .pet ? petBreed : ""
@@ -393,14 +388,6 @@ struct MemberEditorSheet: View {
         member?.identityState == .claimed
     }
 
-    private var noteHint: String {
-        switch householdRole {
-        case .pet: "Rotina, comida, remédios"
-        case .child: "Escola, rotina, o que ajuda"
-        case .adult, .assistant: "Horários, preferências"
-        }
-    }
-
     private var lockedReason: String {
         if isAdding {
             return store.canInviteMorePeople
@@ -428,7 +415,7 @@ struct MemberEditorSheet: View {
                 ? store.currentPermissionRole
                 : member.permissionRole
             tone = member.tone
-            memoryNote = member.memoryNote
+            memoryNote = MemberRecollection.replacesNote(for: member.role) ? "" : member.memoryNote
             if let value = member.birthDate {
                 birthDate = value
                 hasBirthDate = true

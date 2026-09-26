@@ -4,7 +4,7 @@ import Brand from "../components/Brand.astro";
 import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
 
-const updatedAt = "2 de agosto de 2026";
+const updatedAt = "26 de setembro de 2026";
 const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
 const dpoMailto = legalIdentity.dpoContactEmail
   ? `mailto:${legalIdentity.dpoContactEmail}`
@@ -84,14 +84,15 @@ const dpoMailto = legalIdentity.dpoContactEmail
 
       <h2>2. Dados que a Nina trata</h2>
       <p>
-        Tratamos dados de conta, como identificador de login da Apple, email vinculado e nome de
-        perfil; dados da casa, como nome da casa, participantes, papéis, convites e permissões;
-        conteúdo criado pelos usuários, como tarefas, lembretes, listas de compras, mensagens,
-        anexos, documentos, fotos, memórias confirmadas e insights; preferências de uso e
-        consentimento; email, nome opcional, idioma e origem do formulário quando você entra
-        voluntariamente na lista de lançamento; e dados técnicos necessários para autenticação,
-        segurança, sincronização, prevenção de abuso, custo e diagnóstico. A proteção contra abuso
-        da lista usa um identificador criptográfico temporário e não armazena o endereço IP bruto.
+        Tratamos dados de conta, como identificador de login da Apple ou do Google, email
+        vinculado e nome de perfil; dados da casa, como nome da casa, participantes, papéis,
+        convites e permissões; conteúdo criado pelos usuários, como tarefas, lembretes, listas
+        de compras, mensagens, anexos, documentos, fotos, memórias confirmadas e insights;
+        preferências de uso e consentimento; email, nome opcional, idioma e origem do formulário
+        quando você entra voluntariamente na lista de lançamento; e dados técnicos necessários
+        para autenticação, segurança, sincronização, prevenção de abuso, custo e diagnóstico. A
+        proteção contra abuso da lista usa um identificador criptográfico temporário e não
+        armazena o endereço IP bruto.
       </p>
 
       <h2>3. Dados sobre crianças, saúde e documentos</h2>
@@ -127,7 +128,8 @@ const dpoMailto = legalIdentity.dpoContactEmail
       <p>
         Compartilhamos dados apenas com operadores necessários para operar a Nina, como Supabase
         para autenticação, banco de dados, storage e funções de backend; OpenAI para processamento
-        de IA; Apple para autenticação e distribuição do app; e provedores de hospedagem do site.
+        de IA; Apple para autenticação e distribuição do app; Google para autenticação, quando você
+        escolhe entrar com a conta Google; e provedores de hospedagem do site.
         Esses operadores devem tratar dados conforme nossas instruções e medidas de segurança.
       </p>
 

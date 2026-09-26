@@ -51,6 +51,7 @@
 		D0000000000000000000000A /* NotificationTargetingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000009 /* NotificationTargetingTests.swift */; };
 		D0000000000000000000000B /* PremiumSubscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000000000000000000000A /* PremiumSubscriptionTests.swift */; };
 		D0000000000000000000000C /* ChildDayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000000000000000000000B /* ChildDayTests.swift */; };
+		D0000000000000000000000D /* MemberRecollectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000000000000000000000C /* MemberRecollectionTests.swift */; };
 		B00000000000000000000034 /* Fraunces-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000033 /* Fraunces-Regular.ttf */; };
 		B00000000000000000000035 /* Fraunces-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000034 /* Fraunces-OFL.txt */; };
 		B00000000000000000000036 /* NinaMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000035 /* NinaMark.swift */; };
@@ -59,6 +60,7 @@
 		B00000000000000000000039 /* WorkloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000038 /* WorkloadView.swift */; };
 		B00000000000000000000040 /* ChildDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000039 /* ChildDay.swift */; };
 		B00000000000000000000041 /* ChildDayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000040 /* ChildDayView.swift */; };
+		B00000000000000000000042 /* MemberRecollection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000041 /* MemberRecollection.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -121,6 +123,7 @@
 		E00000000000000000000009 /* NotificationTargetingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationTargetingTests.swift; sourceTree = "<group>"; };
 		E0000000000000000000000A /* PremiumSubscriptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumSubscriptionTests.swift; sourceTree = "<group>"; };
 		E0000000000000000000000B /* ChildDayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChildDayTests.swift; sourceTree = "<group>"; };
+		E0000000000000000000000C /* MemberRecollectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberRecollectionTests.swift; sourceTree = "<group>"; };
 		E00000000000000000000030 /* NinaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NinaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F00000000000000000000033 /* Fraunces-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Regular.ttf; sourceTree = "<group>"; };
 		F00000000000000000000034 /* Fraunces-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Fraunces-OFL.txt; sourceTree = "<group>"; };
@@ -130,6 +133,7 @@
 		F00000000000000000000038 /* WorkloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkloadView.swift; sourceTree = "<group>"; };
 		F00000000000000000000039 /* ChildDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChildDay.swift; sourceTree = "<group>"; };
 		F00000000000000000000040 /* ChildDayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChildDayView.swift; sourceTree = "<group>"; };
+		F00000000000000000000041 /* MemberRecollection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberRecollection.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -165,6 +169,7 @@
 			children = (
 				F00000000000000000000040 /* ChildDayView.swift */,
 				F00000000000000000000039 /* ChildDay.swift */,
+				F00000000000000000000041 /* MemberRecollection.swift */,
 				F00000000000000000000038 /* WorkloadView.swift */,
 				F00000000000000000000037 /* MemberDetailView.swift */,
 				F00000000000000000000036 /* TaskDetailView.swift */,
@@ -235,6 +240,7 @@
 				E00000000000000000000009 /* NotificationTargetingTests.swift */,
 				E0000000000000000000000A /* PremiumSubscriptionTests.swift */,
 				E0000000000000000000000B /* ChildDayTests.swift */,
+				E0000000000000000000000C /* MemberRecollectionTests.swift */,
 			);
 			path = NinaTests;
 			sourceTree = "<group>";
@@ -357,6 +363,7 @@
 			files = (
 				B00000000000000000000041 /* ChildDayView.swift in Sources */,
 				B00000000000000000000040 /* ChildDay.swift in Sources */,
+				B00000000000000000000042 /* MemberRecollection.swift in Sources */,
 				B00000000000000000000039 /* WorkloadView.swift in Sources */,
 				B00000000000000000000038 /* MemberDetailView.swift in Sources */,
 				B00000000000000000000037 /* TaskDetailView.swift in Sources */,
@@ -409,6 +416,7 @@
 				D0000000000000000000000A /* NotificationTargetingTests.swift in Sources */,
 				D0000000000000000000000B /* PremiumSubscriptionTests.swift in Sources */,
 				D0000000000000000000000C /* ChildDayTests.swift in Sources */,
+				D0000000000000000000000D /* MemberRecollectionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -565,7 +573,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Nina/Nina.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 97PL8KQA8L;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -592,7 +600,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Nina/Nina.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 97PL8KQA8L;
 				GENERATE_INFOPLIST_FILE = NO;

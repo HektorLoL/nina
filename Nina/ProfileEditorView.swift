@@ -242,7 +242,7 @@ struct ProfileEditorView: View {
             ProfileReadOnlyField(
                 label: "Email",
                 value: user.email ?? "Email não vinculado",
-                note: user.provider == .apple ? user.provider.title : nil
+                note: user.provider == .email ? nil : user.provider.title
             )
 
             ProfileField(label: "Telefone") {
