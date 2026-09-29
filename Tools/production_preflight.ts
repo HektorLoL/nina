@@ -794,6 +794,40 @@ export function nonAppleSignInCalls(source: string): string[] {
   return found;
 }
 
+// Xcode 26 no longer writes archived-expanded-entitlements.xcent, so the signature is the source of truth.
+async function signedEntitlementsJSON(
+  appPath: string,
+): Promise<Record<string, unknown>> {
+  const signed = await new Deno.Command("codesign", {
+    args: ["-d", "--entitlements", ":-", appPath],
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+  if (!signed.success || signed.stdout.length === 0) {
+    throw new Error("Unable to read the signed entitlements.");
+  }
+  const converter = new Deno.Command("plutil", {
+    args: ["-convert", "json", "-o", "-", "-"],
+    stdin: "piped",
+    stdout: "piped",
+    stderr: "piped",
+  }).spawn();
+  const writer = converter.stdin.getWriter();
+  await writer.write(signed.stdout);
+  await writer.close();
+  const output = await converter.output();
+  if (!output.success) {
+    throw new Error("Unable to decode the signed entitlements.");
+  }
+  const record = recordValue(
+    JSON.parse(new TextDecoder().decode(output.stdout)),
+  );
+  if (!record) {
+    throw new Error("The signed entitlements are not a dictionary.");
+  }
+  return record;
+}
+
 async function plistJSON(path: string): Promise<Record<string, unknown>> {
   const output = await new Deno.Command("plutil", {
     args: ["-convert", "json", "-o", "-", path],
@@ -939,7 +973,7 @@ export async function loadIOSArtifactSnapshot(
     ? await plistJSON(
       joinPath(appPath, "archived-expanded-entitlements.xcent"),
     ).catch(() => undefined)
-    : undefined;
+    : await signedEntitlementsJSON(appPath).catch(() => undefined);
 
   return {
     info,

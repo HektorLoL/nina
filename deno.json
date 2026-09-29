@@ -23,7 +23,7 @@
     "db:reset": "npx --yes supabase@2.110.0 db reset",
     "db:down": "npx --yes supabase@2.110.0 stop --no-backup",
     "preflight:repo": "deno run --allow-read --allow-run=git Tools/production_preflight.ts repository",
-    "preflight:production": "deno run --allow-read --allow-run=git,plutil --allow-env --allow-net Tools/production_preflight.ts production",
+    "preflight:production": "deno run --allow-read --allow-run=git,plutil,codesign --allow-env --allow-net Tools/production_preflight.ts production",
     "panel": "deno run --allow-read --allow-write --allow-net=ninai.app --allow-run=deno,gh,git,npx Tools/panel.ts",
     "waitlist:send": "deno run --allow-read=config,Tools --allow-net Tools/waitlist_send.ts"
   }
