@@ -76,8 +76,10 @@ the Terms):
 
 ## 3. Questions for App Review, before submitting
 
-Open a conversation from the App Review page in App Store Connect (free; the
-"Contact us" form is for rejections). Record each answer with its date here. Do
+Ask in a free 30-minute App Review appointment (Meet with Apple;
+`docs/production-launch-runbook.md` §6 has the link). The App Review page in
+App Store Connect cannot start a conversation without a submission, and the
+"Contact us" form is for rejections. Record each answer with its date here. Do
 not submit AL answers without them.
 
 1. Does content shared inside a closed household of up to 8 approved people
@@ -88,6 +90,10 @@ not submit AL answers without them.
    Answer: pending.
 3. Does "some features are only for adults" in the Terms count as a minimum age
    requirement that forces an override?
+   Answer: pending.
+4. Sign in with Apple is the only sign-in, and the chat and the subscription
+   open only for an adult whose age Apple confirmed. How should the reviewer
+   reach those features?
    Answer: pending.
 
 ## 4. Review note (English)
@@ -106,7 +112,10 @@ not submit AL answers without them.
 
 Test accounts are marked with `private.operator_set_age_status`, because App
 Attest and Declared Age Range do not run on the Simulator or on a reviewer's
-device in the expected way.
+device in the expected way. Sign in with Apple is the only sign-in, so there is
+no password to hand the reviewer, and the "Test accounts" line above has no
+working form yet: how the reviewer reaches the adult features is question 4 of
+`docs/production-launch-runbook.md` §6, open until App Review answers it.
 
 ## 5. Metadata
 

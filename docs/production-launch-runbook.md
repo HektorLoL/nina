@@ -285,7 +285,13 @@ first (`deno task db:reset && deno task db:test`, 657 assertions on
    The record carries assurance `operator`, so it counts as trusted. Leave at
    least one tester unmarked on a real iPhone, so the Apple path is proven.
 7. **Distribute build 10**, the one step 0 uploaded and processed, to the
-   tester groups, and turn automatic distribution back on if you want it.
+   tester groups, and turn automatic distribution back on if you want it. An
+   external group (the public link) gets it only after Beta App Review, which
+   starts when the build is added to that group and can take a day; submit it
+   only after step 6, because the reviewer uses production. External testers
+   have no working build until the review passes. The reviewer signs in with
+   their own Apple ID and starts at unknown age, so the Test Information must say
+   what they will see.
 8. **Read the result the next morning** with the queries in "Measuring the age
    distribution on TestFlight" below, and check the nina-maintenance response
    (`minor_accounts`) and log for `minor_account_deletion_failed` and retention
@@ -551,14 +557,22 @@ answers, the rationale per item and the review note are in
 `docs/privacy/classificacao-indicativa.md`; keep the written rationale there
 (Guideline 2.3.6).
 
-1. **Open a conversation from the App Review page in App Store Connect** (free;
-   "Contact us" is for rejections) and ask the three questions word for word:
+1. **Book a free 30-minute App Review appointment** (Meet with Apple, Webex,
+   Tuesdays and Thursdays:
+   `https://developer.apple.com/events/view/upcoming-events?search=Review`).
+   The App Review page in App Store Connect lists submissions and their
+   messages only; it has no way to start a conversation without one (checked
+   2026-09-29), and the written "Contact us" form is for rejections. Ask the
+   four questions word for word:
    1. Does content shared inside a closed household of up to 8 approved people
       count as User-Generated Content or as Messaging?
    2. Do features that the server gates to users the Declared Age Range API
       confirms as 18+ count toward the questionnaire answers?
    3. Does "some features are only for adults" in the Terms count as a minimum
       age requirement?
+   4. Sign in with Apple is the only sign-in, and the chat and the subscription
+      open only for an adult whose age Apple confirmed. How should the reviewer
+      reach those features?
 
    Record the answers in the rating document. Do not submit the "Livre" (AL)
    answers without them. If the answers push the rating to 10 or 12, keep the

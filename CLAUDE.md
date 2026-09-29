@@ -1613,7 +1613,7 @@ the project, not bugs to fix unprompted.
 - **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
   `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
   compares them) and Terms §4 reads the same constant. Apple's questionnaire
-  answers, their rationale and the three questions to ask App Review first are
+  answers, their rationale and the four questions to ask App Review first are
   in `docs/privacy/classificacao-indicativa.md`; ClassInd's voluntary análise
   prévia is not filed. If Apple or the MJSP assign 10 or 12, the chat stays and
   one constant changes in the app, the website and the Terms together. The
