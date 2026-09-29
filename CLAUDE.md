@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-09-26
+Last updated: 2026-09-28
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -594,6 +594,8 @@ secret) and is revoked from every client role. pg_cron runs
 Five Deno functions, all in production. `nina-maintenance` (v5) was redeployed
 on 2026-09-23 with the GPT-6 Luna switch, and `nina-chat` is v12 since
 2026-09-26 (the spoken-dates fix, commit 84ef7c9, byte-checked after deploy).
+Its bounded body reader (2026-09-28) is committed but not yet deployed; v12
+still reads the body with `request.json()`.
 Until 2026-09-23 both still ran the 2026-06-15 build, so check `list_edge_functions` dates against
 `git log` before assuming the server runs what the repo says. `verify_jwt`
 per `supabase/config.toml`: **true** for `nina-chat`, `premium-subscription-sync`,
@@ -614,6 +616,9 @@ platform bundler cannot resolve the import and the deploy fails with 400.
   Model `gpt-6-luna` at reasoning effort `medium` (since 2026-09-23; low effort
   lost two cases in the eval) via OpenAI Responses, strict `json_schema`,
   ≤3 proposals, ≤2 extra tool rounds / ≤4 tool calls, 32k input cap, 35s timeout.
+  The body is capped at 12 MiB (`maxNinaChatRequestBytes`): the 8 MiB attachment
+  ceiling as base64, plus the slashes Swift's `JSONEncoder` escapes; a larger
+  body gets 413 `input_too_large`, which the app already shows as "grande demais".
 - **`nina-maintenance`** — daily retention (`run_nina_retention`,
   `run_waitlist_retention`) *before* any AI work, then ≤25 weekly insights on
   `gpt-6-luna` at effort `low` with a `gpt-5.4-mini` fallback (since
@@ -648,6 +653,9 @@ platform bundler cannot resolve the import and the deploy fails with 400.
   `unpriced_model` for a model without its own branch rather than booking it at
   another model's rates, so a new model needs its price before it can run.
 - Bodies are read through bounded stream readers, never `await request.json()`.
+  `nina-ai.test.ts` scans every function's `index.ts` and every `_shared` module
+  for an unbounded `request.json()`, `.text()`, `.arrayBuffer()`, `.blob()` or
+  `.formData()`.
 
 `supabase/functions/_shared/nina-chat-policy.ts` holds the entire system prompt.
 **Edits there are product changes, not code changes.** Its brevity is deliberate

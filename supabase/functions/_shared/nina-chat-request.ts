@@ -15,6 +15,15 @@ export type NinaChatAttachment = {
 export const maxAttachmentCount = 3;
 export const maxAttachmentBytes = 5 * 1024 * 1024;
 export const maxTotalAttachmentBytes = 8 * 1024 * 1024;
+export const maxNinaChatRequestBytes = 12 * 1024 * 1024;
+
+export type NinaChatRequestRead =
+  | { ok: true; request: NinaChatRequest }
+  | {
+    ok: false;
+    status: 400 | 413;
+    error: "input_too_large" | "invalid_json" | "invalid_request";
+  };
 
 const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
 const imageMimeTypes = new Set([
@@ -101,6 +110,42 @@ export function isNinaChatRequest(value: unknown): value is NinaChatRequest {
     && (request.message.trim().length > 0 || attachments.length > 0);
 }
 
+export async function readNinaChatRequest(
+  request: Request,
+): Promise<NinaChatRequestRead> {
+  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
+  if (
+    Number.isFinite(declaredLength)
+    && declaredLength > maxNinaChatRequestBytes
+  ) {
+    return { ok: false, status: 413, error: "input_too_large" };
+  }
+
+  let rawBody: string | null;
+  try {
+    rawBody = await readBoundedRequestBody(request, maxNinaChatRequestBytes);
+  } catch {
+    return { ok: false, status: 400, error: "invalid_json" };
+  }
+
+  if (rawBody === null) {
+    return { ok: false, status: 413, error: "input_too_large" };
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return { ok: false, status: 400, error: "invalid_json" };
+  }
+
+  if (!isNinaChatRequest(body)) {
+    return { ok: false, status: 400, error: "invalid_request" };
+  }
+
+  return { ok: true, request: body };
+}
+
 export function attachmentMetadata(
   attachments: NinaChatAttachment[],
 ): Array<Record<string, unknown>> {
@@ -110,4 +155,36 @@ export function attachmentMetadata(
     mime_type: attachment.mime_type,
     byte_count: Math.floor(attachment.data_base64.length * 0.75),
   }));
+}
+
+async function readBoundedRequestBody(
+  request: Request,
+  maximumBytes: number,
+): Promise<string | null> {
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    receivedBytes += value.byteLength;
+    if (receivedBytes > maximumBytes) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(receivedBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new TextDecoder("utf-8", { fatal: true }).decode(body);
 }

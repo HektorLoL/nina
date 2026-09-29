@@ -24,9 +24,9 @@ import {
 } from "../_shared/nina-ai.ts";
 import {
   attachmentMetadata,
-  isNinaChatRequest,
   NinaChatAttachment,
   NinaChatRequest,
+  readNinaChatRequest,
 } from "../_shared/nina-chat-request.ts";
 import { ninaSystemPrompt } from "../_shared/nina-chat-policy.ts";
 import { fillMissingDueAt, ninaLocalNow } from "../_shared/nina-due-date.ts";
@@ -463,16 +463,11 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ error: "service_not_configured" }, 503);
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: "invalid_json" }, 400);
+  const read = await readNinaChatRequest(request);
+  if (!read.ok) {
+    return jsonResponse({ error: read.error }, read.status);
   }
-
-  if (!isNinaChatRequest(body)) {
-    return jsonResponse({ error: "invalid_request" }, 400);
-  }
+  const body = read.request;
 
   const clientMessageID = body.message_id ?? crypto.randomUUID();
   const token = authorization.slice("Bearer ".length);

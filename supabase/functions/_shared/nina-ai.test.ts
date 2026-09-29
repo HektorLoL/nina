@@ -41,6 +41,9 @@ import {
   attachmentMetadata,
   isNinaChatRequest,
   maxAttachmentCount,
+  maxNinaChatRequestBytes,
+  maxTotalAttachmentBytes,
+  readNinaChatRequest,
 } from "./nina-chat-request.ts";
 import { ninaSystemPrompt } from "./nina-chat-policy.ts";
 import { ninaDefaultDueTime } from "./nina-due-date.ts";
@@ -96,6 +99,107 @@ Deno.test("request validation enforces attachment count, MIME, and total size", 
     message: "Arquivo grande",
     attachments: [{ ...attachment, data_base64: oversizedBase64 }],
   }));
+});
+
+Deno.test("the largest turn the app can send fits under the chat body cap, slashes escaped as Swift writes them", async () => {
+  const attachmentBytes =
+    Math.floor(maxTotalAttachmentBytes / maxAttachmentCount / 3) * 3;
+  const attachments = Array.from({ length: maxAttachmentCount }, () => ({
+    kind: "document" as const,
+    filename: "\u0001".repeat(180),
+    mime_type: "application/pdf",
+    data_base64: base64OfRandomBytes(attachmentBytes),
+  }));
+  const body = JSON.stringify({
+    family_id: familyID,
+    message_id: messageID,
+    message: "\u0001".repeat(2000),
+    attachments,
+  }).replaceAll("/", "\\/");
+
+  assert(new TextEncoder().encode(body).byteLength < maxNinaChatRequestBytes);
+  const read = await readNinaChatRequest(chatRequest(body));
+  assert(read.ok);
+  if (read.ok) {
+    assertEquals(read.request.attachments?.length, maxAttachmentCount);
+  }
+});
+
+Deno.test("a chat body over the cap is refused as input_too_large before it is all read", async () => {
+  const tooLarge = { ok: false, status: 413, error: "input_too_large" } as const;
+
+  assertEquals(
+    await readNinaChatRequest(
+      chatRequest("{}", {
+        "Content-Length": String(maxNinaChatRequestBytes + 1),
+      }),
+    ),
+    tooLarge,
+  );
+
+  const chunkBytes = 1024 * 1024;
+  let pulls = 0;
+  const endless = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(new Uint8Array(chunkBytes));
+    },
+  });
+  assertEquals(await readNinaChatRequest(chatRequest(endless)), tooLarge);
+  assert(pulls <= maxNinaChatRequestBytes / chunkBytes + 2);
+});
+
+Deno.test("a chat body that is not JSON or not a turn keeps its stable codes", async () => {
+  const invalidJSON = { ok: false, status: 400, error: "invalid_json" } as const;
+  assertEquals(await readNinaChatRequest(chatRequest("{")), invalidJSON);
+  assertEquals(
+    await readNinaChatRequest(chatRequest(new Uint8Array([0x7b, 0xff, 0x7d]))),
+    invalidJSON,
+  );
+  assertEquals(
+    await readNinaChatRequest(
+      new Request("https://example.test/nina-chat", { method: "POST" }),
+    ),
+    invalidJSON,
+  );
+  assertEquals(await readNinaChatRequest(chatRequest("{}")), {
+    ok: false,
+    status: 400,
+    error: "invalid_request",
+  });
+});
+
+Deno.test("no edge function reads a request body without a byte cap", async () => {
+  const functionsURL = new URL("../", import.meta.url);
+  const sources: Array<[string, URL]> = [];
+  for await (const entry of Deno.readDir(functionsURL)) {
+    if (entry.isDirectory && !entry.name.startsWith("_")) {
+      sources.push([entry.name, new URL(`${entry.name}/index.ts`, functionsURL)]);
+    }
+  }
+  for await (const entry of Deno.readDir(new URL("./", import.meta.url))) {
+    if (entry.isFile && entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+      sources.push([entry.name, new URL(entry.name, import.meta.url)]);
+    }
+  }
+  const names = sources.map(([name]) => name);
+  for (const endpoint of ["nina-chat", "nina-maintenance", "delete-account"]) {
+    assert(names.includes(endpoint), endpoint);
+  }
+
+  for (const [name, url] of sources) {
+    const source = await Deno.readTextFile(url);
+    assertFalse(source.includes("await request.json()"), name);
+    assertFalse(
+      /\brequest\.(?:json|text|arrayBuffer|blob|formData)\(/.test(source),
+      name,
+    );
+  }
+
+  const chat = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  assertStringIncludes(chat, "readNinaChatRequest(request)");
 });
 
 Deno.test("September 23 2026 pricing and reservations are deterministic", () => {
@@ -1013,3 +1117,26 @@ Deno.test("maintenance always runs retention and surfaces cleanup failures", asy
       source.indexOf("if (!openAIKey)"),
   );
 });
+
+function chatRequest(
+  body: BodyInit,
+  headers: Record<string, string> = {},
+): Request {
+  return new Request("https://example.test/nina-chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body,
+  });
+}
+
+function base64OfRandomBytes(byteCount: number): string {
+  const bytes = new Uint8Array(byteCount);
+  for (let offset = 0; offset < byteCount; offset += 65_536) {
+    crypto.getRandomValues(bytes.subarray(offset, offset + 65_536));
+  }
+  let binary = "";
+  for (let offset = 0; offset < byteCount; offset += 32_768) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+  }
+  return btoa(binary);
+}

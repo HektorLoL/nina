@@ -1,6 +1,6 @@
 # Product depth backlog
 
-Last updated: 2026-09-26
+Last updated: 2026-09-28
 
 A file-anchored audit of every product area against the product-depth wishlist, produced by
 twelve independent auditors reading the working tree. Each gap states the user-visible symptom,
@@ -45,6 +45,12 @@ been closed; everything else in this document is still open.
   app still wrote them, so the revoke had to wait for the app. Since 2026-09-26 the app keeps a
   legacy turn and its confirmation on the phone, and migration `202609260004` leaves the client
   `select` only.
+- **`nina-chat` buffered any body before checking its size.** It still called
+  `await request.json()`, against the rule in CLAUDE.md §7, and the scan that pinned the rule read
+  only the App Store functions. Since 2026-09-28 `readNinaChatRequest` stops at 12 MiB and answers
+  413 `input_too_large`, a code the app already maps. `nina-ai.test.ts` now scans every function
+  and `_shared` module, and proves the largest turn the app can send still fits. Live once
+  `nina-chat` is redeployed.
 - **A join request reached the owner only if they happened to open the Casa tab.** The pair
   typically ended up phoning each other, which is precisely the coordination cost Nina exists to
   remove. `family_join_requests` stays client-inaccessible; instead a trigger bumps
@@ -758,7 +764,6 @@ been closed; everything else in this document is still open.
 - The legacy v1 suggestion sheet (Nina/Sheets.swift:2611) shows '\(payloadOwner) · \(payloadDueLabel)'. The new v2 NinaProposalCard shows neither. The flagship path discloses strictly less than the path it replaced.
 - The card headline and the created object are different model-generated strings: NinaProposalCard renders proposal.title (Nina/NinaChatView.swift:961) while resolve() writes payload.title (:1100). Anyone 'just adding a rationale line' will miss that the approved text is not necessarily the created text.
 - legacySuggestionFromProposals returns null for kind 'shopping' and 'memory' (nina-ai.ts:418-423). Combined with the launch default NINA_AI_V2_ENABLED = NO, that means two of the four proposal kinds are not degraded — they are completely unreachable, with no button and no error.
-- CLAUDE.md §7 states bodies are read through bounded stream readers and never `await request.json()`, but supabase/functions/nina-chat/index.ts:463 does exactly that. The source-scanning test that pins this rule (supabase/functions/_shared/app-store.test.ts:179) only reads the app-store-server-notifications source, so nina-chat has silently drifted from the documented invariant and buffers the whole body before isNinaChatRequest validates any size.
 - apply(_:) overwrites messages wholesale from the server (Nina/AppStore.swift:2037), and only the client ever holds thumbnailData. So even after the ChatAttachment decode bug is fixed, every successful refresh discards the local image preview — an attachment preview feature has to merge by message id, not just fix the decoder.
 - Adding fields to the proposal is cheaper than it looks: complete_nina_chat_run stores `coalesce(proposal -> 'payload', '{}'::jsonb)` verbatim and both get_nina_chat_result and get_current_nina_state return proposals.payload whole, so anything nested inside payload needs zero migration. Anything added at the proposal top level needs three SQL functions changed. Rationale, source and extraction summaries all belong inside payload.
 
