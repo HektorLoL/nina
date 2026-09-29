@@ -41,6 +41,7 @@ import {
   attachmentMetadata,
   isNinaChatRequest,
   maxAttachmentCount,
+  maxDrainedRequestBytes,
   maxNinaChatRequestBytes,
   maxTotalAttachmentBytes,
   readNinaChatRequest,
@@ -125,8 +126,25 @@ Deno.test("the largest turn the app can send fits under the chat body cap, slash
   }
 });
 
-Deno.test("a chat body over the cap is refused as input_too_large before it is all read", async () => {
+Deno.test("a chat body over the cap is read to its end and discarded before the 413, so the platform can deliver it", async () => {
   const tooLarge = { ok: false, status: 413, error: "input_too_large" } as const;
+  const chunkBytes = 1024 * 1024;
+  const chunkCount = maxNinaChatRequestBytes / chunkBytes + 1;
+  let sent = 0;
+  let drained = false;
+  const oversized = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (sent === chunkCount) {
+        drained = true;
+        controller.close();
+        return;
+      }
+      sent += 1;
+      controller.enqueue(new Uint8Array(chunkBytes));
+    },
+  });
+  assertEquals(await readNinaChatRequest(chatRequest(oversized)), tooLarge);
+  assert(drained);
 
   assertEquals(
     await readNinaChatRequest(
@@ -136,7 +154,17 @@ Deno.test("a chat body over the cap is refused as input_too_large before it is a
     ),
     tooLarge,
   );
+  assertEquals(
+    await readNinaChatRequest(
+      chatRequest("{}", {
+        "Content-Length": String(maxDrainedRequestBytes + 1),
+      }),
+    ),
+    tooLarge,
+  );
+});
 
+Deno.test("an endless chat body stops being read at the drain ceiling", async () => {
   const chunkBytes = 1024 * 1024;
   let pulls = 0;
   const endless = new ReadableStream<Uint8Array>({
@@ -145,8 +173,12 @@ Deno.test("a chat body over the cap is refused as input_too_large before it is a
       controller.enqueue(new Uint8Array(chunkBytes));
     },
   });
-  assertEquals(await readNinaChatRequest(chatRequest(endless)), tooLarge);
-  assert(pulls <= maxNinaChatRequestBytes / chunkBytes + 2);
+  assertEquals(await readNinaChatRequest(chatRequest(endless)), {
+    ok: false,
+    status: 413,
+    error: "input_too_large",
+  });
+  assert(pulls <= maxDrainedRequestBytes / chunkBytes + 2);
 });
 
 Deno.test("a chat body that is not JSON or not a turn keeps its stable codes", async () => {

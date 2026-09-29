@@ -47,10 +47,11 @@ been closed; everything else in this document is still open.
   `select` only.
 - **`nina-chat` buffered any body before checking its size.** It still called
   `await request.json()`, against the rule in CLAUDE.md §7, and the scan that pinned the rule read
-  only the App Store functions. Since 2026-09-28 `readNinaChatRequest` stops at 12 MiB and answers
+  only the App Store functions. Since 2026-09-28 `readNinaChatRequest` keeps at most 12 MiB, reads
+  and discards anything larger (Supabase delivers no answer while an upload is unread), and answers
   413 `input_too_large`, a code the app already maps. `nina-ai.test.ts` now scans every function
-  and `_shared` module, and proves the largest turn the app can send still fits. Live once
-  `nina-chat` is redeployed.
+  and `_shared` module, and proves the largest turn the app can send still fits. Live in
+  `nina-chat` v14.
 - **A join request reached the owner only if they happened to open the Casa tab.** The pair
   typically ended up phoning each other, which is precisely the coordination cost Nina exists to
   remove. `family_join_requests` stays client-inaccessible; instead a trigger bumps

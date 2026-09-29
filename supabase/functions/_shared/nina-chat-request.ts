@@ -16,6 +16,7 @@ export const maxAttachmentCount = 3;
 export const maxAttachmentBytes = 5 * 1024 * 1024;
 export const maxTotalAttachmentBytes = 8 * 1024 * 1024;
 export const maxNinaChatRequestBytes = 12 * 1024 * 1024;
+export const maxDrainedRequestBytes = 32 * 1024 * 1024;
 
 export type NinaChatRequestRead =
   | { ok: true; request: NinaChatRequest }
@@ -114,21 +115,24 @@ export async function readNinaChatRequest(
   request: Request,
 ): Promise<NinaChatRequestRead> {
   const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
-  if (
-    Number.isFinite(declaredLength)
-    && declaredLength > maxNinaChatRequestBytes
-  ) {
+  const declaredTooLarge = Number.isFinite(declaredLength)
+    && declaredLength > maxNinaChatRequestBytes;
+  if (declaredTooLarge && declaredLength > maxDrainedRequestBytes) {
+    await request.body?.cancel().catch(() => undefined);
     return { ok: false, status: 413, error: "input_too_large" };
   }
 
   let rawBody: string | null;
   try {
-    rawBody = await readBoundedRequestBody(request, maxNinaChatRequestBytes);
+    rawBody = await readBoundedRequestBody(
+      request,
+      declaredTooLarge ? 0 : maxNinaChatRequestBytes,
+    );
   } catch {
     return { ok: false, status: 400, error: "invalid_json" };
   }
 
-  if (rawBody === null) {
+  if (declaredTooLarge || rawBody === null) {
     return { ok: false, status: 413, error: "input_too_large" };
   }
 
@@ -167,17 +171,21 @@ async function readBoundedRequestBody(
   const chunks: Uint8Array[] = [];
   let receivedBytes = 0;
 
+  // Supabase delivers no response while an upload is still unread, so a body over the cap is drained, never kept.
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
     receivedBytes += value.byteLength;
-    if (receivedBytes > maximumBytes) {
+    if (receivedBytes > maxDrainedRequestBytes) {
       await reader.cancel().catch(() => undefined);
       return null;
     }
-    chunks.push(value);
+    if (receivedBytes > maximumBytes) chunks.length = 0;
+    else chunks.push(value);
   }
+
+  if (receivedBytes > maximumBytes) return null;
 
   const body = new Uint8Array(receivedBytes);
   let offset = 0;

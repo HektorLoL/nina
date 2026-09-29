@@ -592,10 +592,9 @@ secret) and is revoked from every client role. pg_cron runs
 ## 7. Edge Functions
 
 Five Deno functions, all in production. `nina-maintenance` (v5) was redeployed
-on 2026-09-23 with the GPT-6 Luna switch, and `nina-chat` is v12 since
-2026-09-26 (the spoken-dates fix, commit 84ef7c9, byte-checked after deploy).
-Its bounded body reader (2026-09-28) is committed but not yet deployed; v12
-still reads the body with `request.json()`.
+on 2026-09-23 with the GPT-6 Luna switch, and `nina-chat` is v14 since
+2026-09-28 (the bounded body reader, byte-checked after deploy; v12 on
+2026-09-26 carried the spoken-dates fix, commit 84ef7c9).
 Until 2026-09-23 both still ran the 2026-06-15 build, so check `list_edge_functions` dates against
 `git log` before assuming the server runs what the repo says. `verify_jwt`
 per `supabase/config.toml`: **true** for `nina-chat`, `premium-subscription-sync`,
@@ -617,8 +616,9 @@ platform bundler cannot resolve the import and the deploy fails with 400.
   lost two cases in the eval) via OpenAI Responses, strict `json_schema`,
   ≤3 proposals, ≤2 extra tool rounds / ≤4 tool calls, 32k input cap, 35s timeout.
   The body is capped at 12 MiB (`maxNinaChatRequestBytes`): the 8 MiB attachment
-  ceiling as base64, plus the slashes Swift's `JSONEncoder` escapes; a larger
-  body gets 413 `input_too_large`, which the app already shows as "grande demais".
+  ceiling as base64, plus the slashes Swift's `JSONEncoder` escapes. A larger
+  body is read to its end and thrown away (up to 32 MiB, see §12), then gets
+  413 `input_too_large`, which the app already shows as "grande demais".
 - **`nina-maintenance`** — daily retention (`run_nina_retention`,
   `run_waitlist_retention`) *before* any AI work, then ≤25 weekly insights on
   `gpt-6-luna` at effort `low` with a `gpt-5.4-mini` fallback (since
@@ -1085,6 +1085,16 @@ fixture, give it a body containing `example` / `replace` so the scanner's
 placeholder heuristic classifies it correctly — that is the existing convention
 (`sb_secret_replace_with_a_dedicated_worker_key` in `config/production.env.example`).
 Never obfuscate a fixture to dodge the scan.
+
+**A function that answers before reading the whole upload never delivers that
+answer.** Supabase holds the connection until its idle timeout and returns an
+empty 503 from the gateway. Proven 2026-09-28: a 1 MiB body to
+`premium-subscription-sync` and a 13 MiB body to nina-chat v13 both hung, while
+an 11 MiB body read to its end answered in 1.6 s. So `readNinaChatRequest`
+drains an oversize body up to `maxDrainedRequestBytes` (32 MiB), keeping none of
+it, and only then answers 413. The App Store functions and `delete-account`
+still answer early; nothing legitimate sends them an oversize body, so an
+oversize request there gets the empty 503 and nothing else.
 
 **`app-store-server-notifications` is publicly reachable** with no shared secret
 or IP allowlist — Apple's JWS chain is its only authentication. Sound, but every
