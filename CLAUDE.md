@@ -907,12 +907,14 @@ unconfirmed pre-release child profile is deleted.
 
 ## 7. Edge Functions
 
-Six Deno functions. Five are in production; `age-signal` and the 2026-09-29
-changes to the other five (below) are built and tested locally and not yet
-deployed. `nina-maintenance` (v5) was redeployed on 2026-09-23 with the GPT-6
-Luna switch, and `nina-chat` is v14 since 2026-09-28 (the bounded body reader,
-byte-checked after deploy; v12 on 2026-09-26 carried the spoken-dates fix,
-commit 84ef7c9).
+Six Deno functions, all in production. The all-ages release deployed all six
+from commit d26a730 on 2026-09-29 (`age-signal` v1, `nina-chat` v18,
+`nina-maintenance` v10, `delete-account` v7, `premium-subscription-sync` v9,
+`app-store-server-notifications` v9), from a clean `git archive` export
+because iCloud leaves ignored "… 2" copies of source files in the working tree
+(§12). Before that, `nina-maintenance` was redeployed on 2026-09-23 with the
+GPT-6 Luna switch, and `nina-chat` v14 (2026-09-28) carried the bounded body
+reader and v12 (2026-09-26) the spoken-dates fix, commit 84ef7c9.
 Until 2026-09-23 both still ran the 2026-06-15 build, so check `list_edge_functions` dates against
 `git log` before assuming the server runs what the repo says. `verify_jwt`
 per `supabase/config.toml`: **true** for `nina-chat`, `premium-subscription-sync`,
@@ -1418,6 +1420,17 @@ migrations.** It never applies anything. Editing a migration and re-running only
 must stay ignored, because another session's `git add -A` would otherwise commit
 local machine state.
 
+**iCloud leaves "… 2" copies in the working tree.** The repo lives in
+`~/Documents`, which iCloud syncs, and it drops conflict copies such as
+`202609290001_age_assurance 2.sql` or `index 2.ts` next to the originals.
+`.gitignore` hides them (`*\ 2.*`), so `git status` stays clean, but the
+Supabase CLI does not read `.gitignore`: `db push` would take a
+`NNNN_name 2.sql` as a second migration with the same version (it sorts before
+the original), and `functions deploy` could upload stale copies. Push
+migrations and deploy functions from a clean export
+(`git archive HEAD | tar -x -C <dir>`, then run the CLI there), as the
+2026-09-29 release did.
+
 **`deno.json` enumerates individual files, not directories.** A new
 `web/src/*.ts` or `_shared/*.ts` module is neither formatted, linted, nor
 type-checked until you add it. Likewise `deno task test` globs only
@@ -1595,17 +1608,21 @@ too). **Never point an eval at production.**
 Honest state as of 2026-08-10, with later dated entries. These are facts about
 the project, not bugs to fix unprompted.
 
-- **Nina for all ages is built, not shipped (2026-09-29).** The eight
+- **Nina for all ages is live on the server since 2026-09-29.** The eight
   `202609290001`–`…0008` migrations, `age-signal`, the changes to the other five
   functions, the iOS age step, minor experience, guardian sheets and consent v2,
   and the web Terms, Privacy, `/familias/` and `/denuncia/` pass every local gate
   (Deno 314 tests, pgTAP 657, XCTest 409, repository preflight, Debug and
-  Release builds, `astro check`). Nothing is committed, deployed or applied to
-  production. The local eval on the 38-case fixture is below (§13, the AI eval
-  entry). The order
-  on the production day is `docs/production-launch-runbook.md` §3: expire
-  TestFlight builds ≤9, apply the migrations, set the new secrets, deploy the
-  functions, ship build 10, mark tester accounts. Still open on a device, since
+  Release builds, `astro check`). The local eval on the 38-case fixture is below
+  (§13, the AI eval entry). The production day (`docs/production-launch-runbook.md`
+  §3) ran on 2026-09-29: TestFlight builds ≤9 expired, the five secrets set,
+  the eight migrations applied by `db push` (versions match the filenames), the
+  six functions deployed, `legacy_profile_deadline` set to 2026-10-29, and the
+  online preflight with the build-10 archive left only the expected
+  `deployment.legal-launch-identity` failure. No tester account was marked with
+  `operator_set_age_status`, so the first readings of
+  `private.age_assurance_distribution()` show how real iPhones come back. Build
+  10 reaches the external group only after Beta App Review. Still open on a device, since
   the Simulator runs neither: an Apple-confirmed adult, a self-declared adult, a
   16–17 and a 13–15 Family Sharing child, an under-13, Sign in with Apple with no
   scopes, a decline and a later share, a guardian approval and a guardian
