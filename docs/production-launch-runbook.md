@@ -557,13 +557,16 @@ answers, the rationale per item and the review note are in
 `docs/privacy/classificacao-indicativa.md`; keep the written rationale there
 (Guideline 2.3.6).
 
-1. **Book a free 30-minute App Review appointment** (Meet with Apple, Webex,
-   Tuesdays and Thursdays:
-   `https://developer.apple.com/events/view/upcoming-events?search=Review`).
-   The App Review page in App Store Connect lists submissions and their
-   messages only; it has no way to start a conversation without one (checked
-   2026-09-29), and the written "Contact us" form is for rejections. Ask the
-   four questions word for word:
+1. **Ask the four questions in writing, in the App Review notes of the
+   submission** (decided 2026-09-29). Apple answers in the submission's
+   messages in App Store Connect; a disagreement costs one rejection round, and
+   D1 already accepts a 10 or 12. The App Review page cannot start a
+   conversation without a submission (checked 2026-09-29), and the "Contact us"
+   form is for rejections. A free 30-minute App Review appointment (Meet with
+   Apple, Tuesdays and Thursdays:
+   `https://developer.apple.com/events/view/upcoming-events?search=Review`)
+   gets the answers before submitting, if that ever matters more than the call.
+   The four questions, word for word:
    1. Does content shared inside a closed household of up to 8 approved people
       count as User-Generated Content or as Messaging?
    2. Do features that the server gates to users the Declared Age Range API
@@ -574,8 +577,9 @@ answers, the rationale per item and the review note are in
       open only for an adult whose age Apple confirmed. How should the reviewer
       reach those features?
 
-   Record the answers in the rating document. Do not submit the "Livre" (AL)
-   answers without them. If the answers push the rating to 10 or 12, keep the
+   Record the answers in the rating document. The first submission carries the
+   "Livre" (AL) answers with these questions beside them in the notes, so the
+   reviewer sees both at once. If the answers push the rating to 10 or 12, keep the
    chat (D1) and change `NinaRating.currentCode`, `web/src/rating.ts` and the
    Terms together; `repository.rating-constant-consistency` fails until they
    agree.

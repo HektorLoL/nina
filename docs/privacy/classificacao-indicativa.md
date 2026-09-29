@@ -76,11 +76,10 @@ the Terms):
 
 ## 3. Questions for App Review, before submitting
 
-Ask in a free 30-minute App Review appointment (Meet with Apple;
-`docs/production-launch-runbook.md` §6 has the link). The App Review page in
-App Store Connect cannot start a conversation without a submission, and the
-"Contact us" form is for rejections. Record each answer with its date here. Do
-not submit AL answers without them.
+Ask in writing, in the App Review notes of the submission (decided 2026-09-29;
+`docs/production-launch-runbook.md` §6 has the reasons and the optional
+appointment). Record each answer with its date here. If an answer moves the
+rating, change the answers and `NinaRating.currentCode` together and resubmit.
 
 1. Does content shared inside a closed household of up to 8 approved people
    count as User-Generated Content or as Messaging?
