@@ -115,7 +115,7 @@ jobs:
 
   ios:
     name: iOS
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - name: Check out source
@@ -131,7 +131,7 @@ jobs:
               -name 'Xcode_26*.app' \
               ! -name '*beta*' \
               -print |
-              sort |
+              sort -V |
               tail -n 1
           )"
           if [[ -z "$XCODE_PATH" ]]; then
@@ -140,16 +140,30 @@ jobs:
           fi
           echo "DEVELOPER_DIR=$XCODE_PATH/Contents/Developer" >> "$GITHUB_ENV"
           DEVELOPER_DIR="$XCODE_PATH/Contents/Developer" xcodebuild -version
+          SDK_VERSION="$(DEVELOPER_DIR="$XCODE_PATH/Contents/Developer" xcrun --sdk iphonesimulator --show-sdk-version)"
+          if [[ "$(printf '%s\n' 26.4 "$SDK_VERSION" | sort -V | head -n 1)" != "26.4" ]]; then
+            echo "The app targets iOS 26.4, but the newest stable Xcode here ships the iOS $SDK_VERSION SDK."
+            exit 1
+          fi
 
       - name: Select an available iPhone simulator
         shell: bash
         run: |
           IOS_SIMULATOR_ID="$(
             xcrun simctl list devices available --json |
-              jq -r '[.devices[][] | select(.isAvailable == true and (.name | startswith("iPhone")))][0].udid'
+              jq -r '
+                [.devices
+                  | to_entries[]
+                  | select(.key | test("SimRuntime\\.iOS-"))
+                  | (.key | capture("iOS-(?<major>[0-9]+)-(?<minor>[0-9]+)")) as $version
+                  | select(($version.major | tonumber) > 26
+                      or (($version.major | tonumber) == 26 and ($version.minor | tonumber) >= 4))
+                  | .value[]
+                  | select(.isAvailable == true and (.name | startswith("iPhone")))
+                ][0].udid'
           )"
           if [[ -z "$IOS_SIMULATOR_ID" || "$IOS_SIMULATOR_ID" == "null" ]]; then
-            echo "No available iPhone simulator was found."
+            echo "No available iPhone simulator on iOS 26.4 or later was found."
             exit 1
           fi
           echo "IOS_SIMULATOR_ID=$IOS_SIMULATOR_ID" >> "$GITHUB_ENV"

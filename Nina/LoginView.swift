@@ -1,11 +1,21 @@
 import AuthenticationServices
 import SwiftUI
 
+// Every age sees this screen: it names no friend and asks for a name and email only from a reported adult.
 struct LoginView: View {
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(InviteLinkStore.self) private var inviteLinkStore
+    @Environment(AgeCheckCoordinator.self) private var ageCheck
 
     @State private var appleRawNonce: String?
+    @State private var ageReading: AgeReadingResult?
+    @State private var isReadingAge = false
+
+    // Apple is asked for a name and an email only when the device reported an adult.
+    static func requestedScopes(for reading: AgeReadingResult?) -> [ASAuthorization.Scope] {
+        guard case .reading(let mapping) = reading, mapping.status == .adult else { return [] }
+        return [.fullName, .email]
+    }
 
     private var isInvited: Bool {
         inviteLinkStore.pendingCode != nil
@@ -38,11 +48,11 @@ struct LoginView: View {
             NinaMark(size: 64)
 
             VStack(spacing: 8) {
-                Text(isInvited ? "Você tem um convite" : "Sua amiga Nina")
+                Text(isInvited ? "Você tem um convite" : "Nina")
                     .ninaText(.display)
 
                 // A link grants nothing on its own, so the invited line always names who approves.
-                Text(isInvited ? "Quem convidou aprova sua entrada." : "Conta pra ela o que pesa.")
+                Text(isInvited ? "Quem convidou aprova sua entrada." : "A rotina da casa, dividida.")
                     .ninaText(.label, NinaTheme.muted)
             }
             .multilineTextAlignment(.center)
@@ -53,25 +63,37 @@ struct LoginView: View {
 
     private var actionGroup: some View {
         VStack(spacing: 12) {
-            SignInWithAppleButton(.continue) { request in
-                do {
-                    let rawNonce = try AppleSignInNonce.make()
-                    appleRawNonce = rawNonce
-                    request.requestedScopes = [.fullName, .email]
-                    request.nonce = AppleSignInNonce.sha256(rawNonce)
-                } catch {
-                    appleRawNonce = nil
-                    authSession.report(.unavailable)
+            if ageReading == nil {
+                NinaButton(
+                    title: "Continuar",
+                    fillsWidth: true,
+                    isEnabled: authSession.isBackendAvailable,
+                    isPending: isReadingAge
+                ) {
+                    readAge()
                 }
-            } onCompletion: { result in
-                handleAppleCompletion(result)
+                .accessibilityIdentifier("age-continue")
+            } else {
+                SignInWithAppleButton(.continue) { request in
+                    do {
+                        let rawNonce = try AppleSignInNonce.make()
+                        appleRawNonce = rawNonce
+                        request.requestedScopes = Self.requestedScopes(for: ageReading)
+                        request.nonce = AppleSignInNonce.sha256(rawNonce)
+                    } catch {
+                        appleRawNonce = nil
+                        authSession.report(.unavailable)
+                    }
+                } onCompletion: { result in
+                    handleAppleCompletion(result)
+                }
+                .signInWithAppleButtonStyle(.black)
+                .frame(height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
+                .disabled(authSession.isSigningIn || !authSession.isBackendAvailable)
+                .opacity(authSession.isSigningIn || !authSession.isBackendAvailable ? 0.4 : 1)
+                .accessibilityIdentifier("apple-sign-in")
             }
-            .signInWithAppleButtonStyle(.black)
-            .frame(height: 52)
-            .clipShape(RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
-            .disabled(authSession.isSigningIn || !authSession.isBackendAvailable)
-            .opacity(authSession.isSigningIn || !authSession.isBackendAvailable ? 0.4 : 1)
-            .accessibilityIdentifier("apple-sign-in")
 
             #if DEBUG
             debugAccountRow
@@ -90,17 +112,32 @@ struct LoginView: View {
     }
 
     private var legalFootnote: some View {
-        Text(
-            .init(
-                "Ao continuar, você aceita os [Termos](\(NinaLegalLinks.termsOfUse.absoluteString)) "
-                    + "e a [Política de Privacidade](\(NinaLegalLinks.privacyPolicy.absoluteString))."
+        VStack(spacing: 14) {
+            Text(
+                .init(
+                    "Ao continuar, você aceita os [Termos](\(NinaLegalLinks.termsOfUse.absoluteString)) "
+                        + "e a [Política de Privacidade](\(NinaLegalLinks.privacyPolicy.absoluteString)). "
+                        + "Menores de 18 anos entram numa casa com aprovação de um responsável."
+                )
             )
-        )
-        .ninaText(.meta, NinaTheme.muted)
-        .tint(NinaTheme.cobalt)
-        .multilineTextAlignment(.center)
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity)
+            .ninaText(.meta, NinaTheme.muted)
+            .tint(NinaTheme.cobalt)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
+
+            ClassIndMark(size: 28)
+        }
+    }
+
+    private func readAge() {
+        guard !isReadingAge else { return }
+        Haptics.lightImpact()
+        isReadingAge = true
+        Task {
+            ageReading = await ageCheck.readBeforeSignIn()
+            isReadingAge = false
+        }
     }
 
     #if DEBUG
@@ -165,4 +202,5 @@ struct LoginView: View {
     LoginView()
         .environment(AuthSessionStore())
         .environment(InviteLinkStore())
+        .environment(AgeCheckCoordinator())
 }

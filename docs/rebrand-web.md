@@ -1,6 +1,6 @@
 # Nina web — the azulejo pass
 
-Last updated: 2026-08-14
+Last updated: 2026-09-29
 
 The site was rebuilt onto the azulejo system on 2026-08-14, three days after the
 iOS app. Sources: the `Advertisement` page of the Paper file (`A1` hero, `A2`
@@ -251,6 +251,29 @@ page down 44 px. And the control is drawn at the device's scale, with its hit
 area extended by a pseudo-element to 45 px against a 27 px visual, so the screen
 still reads as a screenshot.
 
+## 6b. Nina for all ages (2026-09-29)
+
+No board draws these; they are built from the existing page shell, type and
+palette, with no inline script or style.
+
+- **One footer on every page.** `SiteFooter.astro` moved into `BaseLayout`, so
+  the landing, the legal pages, `/join/`, the invite rewrite and the 404 all
+  carry Privacidade, Termos, Famílias, Denúncia and Contato and the rating mark.
+- **The ClassInd mark is the one colour outside the palette.**
+  `RatingMark.astro` is an inline SVG with presentation attributes only (CSP
+  safe), coloured from `web/src/rating.ts`, which holds the same code as
+  `Nina/NinaRating.swift` (`repository.rating-constant-consistency`). Its
+  colours and drawing are UNVERIFIED against the gov.br/mj artwork, as in the
+  app (`docs/rebrand-implementation.md` §6i).
+- **Two new pages**, `/familias/` (the Age Suitability URL; its capability table
+  becomes stacked cards on a phone) and `/denuncia/`, use the privacy page's
+  layout. The landing hero lost "A Nina é uma amiga que mora no seu celular" and
+  the card and heading that said the model keeps nothing; `/join/` moved
+  Nina's first-person lines to the third person, because a minor with an invite
+  sees it.
+- **Long links wrap.** `.policy-content a` gets `overflow-wrap: anywhere`: the
+  sub-processor URL scrolled the privacy page sideways at 375px.
+
 ## 7. Still open
 
 - **The three-step promise is written for the flag-on product.**
@@ -264,6 +287,6 @@ still reads as a screenshot.
   They capture the pre-azulejo site. `landing-conversa-alivio.png` is kept and
   still valid: it is the emotional north star `CLAUDE.md` §2 cites, not a layout
   spec.
-- **Legal identity is still `replace_with_…`**, so the privacy page still
-  self-declares `data-legal-status="incomplete"` and the online preflight still
-  fails. Unchanged by this pass, and unchangeable by engineering.
+- **Legal identity is a person's since 2026-09-26** (`CLAUDE.md` §13), so
+  `data-legal-status` reads `complete`; `data-legal-launch` stays `pending`
+  until the company, its address and a separate encarregado exist (D2).

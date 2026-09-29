@@ -54,7 +54,7 @@ const privacyCards = [
   {
     glyph: "server",
     title: "Onde ficam os seus dados",
-    text: "Os seus registros ficam em servidores em São Paulo. Para ler o que você escreve, a Nina usa um modelo fora do Brasil, e pede que ele não guarde o que recebe.",
+    text: "Os seus registros ficam em servidores em São Paulo. Para ler o que você escreve, a Nina usa a OpenAI, empresa dos Estados Unidos, que pode guardar por até 30 dias para evitar abuso.",
   },
 ] as const;
 
@@ -146,8 +146,8 @@ const faq = [
         <p class="eyebrow">Conversa que vira alívio</p>
         <h1 id="hero-title">Tira da sua cabeça. Ela propõe, você confirma.</h1>
         <p class="lede hero-lede">
-          A Nina é uma amiga que mora no seu celular. Você conta o que precisa ser feito, do
-          jeito que veio na cabeça. Ela transforma em tarefa, lembrete, compra — e espera você
+          A Nina organiza a casa pelo seu celular. Você conta o que precisa ser feito, do jeito
+          que veio na cabeça. Ela transforma em tarefa, lembrete, compra — e espera você
           confirmar.
         </p>
         <div class="hero-actions">
@@ -165,7 +165,7 @@ const faq = [
           </a>
         </div>
         <p class="hero-footnote">
-          Em preparação para iPhone · em português · seus dados ficam em São Paulo
+          Em preparação para iPhone · em português · seus registros ficam em São Paulo
         </p>
       </div>
 
@@ -381,11 +381,10 @@ const faq = [
     <div class="support-grid page-shell">
       <section id="privacidade" class="section panel panel-ink privacy-panel">
         <p class="eyebrow">Privacidade</p>
-        <h2>O que ela lê, e o que ela não guarda.</h2>
+        <h2>O que ela lê, e por quanto tempo fica.</h2>
         <p>
-          O boleto da escola, a receita do pediatra, o comunicado que veio na mochila. Você
-          escreve do seu jeito, a Nina lê o que dá para ler e monta a proposta. Você confere e
-          confirma.
+          O material da escola, a lista do mercado, a conta que vence. Você escreve do seu jeito,
+          a Nina monta a proposta. Você confere e confirma.
         </p>
         <ul class="privacy-cards">
           {
@@ -398,7 +397,7 @@ const faq = [
             ))
           }
         </ul>
-        <a class="text-link" href="/privacidade">Ler política de privacidade</a>
+        <a class="text-link" href="/privacidade/">Ler política de privacidade</a>
       </section>
 
       <section id="duvidas" class="section panel faq-panel" aria-labelledby="faq-title">
@@ -441,16 +440,6 @@ const faq = [
       </button>
     </section>
   </main>
-
-  <footer class="site-footer page-shell">
-    <Brand compact />
-    <p>Nina © {new Date().getFullYear()}. Organização da casa com mais leveza.</p>
-    <nav aria-label="Links legais">
-      <a href="/privacidade">Privacidade</a>
-      <a href="/termos">Termos</a>
-      <a href="mailto:oi@ninai.app">Contato</a>
-    </nav>
-  </footer>
 
   <dialog
     class="waitlist-dialog"

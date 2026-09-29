@@ -1,5 +1,48 @@
 import Foundation
 
+// Exactly one of three bodies reaches delete-account; an absent key is omitted, never sent as null.
+struct DeleteAccountRequest: Encodable, Equatable {
+    let confirmation = "delete"
+    private(set) var appleAuthorizationCode: String?
+    private(set) var memberID: UUID?
+
+    init() {}
+
+    private init(appleAuthorizationCode: String?, memberID: UUID?) {
+        self.appleAuthorizationCode = appleAuthorizationCode
+        self.memberID = memberID
+    }
+
+    static func revoking(appleAuthorizationCode code: String) -> DeleteAccountRequest? {
+        guard isValidAuthorizationCode(code) else { return nil }
+        return DeleteAccountRequest(appleAuthorizationCode: code, memberID: nil)
+    }
+
+    static func guardian(memberID: UUID) -> DeleteAccountRequest {
+        DeleteAccountRequest(appleAuthorizationCode: nil, memberID: memberID)
+    }
+
+    static func isValidAuthorizationCode(_ code: String) -> Bool {
+        code.range(of: #"^[A-Za-z0-9._-]{1,512}$"#, options: .regularExpression) != nil
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case confirmation
+        case appleAuthorizationCode = "apple_authorization_code"
+        case memberID = "member_id"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(confirmation, forKey: .confirmation)
+        if let memberID {
+            try container.encode(memberID.uuidString.lowercased(), forKey: .memberID)
+        } else if let appleAuthorizationCode {
+            try container.encode(appleAuthorizationCode, forKey: .appleAuthorizationCode)
+        }
+    }
+}
+
 #if canImport(Supabase)
 import Supabase
 
@@ -81,7 +124,7 @@ struct SupabaseAuthClient: AuthClient {
         return AuthUser(supabaseUser: refreshedUser, profile: profile, preferredProvider: .apple)
     }
 
-    func deleteCurrentAccount() async throws {
+    func deleteAccount(_ request: DeleteAccountRequest) async throws {
         let response: DeleteAccountResponse
         do {
             response = try await BackendRequestLogger.perform(
@@ -91,7 +134,7 @@ struct SupabaseAuthClient: AuthClient {
             ) {
                 try await client.functions.invoke(
                     "delete-account",
-                    options: FunctionInvokeOptions(body: DeleteAccountRequest())
+                    options: FunctionInvokeOptions(body: request)
                 )
             }
         } catch {
@@ -139,10 +182,6 @@ private struct EnsureProfileParams: Encodable {
     }
 }
 
-struct DeleteAccountRequest: Encodable {
-    let confirmation = "delete"
-}
-
 private struct DeleteAccountResponse: Decodable {
     var deleted: Bool
 }
@@ -177,8 +216,13 @@ extension AuthUser {
             email: profile.email ?? user.email,
             provider: providerResolution.primary,
             isEmailVerified: user.emailConfirmedAt != nil,
-            linkedProviders: providerResolution.linked
+            linkedProviders: providerResolution.linked,
+            appleSubject: Self.appleSubject(of: user)
         )
+    }
+
+    private static func appleSubject(of user: User) -> String? {
+        user.identities?.first { $0.provider == AuthProvider.apple.rawValue }?.id
     }
 
     init(offlineSupabaseUser user: User) {
@@ -196,7 +240,8 @@ extension AuthUser {
             email: user.email,
             provider: providerResolution.primary,
             isEmailVerified: user.emailConfirmedAt != nil,
-            linkedProviders: providerResolution.linked
+            linkedProviders: providerResolution.linked,
+            appleSubject: Self.appleSubject(of: user)
         )
     }
 }

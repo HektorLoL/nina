@@ -18,6 +18,7 @@ struct HomeSetupView: View {
 
     @State private var canCreateHome = false
     @State private var canJoinHome = false
+    @State private var isShowingDeletion = false
 
     private enum FocusedField {
         case homeName
@@ -55,6 +56,7 @@ struct HomeSetupView: View {
         .onChange(of: inviteText) { _, newValue in
             canJoinHome = AppStore.normalizedInviteCode(from: newValue) != nil
         }
+        .accountDeletionSheet(isPresented: $isShowingDeletion)
     }
 
     private var header: some View {
@@ -62,6 +64,20 @@ struct HomeSetupView: View {
             NinaWordmark(size: 20)
 
             Spacer()
+
+            Menu {
+                Button("Apagar conta") {
+                    Haptics.lightImpact()
+                    isShowingDeletion = true
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(NinaTheme.muted)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Mais opções")
 
             Button {
                 Haptics.warning()

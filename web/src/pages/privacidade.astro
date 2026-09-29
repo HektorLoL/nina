@@ -4,16 +4,26 @@ import Brand from "../components/Brand.astro";
 import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
 
-const updatedAt = "26 de setembro de 2026";
+const updatedAt = "29 de setembro de 2026";
 const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
+const reportMailto = `mailto:${legalIdentity.reportContactEmail}`;
 const dpoMailto = legalIdentity.dpoContactEmail
   ? `mailto:${legalIdentity.dpoContactEmail}`
   : privacyMailto;
+const { legalEntityName, legalEntityDocument } = legalIdentity;
+const documentWord = legalIdentity.documentLabel === "Documento"
+  ? "documento"
+  : legalIdentity.documentLabel;
+const addressClause = legalIdentity.legalEntityAddress
+  ? `, com endereço em ${legalIdentity.legalEntityAddress}`
+  : "";
+const openAISubprocessorsURL = "https://platform.openai.com/subprocessors";
+const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "");
 ---
 
 <BaseLayout
   title="Política de Privacidade — Nina"
-  description="Como a Nina coleta, usa, protege, exporta e apaga dados pessoais no app de organização doméstica."
+  description="Como a Nina coleta, usa, protege, exporta e apaga dados pessoais, incluindo os de crianças e adolescentes e o envio para a OpenAI, nos Estados Unidos."
   canonical="/privacidade/"
 >
   <header class="site-header legal-header is-scrolled">
@@ -22,7 +32,7 @@ const dpoMailto = legalIdentity.dpoContactEmail
       <nav class="desktop-nav" aria-label="Navegação principal">
         <a href="/">Início</a>
         <a href="/termos/">Termos</a>
-        <a href={privacyMailto}>Contato</a>
+        <a href="/familias/">Famílias</a>
       </nav>
     </div>
   </header>
@@ -32,9 +42,9 @@ const dpoMailto = legalIdentity.dpoContactEmail
       <p class="eyebrow">Privacidade</p>
       <h1>Política de Privacidade</h1>
       <p>
-        A Nina organiza rotinas domésticas, tarefas, lembretes, compras, documentos e memórias
-        confirmadas. Esta política explica quais dados são tratados, por quê, como você controla
-        esses dados e como exercer seus direitos.
+        A Nina organiza rotinas domésticas, tarefas, lembretes, compras e memórias confirmadas.
+        Esta política explica quais dados são tratados, por quê, como você controla esses dados e
+        como exercer seus direitos.
       </p>
       <span>Atualizada em {updatedAt}</span>
     </section>
@@ -48,7 +58,10 @@ const dpoMailto = legalIdentity.dpoContactEmail
       <article>
         <Glyph name="lock" size={28} />
         <h2>IA com consentimento</h2>
-        <p>A conversa online com a Nina exige consentimento claro para processamento de IA e memória.</p>
+        <p>
+          A conversa com a Nina pede o seu consentimento e um aceite separado para o envio à
+          OpenAI, nos Estados Unidos.
+        </p>
       </article>
       <article>
         <Glyph name="document" size={28} />
@@ -60,24 +73,26 @@ const dpoMailto = legalIdentity.dpoContactEmail
     <article
       class="policy-content"
       data-legal-status={legalIdentity.isProductionComplete ? "complete" : "incomplete"}
+      data-legal-launch={legalIdentity.isLaunchReady ? "ready" : "pending"}
     >
       <h2>1. Quem controla os dados</h2>
       {
         legalIdentity.isProductionComplete ? (
           <p>
-            A controladora dos dados é <strong>{legalIdentity.legalEntityName}</strong>, registrada
-            sob o documento <strong>{legalIdentity.legalEntityDocument}</strong>. O encarregado pelo
-            tratamento de dados é <strong>{legalIdentity.dpoName}</strong>, contatável pelo email
-            <a href={dpoMailto}>{legalIdentity.dpoContactEmail}</a>. Para outras solicitações de
-            privacidade, escreva para
-            <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>.
+            Quem controla os dados
+            é <strong>{legalEntityName}</strong>, {documentWord} <strong>{legalEntityDocument}</strong>{addressClause}.
+            O encarregado pelo tratamento de dados é <strong>{legalIdentity.dpoName}</strong>,
+            contatável pelo email <a href={dpoMailto}>{legalIdentity.dpoContactEmail}</a>. Para
+            outras solicitações de privacidade, escreva
+            para <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>.
           </p>
         ) : (
           <p>
             A Nina está em preparação para lançamento comercial. Para dúvidas, solicitações de
-            privacidade ou exercício de direitos previstos na LGPD, entre em contato pelo email
-            <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>. A publicação comercial
-            fica condicionada à identificação formal da controladora e do encarregado nesta página.
+            privacidade ou exercício de direitos previstos na LGPD, entre em contato pelo
+            email <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>. A publicação
+            comercial fica condicionada à identificação formal da controladora e do encarregado
+            nesta página.
           </p>
         )
       }
@@ -95,94 +110,317 @@ const dpoMailto = legalIdentity.dpoContactEmail
         proteção contra abuso da lista usa um identificador criptográfico temporário e não
         armazena o endereço IP bruto.
       </p>
-
-      <h2>3. Dados sobre crianças, saúde e documentos</h2>
       <p>
-        A Nina pode receber dados sensíveis ou delicados quando um adulto registra rotinas de
-        crianças, escola, saúde, medicamentos, documentos ou padrões emocionais da casa. A conversa
-        com a Nina é restrita a adultos. Adultos responsáveis devem evitar enviar dados
-        desnecessários e devem ter legitimidade para registrar informações de crianças ou outros
-        membros da casa.
+        Também tratamos a faixa de idade da conta (nunca a data de nascimento) e como a Apple a
+        obteve; o registro de quem é responsável por um menor e das autorizações dadas; para contas
+        de menores, os minutos de uso por dia; e as denúncias enviadas pelo app ou por email.
+      </p>
+      <p>
+        Quando um adulto registra saúde, remédios, escola ou documentos de alguém da casa, esses
+        registros podem revelar dados sensíveis. Registre só o necessário.
+      </p>
+
+      <h2>3. Crianças e adolescentes</h2>
+      <p>
+        A Nina trata dados de pessoas com menos de 18 anos em duas situações: quando a mãe, o pai ou
+        o responsável legal cadastra uma criança ou um adolescente como perfil da casa, e quando um
+        menor tem conta própria, aprovada por um responsável legal.
+      </p>
+      <p>
+        <strong>Que dados:</strong> primeiro nome, apelidos se o responsável informar, papel na
+        casa, faixa de idade (menos de 12, 12 a 15, ou 16 e 17), quem é responsável e a relação
+        (mãe, pai ou responsável legal), as tarefas atribuídas e as marcações de feito, lembretes de
+        saúde se o responsável autorizar. De quem tem conta, também o identificador de login da
+        Apple, a faixa de idade informada pela Apple com o modo como ela foi obtida, e os minutos de
+        uso por dia. A Nina não guarda data de nascimento de menores, não pede email a menores, e
+        apaga o email e a foto do perfil quando uma conta passa a ser de menor.
+      </p>
+      <p>
+        <strong>Para quê:</strong> organizar a rotina da casa, mostrar ao menor as próprias tarefas,
+        permitir a supervisão pelo responsável e cumprir as regras de proteção de crianças e
+        adolescentes. Nada sobre menores é usado para publicidade ou vendido.
+      </p>
+      <p>
+        <strong>Com que base:</strong> consentimento específico e em destaque da mãe, do pai ou do
+        responsável legal (LGPD, art. 14, §1º), dado no app e registrado com data, versão do texto e
+        quem consentiu; para lembretes de saúde, um consentimento separado (art. 11, I). A faixa de
+        idade é tratada para cumprir a lei (Lei 15.211/2025, art. 14) e só para isso.
+      </p>
+      <p>
+        <strong>Quem vê:</strong> os adultos da casa veem os perfis e as tarefas. O menor vê só as
+        próprias tarefas, sem os detalhes que os adultos escrevem.
+      </p>
+      <p>
+        <strong>Inteligência artificial:</strong> menores não conversam com a Nina, e as tarefas
+        deles não vão para a OpenAI. Quando um adulto conversa com a Nina, o nome e os apelidos de
+        cada menor são trocados por um código antes do envio. Um apelido que a casa não informou
+        pode passar; por isso, escreva só o necessário.
+      </p>
+      <p>
+        <strong>Onde fica:</strong> em servidores no Brasil, em São Paulo.
+      </p>
+      <p>
+        <strong>Por quanto tempo:</strong> enquanto o perfil ou a conta existirem; minutos de uso por
+        30 dias; um pedido de entrada não aprovado some em 7 dias; uma conta de menor sem casa é
+        apagada em 30 dias; o registro das autorizações é guardado por 5 anos depois de encerrado,
+        como prova.
+      </p>
+      <p>
+        <strong>Direitos:</strong> o responsável legal exerce os direitos do menor (LGPD, art. 18,
+        §3º) pelo perfil do menor no app ou pelo
+        email <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>, com resposta em até
+        15 dias. O menor também pode apagar a própria conta. Informações para famílias, incluindo
+        riscos e medidas de segurança, estão em <a href="/familias/">ninai.app/familias</a>.
+      </p>
+
+      <h2>3A. Faixa de idade</h2>
+      <p>
+        Na entrada, a Apple informa à Nina uma faixa (menos de 12, 12 a 15, 16 e 17, ou 18 ou mais)
+        e como ela foi obtida. Guardamos só a faixa e a origem, e usamos só para liberar ou bloquear
+        funções por idade. A faixa não vai para a inteligência artificial, para o resumo semanal
+        nem para os registros de uso; vai só se a pessoa é criança ou adolescente, no código que
+        substitui o nome. Quem aprova sua entrada numa casa vê apenas se você é menor e a
+        faixa. Se a Apple e o responsável indicarem idades diferentes, vale a mais protetiva. Para
+        contestar, veja a seção 10.
+      </p>
+      <p>
+        A faixa só é registrada quando o app prova, por um serviço da Apple, que o pedido saiu dele
+        num iPhone. Quando a Apple não informa a faixa, a conta é tratada como a de uma criança até
+        que a faixa seja informada.
       </p>
 
       <h2>4. Como usamos os dados</h2>
       <p>
         Usamos dados para criar e manter sua conta, sincronizar a casa entre aparelhos, permitir
-        convites, organizar tarefas e lembretes, processar mensagens e anexos enviados à Nina,
-        gerar propostas de organização, manter memórias confirmadas, proteger o serviço, controlar
-        limites de uso, enviar novidades de lançamento apenas para quem entrou na lista com
-        consentimento, responder suporte, cumprir obrigações legais e melhorar a confiabilidade do
-        produto sem vender ou compartilhar dados para anúncios.
+        convites, aplicar as regras de cada faixa de idade, organizar tarefas e lembretes, processar
+        mensagens enviadas à Nina, gerar propostas de organização, manter memórias confirmadas,
+        proteger o serviço, controlar limites de uso, tratar denúncias, enviar novidades de
+        lançamento apenas para quem entrou na lista com consentimento, responder suporte, cumprir
+        obrigações legais e melhorar a confiabilidade do produto sem vender ou compartilhar dados
+        para anúncios.
       </p>
 
       <h2>5. IA e memória da Nina</h2>
       <p>
-        A Nina só processa conversas online depois de consentimento no app. Mensagens, anexos e
-        contexto necessário da casa são enviados por uma função segura no backend para provedores de
-        IA, incluindo OpenAI, para gerar respostas e propostas. O backend configura chamadas de IA
-        com armazenamento de resposta desativado quando disponível. Nada vira tarefa, lembrete ou
-        memória confirmada sem ação do usuário. Memórias pessoais começam privadas e só são
-        compartilhadas com escolha explícita.
+        A Nina só processa conversas depois do consentimento no app, dado por um adulto com idade
+        confirmada pela Apple, com um aceite separado para o envio para fora do Brasil (seção 6A). O
+        que você escreve e o contexto necessário da casa são enviados por uma função segura do nosso
+        servidor para a OpenAI, para gerar respostas e propostas. O backend desativa o armazenamento
+        de respostas na OpenAI. Mesmo assim, a OpenAI pode manter registros de monitoramento de
+        abuso, que podem conter o que foi enviado, por até 30 dias, ou por mais tempo se a lei
+        exigir. A OpenAI não usa esse conteúdo para treinar modelos. O resumo semanal só usa dados de
+        adultos que aceitaram a conversa com a Nina.
+      </p>
+      <p>
+        Nada vira tarefa, lembrete ou memória confirmada sem ação do usuário. Memórias pessoais
+        começam privadas e só são compartilhadas com escolha explícita.
       </p>
 
       <h2>6. Compartilhamento e operadores</h2>
       <p>
         Compartilhamos dados apenas com operadores necessários para operar a Nina, como Supabase
-        para autenticação, banco de dados, storage e funções de backend; OpenAI para processamento
-        de IA; Apple para autenticação e distribuição do app; e provedores de hospedagem do site.
-        Esses operadores devem tratar dados conforme nossas instruções e medidas de segurança.
+        para autenticação, banco de dados, storage e funções de backend, em servidores em São Paulo;
+        OpenAI para processamento de IA; Apple para autenticação, verificação de idade e
+        distribuição do app; um provedor de envio de email para o aviso de lançamento; e provedores
+        de hospedagem do site. Esses operadores devem tratar dados conforme nossas instruções e
+        medidas de segurança.
       </p>
+
+      <section class="policy-highlight" aria-labelledby="envio-para-fora">
+        <h2 id="envio-para-fora">6A. Envio para fora do Brasil</h2>
+        <p>
+          Para a conversa com a Nina funcionar, o que você escreve, o contexto necessário da casa e
+          as respostas passam pela OpenAI (OpenAI OpCo, LLC), empresa dos Estados Unidos, que atua
+          como operadora. A OpenAI não garante em que país o processamento acontece.
+        </p>
+        <ul>
+          <li>
+            <strong>O que vai:</strong> o que você escreve e os detalhes da casa que a conversa
+            precisa, como tarefas, compras, memórias e os nomes das pessoas da casa, com código no
+            lugar do nome de crianças e adolescentes.
+          </li>
+          <li>
+            <strong>Forma:</strong> chamadas cifradas feitas pelo nosso servidor, nunca direto do seu
+            iPhone.
+          </li>
+          <li>
+            <strong>Duração:</strong> o tempo de gerar a resposta; a OpenAI pode manter registros de
+            monitoramento de abuso por até 30 dias, ou mais se a lei exigir.
+          </li>
+          <li>
+            <strong>Finalidade:</strong> entender o pedido, propor tarefas, lembretes, compras,
+            sementes e memórias, e gerar o resumo semanal da casa.
+          </li>
+          <li>
+            <strong>O que não vai com nome:</strong> crianças, adolescentes e adultos que não
+            aceitaram a conversa vão trocados por um código. Tarefas de menores, datas de nascimento,
+            fotos de perfil e notas sobre crianças nunca vão. A faixa de idade não vai; vai só se a
+            pessoa é criança ou adolescente, no código que substitui o nome.
+          </li>
+          <li>
+            <strong>Base:</strong> o seu consentimento específico e em destaque para a
+            transferência, pedido no app antes da primeira conversa e separado das outras
+            finalidades.
+          </li>
+          <li>
+            <strong>Seus direitos:</strong> retirar o consentimento em Ajustes · Privacidade e
+            dados, com efeito imediato, e todos os direitos da seção 10, incluindo peticionar à ANPD.
+          </li>
+          <li>
+            <strong>Suboperadores:</strong> a lista da OpenAI está
+            em <a href={openAISubprocessorsURL} rel="noopener">{openAISubprocessorsLabel}</a>.
+          </li>
+        </ul>
+      </section>
 
       <h2>7. Bases legais LGPD</h2>
-      <p>
-        As bases legais podem incluir execução de contrato e procedimentos preliminares para operar
-        a conta e a casa; consentimento para recursos de IA e memória; legítimo interesse para
-        segurança, prevenção de abuso, diagnóstico e melhoria operacional proporcional; cumprimento
-        de obrigação legal ou regulatória quando aplicável; consentimento para emails da lista de
-        lançamento; e proteção da vida ou da saúde apenas quando estritamente necessário em
-        situações compatíveis com a lei.
-      </p>
+      <ul>
+        <li>Conta e casa: execução de contrato.</li>
+        <li>
+          Conta de menor e perfil de criança ou adolescente: consentimento do responsável legal
+          (art. 14, §1º).
+        </li>
+        <li>
+          Lembretes de saúde de menores: consentimento específico do responsável (arts. 11, I, e 14,
+          §1º).
+        </li>
+        <li>
+          Faixa de idade: cumprimento de obrigação legal (art. 7º, II; Lei 15.211/2025, art. 14).
+        </li>
+        <li>
+          Conversa com a Nina e envio para fora do Brasil: consentimento (arts. 7º, I, e 33, VIII).
+        </li>
+        <li>Segurança e prevenção de abuso: legítimo interesse, nunca para dados de saúde.</li>
+        <li>
+          Denúncias e conteúdo retido para comunicar às autoridades: cumprimento de obrigação legal
+          (Lei 15.211/2025, art. 27).
+        </li>
+        <li>Emails da lista de lançamento: consentimento.</li>
+      </ul>
 
       <h2>8. Retenção</h2>
-      <p>
-        Histórico privado da Nina e propostas resolvidas são removidos automaticamente após 30 dias
-        no backend. Logs operacionais de IA sem conteúdo doméstico e insights expiram após 90 dias.
-        Memórias confirmadas, tarefas, lembretes e dados da casa permanecem enquanto forem úteis
-        para a conta ou a casa, até exclusão pelo usuário, exclusão da conta ou outra base legal de
-        retenção. Inscrições na lista de lançamento são removidas após 24 meses sem nova
-        confirmação ou antes disso quando o consentimento é retirado. Identificadores temporários
-        de prevenção de abuso da lista expiram em até 24 horas.
-      </p>
+      <ul>
+        <li>
+          A conversa privada com a Nina e as propostas resolvidas são apagadas depois de 30 dias.
+          Uma mensagem denunciada fica guardada para revisão por até 90 dias.
+        </li>
+        <li>
+          Os registros operacionais de IA, sem conteúdo da casa, e os resumos semanais expiram em 90
+          dias. Na OpenAI, os registros de monitoramento de abuso duram até 30 dias, ou mais se a lei
+          exigir.
+        </li>
+        <li>
+          Memórias confirmadas, tarefas, lembretes, compras e dados da casa ficam enquanto forem úteis
+          para a conta ou a casa, até você apagar, apagar a conta ou surgir outra base legal de
+          retenção.
+        </li>
+        <li>
+          A faixa de idade fica enquanto a conta existir, sem histórico de faixas anteriores. Os
+          desafios de verificação de idade somem em 1 dia, e a chave de verificação do aparelho, 400
+          dias depois do último uso.
+        </li>
+        <li>
+          Os minutos de uso de um menor ficam 30 dias. Um pedido de entrada de menor não aprovado
+          some em 7 dias. Uma conta de menor sem casa é apagada em 30 dias.
+        </li>
+        <li>
+          Perfis de crianças e adolescentes criados antes desta política, sem a autorização de um
+          responsável, são apagados no prazo avisado no app.
+        </li>
+        <li>
+          Denúncias já revisadas ficam 6 meses. Uma suspensão da conversa já retirada fica 1 ano.
+        </li>
+        <li>
+          O registro de responsáveis, autorizações e aceites fica 5 anos depois de encerrado, como
+          prova, sem ligação direta com uma conta apagada.
+        </li>
+        <li>
+          Conteúdo de aparente abuso sexual de crianças ou adolescentes fica lacrado só para
+          comunicar às autoridades e é apagado quando a Polícia Federal confirma o recebimento. Os
+          dados da conta e os metadados ficam pelo prazo que a lei exige.
+        </li>
+        <li>
+          Os dados de uma conta ligada a esse conteúdo ficam guardados, mesmo depois de a conta ser
+          apagada, pelo prazo que a lei exige, lacrados e só para as autoridades.
+        </li>
+        <li>
+          Inscrições na lista de lançamento são removidas após 24 meses sem nova confirmação, ou
+          antes disso quando o consentimento é retirado. Os identificadores temporários de
+          prevenção de abuso da lista expiram em até 24 horas.
+        </li>
+        <li>
+          Quando você apaga a conta pelo app, apagamos as fotos de perfil, o conteúdo da Nina ligado
+          à conta e a participação nas casas, e também pedimos à Apple que encerre o vínculo do
+          login com a Apple dessa conta.
+        </li>
+      </ul>
 
       <h2>9. Seus controles</h2>
       <p>
         No app, você pode revogar consentimento de IA, apagar histórico privado da Nina, editar ou
-        apagar memórias que pertencem a você, exportar dados em JSON, sair da conta e iniciar a
-        exclusão da conta com confirmação explícita. A exclusão remove fotos de perfil, conteúdo da
-        Nina vinculado à conta e a participação nas casas. Convites ativos criados pela conta são
-        revogados. Quando uma casa é compartilhada, alguns registros operacionais da casa podem
-        continuar visíveis aos demais participantes sem vínculo com a conta apagada. Para retirar o
-        consentimento da lista de lançamento, use o link de preferências incluído em cada email. Você
-        também pode escrever para <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>.
+        apagar memórias que pertencem a você, exportar os seus dados em JSON, sair da conta e
+        iniciar a exclusão da conta com confirmação explícita, mesmo sem estar em nenhuma casa. A
+        exclusão remove fotos de perfil, conteúdo da Nina vinculado à conta e a participação nas
+        casas. Convites ativos criados pela conta são revogados. Quando uma casa é compartilhada,
+        alguns registros operacionais da casa podem continuar visíveis aos demais participantes sem
+        vínculo com a conta apagada. Apagar a conta não cancela a assinatura da Apple. Para retirar
+        o consentimento da lista de lançamento, use o link de preferências incluído em cada email.
+        Você também pode escrever para <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>.
       </p>
 
       <h2>10. Direitos LGPD</h2>
       <p>
         Você pode solicitar confirmação de tratamento, acesso, correção, anonimização, bloqueio,
         eliminação, portabilidade, informação sobre compartilhamento, revisão de consentimento e
-        oposição quando cabível. Envie a solicitação para <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>.
-        Podemos pedir informações adicionais para confirmar identidade e proteger a casa.
+        oposição quando cabível. Envie a solicitação
+        para <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>.
+        Podemos pedir informações adicionais para confirmar identidade e proteger a casa. Você
+        também pode peticionar à ANPD. Os direitos de um menor são exercidos pelo responsável legal.
+      </p>
+      <p>
+        Se a faixa de idade da sua conta estiver errada, compartilhe a faixa de novo pelo app. Se
+        um responsável informou a faixa ao aprovar sua entrada, fale com ele. Ou escreva
+        para <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>, e uma pessoa revê o
+        caso.
       </p>
 
       <h2>11. Segurança</h2>
       <p>
-        Usamos autenticação, regras de acesso por casa, escopo privado para conversas adultas,
-        storage privado para fotos de perfil, limites de anexos, retenção automática e funções de
-        backend para manter segredos fora do app. Nenhum sistema é infalível; caso identifiquemos
-        incidente relevante, seguiremos as obrigações legais aplicáveis.
+        Usamos autenticação, regras de acesso por casa e por idade, escopo privado para conversas
+        adultas, storage privado para fotos de perfil, verificação do aparelho para registrar a
+        faixa de idade, retenção automática e funções de backend para manter segredos fora do app.
+        Nenhum sistema é infalível; caso identifiquemos incidente relevante, seguiremos as
+        obrigações legais aplicáveis.
       </p>
 
-      <h2>12. Alterações</h2>
+      <h2>12. Supervisão dos responsáveis</h2>
+      <p>
+        Quem aprova um menor ou cadastra uma criança ou um adolescente pode, a qualquer momento, pelo
+        app:
+      </p>
+      <ul>
+        <li>ver o que a conta do menor mostra;</li>
+        <li>ligar ou desligar os avisos;</li>
+        <li>definir o horário de silêncio e o limite de uso por dia;</li>
+        <li>ver o tempo de uso dos últimos 7 dias;</li>
+        <li>autorizar ou retirar a autorização para lembretes de saúde;</li>
+        <li>exportar os dados do menor;</li>
+        <li>tirar o menor da casa;</li>
+        <li>apagar a conta ou o perfil.</li>
+      </ul>
+      <p>Para bloquear o iPhone, use também o Tempo de Uso da Apple.</p>
+
+      <h2>13. Canal de denúncia</h2>
+      <p>
+        Para denunciar algo na Nina que fira direitos de uma criança ou de um adolescente, use
+        Denunciar um problema no app ou escreva
+        para <a href={reportMailto}>{legalIdentity.reportContactEmail}</a>. A denúncia não é
+        anônima: ela precisa identificar quem denuncia.
+        Em <a href="/denuncia/">ninai.app/denuncia</a> explicamos como cada denúncia é tratada, o
+        prazo de resposta e como contestar uma decisão.
+      </p>
+
+      <h2>14. Alterações</h2>
       <p>
         Podemos atualizar esta política conforme o produto evoluir. Mudanças relevantes serão
         comunicadas no app ou nesta página, e recursos que dependam de consentimento poderão pedir

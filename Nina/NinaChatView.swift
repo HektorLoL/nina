@@ -7,6 +7,8 @@ import UIKit
 
 struct NinaChatView: View {
     @Environment(AppStore.self) private var store
+    @Environment(AuthSessionStore.self) private var authSession
+    @Environment(AgeCheckCoordinator.self) private var ageCheck
     @Environment(RouterPath.self) private var router
     @State private var didLoadInitialMessages = false
     @State private var composerDraft = ""
@@ -26,11 +28,68 @@ struct NinaChatView: View {
                 } else {
                     chatContent
                 }
+            } else if store.isAIBlocked && store.isAdultViewer {
+                blockedContent
+            } else if store.needsConfirmedAgeForChat {
+                ageConfirmationContent
             } else {
                 adultOnlyContent
             }
         }
         .ninaScreenBackground()
+    }
+
+    // A declared adult keeps the whole house; only the conversation waits for Apple's confirmation.
+    private var ageConfirmationContent: some View {
+        VStack(spacing: 0) {
+            header
+            Spacer(minLength: 0)
+            ZeroState(
+                headline: "A conversa pede idade confirmada.",
+                body_: "A Apple ainda não confirmou sua idade. O resto funciona.",
+                presence: .unavailable
+            ) {
+                VStack(spacing: 10) {
+                    NinaButton(
+                        title: "Tentar de novo",
+                        systemName: "arrow.clockwise",
+                        isPending: ageCheck.isRequestingInline
+                    ) {
+                        Haptics.lightImpact()
+                        guard let user = authSession.currentUser else { return }
+                        Task {
+                            guard let status = await ageCheck.requestInline(for: user) else { return }
+                            await store.applyRecordedAge(status, for: user)
+                        }
+                    }
+
+                    if let outcome = ageCheck.inlineOutcome {
+                        Text(outcome.line)
+                            .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            Spacer(minLength: 0)
+        }
+        .padding(.bottom, 104)
+    }
+
+    private var blockedContent: some View {
+        VStack(spacing: 0) {
+            header
+            Spacer(minLength: 0)
+            ZeroState(
+                headline: "A conversa está suspensa nesta conta.",
+                body_: "Se for engano, escreva para \(NinaLegalLinks.privacyEmail).",
+                presence: .unavailable
+            )
+            .padding(.horizontal, 20)
+            Spacer(minLength: 0)
+        }
+        .padding(.bottom, 104)
     }
 
     private var chatContent: some View {
@@ -48,6 +107,16 @@ struct NinaChatView: View {
                 draft: $composerDraft,
                 examples: showsIntro ? Self.captureExamples : []
             )
+        }
+        .onAppear { restoreDraftIfNeeded() }
+    }
+
+    // Words the chat dropped when it closed come back once it opens again, never over a new draft.
+    private func restoreDraftIfNeeded() {
+        guard let draft = store.restorableDraft else { return }
+        store.restorableDraft = nil
+        if composerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            composerDraft = draft
         }
     }
 
@@ -191,40 +260,65 @@ struct NinaChatView: View {
     }
 }
 
-private struct AIMemoryConsentCard: View {
+// The notice names OpenAI, says what leaves the house and what OpenAI may keep, and asks for the transfer separately.
+struct AIMemoryConsentCard: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openURL) private var openURL
+
+    var onGranted: () -> Void = {}
+
+    @State private var authorizesTransfer = false
+
+    static let lead = "Para eu entender o que você escreve, o texto e os detalhes da casa que eu preciso, como tarefas, compras e nomes, vão para a OpenAI, uma empresa dos Estados Unidos. Cada adulto da casa decide o seu."
+
+    static let lines = [
+        "A OpenAI pode guardar o que você manda por até 30 dias, só para evitar abuso, ou mais se a lei exigir. Nada disso treina modelo.",
+        "A sua conversa é só sua. O outro adulto da casa não lê o que você escreve para mim.",
+        "Nomes de crianças e adolescentes vão trocados por um código, e as tarefas deles não vão. O que você escrever sobre eles vai junto, então escreva só o necessário.",
+        "Seu nome vai quando outro adulto que aceitou conversa comigo. De quem não aceitou, o nome vai trocado.",
+        "Dá para desligar quando quiser, em Ajustes · Privacidade e dados. Aí eu paro de ler na hora."
+    ]
+
+    static let transferLine = "Autorizo enviar o que eu escrever e os detalhes da casa para a OpenAI, empresa dos Estados Unidos."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             NinaMark(size: 48, presence: .listening)
 
+            if store.aiConsentNoticeChanged {
+                Text("Este aviso mudou.")
+                    .ninaText(.label, NinaTheme.ink, weight: .semibold)
+            }
+
             Text("Antes de eu ler qualquer coisa.")
                 .ninaText(.screen)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Para eu entender o que você escreve, o texto sai do seu aparelho e vai para um modelo fora do Brasil. Você decide isso por conta própria, e cada adulto da casa decide a dele separado.")
+            Text(Self.lead)
                 .ninaText(.label, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 12) {
-                consentLine("Nada do que você manda fica guardado lá. A sua conversa não treina modelo nenhum.")
-                consentLine("A sua conversa é só sua. O outro adulto da casa não lê o que você escreve para mim.")
-                consentLine("Dá para desligar quando quiser, em Ajustes · Privacidade e dados. Aí eu paro de ler na hora.")
+                ForEach(Self.lines, id: \.self) { line in
+                    consentLine(line)
+                }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .ninaCard(fill: NinaTheme.grout, stroke: .clear)
 
+            transferBlock
+
             NinaButton(
                 title: "Aceitar e conversar com a Nina",
                 fillsWidth: true,
-                isEnabled: !store.isSyncingHome
+                isEnabled: authorizesTransfer && !store.isSyncingHome
             ) {
                 Haptics.lightImpact()
                 Task {
-                    if await store.grantAIMemoryConsent() {
+                    if await store.grantAIMemoryConsent(transferConsented: authorizesTransfer) {
                         Haptics.success()
+                        onGranted()
                     }
                 }
             }
@@ -256,6 +350,35 @@ private struct AIMemoryConsentCard: View {
                 openURL(NinaLegalLinks.privacyPolicy)
             }
         }
+    }
+
+    private var transferBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Eyebrow(text: "Envio para fora do Brasil")
+
+            Button {
+                Haptics.selection()
+                authorizesTransfer.toggle()
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
+                    NinaCheckbox(isOn: authorizesTransfer, isSquare: true)
+                    Text(Self.transferLine)
+                        .ninaText(.label, NinaTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Self.transferLine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(authorizesTransfer ? "Marcado" : "Desmarcado")
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
     }
 
     private func consentLine(_ text: String) -> some View {
@@ -566,7 +689,7 @@ private struct ChatInputBar: View {
                         .font(.system(size: 12, weight: .regular))
                         .foregroundStyle(NinaTheme.muted)
 
-                    Text("A foto não fica guardada em servidor nenhum.")
+                    Text("A Nina não guarda a foto. A OpenAI pode guardar por até 30 dias para evitar abuso.")
                         .ninaText(.meta, NinaTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -981,11 +1104,18 @@ private struct NinaTypingBubble: View {
 }
 
 private struct MessageBubble: View {
+    @Environment(AppStore.self) private var store
     var message: ChatMessage
     var showsDisclaimer: Bool
 
+    @State private var isReporting = false
+
     private var isNina: Bool {
         message.sender == .nina
+    }
+
+    private var canReport: Bool {
+        isNina && store.requiresAIMemoryConsent
     }
 
     var body: some View {
@@ -1046,6 +1176,106 @@ private struct MessageBubble: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(isNina ? "Nina" : "Você"): \(message.text)")
+        .contextMenu {
+            if canReport {
+                Button {
+                    Haptics.lightImpact()
+                    isReporting = true
+                } label: {
+                    Label("Denunciar resposta", systemImage: "flag")
+                }
+            }
+        }
+        .accessibilityActions {
+            if canReport {
+                Button("Denunciar resposta") {
+                    isReporting = true
+                }
+            }
+        }
+        .sheet(isPresented: $isReporting) {
+            ReportReplySheet(message: message)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+}
+
+// A report holds the reply and its message for review; the reason is one of four closed chips.
+private struct ReportReplySheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let message: ChatMessage
+
+    @State private var reason: NinaReplyReportReason?
+    @State private var isSending = false
+    @State private var didSend = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SheetHeader(eyebrow: "Denunciar resposta") { dismiss() }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if didSend {
+                        Text("Recebido. Vamos olhar.")
+                            .ninaText(.title)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        FlowChips(reasons: NinaReplyReportReason.allCases, selection: $reason)
+
+                        if let error = store.syncErrorMessage {
+                            Text(error)
+                                .ninaText(.caption, NinaTheme.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        NinaButton(
+                            title: "Enviar",
+                            fillsWidth: true,
+                            isEnabled: reason != nil,
+                            isPending: isSending
+                        ) {
+                            send()
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .ninaSheetBackground()
+    }
+
+    private func send() {
+        guard let reason, !isSending else { return }
+        isSending = true
+        Task {
+            let sent = await store.reportNinaReply(message, reason: reason)
+            isSending = false
+            didSend = sent
+        }
+    }
+}
+
+private struct FlowChips: View {
+    let reasons: [NinaReplyReportReason]
+    @Binding var selection: NinaReplyReportReason?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(reasons) { reason in
+                Button {
+                    Haptics.lightImpact()
+                    selection = reason
+                } label: {
+                    NinaChip(text: reason.title, isSet: selection == reason)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }
 
@@ -1857,5 +2087,7 @@ private extension Int {
 #Preview {
     NinaChatView()
         .environment(AppStore())
+        .environment(AuthSessionStore())
+        .environment(AgeCheckCoordinator())
         .environment(RouterPath())
 }

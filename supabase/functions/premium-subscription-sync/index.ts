@@ -9,6 +9,7 @@ import {
   isUUID,
   jsonResponse,
   parseConfiguredKey,
+  premiumSyncEligibility,
   readAppStoreJSONRequest,
   verificationFailureDetails,
   verifyTransaction,
@@ -70,6 +71,49 @@ Deno.serve(async (request: Request) => {
         environment: transaction.environment ?? null,
       }));
       return jsonResponse({ error: "app_account_token_mismatch" }, 403);
+    }
+
+    const originalTransactionID = transaction.originalTransactionId;
+    if (typeof originalTransactionID !== "string" || !originalTransactionID) {
+      throw new Error("missing_original_transaction_id");
+    }
+    const { data: recordedOriginal, error: recordedError } = await admin
+      .from("premium_subscriptions")
+      .select("original_transaction_id")
+      .eq("original_transaction_id", originalTransactionID)
+      .eq("user_id", userID)
+      .maybeSingle();
+    if (recordedError) {
+      console.error(JSON.stringify({
+        event: "premium_eligibility_check_failed",
+        code: recordedError.code,
+      }));
+      return jsonResponse({ error: "subscription_sync_failed" }, 503);
+    }
+
+    let buyerEligible = true;
+    if (!recordedOriginal) {
+      const { data: eligible, error: eligibilityError } = await admin.rpc(
+        "premium_buyer_is_eligible",
+        { target_user_id: userID },
+      );
+      if (eligibilityError) {
+        console.error(JSON.stringify({
+          event: "premium_eligibility_check_failed",
+          code: eligibilityError.code,
+        }));
+        return jsonResponse({ error: "subscription_sync_failed" }, 503);
+      }
+      buyerEligible = eligible === true;
+    }
+
+    if (
+      premiumSyncEligibility({
+        originalRecordedForUser: Boolean(recordedOriginal),
+        buyerEligible,
+      }) === "premium_requires_adult"
+    ) {
+      return jsonResponse({ error: "premium_requires_adult" }, 403);
     }
 
     const source = body.source?.slice(0, 80) || "app_sync";

@@ -45,6 +45,18 @@ enum ChildDayTap: Equatable {
 enum ChildDay {
     static let rowsPerPrintedPage = 10
 
+    // Any adult may show the list, but only for a profile without an account whose consent is on record.
+    static func canShow(_ member: HouseholdMember) -> Bool {
+        member.role.isMinorRole
+            && member.userID == nil
+            && member.minorAccess?.hasProfileConsent == true
+    }
+
+    // Print and share take the list off the phone, so only that child's live guardian may use them.
+    static func canPrintOrShare(_ member: HouseholdMember) -> Bool {
+        canShow(member) && member.minorAccess?.isViewerGuardian == true
+    }
+
     // A list that leaves the phone must say whose it is: a namesake's list never carries the same name.
     static func displayName(for child: HouseholdMember, among members: [HouseholdMember]) -> String {
         let name = child.name.trimmingCharacters(in: .whitespacesAndNewlines)

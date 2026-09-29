@@ -9,6 +9,7 @@ struct NinaApp: App {
     @State private var premiumSubscriptionStore: PremiumSubscriptionStore
     @State private var backendDiagnostics: BackendDiagnosticsStore
     @State private var inviteLinkStore = InviteLinkStore()
+    @State private var ageCheck: AgeCheckCoordinator
 
     init() {
         try? PrivacyExportFileStore.removeAll()
@@ -37,6 +38,12 @@ struct NinaApp: App {
                 backend: BackendServices.makePremiumSubscriptionBackend(diagnostics: diagnostics)
             )
         )
+        _ageCheck = State(
+            initialValue: AgeCheckCoordinator(
+                provider: BackendServices.makeAgeRangeProvider(),
+                submitter: BackendServices.makeAgeSignalSubmitter(diagnostics: diagnostics)
+            )
+        )
     }
 
     var body: some Scene {
@@ -56,6 +63,7 @@ struct NinaApp: App {
                 .environment(premiumSubscriptionStore)
                 .environment(backendDiagnostics)
                 .environment(inviteLinkStore)
+                .environment(ageCheck)
                 .onOpenURL { url in
                     inviteLinkStore.receive(url)
                 }

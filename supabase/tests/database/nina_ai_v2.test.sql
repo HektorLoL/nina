@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(105);
+select plan(107);
 
 insert into auth.users (
   id,
@@ -50,6 +50,16 @@ values
     now(),
     now()
   );
+
+-- Every fixture account is an Apple-confirmed adult unless a test says otherwise.
+insert into private.account_age_status (user_id, status, assurance, recheck_after)
+select users.id, 'adult', 'confirmed', now() + interval '180 days'
+from auth.users as users
+on conflict (user_id) do nothing;
+
+update private.account_age_status
+set status = 'minor', minor_band = 'under_12', assurance = 'self_declared', minor_since = now()
+where user_id = '61000000-0000-0000-0000-000000000003';
 
 insert into public.families (id, name, invite_code, created_by)
 values
@@ -132,7 +142,7 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$select public.record_nina_ai_consent('2026-06-16', true)$$,
+  $$select public.record_nina_ai_consent('2026-09-29', true, true)$$,
   '42501',
   'nina_adult_access_required',
   'a child profile cannot consent to Nina on behalf of the household'
@@ -141,14 +151,14 @@ select throws_ok(
 set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
 
 select is(
-  public.record_nina_ai_consent('2026-06-16', true) -> 'ai_consent' ->> 'is_granted',
+  public.record_nina_ai_consent('2026-09-29', true, true) -> 'ai_consent' ->> 'is_granted',
   'true',
   'an adult records server side consent to Nina'
 );
 
 select is(
   public.get_current_home_context() -> 'ai_consent' ->> 'policy_version',
-  '2026-06-16',
+  '2026-09-29',
   'the household context carries the policy version the adult accepted'
 );
 
@@ -157,8 +167,8 @@ select is(
     select count(*)::integer
     from jsonb_object_keys(public.get_current_home_context() -> 'ai_consent')
   ),
-  3,
-  'the AI consent block exposes exactly three fields'
+  7,
+  'the AI consent block exposes exactly its seven fields'
 );
 
 select lives_ok(
@@ -192,7 +202,7 @@ select set_config(
 set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
 
 select is(
-  public.record_nina_ai_consent('2026-06-16', true) -> 'ai_consent' ->> 'is_granted',
+  public.record_nina_ai_consent('2026-09-29', true, true) -> 'ai_consent' ->> 'is_granted',
   'true',
   'the second adult records their own consent'
 );
@@ -1351,7 +1361,7 @@ set local role authenticated;
 set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
 
 select is(
-  public.record_nina_ai_consent('2026-06-16', false) -> 'ai_consent' ->> 'is_granted',
+  public.record_nina_ai_consent('2026-09-29', false) -> 'ai_consent' ->> 'is_granted',
   'false',
   'withdrawing consent clears the household context signal'
 );
@@ -1398,14 +1408,14 @@ select ok(
 set local role service_role;
 
 select ok(
-  exists (
+  not exists (
     select 1
     from jsonb_array_elements(
       public.get_nina_weekly_candidates()
     ) as candidate(metrics)
     where candidate.metrics ->> 'family_id' = '62000000-0000-0000-0000-000000000001'
   ),
-  'a household keeps its weekly digest while another adult still consents'
+  'a household left with one consenting carrier gets no weekly digest, because a comparison of one is a portrait of a person'
 );
 
 reset role;
@@ -1413,7 +1423,7 @@ set local role authenticated;
 set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
 
 select is(
-  public.record_nina_ai_consent('2026-06-16', false) -> 'ai_consent' ->> 'is_granted',
+  public.record_nina_ai_consent('2026-09-29', false) -> 'ai_consent' ->> 'is_granted',
   'false',
   'the second adult withdraws consent as well'
 );
@@ -1437,7 +1447,7 @@ set local role authenticated;
 set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000002';
 
 select is(
-  public.record_nina_ai_consent('2026-06-16', true) -> 'ai_consent' ->> 'is_granted',
+  public.record_nina_ai_consent('2026-09-29', true, true) -> 'ai_consent' ->> 'is_granted',
   'true',
   'an adult can consent again after withdrawing'
 );
@@ -1459,6 +1469,30 @@ select is(
 set local role service_role;
 
 select ok(
+  not exists (
+    select 1
+    from jsonb_array_elements(
+      public.get_nina_weekly_candidates()
+    ) as candidate(metrics)
+    where candidate.metrics ->> 'family_id' = '62000000-0000-0000-0000-000000000001'
+  ),
+  'one adult consenting again is still not enough for the weekly digest'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select is(
+  public.record_nina_ai_consent('2026-09-29', true, true) -> 'ai_consent' ->> 'is_current',
+  'true',
+  'the first adult consents again at the current version with the transfer'
+);
+
+reset role;
+set local role service_role;
+
+select ok(
   exists (
     select 1
     from jsonb_array_elements(
@@ -1466,7 +1500,7 @@ select ok(
     ) as candidate(metrics)
     where candidate.metrics ->> 'family_id' = '62000000-0000-0000-0000-000000000001'
   ),
-  'the household returns as a weekly digest candidate once an adult consents again'
+  'the household returns as a weekly digest candidate once two adults consent again'
 );
 
 reset role;
@@ -1546,7 +1580,7 @@ select ok(
 select ok(
   has_function_privilege(
     'authenticated',
-    'public.record_nina_ai_consent(text,boolean)',
+    'public.record_nina_ai_consent(text,boolean,boolean)',
     'execute'
   ),
   'an adult records their own AI consent through the client role'
@@ -1555,7 +1589,7 @@ select ok(
 select ok(
   not has_function_privilege(
     'anon',
-    'public.record_nina_ai_consent(text,boolean)',
+    'public.record_nina_ai_consent(text,boolean,boolean)',
     'execute'
   ),
   'anonymous callers cannot record AI consent'
@@ -1564,7 +1598,7 @@ select ok(
 select ok(
   not has_function_privilege(
     'service_role',
-    'public.record_nina_ai_consent(text,boolean)',
+    'public.record_nina_ai_consent(text,boolean,boolean)',
     'execute'
   ),
   'no server path records AI consent on behalf of a person'

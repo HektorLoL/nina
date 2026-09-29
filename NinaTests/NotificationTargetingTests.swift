@@ -305,6 +305,52 @@ final class NotificationTargetingTests: XCTestCase {
         )
     }
 
+    func testAMinorsDeviceGetsNoNudgesANeutralBodyAndForcedQuietHours() {
+        let memberID = UUID()
+        var urgent = homeTask(owner: "Bia", dueAt: date(year: 2026, month: 8, day: 8, hour: 22, minute: 15))
+        urgent.title = "Guardar a mochila"
+        urgent.ownerMemberID = memberID
+        urgent.priority = .urgent
+        var afternoon = homeTask(owner: "Bia", dueAt: date(year: 2026, month: 8, day: 8, hour: 15, minute: 0))
+        afternoon.title = "Regar as plantas"
+        afternoon.ownerMemberID = memberID
+        let viewer = HomeNotificationViewer(
+            memberID: memberID,
+            name: "Bia",
+            minorPolicy: MinorNotificationPolicy(alertsEnabled: true, quietStart: 21 * 60, quietEnd: 7 * 60)
+        )
+
+        let planned = LocalHomeNotificationScheduler.plannedNotifications(
+            tasks: [urgent, afternoon],
+            familyID: familyID,
+            viewer: viewer,
+            now: now,
+            defaults: defaults,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(planned.count, 2)
+        XCTAssertTrue(planned.allSatisfy { $0.kind == .alert })
+        XCTAssertEqual(planned.map(\.body), ["Regar as plantas · 15:00", "Guardar a mochila · 22:15"])
+        XCTAssertTrue(planned.allSatisfy { $0.title.isEmpty })
+        XCTAssertFalse(planned.contains { $0.body.contains("Ficou com você") || $0.body.contains("dono") })
+        XCTAssertEqual(planned.map(\.isSilent), [false, true])
+
+        let silenced = LocalHomeNotificationScheduler.plannedNotifications(
+            tasks: [urgent, afternoon],
+            familyID: familyID,
+            viewer: HomeNotificationViewer(
+                memberID: memberID,
+                name: "Bia",
+                minorPolicy: MinorNotificationPolicy(alertsEnabled: false, quietStart: 21 * 60, quietEnd: 7 * 60)
+            ),
+            now: now,
+            defaults: defaults,
+            calendar: calendar
+        )
+        XCTAssertTrue(silenced.isEmpty)
+    }
+
     private func plan(_ tasks: [TaskItem]) -> [ScheduledNotification] {
         LocalHomeNotificationScheduler.plannedNotifications(
             tasks: tasks,

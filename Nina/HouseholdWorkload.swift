@@ -77,6 +77,9 @@ enum HouseholdWorkload {
         let people = members.filter { $0.role != .assistant }
         let resolver = TaskOwnerResolver(people: people)
         let committedOpenTasks = tasks.filter { !$0.isDone && $0.kind == .task }
+        // Children, teens and anyone whose role this build cannot read are never drawn and never counted.
+        let carrierPeople = people.filter { $0.role.isWorkloadCarrier }
+        let carrierIDs = Set(carrierPeople.map(\.id))
 
         var countsByOwner: [TaskOwnerBucket: Int] = [:]
         var sharedCount = 0
@@ -87,11 +90,12 @@ enum HouseholdWorkload {
             case .shared, .label:
                 sharedCount += 1
             case .member(let memberID):
+                guard carrierIDs.contains(memberID) else { continue }
                 countsByOwner[.member(memberID), default: 0] += 1
             }
         }
 
-        var entries = people.map { person in
+        var entries = carrierPeople.map { person in
             HouseholdWorkloadEntry(
                 memberID: person.id,
                 name: resolver.displayName(for: person),

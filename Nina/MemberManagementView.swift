@@ -7,6 +7,7 @@ enum MemberEditorMode: Hashable {
 
 struct MemberEditorSheet: View {
     @Environment(AppStore.self) private var store
+    @Environment(RouterPath.self) private var router
     @Environment(\.dismiss) private var dismiss
 
     let mode: MemberEditorMode
@@ -24,6 +25,7 @@ struct MemberEditorSheet: View {
     @State private var didLoad = false
     @State private var isSaving = false
     @State private var isShowingRemoveConfirmation = false
+    @State private var guardianSheet: GuardianSheetMode?
     @FocusState private var isNameFocused: Bool
 
     private var member: HouseholdMember? {
@@ -38,7 +40,7 @@ struct MemberEditorSheet: View {
     private var canEdit: Bool {
         switch mode {
         case .addProfile:
-            store.canManageFamily && store.canInviteMorePeople
+            (store.canManageFamily || store.canActForMinors) && store.canInviteMorePeople
         case .edit:
             member.map(store.canEditFamilyMember) == true
         }
@@ -73,6 +75,14 @@ struct MemberEditorSheet: View {
             if isAdding {
                 isNameFocused = true
             }
+        }
+        .sheet(item: $guardianSheet) { mode in
+            NavigationStack {
+                GuardianApprovalSheet(mode: mode) {
+                    dismiss()
+                }
+            }
+            .presentationDragIndicator(.visible)
         }
         .alert("Remover esta pessoa?", isPresented: $isShowingRemoveConfirmation) {
             Button("Cancelar", role: .cancel) {}
@@ -122,7 +132,7 @@ struct MemberEditorSheet: View {
                 Text(displayName).ninaText(.title)
             }
 
-            if isAdding {
+            if isAdding, householdRole != .adult {
                 Text("Os adultos cuidam deste perfil. Não usa o app.")
                     .ninaText(.caption, NinaTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -148,7 +158,7 @@ struct MemberEditorSheet: View {
             .disabled(isNameLocked)
             .opacity(isNameLocked ? 0.4 : 1)
 
-            if householdRole == .adult {
+            if householdRole == .adult, !isAdding {
                 MemberField_(title: "Na casa") {
                     TextField("Esposa, marido, avó", text: $relationship)
                         .submitLabel(.done)
@@ -166,16 +176,15 @@ struct MemberEditorSheet: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Eyebrow(text: "Tipo")
 
-                    HStack(spacing: 8) {
-                        ForEach(availableHouseholdRoles) { role in
-                            Button {
-                                Haptics.lightImpact()
-                                householdRole = role
-                            } label: {
-                                NinaChip(text: role.title, isSet: householdRole == role)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { roleChips }
+                        VStack(alignment: .leading, spacing: 8) { roleChips }
+                    }
+
+                    if isAdding, !store.canActForMinors {
+                        Text("Só um responsável com idade confirmada pela Apple cadastra.")
+                            .ninaText(.caption, NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -218,8 +227,34 @@ struct MemberEditorSheet: View {
     }
 
     @ViewBuilder
+    private var roleChips: some View {
+        ForEach(availableHouseholdRoles) { role in
+            let isEnabled = isRoleAvailable(role)
+            Button {
+                Haptics.lightImpact()
+                householdRole = role
+            } label: {
+                NinaChip(text: role.title, isSet: householdRole == role, isDisabled: !isEnabled)
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEnabled)
+        }
+    }
+
+    // Children and teens are registered only by a guardian Apple confirmed; a pet only by who runs the house.
+    private func isRoleAvailable(_ role: HouseholdRole) -> Bool {
+        guard isAdding else { return true }
+        switch role {
+        case .teen, .child: return store.canActForMinors
+        case .pet: return store.canManageFamily
+        case .adult: return true
+        case .assistant, .unrecognized: return false
+        }
+    }
+
+    @ViewBuilder
     private var careFields: some View {
-        if householdRole == .child || householdRole == .pet {
+        if householdRole == .pet {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(isOn: $hasBirthDate) {
                     Text("Data de nascimento").ninaText(.label)
@@ -256,7 +291,7 @@ struct MemberEditorSheet: View {
             }
             .disabled(!canEdit)
             .opacity(canEdit ? 1 : 0.4)
-        } else if member != nil {
+        } else if member != nil, !householdRole.isMinorRole {
             MemberField_(title: "O que a Nina lembra") {
                 TextField("Horários, preferências", text: $memoryNote, axis: .vertical)
                     .lineLimit(3...6)
@@ -304,7 +339,17 @@ struct MemberEditorSheet: View {
     @ViewBuilder
     private var actions: some View {
         VStack(spacing: 8) {
-            if canEdit {
+            if isAdding, householdRole == .adult {
+                Text("Adultos entram por convite.")
+                    .ninaText(.label, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                NinaButton(title: "Convidar", fillsWidth: true, isEnabled: store.canInviteMorePeople) {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .inviteFamily
+                }
+            } else if canEdit {
                 NinaButton(
                     title: isSaving ? "Salvando" : saveButtonTitle,
                     systemName: "checkmark",
@@ -346,8 +391,11 @@ struct MemberEditorSheet: View {
             identityState: member?.identityState ?? .unclaimed,
             tone: tone,
             taskCount: member?.taskCount ?? 0,
-            memoryNote: MemberRecollection.storedNote(memoryNote, for: householdRole),
-            birthDate: hasBirthDate ? birthDate : nil,
+            memoryNote: MemberRecollection.storedNote(
+                memoryNote,
+                for: householdRole.isMinorRole ? .child : householdRole
+            ),
+            birthDate: hasBirthDate && householdRole == .pet ? birthDate : nil,
             petSpecies: householdRole == .pet ? petSpecies : "",
             petBreed: householdRole == .pet ? petBreed : ""
         )
@@ -360,24 +408,30 @@ struct MemberEditorSheet: View {
         return first.uppercased() + species.dropFirst()
     }
 
+    // A child or teen row keeps its role; an adult or pet row can never become one.
     private var availableHouseholdRoles: [HouseholdRole] {
         switch mode {
         case .addProfile:
-            [.child, .pet]
+            HouseholdRole.editorRoles
         case .edit:
-            [.adult, .child, .pet]
+            member?.role.isMinorRole == true ? [] : [.adult, .pet]
         }
     }
 
     private var saveButtonTitle: String {
         switch mode {
-        case .addProfile: "Adicionar perfil"
+        case .addProfile: householdRole.isMinorRole ? "Continuar" : "Adicionar perfil"
         case .edit: "Salvar"
         }
     }
 
     private var defaultName: String {
-        householdRole == .pet ? "Novo pet" : "Nova criança"
+        switch householdRole {
+        case .pet: "Novo pet"
+        case .teen: "Novo adolescente"
+        case .child: "Nova criança"
+        case .adult, .assistant, .unrecognized: "Nova pessoa"
+        }
     }
 
     private var displayName: String {
@@ -403,9 +457,9 @@ struct MemberEditorSheet: View {
 
         switch mode {
         case .addProfile:
-            householdRole = .child
-            relationship = "Criança"
-            tone = .amber
+            householdRole = store.canActForMinors ? .child : (store.canManageFamily ? .pet : .adult)
+            relationship = householdRole == .pet ? "Pet" : "Criança"
+            tone = householdRole == .pet ? .lavender : .amber
         case .edit:
             guard let member else { return }
             name = member.name
@@ -427,6 +481,11 @@ struct MemberEditorSheet: View {
 
     private func save() {
         guard canSave, !isSaving else { return }
+        if isAdding, householdRole.isMinorRole {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guardianSheet = .newProfile(name: trimmed, band: householdRole == .child ? .under12 : nil)
+            return
+        }
         isSaving = true
 
         Task {
@@ -475,7 +534,7 @@ struct MemberEditorSheet: View {
         to newRole: HouseholdRole
     ) {
         let trimmedRelationship = relationship.trimmingCharacters(in: .whitespacesAndNewlines)
-        let oldDefault = oldRole == .pet ? "Pet" : "Criança"
+        let oldDefault = oldRole == .pet ? "Pet" : oldRole.title
         guard trimmedRelationship.isEmpty || trimmedRelationship == oldDefault else { return }
 
         switch newRole {
@@ -483,7 +542,9 @@ struct MemberEditorSheet: View {
             relationship = "Pet"
         case .child:
             relationship = "Criança"
-        case .adult, .assistant:
+        case .teen:
+            relationship = "Adolescente"
+        case .adult, .assistant, .unrecognized:
             break
         }
     }
@@ -496,9 +557,14 @@ struct PendingJoinRequestCard: View {
     @State private var permissionRole: FamilyPermissionRole = .member
     @State private var isWorking = false
     @State private var isShowingDeclineConfirmation = false
+    @State private var guardianSheet: GuardianSheetMode?
 
     private var isBusy: Bool {
         isWorking || store.isSyncingHome
+    }
+
+    private var isAdultRequester: Bool {
+        request.requesterAge.isAdult
     }
 
     var body: some View {
@@ -512,36 +578,17 @@ struct PendingJoinRequestCard: View {
                 EmptyView()
             }
 
-            if store.canChangeFamilyPermissions {
-                VStack(alignment: .leading, spacing: 8) {
-                    Eyebrow(text: "Entra como")
+            // The tag is the live reading, never the snapshot taken when the request was sent.
+            Text(request.requesterAge.tag)
+                .ninaText(.caption, NinaTheme.ink, weight: .semibold)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 28)
+                .background(NinaTheme.grout, in: Capsule())
 
-                    HStack(spacing: 8) {
-                        permissionChip(.member)
-                        permissionChip(.admin)
-                    }
-
-                    if permissionRole == .admin {
-                        Text(permissionRole.summary)
-                            .ninaText(.caption, NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-
-            HStack(spacing: 10) {
-                NinaButton(
-                    title: store.canInviteMorePeople ? "Aprovar" : "Casa cheia",
-                    fillsWidth: true,
-                    isEnabled: store.canInviteMorePeople && !isBusy
-                ) {
-                    approve()
-                }
-
-                NinaButton(title: "Recusar", kind: .outline, isEnabled: !isBusy) {
-                    Haptics.warning()
-                    isShowingDeclineConfirmation = true
-                }
+            if isAdultRequester {
+                adultApproval
+            } else {
+                guardianApproval
             }
         }
         .padding(18)
@@ -554,6 +601,82 @@ struct PendingJoinRequestCard: View {
             }
         } message: {
             Text("\(request.requesterName) não recebe acesso à casa.")
+        }
+        .sheet(item: $guardianSheet) { mode in
+            NavigationStack {
+                GuardianApprovalSheet(mode: mode)
+            }
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    @ViewBuilder
+    private var adultApproval: some View {
+        if store.canChangeFamilyPermissions {
+            VStack(alignment: .leading, spacing: 8) {
+                Eyebrow(text: "Entra como")
+
+                HStack(spacing: 8) {
+                    permissionChip(.member)
+                    permissionChip(.admin)
+                }
+
+                if permissionRole == .admin {
+                    Text(permissionRole.summary)
+                        .ninaText(.caption, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+
+        HStack(spacing: 10) {
+            NinaButton(
+                title: store.canInviteMorePeople ? "Aprovar" : "Casa cheia",
+                fillsWidth: true,
+                isEnabled: store.canInviteMorePeople && !isBusy
+            ) {
+                approve()
+            }
+
+            declineButton
+        }
+    }
+
+    // A minor or a person of unknown age enters only as a member, approved by a guardian Apple confirmed.
+    @ViewBuilder
+    private var guardianApproval: some View {
+        if !store.canActForMinors {
+            Text("Isso pede idade confirmada pela Apple.")
+                .ninaText(.caption, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                guardianButton
+                declineButton
+            }
+            VStack(spacing: 10) {
+                guardianButton
+                declineButton
+            }
+        }
+    }
+
+    private var guardianButton: some View {
+        NinaButton(
+            title: store.canInviteMorePeople ? "Aprovar como responsável" : "Casa cheia",
+            fillsWidth: true,
+            isEnabled: store.canInviteMorePeople && store.canActForMinors && !isBusy
+        ) {
+            guardianSheet = .approval(request)
+        }
+    }
+
+    private var declineButton: some View {
+        NinaButton(title: "Recusar", kind: .outline, isEnabled: !isBusy) {
+            Haptics.warning()
+            isShowingDeclineConfirmation = true
         }
     }
 
@@ -568,7 +691,7 @@ struct PendingJoinRequestCard: View {
     }
 
     private func approve() {
-        guard !isWorking, store.canInviteMorePeople else { return }
+        guard !isWorking, store.canInviteMorePeople, isAdultRequester else { return }
         isWorking = true
         Task {
             let success = await store.approveJoinRequest(request, permissionRole: permissionRole)
@@ -598,6 +721,7 @@ struct PendingHomeApprovalView: View {
     @Environment(OnboardingStore.self) private var onboardingStore
 
     @State private var isCancelling = false
+    @State private var isShowingDeletion = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -645,6 +769,11 @@ struct PendingHomeApprovalView: View {
                             await authSession.signOut()
                         }
                     }
+
+                    NinaButton(title: "Apagar conta", kind: .quiet) {
+                        Haptics.lightImpact()
+                        isShowingDeletion = true
+                    }
                     .padding(.bottom, 12)
                 }
                 .padding(.horizontal, 20)
@@ -653,6 +782,7 @@ struct PendingHomeApprovalView: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .ninaScreenBackground()
+        .accountDeletionSheet(isPresented: $isShowingDeletion)
         // Nobody should have to tap "Atualizar" to learn they were let in.
         .task {
             while !Task.isCancelled {
@@ -687,6 +817,7 @@ struct FamilyAccessDecisionView: View {
     @Environment(OnboardingStore.self) private var onboardingStore
 
     @State private var isAcknowledging = false
+    @State private var isShowingDeletion = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -731,6 +862,11 @@ struct FamilyAccessDecisionView: View {
                             await authSession.signOut()
                         }
                     }
+
+                    NinaButton(title: "Apagar conta", kind: .quiet) {
+                        Haptics.lightImpact()
+                        isShowingDeletion = true
+                    }
                     .padding(.bottom, 12)
                 }
                 .padding(.horizontal, 20)
@@ -739,6 +875,7 @@ struct FamilyAccessDecisionView: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .ninaScreenBackground()
+        .accountDeletionSheet(isPresented: $isShowingDeletion)
     }
 
     private var outcome: FamilyAccessOutcome {

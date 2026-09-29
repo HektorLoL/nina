@@ -182,6 +182,19 @@ export function verificationFailureDetails(
   return { error: message, status, cause };
 }
 
+export type PremiumSyncEligibility = "allowed" | "premium_requires_adult";
+
+// A renewal or restore of an original already recorded for this account is
+// always honored; only a new original needs an account the server lets buy.
+export function premiumSyncEligibility(input: {
+  originalRecordedForUser: boolean;
+  buyerEligible: boolean;
+}): PremiumSyncEligibility {
+  return input.originalRecordedForUser || input.buyerEligible
+    ? "allowed"
+    : "premium_requires_adult";
+}
+
 export function isPremiumSyncRequest(value: unknown): value is {
   signed_transaction_info: string;
   source?: string;

@@ -5,7 +5,9 @@ interface ImportMetaEnv {
   readonly PUBLIC_NINA_APP_STORE_ID?: string;
   readonly PUBLIC_NINA_LEGAL_ENTITY_NAME?: string;
   readonly PUBLIC_NINA_LEGAL_ENTITY_DOCUMENT?: string;
+  readonly PUBLIC_NINA_LEGAL_ENTITY_ADDRESS?: string;
   readonly PUBLIC_NINA_PRIVACY_CONTACT_EMAIL?: string;
+  readonly PUBLIC_NINA_REPORT_CONTACT_EMAIL?: string;
   readonly PUBLIC_NINA_DPO_NAME?: string;
   readonly PUBLIC_NINA_DPO_CONTACT_EMAIL?: string;
 }

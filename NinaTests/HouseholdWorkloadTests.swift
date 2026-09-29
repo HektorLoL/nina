@@ -322,6 +322,33 @@ final class HouseholdWorkloadTests: XCTestCase {
         XCTAssertTrue(HouseholdWorkload.assignedTasks(to: secondAna, in: tasks, members: members).isEmpty)
     }
 
+    func testChildrenTeensAndUnreadableRolesAreNeverCarriersNorCountedAsTheHouse() {
+        let ana = member(named: "Ana", tone: .mint)
+        let bruno = member(named: "Bruno", tone: .sky)
+        let pedro = member(named: "Pedro", tone: .amber, role: .child)
+        let bia = member(named: "Bia", tone: .coral, role: .teen)
+        let stranger = member(named: "Ciro", tone: .lavender, role: .unrecognized)
+        let members = [ana, bruno, pedro, bia, stranger]
+        let minorsWork = (0..<10).flatMap { _ in
+            [
+                openTask(owner: "Pedro", ownerMemberID: pedro.id),
+                openTask(owner: "Bia", ownerMemberID: bia.id),
+                openTask(owner: "Ciro", ownerMemberID: stranger.id)
+            ]
+        }
+        let adultsWork = [
+            openTask(owner: "Ana", ownerMemberID: ana.id),
+            openTask(owner: "Bruno", ownerMemberID: bruno.id)
+        ]
+
+        let snapshot = HouseholdWorkload.snapshot(tasks: minorsWork + adultsWork, members: members)
+
+        XCTAssertEqual(Set(snapshot.entries.compactMap(\.memberID)), [ana.id, bruno.id])
+        XCTAssertEqual(snapshot.sharedCount, 0)
+        XCTAssertEqual(snapshot.assignedCount, 2)
+        XCTAssertFalse(snapshot.isConclusive)
+    }
+
     private func openTask(owner: String, ownerMemberID: UUID? = nil, kind: TaskKind = .task) -> TaskItem {
         TaskItem(
             kind: kind,

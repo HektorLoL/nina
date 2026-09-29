@@ -1,3 +1,5 @@
+import type { AppleRevocationResult } from "./apple-sign-in-revocation.ts";
+
 export const deleteAccountConfirmation = "delete";
 export const maxDeleteAccountRequestBytes = 1_024;
 
@@ -6,9 +8,14 @@ const profilePhotoPageSize = 1_000;
 const profilePhotoRemovalBatchSize = 100;
 const maxProfilePhotoCount = 10_000;
 
+const appleAuthorizationCodePattern = /^[A-Za-z0-9._-]{1,512}$/;
+const lowercaseUUIDPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 export type DeleteAccountFailureStage =
   | "configuration"
   | "authentication"
+  | "guardian_authorization"
   | "profile_photos"
   | "database"
   | "auth_user";
@@ -18,8 +25,22 @@ export type DeleteAccountFailureEvent = {
   stage: DeleteAccountFailureStage;
 };
 
+export type AppleTokenRevocationFailureEvent = {
+  requestID: string;
+  stage: "configuration" | "token_exchange" | "revoke";
+};
+
+export type DeleteAccountRequestBody =
+  | { mode: "self"; appleAuthorizationCode?: string }
+  | { mode: "guardian"; memberID: string };
+
 export interface DeleteAccountBackend {
   authenticatedUserID(accessToken: string): Promise<string | null>;
+  // Null means the caller is not a live guardian of that claimed minor.
+  authorizeGuardianAccountDeletion(
+    guardianUserID: string,
+    memberID: string,
+  ): Promise<string | null>;
   listProfilePhotoNames(
     userID: string,
     offset: number,
@@ -32,8 +53,12 @@ export interface DeleteAccountBackend {
 
 export type DeleteAccountDependencies = {
   backend?: DeleteAccountBackend;
+  revokeAppleToken?: (
+    authorizationCode: string,
+  ) => Promise<AppleRevocationResult>;
   makeRequestID?: () => string;
   logFailure?: (event: DeleteAccountFailureEvent) => void;
+  logRevocationFailure?: (event: AppleTokenRevocationFailureEvent) => void;
 };
 
 function responseHeaders(
@@ -139,8 +164,51 @@ async function readBoundedBody(request: Request): Promise<string | null> {
 }
 
 type ConfirmationResult =
-  | { ok: true }
+  | { ok: true; body: DeleteAccountRequestBody }
   | { ok: false; response: Response };
+
+export function parseDeleteAccountBody(
+  payload: unknown,
+): DeleteAccountRequestBody | null {
+  if (
+    typeof payload !== "object" || payload === null || Array.isArray(payload)
+  ) {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  if (record.confirmation !== deleteAccountConfirmation) return null;
+
+  if (keys.length === 1 && keys[0] === "confirmation") {
+    return { mode: "self" };
+  }
+
+  if (
+    keys.length === 2 &&
+    keys[0] === "apple_authorization_code" &&
+    keys[1] === "confirmation" &&
+    typeof record.apple_authorization_code === "string" &&
+    appleAuthorizationCodePattern.test(record.apple_authorization_code)
+  ) {
+    return {
+      mode: "self",
+      appleAuthorizationCode: record.apple_authorization_code,
+    };
+  }
+
+  if (
+    keys.length === 2 &&
+    keys[0] === "confirmation" &&
+    keys[1] === "member_id" &&
+    typeof record.member_id === "string" &&
+    lowercaseUUIDPattern.test(record.member_id)
+  ) {
+    return { mode: "guardian", memberID: record.member_id };
+  }
+
+  return null;
+}
 
 async function requireConfirmation(
   request: Request,
@@ -179,9 +247,8 @@ async function requireConfirmation(
     };
   }
 
-  if (
-    typeof payload !== "object" || payload === null || Array.isArray(payload)
-  ) {
+  const parsed = parseDeleteAccountBody(payload);
+  if (!parsed) {
     return {
       ok: false,
       response: jsonResponse(
@@ -192,23 +259,7 @@ async function requireConfirmation(
     };
   }
 
-  const keys = Object.keys(payload);
-  if (
-    keys.length !== 1 || keys[0] !== "confirmation" ||
-    (payload as Record<string, unknown>).confirmation !==
-      deleteAccountConfirmation
-  ) {
-    return {
-      ok: false,
-      response: jsonResponse(
-        requestID,
-        { error: "confirmation_required" },
-        400,
-      ),
-    };
-  }
-
-  return { ok: true };
+  return { ok: true, body: parsed };
 }
 
 function isSafeProfilePhotoName(name: unknown): name is string {
@@ -226,8 +277,13 @@ function isSafeProfilePhotoName(name: unknown): name is string {
   return true;
 }
 
-async function deleteProfilePhotos(
-  backend: DeleteAccountBackend,
+export type ProfilePhotoStore = Pick<
+  DeleteAccountBackend,
+  "listProfilePhotoNames" | "removeProfilePhotoPaths"
+>;
+
+export async function deleteProfilePhotos(
+  backend: ProfilePhotoStore,
   userID: string,
 ) {
   const names: string[] = [];
@@ -305,20 +361,43 @@ export async function handleDeleteAccountRequest(
     );
   }
 
-  let userID: string | null;
+  let callerID: string | null;
   try {
-    userID = await backend.authenticatedUserID(accessToken);
+    callerID = await backend.authenticatedUserID(accessToken);
   } catch {
     reportFailure(dependencies, requestID, "authentication");
     return failureResponse(requestID);
   }
 
-  if (!userID) {
+  if (!callerID) {
     return jsonResponse(requestID, { error: "not_authenticated" }, 401);
   }
-  if (!isUUID(userID)) {
+  if (!isUUID(callerID)) {
     reportFailure(dependencies, requestID, "authentication");
     return failureResponse(requestID);
+  }
+
+  const body = confirmation.body;
+  let userID = callerID;
+  if (body.mode === "guardian") {
+    let wardID: string | null;
+    try {
+      wardID = await backend.authorizeGuardianAccountDeletion(
+        callerID,
+        body.memberID,
+      );
+    } catch {
+      reportFailure(dependencies, requestID, "guardian_authorization");
+      return failureResponse(requestID);
+    }
+    if (!wardID) {
+      return jsonResponse(requestID, { error: "guardian_access_denied" }, 403);
+    }
+    if (!isUUID(wardID) || wardID === callerID) {
+      reportFailure(dependencies, requestID, "guardian_authorization");
+      return failureResponse(requestID);
+    }
+    userID = wardID;
   }
 
   try {
@@ -342,5 +421,70 @@ export async function handleDeleteAccountRequest(
     return failureResponse(requestID);
   }
 
+  // The Apple token is revoked only after the account is gone, so revocation
+  // can never block, undo or change the answer to a deletion.
+  if (body.mode === "self" && body.appleAuthorizationCode) {
+    await revokeAfterDeletion(
+      dependencies,
+      requestID,
+      body.appleAuthorizationCode,
+    );
+  }
+
   return jsonResponse(requestID, { deleted: true });
+}
+
+async function revokeAfterDeletion(
+  dependencies: DeleteAccountDependencies,
+  requestID: string,
+  authorizationCode: string,
+) {
+  let result: AppleRevocationResult;
+  try {
+    result = dependencies.revokeAppleToken
+      ? await dependencies.revokeAppleToken(authorizationCode)
+      : { revoked: false, stage: "configuration" };
+  } catch {
+    result = { revoked: false, stage: "revoke" };
+  }
+  if (result.revoked) return;
+
+  try {
+    dependencies.logRevocationFailure?.({ requestID, stage: result.stage });
+  } catch {
+    // Logging must never change deletion behavior or expose the underlying error.
+  }
+}
+
+export type AccountDeletionStages = Pick<
+  DeleteAccountBackend,
+  | "listProfilePhotoNames"
+  | "removeProfilePhotoPaths"
+  | "prepareAccountDeletion"
+  | "deleteAuthUser"
+>;
+
+// Every deletion path, a person's own, a guardian's or maintenance's, runs
+// photos, then the database, then Auth, and stops at the first failure.
+export async function deleteAccountInOrder(
+  backend: AccountDeletionStages,
+  userID: string,
+): Promise<"profile_photos" | "database" | "auth_user" | null> {
+  if (!isUUID(userID)) return "database";
+  try {
+    await deleteProfilePhotos(backend, userID);
+  } catch {
+    return "profile_photos";
+  }
+  try {
+    await backend.prepareAccountDeletion(userID);
+  } catch {
+    return "database";
+  }
+  try {
+    await backend.deleteAuthUser(userID);
+  } catch {
+    return "auth_user";
+  }
+  return null;
 }

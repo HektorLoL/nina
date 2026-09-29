@@ -153,6 +153,121 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(payload, ["confirmation": "delete"])
     }
 
+    func testAppleIsAskedForANameAndAnEmailOnlyWhenTheDeviceReportedAnAdult() {
+        let adult = AgeReadingResult.reading(
+            AgeMapping(status: .adult, band: nil, assurance: .selfDeclared, parentalControlsActive: false)
+        )
+        let minor = AgeReadingResult.reading(
+            AgeMapping(status: .minor, band: .twelveToFifteen, assurance: .none, parentalControlsActive: false)
+        )
+        let unknown = AgeReadingResult.reading(
+            AgeMapping(status: .unknown, band: nil, assurance: .none, parentalControlsActive: false)
+        )
+
+        XCTAssertEqual(LoginView.requestedScopes(for: adult), [.fullName, .email])
+        XCTAssertEqual(LoginView.requestedScopes(for: minor), [])
+        XCTAssertEqual(LoginView.requestedScopes(for: unknown), [])
+        XCTAssertEqual(LoginView.requestedScopes(for: .unavailable), [])
+        XCTAssertEqual(LoginView.requestedScopes(for: nil), [])
+    }
+
+    func testEachDeletionBodyCarriesOnlyItsOwnKeysAndNeverANull() throws {
+        func payload(_ request: DeleteAccountRequest) throws -> [String: String] {
+            let data = try JSONEncoder().encode(request)
+            return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: String])
+        }
+        let memberID = try XCTUnwrap(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))
+        let revoking = try XCTUnwrap(DeleteAccountRequest.revoking(appleAuthorizationCode: "c0de.abc_-123"))
+
+        XCTAssertEqual(try payload(DeleteAccountRequest()), ["confirmation": "delete"])
+        XCTAssertEqual(
+            try payload(revoking),
+            ["confirmation": "delete", "apple_authorization_code": "c0de.abc_-123"]
+        )
+        XCTAssertEqual(
+            try payload(.guardian(memberID: memberID)),
+            ["confirmation": "delete", "member_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]
+        )
+        XCTAssertNil(DeleteAccountRequest.revoking(appleAuthorizationCode: "has space"))
+        XCTAssertNil(DeleteAccountRequest.revoking(appleAuthorizationCode: ""))
+        XCTAssertNil(DeleteAccountRequest.revoking(appleAuthorizationCode: String(repeating: "a", count: 513)))
+    }
+
+    @MainActor
+    func testACancelledAppleReauthorizationDeletesNothingAndSaysSo() async {
+        let client = AuthClientSpy()
+        let store = AuthSessionStore(authClient: client)
+        store.currentUser = AuthUser(
+            id: "current",
+            displayName: "Current",
+            email: nil,
+            provider: .apple,
+            appleSubject: "apple-subject"
+        )
+
+        let deleted = await store.deleteAccount(reauthorizer: ScriptedReauthorizer(outcome: .cancelled))
+
+        XCTAssertFalse(deleted)
+        XCTAssertTrue(client.deletionRequests.isEmpty)
+        XCTAssertNotNil(store.currentUser)
+        XCTAssertEqual(store.errorMessage, "A Apple não confirmou. Nada foi apagado.")
+    }
+
+    @MainActor
+    func testAFreshAppleCodeTravelsWithTheDeletionOnlyForTheSameAppleAccount() async throws {
+        let matching = AuthClientSpy()
+        let store = AuthSessionStore(authClient: matching)
+        store.currentUser = AuthUser(
+            id: "current",
+            displayName: "Current",
+            email: nil,
+            provider: .apple,
+            appleSubject: "apple-subject"
+        )
+        _ = await store.deleteAccount(
+            reauthorizer: ScriptedReauthorizer(outcome: .code("fresh.code", user: "apple-subject"))
+        )
+        XCTAssertEqual(
+            matching.deletionRequests,
+            [try XCTUnwrap(DeleteAccountRequest.revoking(appleAuthorizationCode: "fresh.code"))]
+        )
+
+        let mismatched = AuthClientSpy()
+        let otherStore = AuthSessionStore(authClient: mismatched)
+        otherStore.currentUser = AuthUser(
+            id: "current",
+            displayName: "Current",
+            email: nil,
+            provider: .apple,
+            appleSubject: "apple-subject"
+        )
+        _ = await otherStore.deleteAccount(
+            reauthorizer: ScriptedReauthorizer(outcome: .code("fresh.code", user: "someone-else"))
+        )
+        XCTAssertEqual(mismatched.deletionRequests, [DeleteAccountRequest()])
+
+        let failed = AuthClientSpy()
+        let failedStore = AuthSessionStore(authClient: failed)
+        failedStore.currentUser = AuthUser(id: "current", displayName: "Current", email: nil, provider: .apple)
+        _ = await failedStore.deleteAccount(reauthorizer: ScriptedReauthorizer(outcome: .failed))
+        XCTAssertEqual(failed.deletionRequests, [DeleteAccountRequest()])
+    }
+
+    @MainActor
+    func testAGuardianDeletesAWardWithoutLeavingTheirOwnSession() async throws {
+        let client = AuthClientSpy()
+        let store = AuthSessionStore(authClient: client)
+        let guardian = AuthUser(id: "guardian", displayName: "Guardian", email: nil, provider: .apple)
+        store.currentUser = guardian
+        let wardMemberID = UUID()
+
+        let deleted = await store.deleteWardAccount(memberID: wardMemberID)
+
+        XCTAssertTrue(deleted)
+        XCTAssertEqual(client.deletionRequests, [.guardian(memberID: wardMemberID)])
+        XCTAssertEqual(store.currentUser, guardian)
+    }
+
     @MainActor
     func testClearingDeletedAccountAlsoRemovesOnboardingMarker() throws {
         let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
@@ -328,11 +443,21 @@ final class AuthSessionTests: XCTestCase {
     #endif
 }
 
+private struct ScriptedReauthorizer: AppleReauthorizing {
+    var outcome: AppleReauthorizationOutcome
+
+    @MainActor
+    func freshAuthorizationCode() async -> AppleReauthorizationOutcome {
+        outcome
+    }
+}
+
 private final class AuthClientSpy: AuthClient, @unchecked Sendable {
     var restoration: AuthSessionRestoration
     var lastAppleCredential: AppleSignInCredential?
     var appleSignInError: Error?
     var deleteAccountCallCount = 0
+    var deletionRequests: [DeleteAccountRequest] = []
     var restoreCallCount = 0
     var signOutCallCount = 0
 
@@ -358,8 +483,9 @@ private final class AuthClientSpy: AuthClient, @unchecked Sendable {
         )
     }
 
-    func deleteCurrentAccount() async throws {
+    func deleteAccount(_ request: DeleteAccountRequest) async throws {
         deleteAccountCallCount += 1
+        deletionRequests.append(request)
     }
 
     func signOut() async throws {

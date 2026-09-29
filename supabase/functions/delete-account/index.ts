@@ -1,5 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
+  appleSignInConfigurationFromEnvironment,
+  revokeAppleSignIn,
+} from "../_shared/apple-sign-in-revocation.ts";
+import {
   type DeleteAccountBackend,
   handleDeleteAccountRequest,
 } from "../_shared/delete-account.ts";
@@ -89,6 +93,21 @@ class SupabaseDeleteAccountBackend implements DeleteAccountBackend {
     return data.user?.id ?? null;
   }
 
+  async authorizeGuardianAccountDeletion(
+    guardianUserID: string,
+    memberID: string,
+  ): Promise<string | null> {
+    const { data, error } = await this.admin.rpc(
+      "authorize_guardian_account_deletion",
+      { guardian_user_id: guardianUserID, target_member_id: memberID },
+    );
+    if (error) {
+      if (error.message === "guardian_access_denied") return null;
+      throw new Error("guardian_authorization_failed");
+    }
+    return typeof data === "string" ? data : null;
+  }
+
   async listProfilePhotoNames(
     userID: string,
     offset: number,
@@ -148,9 +167,22 @@ function configuredBackend(): DeleteAccountBackend | undefined {
 Deno.serve((request: Request) =>
   handleDeleteAccountRequest(request, {
     backend: configuredBackend(),
+    revokeAppleToken: (authorizationCode) =>
+      revokeAppleSignIn(authorizationCode, {
+        configuration: appleSignInConfigurationFromEnvironment((name) =>
+          Deno.env.get(name)
+        ),
+      }),
     logFailure: ({ requestID, stage }) => {
       console.error(JSON.stringify({
         event: "delete_account_failed",
+        request_id: requestID,
+        stage,
+      }));
+    },
+    logRevocationFailure: ({ requestID, stage }) => {
+      console.error(JSON.stringify({
+        event: "apple_token_revocation_failed",
         request_id: requestID,
         stage,
       }));

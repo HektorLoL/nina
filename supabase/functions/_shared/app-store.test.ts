@@ -15,6 +15,7 @@ import {
   isUUID,
   mapAppleSubscriptionStatus,
   maxAppStoreRequestBytes,
+  premiumSyncEligibility,
   readAppStoreJSONRequest,
   verificationFailureDetails,
 } from "./app-store.ts";
@@ -269,4 +270,64 @@ Deno.test("verification failures log a status code and a bounded cause, never a 
     status: null,
     cause: null,
   });
+});
+
+Deno.test("a new original transaction from a non-trusted account is refused with premium_requires_adult", () => {
+  assertEquals(
+    premiumSyncEligibility({
+      originalRecordedForUser: false,
+      buyerEligible: false,
+    }),
+    "premium_requires_adult",
+  );
+  assertEquals(
+    premiumSyncEligibility({ originalRecordedForUser: false, buyerEligible: true }),
+    "allowed",
+  );
+});
+
+Deno.test("a renewal or restore of an original already recorded for the account is honored", () => {
+  assertEquals(
+    premiumSyncEligibility({ originalRecordedForUser: true, buyerEligible: false }),
+    "allowed",
+  );
+});
+
+Deno.test("premium sync checks eligibility before writing anything", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../premium-subscription-sync/index.ts", import.meta.url),
+  );
+  const check = source.indexOf('"premium_buyer_is_eligible"');
+  const refusal = source.indexOf(
+    'jsonResponse({ error: "premium_requires_adult" }, 403)',
+  );
+  assert(check > 0);
+  assert(refusal > check);
+  assert(refusal < source.indexOf('.from("premium_subscription_transactions")'));
+  assert(refusal < source.indexOf(".upsert(subscriptionUpsert"));
+  assert(
+    source.indexOf('.eq("user_id", userID)') < check,
+    "only an original recorded for this same account is exempt",
+  );
+});
+
+Deno.test("an App Store notification never turns a refused new original into a subscription", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../app-store-server-notifications/index.ts", import.meta.url),
+  );
+  const check = source.indexOf('"premium_buyer_is_eligible"');
+  const acknowledgement = source.indexOf(
+    'jsonResponse({ ok: true, ignored: "premium_requires_adult" })',
+  );
+  assert(check > 0);
+  assert(acknowledgement > check);
+  assert(
+    source.indexOf('.from("premium_subscription_transactions")') < check,
+    "the ledger still records what Apple sent",
+  );
+  assert(acknowledgement < source.indexOf(".upsert(subscriptionUpsert"));
+  assert(
+    source.indexOf('.eq("user_id", userID)') < check,
+    "only an original recorded for this same account is exempt",
+  );
 });

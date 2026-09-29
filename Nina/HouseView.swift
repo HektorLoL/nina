@@ -102,6 +102,8 @@ struct HouseView: View {
                                 .font(.system(size: 13, weight: .regular))
                                 .foregroundStyle(NinaTheme.ink)
                                 .accessibilityLabel("Responsável pela casa")
+                        } else if let value = accessValue(member) {
+                            Text(value).ninaText(.meta, NinaTheme.muted)
                         }
                     }
                     .contentShape(Rectangle())
@@ -132,7 +134,7 @@ struct HouseView: View {
                 }
             }
 
-            if store.canManageFamily, store.canInviteMorePeople {
+            if store.canManageFamily || store.canActForMinors, store.canInviteMorePeople {
                 NinaDivider()
 
                 actionRow("Adicionar criança ou pet", systemName: "person.badge.plus") {
@@ -149,7 +151,17 @@ struct HouseView: View {
         }
     }
 
-    private func memberSubtitle(_ member: HouseholdMember) -> String {
+    // A claimed minor reads as limited access, never as an age; a profile nobody answers for says so.
+    private func accessValue(_ member: HouseholdMember) -> String? {
+        guard member.isMinorProfile else { return nil }
+        if member.isClaimed { return "Acesso limitado" }
+        return member.minorAccess?.hasProfileConsent == true ? nil : "Sem autorização"
+    }
+
+    private func memberSubtitle(_ member: HouseholdMember) -> String? {
+        if member.isMinorProfile, member.isClaimed, member.id != store.currentFamilyMember?.id {
+            return nil
+        }
         let role = member.permissionRole == .admin ? member.permissionRole.title : member.role.title
         guard member.id == store.currentFamilyMember?.id else { return role }
         return member.permissionRole == .admin ? "Você · \(role)" : "Você"
@@ -288,6 +300,15 @@ struct HouseView: View {
                 CategoryGlyph(systemName: "calendar", size: 18, tint: NinaTheme.ink)
             } trailing: {
                 EmptyView()
+            }
+            .padding(.horizontal, 18)
+            .ninaCard()
+            .accessibilityElement(children: .combine)
+        } else if !store.canBuyPremium {
+            NinaRow(title: "Resumo semanal") {
+                CategoryGlyph(systemName: "lock", size: 18, tint: NinaTheme.ink)
+            } trailing: {
+                premiumTag
             }
             .padding(.horizontal, 18)
             .ninaCard()

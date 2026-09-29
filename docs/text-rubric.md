@@ -1,6 +1,6 @@
 # Nina: rubric for cutting on-screen text
 
-Last updated: 2026-09-26
+Last updated: 2026-09-29
 
 This rubric applies to every screen of the iOS app. A screen passes when it meets every rule in §1 and every rule in its surface section (§2), and when none of the text listed in §3 has been lost. The rules come from Mobbin research on about 90 iOS screens across six surfaces. The strongest references are cited inline.
 
@@ -8,7 +8,7 @@ This rubric applies to every screen of the iOS app. A screen passes when it meet
 
 ## 0. How to audit a screen
 
-1. **Render every state.** That means default, empty, error, loading and offline. It also means owner, admin and member; a free house and a covered house; and Dynamic Type at `accessibility3`.
+1. **Render every state.** That means default, empty, error, loading and offline. It also means owner, admin and member; a free house and a covered house; a trusted adult, a declared adult, a minor and an unknown age; and Dynamic Type at `accessibility3`.
 2. **List every visible string and tag it.**
    - **T**: title
    - **D**: live data (a date, count, name, price or status value)
@@ -73,6 +73,8 @@ This rubric applies to every screen of the iOS app. A screen passes when it meet
   - Nina is named as a person, never "IA" or "assistente".
   - No string claims Nina did something.
   - Short does not mean telegraphic: Nina's own lines stay whole sentences with a period.
+  - **Exception, surfaces a minor can see** (§2.9 and the login): Nina is spoken of in the third person and never says "eu", she is "um programa de computador" once per flow (Decreto 12.880 art. 11 I), and she is never "amiga". The guardian sheet and "O que a Nina guarda" may say "inteligência artificial", because the legal line has to name what the data does not reach.
+- **G18. No string claims that nothing sent to the model is kept.** OpenAI may keep abuse logs up to 30 days. "fica guardado lá", "servidor nenhum", "usado só para responder" and "não guarde o que recebe" fail `repository.retention-claims`.
 
 ### Word budgets
 
@@ -80,7 +82,7 @@ These count authored words only, as defined in §0 step 4.
 
 | Surface | Budget |
 |---|---|
-| Welcome / login | ≤ 28 including button labels and legal; ≤ 16 without the legal line |
+| Welcome / login | ≤ 28 including button labels and legal; ≤ 16 without the legal line. The protected age line makes it 30; the legal text wins |
 | Settings root | ≤ 50, and 1 second line in total (the account row) |
 | Settings sub-screen | ≤ 40, plus protected footers |
 | Tutorial | ≤ 3 screens, ≤ 120 words in total, ≤ 45 per screen |
@@ -88,7 +90,9 @@ These count authored words only, as defined in §0 step 4.
 | Filter or group empty | one line ≤ 4 |
 | Chat, empty | ≤ 25 including chips and placeholder |
 | Proposal card chrome | ≤ 10, not counting the proposal's own values or protected lines |
-| Consent gate | ≤ 50 (changes need counsel sign-off, see §3) |
+| Consent gate | no budget: every line is Law-text-gated (§3 row 3) |
+| Age check, minor states | the empty-state budget; protected lines are not counted |
+| Guardian sheet chrome | ≤ 20, not counting the protected card, declaration and consents |
 | Alert | title ≤ 7, message ≤ 10, buttons 1–2 words |
 | Capture sheet chrome | ≤ 15 |
 | Paywall | ≤ 55 including the terms line and the link row |
@@ -113,13 +117,16 @@ These count authored words only, as defined in §0 step 4.
 ┌────────────────────────────────┐
 │ (flexible spacer, min 32)      │
 │            [cup 64]            │  NinaMark(size: 64)
-│         Sua amiga Nina         │  .ninaText(.display), centered
-│    Conta pra ela o que pesa.   │  .ninaText(.label, muted), centered
+│              Nina              │  .ninaText(.display), centered
+│   A rotina da casa, dividida.  │  .ninaText(.label, muted), centered
 │ (flexible spacer, min 32)      │
-│ [    Continuar com a Apple   ] │  system button, black, 52pt
+│ [          Continuar         ] │  cobalt, reads the age range first
+│ [    Continuar com a Apple   ] │  then the system button, black, 52pt
 │        error line (if any)     │  .meta, ink, centered, 12pt gap
 │ Ao continuar, você aceita os   │  .meta muted, centered, 14pt below
 │ Termos e a Política de Priv.   │  links tinted
+│ Menores de 18 anos entram…     │  protected age line
+│             [ L ]              │  ClassIndMark(size: 28)
 │ 16pt bottom inset              │
 └────────────────────────────────┘
 ```
@@ -153,22 +160,22 @@ The two equal spacers center the brand block in the space above the actions. On 
 - **L3.** The tagline is one line of 6 words or fewer.
   - The login screen never explains how the product works. That is the tutorial's job.
   - Only 4 of 16 references add a second line, and none explains the product.
-- **L4.** One button: Apple (black, system label, 52pt). There is no cobalt fill on the welcome screen and no other door; email, code and Google sign-in were removed on 2026-09-26.
-  - Word count: Apple's system label is not counted, because the system draws it (§0 step 4 counts what the app writes). The welcome is 9 words without the legal line and 20 with it.
+- **L4.** One door: Apple. Since 2026-09-29 it takes two steps. First one cobalt "Continuar", which reads Apple's age range before sign-in; then the black Apple button (system label, 52pt), which asks for name and email only when the reading is adult. No other door; email, code and Google sign-in were removed on 2026-09-26.
+  - Word count: Apple's system label is not counted, because the system draws it (§0 step 4 counts what the app writes). The welcome is 7 words without the legal line and 30 with it.
   - A Debug build adds one quiet row, "Teste 1 · Teste 2", under the Apple button for the local test accounts. It is compiled out of Release, so no budget here counts it.
 - **L5.** Retired 2026-09-26: there is no email sheet.
 - **L6.** Retired 2026-09-26: there is no code step.
-- **L7. The legal footnote** is centered, 1–2 lines, in the `.meta` tier, 14pt under the last button. It appears on the welcome screen only.
+- **L7. The legal footnote** is centered, in the `.meta` tier, 14pt under the last button, followed by the ClassInd mark (Portaria MJSP 1.048 art. 50: the rating shows at login). It appears on the welcome screen only. It carries the protected age line (§3 row 18), so it runs to 3–4 lines.
 - **L8.** The error line sits inside the action group, centered, in ink (never terracotta). One state gets one sentence.
 
 **Target strings**
 
 | Where | Current | Target |
 |---|---|---|
-| Welcome tagline | 20-word, two-sentence subtitle | "Conta pra ela o que pesa." |
+| Welcome title and tagline | "Sua amiga Nina" / "Conta pra ela o que pesa." (until 2026-09-29) | "Nina" / "A rotina da casa, dividida." Every age sees this screen, and the old tagline invited emotional unloading. |
 | Invite variant | "Você foi convidado para uma casa." plus a subtitle | Title "Você tem um convite"; tagline "Quem convidou aprova sua entrada." The line is protected (§3). The new title is also gender-neutral. |
 | Email and Google buttons | "Entrar com email", "Continuar com o Google" | None. Apple is the only door (2026-09-26). |
-| Legal footnote | no comma after "Ao continuar" | "Ao continuar, você aceita os Termos e a Política de Privacidade." |
+| Legal footnote | "Ao continuar, você aceita os Termos e a Política de Privacidade." | the same, plus "Menores de 18 anos entram numa casa com aprovação de um responsável." (§3 row 18) |
 | Backend unavailable | "Configure o projeto Supabase…" plus the error line | Delete the footer sentence. `configurationMissing` becomes "Não dá para entrar agora. Tente mais tarde." |
 
 ### 2.2 Onboarding and tutorial
@@ -242,7 +249,8 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Consent toggle: "Deixar a Nina ler", with the second line "Mensagens e fotos."
   - Footer under it: "Vale só para você. Cada adulto decide o seu."
   - Data rows: `Baixar meus dados ›` and `Apagar minha conversa`, with the footer "A conversa some sozinha depois de 30 dias."
-  - The "Onde ficam os seus dados" card becomes one closing footer: "Seus dados ficam no Brasil. Para responder, o que você envia passa por um serviço fora do país." This needs counsel sign-off (§3).
+  - The "Onde ficam os seus dados" card becomes one closing footer. Since 2026-09-29 it names the provider and the retention (§3 row 4): "Em São Paulo. Os seus registros ficam em servidores no Brasil. Se você aceitou conversar com a Nina, o que você escreve vai para a OpenAI, empresa dos Estados Unidos, que pode guardar por até 30 dias para evitar abuso. Quando outro adulto conversa com a Nina, suas tarefas podem ir junto, com seu nome trocado por um código."
+  - The row "Denunciar um problema" (every age) opens the report page: "Algo na Nina fere uma criança ou um adolescente? Conte para nós.", the protected "A denúncia não é anônima: ela sai do seu email.", the button "Escrever denúncia" (mail, subject "Denúncia ECA Digital", no household data) and the link "Como tratamos denúncias".
   - "Apagar minha conversa" alert: title "Apagar sua conversa?", message "Tarefas e memórias confirmadas ficam."
 - **Avisos**
   - Delete the intro sentence.
@@ -253,6 +261,8 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Eyebrow "Some para sempre": "Sua conversa com a Nina", "Suas memórias privadas", "Seu perfil e sua foto", "Seu acesso a ‹casa›".
   - Eyebrow "Fica na casa": "Tarefas que você criou, sem dono", "Compras", "Memórias compartilhadas".
   - Keep the typed gate and the ink "Apagar conta" button. Delete "Deixa pra lá".
+  - An active subscriber first sees one grout card: "Sua assinatura continua." / "Apagar a conta não cancela a cobrança. A Apple segue cobrando até você cancelar." / quiet "Gerenciar assinatura" (§3 row 6; build-10 fix b).
+  - The same screen is reachable with no house: from house setup, the pending and decision screens, the unavailable screen and every minor state.
   - Alert: title "Apagar sua conta?", message "Não dá para desfazer." Keep `Haptics.warning()` when arming it.
 
 ### 2.4 Lists and empty states (Hoje, Tarefas, Sementes, Compras, Memórias)
@@ -314,7 +324,7 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Precedent: [Perplexity](https://mobbin.com/screens/7248785b-ef14-4bc8-86ac-6f657fa9e6db).
 - **C5. Photo previews.**
   - A draft photo previews as a thumbnail with an X, with no filename or size. Only documents show a name and size.
-  - The draft footer becomes the protected line "A foto não fica guardada em servidor nenhum."
+  - The draft footer is the protected line "A Nina não guarda a foto. A OpenAI pode guardar por até 30 dias para evitar abuso." (§3 row 12; the old "A foto não fica guardada em servidor nenhum." was untrue).
 - **C6. "Not yet confirmed" is said once per card, and the disclaimer once per screen.**
   - The card carries one pending tag of 3 words or fewer: "Ainda não existe" (a memory uses "Ainda não guardada").
   - The disclaimer is one faint line under the newest Nina reply that has a pending proposal: "A Nina pode ler errado. Nada entra sem você confirmar."
@@ -349,7 +359,10 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Unparseable: "Não entendi a data. Tente "amanhã 18:00"."
 - **C14. The gates** have a headline, at most 4 lines of 10 words or fewer, one button, one footnote and one link. No closing paragraph.
   - Adult-only gate: "A conversa é dos adultos da casa." + "Tarefas e compras continuam com você."
-  - Consent gate: see §3. It needs counsel sign-off before any wording ships.
+  - Declared adult: "A conversa pede idade confirmada." + "A Apple ainda não confirmou sua idade. O resto funciona." + "Tentar de novo".
+  - Blocked account: "A conversa está suspensa nesta conta." + "Se for engano, escreva para ‹email de privacidade›."
+  - Consent gate: see §3 row 3. It is exempt from the line limits, because every line is Law-text-gated.
+- **C15. "Denunciar resposta"** is a context-menu item on every Nina reply. The sheet has four chips ("Conteúdo impróprio", "Risco para alguém", "Saúde ou remédio", "Outro") and "Enviar"; the confirmation is "Recebido. Vamos olhar."
 
 **Target empty chat:** "Jogue uma lembrança aqui." + "Eu proponho. Você confirma." Chips: "Acabou o café" · "Autorização da escola até sexta" · "Um dia, pintar a sala".
 
@@ -414,6 +427,8 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
 
 ### 2.8 Casa (`HouseView`, member screens, `WorkloadView`)
 
+Since 2026-09-29 a claimed minor's row reads "Acesso limitado" and an account-less child or teen without a guardian's consent reads "Sem autorização" (G3 values; never the band). The member editor's role chips are "Adulto · Adolescente · Criança · Pet"; "Adulto" shows "Adultos entram por convite." and "Convidar", and a viewer who is not a trusted adult sees the two minor chips disabled with the helper "Só um responsável com idade confirmada pela Apple cadastra." (G6: it prevents an error with a legal consequence).
+
 **Rules**
 
 - **H1. Member rows** are an avatar, a name and one line of data: the role, "Criança" or "Pet". Never a sentence. Precedents: [Greenlight Family](https://mobbin.com/screens/5a8be526-2a1c-4402-9666-fec75183726b) and [Life360](https://mobbin.com/screens/4af1acb5-fbf9-4dd7-832f-d7795f1d5f14).
@@ -452,40 +467,72 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Empty: one muted line, "A Nina aprende sobre ‹Nome› nas conversas." It is an allowed X string, an exception to G12's 4-word group line, because an empty card would otherwise read as a field to fill. It has no mark and no action.
   - Names: the name follows H8's namesake rule, except that Nina's own row counts. There is never an article before the name, and never a task's detail line.
 
+### 2.9 Age, minors and guardians (`AgeCheckView`, `MinorViews`, `GuardianViews`)
+
+Every screen here can be seen by someone under 18, so G17's minor exception applies, and most lines are Law-text-gated (§3). Nothing on a minor's surface shows lateness, a task's detail line, another person's work, a price or a chat.
+
+**Rules**
+
+- **M1. Each blocked state is one G12 block.** No house: "Peça o convite da sua casa." / "Quem cuida de você aprova sua entrada." Unknown age: "Falta sua faixa de idade." / "Sem ela, só um responsável aprova sua entrada." / "Compartilhar faixa". Sent: "Pedido enviado." / "Um responsável seu na casa precisa aprovar." Limit: "Por hoje é só." / "Seus avisos continuam chegando." ("Volte amanhã." when the guardian turned alerts off, since the other line would be false) No guardian: "Sua conta está pausada." / "Falta um responsável na casa." Removed: "Você saiu da casa." / "Sua conta é apagada em 30 dias." / "Apagar agora".
+- **M2. The age check** is "Antes, sua faixa de idade." + the protected Apple line + "Continuar". Its declined, Apple-error and App Attest states each have one headline, one line, a retry and a quiet "Continuar assim". Never name the Settings path until the pt-BR labels are read on a device. A share started from a button inside the app ("Tentar de novo", "Compartilhar faixa", "Compartilhar de novo") never replaces the screen: the button shows pending, then one line under it, "Faixa atualizada.", "A faixa não foi compartilhada.", "A Apple não respondeu agora. Tente de novo em instantes.", "Não deu para confirmar este iPhone." or "Não deu para atualizar sua idade."
+- **M2a. The majority and changed-Terms gates** are one title, one line, "Aceitar", then the quiet "Ler os Termos", "Sair da conta" and "Apagar conta" (a gate always leaves a way out, §3 row 6). Majority: "Agora a conta é sua." / "A Apple informou que você tem 18 anos ou mais." / "‹responsável› não acompanha mais sua conta." Changed Terms, for a restored session that never saw the current version: "Os Termos mudaram." / "Para continuar, leia e aceite a nova versão."
+- **M3. The minor home** is "Suas tarefas" with the protected second line "Responsável: ‹nome›", sections "Hoje" and "Próximos dias", rows shaped like H8's child's day, and the empty line "Nada para hoje." / "Quando combinarem uma tarefa, ela aparece aqui."
+- **M4. Minor settings** are rows only (S1): "Responsável", "Tempo hoje" ("4 de 30 min"), "Avisos", "O que a Nina guarda", "Precisa conversar?", "Minha idade está errada", "Denunciar um problema", "Termos de uso" ↗, "Política de privacidade" ↗, "Classificação indicativa" (value), then "Sair" and "Apagar conta". Alerts: "Apagar sua conta?" / "Suas tarefas voltam para a casa. Não dá para desfazer." and "Sair deste iPhone?" / "Para entrar de novo, use sua conta Apple."
+- **M5. The guardian sheet** keeps its protected card, declaration and consents whole; its chrome follows the capture sheet (K1–K4) with the title "Você é responsável por ‹nome›?", the eyebrows "Quem você é" and "Idade de ‹nome›", the optional "Apelidos" field (helper "Só para a Nina esconder o nome."), "Aprovar" (or "Cadastrar"), quiet "Agora não", the link "Ler sobre famílias" and the footnote "Se você não é responsável, feche e peça a quem é."
+- **M6. Supervision** is the eyebrow "Supervisão" and value rows (G3); the footer "‹nome› não conversa com a Nina e não compra nada."; the quiet destructive actions last. Choosing "Sem limite" shows only the neutral "Sem limite, o tempo de ‹nome› fica só no Tempo de Uso do iPhone." No copy may push a guardian toward a weaker setting (ECA Digital art. 18 §§1–2).
+- **M7. A minor's notification** is "‹título› · ‹hora›": no Nina voice, no nudge.
+
 ---
 
 ## 3. Text that must never be cut
 
 These strings may be shortened to the minimum form shown. Every element listed must survive.
 
-**Counsel-gated** means Brazilian counsel approves the new wording before it ships (CLAUDE.md §13). Until then, change only layout and spacing, not wording.
+**Law-text-gated** (since 2026-09-29; it replaces "Counsel-gated", because no lawyer reviews Nina's wording) means the string answers a legal article, cited in `docs/privacy/avaliacao-impacto-criancas.md` §9. A shorter rewrite is allowed only if it still says everything the article asks; where the legal text is longer than a word budget, the legal text wins. Changing one means changing that document's row in the same commit.
 
 | # | Protected content | Surface | Minimum form | Gate |
 |---|---|---|---|---|
 | 1 | Subscription terms: plan name, period, billed price per option, auto-renewal, how to cancel, Restaurar compras, links to Termos and Privacidade | Paywall | Title + a price on each option + one terms line (P3) + link row | App Review 3.1.2. Drop no element. |
 | 2 | The limit Premium does not lift | Paywall | "Teto da casa: 100 conversas por dia." | — |
-| 3 | AI consent: content goes to a model outside Brazil; nothing is retained there or used for training; the conversation stays with the person; each adult decides; it can be switched off in Ajustes and stops immediately; declining keeps everything else working; privacy policy link | Chat consent gate | Headline + ≤4 lines of ≤10 words + button + footnote + link | Counsel-gated |
-| 4 | Where data lives, plus the international transfer | Privacidade | One closing footer (§2.3) | Counsel-gated |
-| 5 | Withdrawing consent applies only to you | Privacidade | "Vale só para você. Cada adulto decide o seu." | Counsel-gated |
-| 6 | Account deletion: every item that disappears, every item that stays, irreversibility, the typed gate. Must be reachable from the Settings root | Apagar conta | Two noun lists + gate + "Não dá para desfazer." | App Store 5.1.1(v). No item removed. |
+| 3 | AI consent v2: the text and the house details go to OpenAI, a US company; OpenAI may keep them up to 30 days against abuse, or longer if the law requires, and trains nothing on them; the conversation is the person's own; children's and teens' names go as codes and their tasks never go; another adult's name goes only if that adult accepted; it can be switched off in Ajustes · Privacidade e dados and stops at once; the separate, unchecked transfer box "Autorizo enviar o que eu escrever e os detalhes da casa para a OpenAI, empresa dos Estados Unidos."; "Este aviso mudou." when an older consent was withdrawn; declining keeps everything else working; privacy policy link | Chat consent gate | Headline + lead + the five lines + the transfer block + button + footnote + link | Law-text-gated (LGPD arts. 8, 9 §1 and 33 VIII; Apple 5.1.2(i)) |
+| 4 | Where data lives, plus the international transfer and its 30-day abuse logs, and that an adult who did not accept still has tasks sent, under a code, when another adult chats | Privacidade | One closing footer (§2.3) | Law-text-gated (LGPD art. 33 VIII) |
+| 5 | Withdrawing consent applies only to you | Privacidade | "Vale só para você. Cada adulto decide o seu." | Law-text-gated |
+| 6 | Account deletion: every item that disappears, every item that stays, irreversibility, the typed gate; for a subscriber, that deleting does not cancel Apple's billing, with a way to manage the subscription. Must be reachable from the Settings root, from every no-house screen and from the majority and changed-Terms gates | Apagar conta | Two noun lists + gate + "Não dá para desfazer." + the subscriber card | App Store 5.1.1(v) and 3.1.2. No item removed. |
 | 7 | What survives deleting the conversation; 30-day retention | Privacidade | Alert message (§2.3) + "A conversa some sozinha depois de 30 dias." | — |
 | 8 | Who will read a shared memory, and that sharing is irreversible | Memory share alert | C10 | — |
 | 9 | Memories start private | Memórias empty state, memory card | "Memórias começam privadas." and the two separate buttons | — |
 | 10 | An invite link grants nothing; someone in the house approves | Invite sheet; login invite variant | One line each (§2.1, K7) | — |
 | 11 | Pending state; date and owner on the card face; the "can read it wrong" disclaimer | Proposal card, tutorial | One tag + one disclaimer line per screen (C6) | — |
-| 12 | Photos are not stored on a server | Composer, while a photo is attached | "A foto não fica guardada em servidor nenhum." | Privacy-sensitive path (CLAUDE.md §13) |
+| 12 | Nina keeps no photo, and what OpenAI may keep | Composer, while a photo is attached | "A Nina não guarda a foto. A OpenAI pode guardar por até 30 dias para evitar abuso." | Law-text-gated; privacy-sensitive path (CLAUDE.md §13) |
 | 13 | The card cannot be used to pay a bill | "O que eu li" block on bills | "Para pagar, abra o boleto no banco." | — |
 | 14 | Quiet hours silence a notification but never move it | Avisos | "No silêncio, o aviso chega na hora, sem som." | — |
 | 15 | The workload portrait is not for blame; it is never drawn when inconclusive | Casa, `WorkloadView` | "Para conversar, não para cobrar." gated on `isConclusive` | — |
 | 16 | Nina does not take a slot | Casa, Nina's row | "Não ocupa vaga." | — |
 | 17 | Honesty states: offline or local reply, confirmation withheld, an action that failed | Chat notices, error lines | One line each (C11) | Never replaced by silence |
-| 18 | Legal acceptance at sign-in | Welcome | L7 footnote | — |
-| 19 | Why chat is unavailable, and what still works | Adult-only gate | C14 | — |
+| 18 | Legal acceptance at sign-in, and that a minor enters only with a guardian's approval | Welcome | "Ao continuar, você aceita os Termos e a Política de Privacidade. Menores de 18 anos entram numa casa com aprovação de um responsável." | Law-text-gated (LGPD arts. 8 and 14 §1; ECA Digital art. 24) |
+| 19 | Why chat is unavailable, and what still works: adult-only, age not confirmed by Apple, suspended | Adult-only, declared-adult and blocked gates | C14 | — |
 | 20 | Irreversibility on every irreversible action | Destructive alerts | "Não dá para desfazer." | — |
 | 21 | Only the subscriber manages a shared plan | Premium management | "Só quem assina muda o plano." | — |
+| 22 | The rating | Welcome, loading screen, settings row, web footer | The ClassInd mark from `NinaRating.current`, accessibility label "Classificação indicativa: livre" | Law-text-gated (Portaria MJSP 1.048 art. 50) |
+| 23 | Apple gives only a range, never a birth date | `AgeCheckView` | "A Apple informa só a faixa, nunca a data de nascimento." | Law-text-gated (ECA Digital art. 13; Decreto 12.880 art. 25 §1) |
+| 24 | What a minor sees and does not; that their tasks do not go to the AI and their name goes as a code; the guardian's controls | Guardian sheet card | The five card lines | Law-text-gated (LGPD art. 14 §§3, 6; ECA Digital arts. 7 and 17–18) |
+| 25 | The guardian's declaration, the account consent with Terms acceptance on the minor's behalf, and the separate optional health consent | Guardian sheet | The two required checkboxes and the optional one, whole | Law-text-gated (LGPD arts. 8 §2, 11 I, 14 §§1, 4, 5; Código Civil arts. 3 and 1.634 VII) |
+| 26 | Nina is a program, who supervises the account, never to share access | Minor welcome | The five lines; "Entendi" under 16, "Aceitar" with "Você aceita os Termos junto com ‹responsável›." at 16–17 | Law-text-gated (Decreto 12.880 art. 11 I; ECA Digital art. 17) |
+| 27 | Who supervises | Minor home | "Responsável: ‹nome›" | Law-text-gated (ECA Digital art. 17 III) |
+| 28 | What Nina keeps about a minor, where, who sees it, that Nina is a program, the codes, how to delete | "O que a Nina guarda" | The six lines + "Mais para os responsáveis" | Law-text-gated (LGPD art. 14 §6) |
+| 29 | Where to talk | "Precisa conversar?" | "Se algo te preocupa, fale com um adulto de confiança." + "CVV: ligue 188. É de graça, a qualquer hora." (number UNVERIFIED) | Law-text-gated (ECA Digital art. 17 §4 IX) |
+| 30 | How to contest the age | "Minha idade está errada" | The Apple or guardian variant + "Ou escreva para ‹email de privacidade›." | Law-text-gated (Decreto 12.880 art. 27) |
+| 31 | A report is never anonymous | "Denunciar um problema" | "A denúncia não é anônima: ela sai do seu email." | Law-text-gated (ECA Digital art. 29 §2) |
+| 32 | No setting is pushed weaker | Supervision, "Sem limite" | "Sem limite, o tempo de ‹nome› fica só no Tempo de Uso do iPhone." | Law-text-gated (ECA Digital art. 18 §§1–2) |
+| 33 | Someone who writes about hurting themselves meets the CVV line before any model | Chat reply (`ninaSupportReply`) | "Sinto muito que esteja tão pesado. Você não precisa passar por isso sem apoio: ligue 188, o CVV, de graça, a qualquer hora. Se houver perigo agora, procure um serviço de emergência." (number UNVERIFIED) | Law-text-gated (ECA Digital art. 17 §4 IX) |
+| 34 | Withdrawing a minor's health consent deletes the health reminders | Health consent sheet, confirm alert armed with `warning()` | "Retirar a autorização de saúde?" / "Os lembretes de saúde de ‹nome› são apagados." / "Retirar" | Law-text-gated (LGPD arts. 8 §5, 15 III and 16) |
+| 35 | Deleting the account needs Apple's confirmation, and a cancelled confirmation deletes nothing | Apagar conta | "A Apple pede para confirmar com sua conta." above the ink button; "A Apple não confirmou. Nada foi apagado." when the Apple sheet is cancelled | Apple 5.1.1(v) |
 
 **Never write**
 
+- Copy claiming that nothing sent to the model provider is kept (G18).
+- "amiga", "eu" in Nina's voice, or a scripted Nina conversation on a surface a minor can see (G17).
+- A minor's age band anywhere but their own guardian's supervision block.
 - Copy claiming that task titles are hidden from the lock screen. They are not.
 - Any string saying Nina created, changed or deleted something.
 - "IA" or "assistente" as Nina's name.

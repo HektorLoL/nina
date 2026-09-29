@@ -111,16 +111,63 @@ final class TabRouter {
     }
 }
 
-private enum AppEntryPhase: Hashable {
+enum AppEntryPhase: Hashable {
     case signedOut
-    case tutorial
+    case ageCheck
     case homeLoading
+    case homeUnavailable
+    case minorRoot
+    case majority
+    case termsAcceptance
     case invite
+    case tutorial
     case pendingApproval
     case accessDecision
     case homeSetup
-    case homeUnavailable
     case app
+}
+
+struct AppEntryInputs {
+    var isSignedIn: Bool
+    var needsAgeCheck: Bool
+    var homeAccessState: HomeAccessState
+    var viewerIsAdult: Bool
+    var reachedMajority: Bool = false
+    var needsTermsAcceptance: Bool = false
+    var hasPendingInvite: Bool
+    var shouldShowTutorial: Bool
+}
+
+// The age step precedes everything a signed-in person can reach, and a non-adult never meets the invite,
+// the tutorial or the four tabs: their whole app is minorRoot.
+enum AppEntryRouting {
+    static func phase(for inputs: AppEntryInputs) -> AppEntryPhase {
+        guard inputs.isSignedIn else { return .signedOut }
+        if inputs.needsAgeCheck { return .ageCheck }
+        if inputs.homeAccessState == .loading { return .homeLoading }
+        // A failed verification says nothing about age, so it is never read as a minor's screen.
+        if inputs.homeAccessState == .unavailable { return .homeUnavailable }
+        if !inputs.viewerIsAdult { return .minorRoot }
+        if inputs.reachedMajority { return .majority }
+        if inputs.needsTermsAcceptance { return .termsAcceptance }
+        if inputs.hasPendingInvite { return .invite }
+        if inputs.shouldShowTutorial { return .tutorial }
+
+        switch inputs.homeAccessState {
+        case .loading:
+            return .homeLoading
+        case .noHome:
+            return .homeSetup
+        case .pendingApproval:
+            return .pendingApproval
+        case .accessDecision:
+            return .accessDecision
+        case .unavailable, .minorMember:
+            return .homeUnavailable
+        case .authorized:
+            return .app
+        }
+    }
 }
 
 struct AppRootView: View {
@@ -132,6 +179,7 @@ struct AppRootView: View {
     @Environment(ProfileStore.self) private var profileStore
     @Environment(PremiumSubscriptionStore.self) private var premiumSubscriptionStore
     @Environment(InviteLinkStore.self) private var inviteLinkStore
+    @Environment(AgeCheckCoordinator.self) private var ageCheck
 
     @State private var selectedTab: AppTab = .nina
     @State private var tabRouter = TabRouter()
@@ -166,13 +214,25 @@ struct AppRootView: View {
         .animation(.easeInOut(duration: 0.28), value: entryPhase)
         .onChange(of: authSession.currentUser?.id) { oldValue, newValue in
             guard oldValue != newValue else { return }
+            if let newValue, authSession.interactiveSignInUserID == newValue {
+                store.noteTermsFootnoteShown(for: newValue)
+            }
             Task {
                 await profileStore.refreshProfile(for: authSession.currentUser)
-                await store.activateHomeContext(for: authSession.currentUser)
+                await loadHomeAndAge()
                 await premiumSubscriptionStore.configure(for: authSession.currentUser)
             }
             selectedTab = .nina
             tabRouter = TabRouter()
+        }
+        .onChange(of: store.ageCheckRequested) { _, requested in
+            guard requested else { return }
+            store.ageCheckRequested = false
+            ageCheck.requestPrompt()
+        }
+        .onChange(of: store.homeAccessState) { _, newState in
+            guard newState == .minorMember, scenePhase == .active else { return }
+            store.minorSceneBecameActive()
         }
         .onChange(of: store.hasActiveHome) { _, _ in
             selectedTab = .nina
@@ -185,26 +245,31 @@ struct AppRootView: View {
 
             if newPhase == .background {
                 shouldRefreshWhenActive = didFinishInitialLoad
+                Task { await store.minorSceneLeftForeground() }
                 return
             }
 
-            guard newPhase == .active, shouldRefreshWhenActive else { return }
+            guard newPhase == .active else { return }
+            store.minorSceneBecameActive()
+            guard shouldRefreshWhenActive else { return }
             shouldRefreshWhenActive = false
 
             Task {
                 await authSession.restoreSession()
                 await profileStore.refreshProfile(for: authSession.currentUser)
                 await store.refreshHomeFromRemote(for: authSession.currentUser)
+                await evaluateAge(for: authSession.currentUser)
                 await premiumSubscriptionStore.configure(for: authSession.currentUser)
                 await store.refreshNotificationAuthorizationStatus()
                 store.synchronizeLocalNotifications()
             }
         }
         .task {
+            ageCheck.onRejection = { message in store.reportSyncError(message) }
             await authSession.restoreSession()
             await profileStore.refreshProfile(for: authSession.currentUser)
             await premiumSubscriptionStore.configure(for: authSession.currentUser)
-            await store.activateHomeContext(for: authSession.currentUser)
+            await loadHomeAndAge()
             await store.refreshNotificationAuthorizationStatus()
             didFinishInitialLoad = true
             await Task.yield()
@@ -248,38 +313,35 @@ struct AppRootView: View {
     }
 
     private var entryPhase: AppEntryPhase {
-        if !authSession.isSignedIn {
-            return .signedOut
-        }
+        AppEntryRouting.phase(
+            for: AppEntryInputs(
+                isSignedIn: authSession.isSignedIn,
+                needsAgeCheck: ageCheck.needsAgeCheck,
+                homeAccessState: store.homeAccessState,
+                viewerIsAdult: store.viewerAge.isAdult,
+                reachedMajority: store.viewerAge.terms.reachedMajority,
+                needsTermsAcceptance: store.needsTermsAcceptance,
+                hasPendingInvite: inviteLinkStore.pendingCode != nil,
+                shouldShowTutorial: onboardingStore.shouldShowTutorial(for: authSession.currentUser)
+            )
+        )
+    }
 
-        if store.homeAccessState == .loading {
-            return .homeLoading
-        }
+    private func loadHomeAndAge() async {
+        let user = authSession.currentUser
+        await store.activateHomeContext(for: user)
+        await evaluateAge(for: user)
+    }
 
-        // A person who arrived through an invite came to join a house; the
-        // rehearsal can wait until they are in it.
-        if inviteLinkStore.pendingCode != nil {
-            return .invite
-        }
-
-        if onboardingStore.shouldShowTutorial(for: authSession.currentUser) {
-            return .tutorial
-        }
-
-        switch store.homeAccessState {
-        case .loading:
-            return .homeLoading
-        case .noHome:
-            return .homeSetup
-        case .pendingApproval:
-            return .pendingApproval
-        case .accessDecision:
-            return .accessDecision
-        case .unavailable:
-            return .homeUnavailable
-        case .authorized:
-            return .app
-        }
+    private func evaluateAge(for user: AuthUser?) async {
+        let isVerified = store.homeAccessState != .loading && store.homeAccessState != .unavailable
+        guard let status = await ageCheck.evaluate(
+            user: user,
+            age: store.viewerAge,
+            isVerified: isVerified,
+            isLocalContext: store.isUsingLocalContext
+        ) else { return }
+        await store.applyRecordedAge(status, for: user)
     }
 
     @ViewBuilder
@@ -288,6 +350,18 @@ struct AppRootView: View {
         case .signedOut:
             LoginView()
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
+        case .ageCheck:
+            AgeCheckView()
+                .transition(.opacity)
+        case .minorRoot:
+            MinorRootView()
+                .transition(.opacity)
+        case .majority:
+            AgeMajorityView()
+                .transition(.opacity)
+        case .termsAcceptance:
+            AgeMajorityView(reason: .termsChanged)
+                .transition(.opacity)
         case .tutorial:
             OnboardingTutorialView()
                 .transition(.opacity.combined(with: .scale(scale: 1.01)))
@@ -455,6 +529,7 @@ private struct HomeAccessUnavailableView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(OnboardingStore.self) private var onboardingStore
+    @State private var isShowingDeletion = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -482,6 +557,11 @@ private struct HomeAccessUnavailableView: View {
                                 await authSession.signOut()
                             }
                         }
+
+                        NinaButton(title: "Apagar conta", kind: .quiet) {
+                            Haptics.lightImpact()
+                            isShowingDeletion = true
+                        }
                     }
                 }
                 .padding(28)
@@ -490,6 +570,7 @@ private struct HomeAccessUnavailableView: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .ninaScreenBackground()
+        .accountDeletionSheet(isPresented: $isShowingDeletion)
     }
 }
 
@@ -809,6 +890,13 @@ struct AppLoadingScreen: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Nina")
+
+            // The rating is shown at install, login and startup.
+            VStack {
+                Spacer()
+                ClassIndMark(size: 30)
+                    .padding(.bottom, 24)
+            }
         }
         .task {
             guard !reduceMotion else { return }
@@ -927,7 +1015,7 @@ private struct SheetDestinationsModifier: ViewModifier {
                 case .settings:
                     SettingsSheet()
                 case .premium:
-                    PremiumBenefitsSheet()
+                    PremiumEntryView()
                 case .addTask:
                     TaskEditorSheet(mode: .add(sectionID: AppStore.houseTasksSectionID))
                 case .addSeed:

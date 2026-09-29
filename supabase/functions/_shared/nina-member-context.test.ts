@@ -30,6 +30,18 @@ Deno.test("a child's memory note never reaches the model context", () => {
   assertFalse(JSON.stringify(minimized).includes("mochila"));
 });
 
+Deno.test("a teen's memory note never reaches the model context either", () => {
+  const [minimized] = minimizeMembersForModel([{
+    name: "Pedro",
+    relationship: "filho",
+    household_role: "teen",
+    memory_note: "Treina à tarde.",
+  }]);
+
+  assertFalse("memory_note" in minimized);
+  assertEquals(minimized.household_role, "teen");
+});
+
 Deno.test("a child keeps the name and relationship a task has to name", () => {
   const [minimized] = minimizeMembersForModel([child]);
 

@@ -1,20 +1,28 @@
 import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import {
+  ageAssuranceEntitlementsPresent,
   containsDebugSignIn,
   deploymentChecks,
+  deploymentTargetsAtLeast,
   iosArtifactChecks,
   type IOSArtifactSnapshot,
   isAppleOnlySignIn,
   isPublishableSupabaseKey,
   isSecretSupabaseKey,
+  legalAgeRuleHolds,
+  looksLikeSecret,
   nonAppleSignInCalls,
   parseEnvironmentFile,
   pinnedSupabaseCLIVersions,
   type PreflightEnvironment,
   premiumTransactionFinishes,
   productionEnvironmentChecks,
+  ratingCodes,
+  ratingConstantsAgree,
   type RepositoryFacts,
+  retentionClaimOffenders,
   signInProviderCheck,
+  versionAtLeast,
 } from "./production_preflight.ts";
 
 const facts: RepositoryFacts = {
@@ -62,6 +70,10 @@ function validEnvironment(): PreflightEnvironment {
     PUBLIC_NINA_PRIVACY_CONTACT_EMAIL: "privacidade@ninai.app",
     PUBLIC_NINA_DPO_NAME: "Responsável de Privacidade",
     PUBLIC_NINA_DPO_CONTACT_EMAIL: "privacidade@ninai.app",
+    PUBLIC_NINA_LEGAL_ENTITY_ADDRESS:
+      "Avenida Paulista, 1000, São Paulo, SP, 01310-100",
+    NINA_CONTROLLER_DECISION_MAKERS: "Heitor Castello",
+    NINA_APP_ATTEST_MODE: "production",
   };
 }
 
@@ -78,6 +90,12 @@ function validArtifact(): IOSArtifactSnapshot {
       NINA_PREMIUM_PRODUCT_IDS: environment.NINA_PREMIUM_PRODUCT_IDS,
       NINA_AI_V2_ENABLED: environment.NINA_AI_V2_ENABLED,
       NINA_ATTACHMENTS_ENABLED: environment.NINA_ATTACHMENTS_ENABLED,
+      MinimumOSVersion: "26.4",
+    },
+    entitlements: {
+      "com.apple.developer.applesignin": ["Default"],
+      "com.apple.developer.declared-age-range": true,
+      "com.apple.developer.devicecheck.appattest-environment": "production",
     },
     archiveInfo: {
       ApplicationProperties: {
@@ -572,4 +590,237 @@ Deno.test("the online sign-in check fails closed while email, Google, passkeys o
   assertFalse(isAppleOnlySignIn(undefined));
   assertFalse(isAppleOnlySignIn("apple"));
   assert(isAppleOnlySignIn(productionAuthSettings()));
+});
+
+Deno.test("the launch identity needs a company CNPJ, an address and an encarregado who is not the controller", () => {
+  const failed = (environment: PreflightEnvironment) =>
+    productionEnvironmentChecks(environment, facts).some((result) =>
+      result.id === "deployment.legal-launch-identity" &&
+      result.status === "failure"
+    );
+
+  assertFalse(failed(validEnvironment()));
+
+  const individual = validEnvironment();
+  individual.PUBLIC_NINA_LEGAL_ENTITY_NAME = "Heitor Castello";
+  individual.PUBLIC_NINA_LEGAL_ENTITY_DOCUMENT = "123.456.789-09";
+  individual.PUBLIC_NINA_DPO_NAME = "Heitor Castello";
+  assert(failed(individual));
+
+  const sameDPO = validEnvironment();
+  sameDPO.PUBLIC_NINA_DPO_NAME = "NINA TECNOLOGIA LTDA";
+  assert(failed(sameDPO));
+
+  const noAddress = validEnvironment();
+  noAddress.PUBLIC_NINA_LEGAL_ENTITY_ADDRESS =
+    "replace_with_the_controller_address";
+  assert(failed(noAddress));
+  delete noAddress.PUBLIC_NINA_LEGAL_ENTITY_ADDRESS;
+  assert(failed(noAddress));
+});
+
+Deno.test("the encarregado may not be a partner or administrator of the controller", () => {
+  const failed = (environment: PreflightEnvironment) =>
+    productionEnvironmentChecks(environment, facts).some((result) =>
+      result.id === "deployment.legal-launch-identity" &&
+      result.status === "failure"
+    );
+
+  const partnerDPO = validEnvironment();
+  partnerDPO.NINA_CONTROLLER_DECISION_MAKERS = "Ana Souza, Heitor Castello";
+  partnerDPO.PUBLIC_NINA_DPO_NAME = "HEITOR CASTELLO";
+  assert(failed(partnerDPO));
+
+  const unlisted = validEnvironment();
+  delete unlisted.NINA_CONTROLLER_DECISION_MAKERS;
+  assert(failed(unlisted));
+
+  const placeholder = validEnvironment();
+  placeholder.NINA_CONTROLLER_DECISION_MAKERS =
+    "replace_with_the_partners_and_administrators";
+  assert(failed(placeholder));
+
+  const empty = validEnvironment();
+  empty.NINA_CONTROLLER_DECISION_MAKERS = " , ";
+  assert(failed(empty));
+
+  const outsider = validEnvironment();
+  outsider.NINA_CONTROLLER_DECISION_MAKERS = "Heitor Castello, Ana Souza";
+  outsider.PUBLIC_NINA_DPO_NAME = "Beatriz Lima";
+  assertFalse(failed(outsider));
+});
+
+Deno.test("App Attest must run in production mode in production", () => {
+  for (
+    const mode of [undefined, "development", "insecure-local", "Production"]
+  ) {
+    const environment = validEnvironment();
+    if (mode === undefined) delete environment.NINA_APP_ATTEST_MODE;
+    else environment.NINA_APP_ATTEST_MODE = mode;
+    assert(
+      productionEnvironmentChecks(environment, facts).some((result) =>
+        result.id === "deployment.app-attest-mode" &&
+        result.status === "failure"
+      ),
+      String(mode),
+    );
+  }
+});
+
+Deno.test("a build without the age entitlements or below iOS 26.4 fails the artifact checks", () => {
+  const artifact = validArtifact();
+  artifact.entitlements = {
+    "com.apple.developer.devicecheck.appattest-environment": "development",
+  };
+  artifact.info.MinimumOSVersion = "26.3";
+
+  const failedIDs = iosArtifactChecks(artifact, validEnvironment(), facts)
+    .filter((result) => result.status === "failure")
+    .map((result) => result.id);
+
+  assertEquals(failedIDs.sort(), [
+    "artifact.app-attest-environment-production",
+    "artifact.declared-age-range-entitlement",
+    "artifact.deployment-target-minimum",
+  ]);
+
+  const unreadable = validArtifact();
+  delete unreadable.entitlements;
+  assert(
+    iosArtifactChecks(unreadable, validEnvironment(), facts).some((result) =>
+      result.id === "artifact.declared-age-range-entitlement" &&
+      result.status === "failure"
+    ),
+  );
+});
+
+Deno.test("a Swift or web string claiming nothing is kept fails the retention check", () => {
+  assertEquals(
+    retentionClaimOffenders([
+      { path: "Nina/NinaChatView.swift", text: "A foto não fica guardada." },
+      {
+        path: "web/src/pages/index.astro",
+        text: "O que ela lê, e por quanto tempo fica.",
+      },
+      { path: "docs/history.md", text: "servidor nenhum" },
+    ]),
+    [],
+  );
+  assertEquals(
+    retentionClaimOffenders([
+      {
+        path: "Nina/NinaChatView.swift",
+        text: "Nada do que você manda fica guardado lá.",
+      },
+      { path: "Nina/Sheets.swift", text: "usado só para responder" },
+      {
+        path: "web/src/pages/index.astro",
+        text: "pede que não guarde o que recebe",
+      },
+      { path: "Nina/LoginView.swift", text: 'Text("Sua amiga Nina")' },
+    ]),
+    [
+      "Nina/NinaChatView.swift: fica guardado lá",
+      "Nina/Sheets.swift: usado só para responder",
+      "web/src/pages/index.astro: não guarde o que recebe",
+      "Nina/LoginView.swift: Sua amiga Nina",
+    ],
+  );
+});
+
+Deno.test("the Terms must state the rating and require no minimum age, and the families and report pages must exist", () => {
+  const terms =
+    "A classificação indicativa da Nina é {ninaRating.termsPhrase}.";
+  assert(legalAgeRuleHolds({
+    terms,
+    familiesPageExists: true,
+    reportPageExists: true,
+  }));
+  assertFalse(legalAgeRuleHolds({
+    terms: `${terms} Você declara ter 18 anos ou mais.`,
+    familiesPageExists: true,
+    reportPageExists: true,
+  }));
+  assertFalse(legalAgeRuleHolds({
+    terms: "Sem classificação.",
+    familiesPageExists: true,
+    reportPageExists: true,
+  }));
+  assertFalse(legalAgeRuleHolds({
+    terms,
+    familiesPageExists: false,
+    reportPageExists: true,
+  }));
+  assertFalse(legalAgeRuleHolds({
+    terms,
+    familiesPageExists: true,
+    reportPageExists: false,
+  }));
+});
+
+Deno.test("the app and the website rating constants must agree", () => {
+  const swift = 'enum NinaRating {\n    static let currentCode = "L"\n}';
+  const web = 'export const ninaRatingCode: NinaRatingCode = "L";';
+  assertEquals(ratingCodes(swift, web), { app: "L", web: "L" });
+  assert(ratingConstantsAgree(swift, web));
+  assertFalse(
+    ratingConstantsAgree(
+      swift,
+      'export const ninaRatingCode: NinaRatingCode = "12";',
+    ),
+  );
+  assertFalse(ratingConstantsAgree("", web));
+  assertFalse(
+    ratingConstantsAgree(
+      'enum NinaRating {\n    static let currentCode = "X"\n}',
+      'export const ninaRatingCode: NinaRatingCode = "X";',
+    ),
+  );
+});
+
+Deno.test("both age-assurance entitlements must be declared with their release values", () => {
+  const complete = `<dict>
+\t<key>com.apple.developer.declared-age-range</key>
+\t<true/>
+\t<key>com.apple.developer.devicecheck.appattest-environment</key>
+\t<string>production</string>
+</dict>`;
+  assert(ageAssuranceEntitlementsPresent(complete));
+  assertFalse(
+    ageAssuranceEntitlementsPresent(
+      complete.replace(
+        "<string>production</string>",
+        "<string>development</string>",
+      ),
+    ),
+  );
+  assertFalse(
+    ageAssuranceEntitlementsPresent(complete.replace("<true/>", "<false/>")),
+  );
+});
+
+Deno.test("every deployment target must be 26.4 or later", () => {
+  assert(deploymentTargetsAtLeast(
+    "IPHONEOS_DEPLOYMENT_TARGET = 26.4;\nIPHONEOS_DEPLOYMENT_TARGET = 26.5;",
+  ));
+  assertFalse(deploymentTargetsAtLeast(
+    "IPHONEOS_DEPLOYMENT_TARGET = 26.4;\nIPHONEOS_DEPLOYMENT_TARGET = 17.0;",
+  ));
+  assertFalse(deploymentTargetsAtLeast("no targets"));
+  assert(versionAtLeast("27", "26.4"));
+  assert(versionAtLeast("26.4.1", "26.4"));
+  assertFalse(versionAtLeast("26.3.9", "26.4"));
+  assertFalse(versionAtLeast("26.x", "26.4"));
+});
+
+Deno.test("a private-key header followed by a key body is a secret", () => {
+  const body = "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg".repeat(2);
+  assert(looksLikeSecret(`-----BEGIN PRIVATE KEY-----\n${body}\n`));
+  assert(looksLikeSecret(`-----BEGIN EC PRIVATE KEY-----\n${body}`));
+});
+
+Deno.test("a private-key header around a key built at run time is not a secret", () => {
+  const template =
+    "privateKey: `-----BEGIN PRIVATE KEY-----\\n${body}\\n-----END PRIVATE KEY-----`,";
+  assertFalse(looksLikeSecret(template));
 });

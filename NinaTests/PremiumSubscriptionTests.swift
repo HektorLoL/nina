@@ -3,6 +3,35 @@ import XCTest
 @testable import Nina
 
 final class PremiumSubscriptionTests: XCTestCase {
+    func testDeletingTheAccountWarnsOnlyWhileApplesBillingWouldContinue() {
+        func entitlement(_ status: PremiumSubscriptionStatus, active: Bool, renews: Bool?) -> PremiumEntitlement {
+            PremiumEntitlement(
+                isActive: active,
+                status: status,
+                productID: "nina.premium.monthly",
+                expiresAt: nil,
+                willRenew: renews,
+                environment: nil,
+                originalTransactionID: nil,
+                latestTransactionID: nil,
+                lastVerifiedAt: nil
+            )
+        }
+
+        XCTAssertTrue(entitlement(.active, active: true, renews: true).keepsBillingAfterAccountDeletion)
+        XCTAssertTrue(entitlement(.active, active: true, renews: nil).keepsBillingAfterAccountDeletion)
+        XCTAssertTrue(entitlement(.reconciling, active: false, renews: nil).keepsBillingAfterAccountDeletion)
+        XCTAssertTrue(entitlement(.billingRetry, active: false, renews: true).keepsBillingAfterAccountDeletion)
+        XCTAssertFalse(entitlement(.active, active: true, renews: false).keepsBillingAfterAccountDeletion)
+        XCTAssertFalse(entitlement(.expired, active: false, renews: nil).keepsBillingAfterAccountDeletion)
+        XCTAssertFalse(PremiumEntitlement.inactive.keepsBillingAfterAccountDeletion)
+    }
+
+    func testAPurchaseFromAnAccountWithoutAConfirmedAgeReadsAsItsOwnRefusal() {
+        XCTAssertEqual(PremiumBackendRequestError(serverCode: "premium_requires_adult"), .premiumRequiresAdult)
+        XCTAssertEqual(PremiumBackendRequestError(serverCode: "premium_sync_failed"), .server("premium_sync_failed"))
+    }
+
     func testTheHouseholdPremiumBlockDecodesTheShapeGetCurrentHomeContextReturns() throws {
         let json = """
         {"is_active":true,"status":"grace_period","expires_at":"2026-09-01T03:00:00Z"}
@@ -943,7 +972,29 @@ private actor HouseholdPremiumHomeBackend: RemoteHomeBackend {
                 shoppingItems: [],
                 insights: []
             ),
-            householdPremium: householdPremium
+            householdPremium: householdPremium,
+            viewerAge: .premiumTestAdult
+        )
+    }
+}
+
+private extension AgeStatus {
+    static var premiumTestAdult: AgeStatus {
+        AgeStatus(
+            status: .adult,
+            band: nil,
+            bandSource: .apple,
+            assurance: .confirmed,
+            parentalControlsActive: false,
+            householdMarked: false,
+            trustedAdult: true,
+            mayUseAI: true,
+            mayBuyPremium: true,
+            aiBlocked: false,
+            recordedAt: Date(timeIntervalSince1970: 1_785_585_600),
+            recheckAfter: nil,
+            guardianNames: [],
+            terms: .unknown
         )
     }
 }

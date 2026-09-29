@@ -37,20 +37,24 @@ struct ChildTodaySection: View {
                     }
                 }
 
-                NinaButton(title: "Mostrar para \(name)", fillsWidth: true) {
-                    Haptics.lightImpact()
-                    store.presentChildDay(for: member)
-                }
-                .padding(.top, 4)
-
-                ViewThatFits(in: .horizontal) {
-                    EqualWidthRow(spacing: 12) {
-                        printControl(name: name, dateLine: dateLine, rows: rows)
-                        shareControl(name: name, dateLine: dateLine, rows: rows)
+                if ChildDay.canShow(member) {
+                    NinaButton(title: "Mostrar para \(name)", fillsWidth: true) {
+                        Haptics.lightImpact()
+                        store.presentChildDay(for: member)
                     }
-                    VStack(spacing: 12) {
-                        printControl(name: name, dateLine: dateLine, rows: rows)
-                        shareControl(name: name, dateLine: dateLine, rows: rows)
+                    .padding(.top, 4)
+                }
+
+                if ChildDay.canPrintOrShare(member) {
+                    ViewThatFits(in: .horizontal) {
+                        EqualWidthRow(spacing: 12) {
+                            printControl(name: name, dateLine: dateLine, rows: rows)
+                            shareControl(name: name, dateLine: dateLine, rows: rows)
+                        }
+                        VStack(spacing: 12) {
+                            printControl(name: name, dateLine: dateLine, rows: rows)
+                            shareControl(name: name, dateLine: dateLine, rows: rows)
+                        }
                     }
                 }
 

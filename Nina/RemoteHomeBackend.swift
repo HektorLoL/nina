@@ -8,6 +8,152 @@ struct RemoteHomeState {
     var joinRequests: [FamilyJoinRequest] = []
     var householdPremium: HouseholdPremium = .inactive
     var aiConsent: NinaAIConsent = .withheld
+    var viewerAge: AgeStatus = .unknown
+}
+
+// The server answers a non-adult caller with the minor shape, which carries no house at all.
+struct RemoteHomeContext {
+    var viewerAge: AgeStatus
+    var isMinorView: Bool
+    var state: RemoteHomeState?
+
+    init(viewerAge: AgeStatus, isMinorView: Bool? = nil, state: RemoteHomeState?) {
+        self.viewerAge = viewerAge
+        self.isMinorView = isMinorView ?? !viewerAge.isAdult
+        self.state = self.isMinorView ? nil : state
+    }
+}
+
+struct GuardianApproval: Equatable {
+    var relationship: GuardianRelationship
+    var band: MinorBand
+    var consentVersion: String = MinorConsentVersion.current
+    var healthConsent: Bool
+    var nicknames: [String]
+}
+
+struct MinorProfileDraft: Equatable {
+    var name: String
+    var band: MinorBand
+    var guardianRelationship: GuardianRelationship
+    var consentVersion: String = MinorConsentVersion.current
+    var healthConsent: Bool
+    var nicknames: [String]
+    var relationship: String = ""
+    var tone: MemberTone = .amber
+}
+
+struct GuardianDeclaration: Equatable {
+    var relationship: GuardianRelationship
+    var consentVersion: String = MinorConsentVersion.current
+    var band: MinorBand?
+    var healthConsent: Bool
+    var nicknames: [String]?
+}
+
+struct MinorSupervisionUpdate: Equatable {
+    var alertsEnabled: Bool?
+    var quietStart: Int?
+    var quietEnd: Int?
+    var dailyLimitMinutes: Int??
+    var nicknames: [String]?
+}
+
+// Stable server codes; the store owns the pt-BR copy for each.
+enum RemoteRPCErrorCode: String, CaseIterable {
+    case ageSignalRequired = "age_signal_required"
+    case ageSignalRejected = "age_signal_rejected"
+    case adultAccountRequired = "adult_account_required"
+    case ageConfirmationRequired = "age_confirmation_required"
+    case guardianDeclarationRequired = "guardian_declaration_required"
+    case minorRoleRestricted = "minor_role_restricted"
+    case minorBirthDateNotAllowed = "minor_birth_date_not_allowed"
+    case minorHealthConsentRequired = "minor_health_consent_required"
+    case guardianRequired = "guardian_required"
+    case guardianAccessDenied = "guardian_access_denied"
+    case minorConsentOutdated = "minor_consent_outdated"
+    case invalidMinorBand = "invalid_minor_band"
+    case invalidNicknames = "invalid_nicknames"
+    case invalidSupervisionSettings = "invalid_supervision_settings"
+    case invalidAcknowledgement = "invalid_acknowledgement"
+    case invalidUsage = "invalid_usage"
+    case invalidNextDueAt = "invalid_next_due_at"
+    case invalidReportReason = "invalid_report_reason"
+    case notAMinorMember = "not_a_minor_member"
+    case minorAccountRequired = "minor_account_required"
+    case joinRequestAgeChanged = "join_request_age_changed"
+    case taskVersionConflict = "task_version_conflict"
+    case taskNotFound = "task_not_found"
+    case ninaMessageNotFound = "nina_message_not_found"
+    case ninaConsentOutdated = "nina_consent_outdated"
+    case ninaTransferConsentRequired = "nina_transfer_consent_required"
+    case ninaAIBlocked = "nina_ai_blocked"
+    case ninaAdultAccessRequired = "nina_adult_access_required"
+    case rateLimited = "rate_limited"
+    case familyMemberLimitReached = "family_member_limit_reached"
+
+    // The message is the code itself; a longer message never contains another code by accident because matching is exact.
+    init?(message: String?) {
+        guard let message else { return nil }
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let code = RemoteRPCErrorCode(rawValue: trimmed) else { return nil }
+        self = code
+    }
+
+    static func from(_ error: Error) -> RemoteRPCErrorCode? {
+        if let rpcError = error as? RemoteRPCError {
+            return rpcError.code
+        }
+        #if canImport(Supabase)
+        if let postgrestError = error as? PostgrestError {
+            return RemoteRPCErrorCode(message: postgrestError.message)
+        }
+        #endif
+        return nil
+    }
+
+    func userMessage(name: String? = nil) -> String {
+        let person = name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? name ?? "" : "essa pessoa"
+        switch self {
+        case .ageSignalRequired:
+            return "Falta sua faixa de idade."
+        case .ageSignalRejected:
+            return "Não deu para atualizar sua idade."
+        case .adultAccountRequired:
+            return "Isso é só para maiores de 18 anos."
+        case .ageConfirmationRequired:
+            return "Isso pede idade confirmada pela Apple."
+        case .guardianDeclarationRequired:
+            return "Falta sua declaração de responsável."
+        case .minorRoleRestricted:
+            return "Menor de idade entra como membro."
+        case .minorHealthConsentRequired:
+            return "Sem autorização de saúde para \(person)."
+        case .guardianRequired:
+            return "Falta um responsável na casa."
+        case .guardianAccessDenied:
+            return "Só um responsável por \(person) faz isso."
+        case .minorConsentOutdated, .ninaConsentOutdated, .ninaTransferConsentRequired:
+            return "Este aviso mudou."
+        case .invalidMinorBand:
+            return "Escolha a mesma faixa ou uma mais nova."
+        case .joinRequestAgeChanged:
+            return "A idade de \(person) mudou. Confira de novo."
+        case .ninaAIBlocked:
+            return "A conversa está suspensa nesta conta."
+        case .familyMemberLimitReached:
+            return "A casa já atingiu o limite de 8 pessoas."
+        case .minorBirthDateNotAllowed, .invalidNicknames, .invalidSupervisionSettings,
+             .invalidAcknowledgement, .invalidUsage, .invalidNextDueAt, .invalidReportReason,
+             .notAMinorMember, .minorAccountRequired, .taskVersionConflict, .taskNotFound,
+             .ninaMessageNotFound, .ninaAdultAccessRequired, .rateLimited:
+            return "Não deu para salvar agora."
+        }
+    }
+}
+
+struct RemoteRPCError: Error, Equatable {
+    var code: RemoteRPCErrorCode
 }
 
 struct FamilyInvitePreview: Hashable {
@@ -139,8 +285,43 @@ protocol RemoteHomeBackend {
     func updateNinaMemory(_ memory: NinaMemory) async throws -> NinaMemory
     func deleteNinaMemory(_ memoryID: UUID) async throws
     func deleteNinaChatHistory(familyID: UUID) async throws
-    func recordNinaAIConsent(granted: Bool, policyVersion: String) async throws -> RemoteHomeState
+    func recordNinaAIConsent(
+        granted: Bool,
+        policyVersion: String,
+        transferConsented: Bool
+    ) async throws -> RemoteHomeState
     func realtimeEvents(familyID: UUID) async -> AsyncStream<HomeRealtimeEvent>
+    func loadHomeContext(for user: AuthUser) async throws -> RemoteHomeContext
+    func recordTermsAcceptance() async throws -> AgeStatus
+    func loadMinorHome() async throws -> MinorHome
+    func setMinorTaskDone(
+        _ taskID: UUID,
+        expectedVersion: Int,
+        markDone: Bool,
+        nextDueAt: Date?
+    ) async throws -> MinorHome
+    func recordMinorUsage(day: String, minutes: Int) async throws -> MinorUsageResult
+    func acknowledgeMinorTerms(kind: MinorAcknowledgementKind, textVersion: String) async throws -> MinorHome
+    func approveJoinRequestAsGuardian(
+        _ requestID: UUID,
+        approval: GuardianApproval
+    ) async throws -> RemoteHomeState
+    func addMinorProfile(_ draft: MinorProfileDraft, familyID: UUID) async throws -> RemoteHomeState
+    func declareMinorGuardianship(
+        _ memberID: UUID,
+        declaration: GuardianDeclaration
+    ) async throws -> RemoteHomeState
+    func setMinorHealthConsent(
+        _ memberID: UUID,
+        granted: Bool,
+        consentVersion: String
+    ) async throws -> RemoteHomeState
+    func setMinorSupervision(_ memberID: UUID, update: MinorSupervisionUpdate) async throws -> RemoteHomeState
+    func changeMinorBand(_ memberID: UUID, band: MinorBand, consentVersion: String?) async throws -> RemoteHomeState
+    func endMinorGuardianship(_ memberID: UUID) async throws -> RemoteHomeState
+    func exportMinorData(_ memberID: UUID) async throws -> Data
+    func exportAccountData() async throws -> Data
+    func reportNinaReply(_ messageID: UUID, reason: NinaReplyReportReason) async throws
 }
 
 enum RemoteHomeBackendError: Error {
@@ -246,7 +427,11 @@ extension RemoteHomeBackend {
         throw RemoteHomeBackendError.operationUnavailable
     }
 
-    func recordNinaAIConsent(granted: Bool, policyVersion: String) async throws -> RemoteHomeState {
+    func recordNinaAIConsent(
+        granted: Bool,
+        policyVersion: String,
+        transferConsented: Bool
+    ) async throws -> RemoteHomeState {
         throw RemoteHomeBackendError.operationUnavailable
     }
 
@@ -254,6 +439,87 @@ extension RemoteHomeBackend {
         AsyncStream { continuation in
             continuation.finish()
         }
+    }
+
+    // A backend that cannot say the viewer's age reports it as unknown, the most protective reading.
+    func loadHomeContext(for user: AuthUser) async throws -> RemoteHomeContext {
+        let state = try await loadHome(for: user)
+        return RemoteHomeContext(viewerAge: state?.viewerAge ?? .unknown, state: state)
+    }
+
+    func recordTermsAcceptance() async throws -> AgeStatus {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func loadMinorHome() async throws -> MinorHome {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func setMinorTaskDone(
+        _ taskID: UUID,
+        expectedVersion: Int,
+        markDone: Bool,
+        nextDueAt: Date?
+    ) async throws -> MinorHome {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func recordMinorUsage(day: String, minutes: Int) async throws -> MinorUsageResult {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func acknowledgeMinorTerms(kind: MinorAcknowledgementKind, textVersion: String) async throws -> MinorHome {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func approveJoinRequestAsGuardian(
+        _ requestID: UUID,
+        approval: GuardianApproval
+    ) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func addMinorProfile(_ draft: MinorProfileDraft, familyID: UUID) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func declareMinorGuardianship(
+        _ memberID: UUID,
+        declaration: GuardianDeclaration
+    ) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func setMinorHealthConsent(
+        _ memberID: UUID,
+        granted: Bool,
+        consentVersion: String
+    ) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func setMinorSupervision(_ memberID: UUID, update: MinorSupervisionUpdate) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func changeMinorBand(_ memberID: UUID, band: MinorBand, consentVersion: String?) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func endMinorGuardianship(_ memberID: UUID) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func exportMinorData(_ memberID: UUID) async throws -> Data {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func exportAccountData() async throws -> Data {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func reportNinaReply(_ messageID: UUID, reason: NinaReplyReportReason) async throws {
+        throw RemoteHomeBackendError.operationUnavailable
     }
 }
 
@@ -265,6 +531,10 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
     var diagnostics: BackendDiagnosticsStore? = nil
 
     func loadHome(for user: AuthUser) async throws -> RemoteHomeState? {
+        try await loadHomeContext(for: user).state
+    }
+
+    func loadHomeContext(for user: AuthUser) async throws -> RemoteHomeContext {
         let context: HomeContextRow = try await perform(
             operation: "get_current_home_context"
         ) {
@@ -274,7 +544,225 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                 .value
         }
 
-        return try await loadRemoteState(from: context)
+        return RemoteHomeContext(
+            viewerAge: context.viewerAge,
+            isMinorView: context.isMinorView,
+            state: try await loadRemoteState(from: context)
+        )
+    }
+
+    func recordTermsAcceptance() async throws -> AgeStatus {
+        try await perform(operation: "record_terms_acceptance") {
+            try await client
+                .rpc("record_terms_acceptance")
+                .execute()
+                .value
+        }
+    }
+
+    func loadMinorHome() async throws -> MinorHome {
+        try await perform(operation: "get_minor_home_view") {
+            try await client
+                .rpc("get_minor_home_view")
+                .execute()
+                .value
+        }
+    }
+
+    func setMinorTaskDone(
+        _ taskID: UUID,
+        expectedVersion: Int,
+        markDone: Bool,
+        nextDueAt: Date?
+    ) async throws -> MinorHome {
+        try await perform(operation: "set_minor_task_done") {
+            try await client
+                .rpc(
+                    "set_minor_task_done",
+                    params: SetMinorTaskDoneParams(
+                        targetTaskID: taskID,
+                        expectedVersion: expectedVersion,
+                        markDone: markDone,
+                        nextDueAt: nextDueAt
+                    )
+                )
+                .execute()
+                .value
+        }
+    }
+
+    func recordMinorUsage(day: String, minutes: Int) async throws -> MinorUsageResult {
+        try await perform(operation: "record_minor_usage") {
+            try await client
+                .rpc(
+                    "record_minor_usage",
+                    params: RecordMinorUsageParams(usageDay: day, usageMinutes: minutes)
+                )
+                .execute()
+                .value
+        }
+    }
+
+    func acknowledgeMinorTerms(kind: MinorAcknowledgementKind, textVersion: String) async throws -> MinorHome {
+        try await perform(operation: "acknowledge_minor_terms") {
+            try await client
+                .rpc(
+                    "acknowledge_minor_terms",
+                    params: AcknowledgeMinorTermsParams(
+                        acknowledgementKind: kind.rawValue,
+                        textVersion: textVersion
+                    )
+                )
+                .execute()
+                .value
+        }
+    }
+
+    func approveJoinRequestAsGuardian(
+        _ requestID: UUID,
+        approval: GuardianApproval
+    ) async throws -> RemoteHomeState {
+        try await homeState(operation: "approve_family_join_request") {
+            try await client
+                .rpc(
+                    "approve_family_join_request",
+                    params: GuardianApproveJoinRequestParams(requestID: requestID, approval: approval)
+                )
+                .execute()
+                .value
+        }
+    }
+
+    func addMinorProfile(_ draft: MinorProfileDraft, familyID: UUID) async throws -> RemoteHomeState {
+        try await homeState(operation: "add_minor_profile") {
+            try await client
+                .rpc(
+                    "add_minor_profile",
+                    params: AddMinorProfileParams(familyID: familyID, draft: draft)
+                )
+                .execute()
+                .value
+        }
+    }
+
+    func declareMinorGuardianship(
+        _ memberID: UUID,
+        declaration: GuardianDeclaration
+    ) async throws -> RemoteHomeState {
+        try await homeState(operation: "declare_minor_guardianship") {
+            try await client
+                .rpc(
+                    "declare_minor_guardianship",
+                    params: DeclareMinorGuardianshipParams(memberID: memberID, declaration: declaration)
+                )
+                .execute()
+                .value
+        }
+    }
+
+    func setMinorHealthConsent(
+        _ memberID: UUID,
+        granted: Bool,
+        consentVersion: String
+    ) async throws -> RemoteHomeState {
+        try await homeState(operation: "set_minor_health_consent") {
+            try await client
+                .rpc(
+                    "set_minor_health_consent",
+                    params: SetMinorHealthConsentParams(
+                        targetMemberID: memberID,
+                        granted: granted,
+                        consentVersion: consentVersion
+                    )
+                )
+                .execute()
+                .value
+        }
+    }
+
+    func setMinorSupervision(_ memberID: UUID, update: MinorSupervisionUpdate) async throws -> RemoteHomeState {
+        try await homeState(operation: "set_minor_supervision") {
+            try await client
+                .rpc(
+                    "set_minor_supervision",
+                    params: SetMinorSupervisionParams(
+                        targetMemberID: memberID,
+                        supervision: MinorSupervisionPayload(update: update)
+                    )
+                )
+                .execute()
+                .value
+        }
+    }
+
+    func changeMinorBand(_ memberID: UUID, band: MinorBand, consentVersion: String?) async throws -> RemoteHomeState {
+        try await homeState(operation: "change_minor_band") {
+            try await client
+                .rpc(
+                    "change_minor_band",
+                    params: ChangeMinorBandParams(
+                        targetMemberID: memberID,
+                        minorBand: band.rawValue,
+                        consentVersion: consentVersion
+                    )
+                )
+                .execute()
+                .value
+        }
+    }
+
+    func endMinorGuardianship(_ memberID: UUID) async throws -> RemoteHomeState {
+        try await homeState(operation: "end_minor_guardianship") {
+            try await client
+                .rpc(
+                    "end_minor_guardianship",
+                    params: MemberIDParams(targetMemberID: memberID)
+                )
+                .execute()
+                .value
+        }
+    }
+
+    // The export is written byte for byte as the server produced it; the app adds nothing about anyone else.
+    func exportMinorData(_ memberID: UUID) async throws -> Data {
+        try await perform(operation: "export_minor_data") {
+            try await client
+                .rpc("export_minor_data", params: MemberIDParams(targetMemberID: memberID))
+                .execute()
+                .data
+        }
+    }
+
+    func exportAccountData() async throws -> Data {
+        try await perform(operation: "export_account_data") {
+            try await client
+                .rpc("export_account_data")
+                .execute()
+                .data
+        }
+    }
+
+    func reportNinaReply(_ messageID: UUID, reason: NinaReplyReportReason) async throws {
+        try await perform(operation: "report_nina_reply") {
+            _ = try await client
+                .rpc(
+                    "report_nina_reply",
+                    params: ReportNinaReplyParams(targetMessageID: messageID, reportReason: reason.rawValue)
+                )
+                .execute()
+            return ()
+        }
+    }
+
+    private func homeState(
+        operation: String,
+        request: () async throws -> HomeContextRow
+    ) async throws -> RemoteHomeState {
+        let context = try await perform(operation: operation, request: request)
+        guard let state = try await loadRemoteState(from: context) else {
+            throw RemoteHomeBackendError.familyNotFound
+        }
+        return state
     }
 
     func createHome(named name: String, owner: AuthUser?) async throws -> RemoteHomeState {
@@ -481,7 +969,7 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                         targetFamilyID: familyID,
                         memberName: member.name,
                         relationship: member.relationship,
-                        householdRole: member.role.rawValue,
+                        householdRole: member.role.wireValue,
                         tone: member.tone.rawValue,
                         memoryNote: member.memoryNote,
                         birthDate: PostgresDateOnlyCodec.string(from: member.birthDate),
@@ -508,7 +996,7 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                         targetMemberID: member.id,
                         memberName: member.name,
                         relationship: member.relationship,
-                        householdRole: member.role.rawValue,
+                        householdRole: member.role.wireValue,
                         permissionRole: member.permissionRole.rawValue,
                         tone: member.tone.rawValue,
                         memoryNote: member.memoryNote,
@@ -807,14 +1295,19 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         }
     }
 
-    func recordNinaAIConsent(granted: Bool, policyVersion: String) async throws -> RemoteHomeState {
+    func recordNinaAIConsent(
+        granted: Bool,
+        policyVersion: String,
+        transferConsented: Bool
+    ) async throws -> RemoteHomeState {
         let context: HomeContextRow = try await perform(operation: "record_nina_ai_consent") {
             try await client
                 .rpc(
                     "record_nina_ai_consent",
                     params: RecordNinaAIConsentParams(
                         policyVersion: policyVersion,
-                        granted: granted
+                        granted: granted,
+                        transferConsented: transferConsented
                     )
                 )
                 .execute()
@@ -1043,7 +1536,16 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         "id,task_kind,section_id,title,subtitle,owner_label,owner_member_id,due_label,due_at,category_id,category_snapshot,priority,recurrence_rule,remind_offset_minutes,snoozed_until,is_done,completed_at,created_by_label,version"
 }
 
+enum RemoteHomeContextDecoding {
+    static func context(from data: Data) throws -> RemoteHomeContext {
+        let row = try NinaDateCoding.decoder().decode(HomeContextRow.self, from: data)
+        return RemoteHomeContext(viewerAge: row.viewerAge, isMinorView: row.isMinorView, state: row.remoteState)
+    }
+}
+
 private struct HomeContextRow: Decodable {
+    var viewerKind: String
+    var viewerAge: AgeStatus
     var family: FamilyRow?
     var members: [FamilyMemberRow]
     var permissionRole: String?
@@ -1054,6 +1556,8 @@ private struct HomeContextRow: Decodable {
     var aiConsent: NinaAIConsent
 
     private enum CodingKeys: String, CodingKey {
+        case viewerKind = "viewer_kind"
+        case viewerAge = "viewer_age"
         case family
         case members
         case permissionRole = "permission_role"
@@ -1064,8 +1568,15 @@ private struct HomeContextRow: Decodable {
         case aiConsent = "ai_consent"
     }
 
+    // A response without a viewer kind comes from a server that cannot vouch for an adult, so it reads as minor.
+    var isMinorView: Bool {
+        viewerKind != "adult" || !viewerAge.isAdult
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        viewerKind = try container.decodeIfPresent(String.self, forKey: .viewerKind) ?? "minor"
+        viewerAge = (try? container.decodeIfPresent(AgeStatus.self, forKey: .viewerAge)) ?? .unknown
         family = try container.decodeIfPresent(FamilyRow.self, forKey: .family)
         members = try container.decodeIfPresent([FamilyMemberRow].self, forKey: .members) ?? []
         permissionRole = try container.decodeIfPresent(String.self, forKey: .permissionRole)
@@ -1080,7 +1591,8 @@ private struct HomeContextRow: Decodable {
     }
 
     var remoteState: RemoteHomeState? {
-        guard membershipVerified,
+        guard !isMinorView,
+              membershipVerified,
               let family,
               let permissionRole = permissionRole.flatMap(FamilyPermissionRole.init(rawValue:)) else {
             return nil
@@ -1093,7 +1605,8 @@ private struct HomeContextRow: Decodable {
             inviteStatus: activeInvite?.domainStatus,
             joinRequests: pendingJoinRequests.map(\.domainRequest),
             householdPremium: premium,
-            aiConsent: aiConsent
+            aiConsent: aiConsent,
+            viewerAge: viewerAge
         )
     }
 }
@@ -1226,6 +1739,7 @@ private struct FamilyMemberRow: Decodable {
     var petSpecies: String
     var petBreed: String
     var createdAt: Date
+    var access: MinorAccess?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -1243,6 +1757,7 @@ private struct FamilyMemberRow: Decodable {
         case petSpecies = "pet_species"
         case petBreed = "pet_breed"
         case createdAt = "created_at"
+        case access
     }
 
     init(from decoder: Decoder) throws {
@@ -1252,7 +1767,7 @@ private struct FamilyMemberRow: Decodable {
         userID = try container.decodeIfPresent(UUID.self, forKey: .userID)
         name = try container.decode(String.self, forKey: .name)
         relationship = try container.decodeIfPresent(String.self, forKey: .relationship) ?? ""
-        householdRole = try container.decodeIfPresent(String.self, forKey: .householdRole) ?? "adult"
+        householdRole = try container.decodeIfPresent(String.self, forKey: .householdRole) ?? ""
         permissionRole = try container.decodeIfPresent(String.self, forKey: .permissionRole) ?? "member"
         identityState = try container.decodeIfPresent(String.self, forKey: .identityState)
             ?? (userID == nil ? "unclaimed" : "claimed")
@@ -1263,6 +1778,7 @@ private struct FamilyMemberRow: Decodable {
         petSpecies = try container.decodeIfPresent(String.self, forKey: .petSpecies) ?? ""
         petBreed = try container.decodeIfPresent(String.self, forKey: .petBreed) ?? ""
         createdAt = try container.decode(Date.self, forKey: .createdAt)
+        access = try? container.decodeIfPresent(MinorAccess.self, forKey: .access)
     }
 
     var domainMember: HouseholdMember {
@@ -1271,15 +1787,18 @@ private struct FamilyMemberRow: Decodable {
             userID: userID?.uuidString,
             name: name,
             relationship: relationship,
-            role: HouseholdRole(rawValue: householdRole) ?? .adult,
+            role: HouseholdRole(wireValue: householdRole),
             permissionRole: FamilyPermissionRole(rawValue: permissionRole) ?? .member,
             identityState: MemberIdentityState(rawValue: identityState) ?? (userID == nil ? .unclaimed : .claimed),
             tone: MemberTone(rawValue: tone) ?? .mint,
             taskCount: taskCount,
             memoryNote: memoryNote,
-            birthDate: PostgresDateOnlyCodec.date(from: birthDate),
+            birthDate: HouseholdRole(wireValue: householdRole).isMinorRole
+                ? nil
+                : PostgresDateOnlyCodec.date(from: birthDate),
             petSpecies: petSpecies,
-            petBreed: petBreed
+            petBreed: petBreed,
+            minorAccess: access
         )
     }
 }
@@ -1325,10 +1844,211 @@ private struct AcknowledgeAccessDecisionParams: Encodable {
 private struct RecordNinaAIConsentParams: Encodable {
     var policyVersion: String
     var granted: Bool
+    var transferConsented: Bool
 
     private enum CodingKeys: String, CodingKey {
         case policyVersion = "policy_version"
         case granted
+        case transferConsented = "transfer_consented"
+    }
+}
+
+private struct SetMinorTaskDoneParams: Encodable {
+    var targetTaskID: UUID
+    var expectedVersion: Int
+    var markDone: Bool
+    var nextDueAt: Date?
+
+    private enum CodingKeys: String, CodingKey {
+        case targetTaskID = "target_task_id"
+        case expectedVersion = "expected_version"
+        case markDone = "mark_done"
+        case nextDueAt = "next_due_at"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(targetTaskID, forKey: .targetTaskID)
+        try container.encode(expectedVersion, forKey: .expectedVersion)
+        try container.encode(markDone, forKey: .markDone)
+        try container.encode(nextDueAt, forKey: .nextDueAt)
+    }
+}
+
+private struct RecordMinorUsageParams: Encodable {
+    var usageDay: String
+    var usageMinutes: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case usageDay = "usage_day"
+        case usageMinutes = "usage_minutes"
+    }
+}
+
+private struct AcknowledgeMinorTermsParams: Encodable {
+    var acknowledgementKind: String
+    var textVersion: String
+
+    private enum CodingKeys: String, CodingKey {
+        case acknowledgementKind = "acknowledgement_kind"
+        case textVersion = "text_version"
+    }
+}
+
+private struct GuardianApproveJoinRequestParams: Encodable {
+    var requestID: UUID
+    var approval: GuardianApproval
+
+    private enum CodingKeys: String, CodingKey {
+        case targetRequestID = "target_request_id"
+        case grantedPermissionRole = "granted_permission_role"
+        case guardianRelationship = "guardian_relationship"
+        case minorBand = "minor_band"
+        case guardianDeclared = "guardian_declared"
+        case consentVersion = "consent_version"
+        case healthConsent = "health_consent"
+        case nicknames
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(requestID, forKey: .targetRequestID)
+        try container.encode(FamilyPermissionRole.member.rawValue, forKey: .grantedPermissionRole)
+        try container.encode(approval.relationship.rawValue, forKey: .guardianRelationship)
+        try container.encode(approval.band.rawValue, forKey: .minorBand)
+        try container.encode(true, forKey: .guardianDeclared)
+        try container.encode(approval.consentVersion, forKey: .consentVersion)
+        try container.encode(approval.healthConsent, forKey: .healthConsent)
+        try container.encode(approval.nicknames, forKey: .nicknames)
+    }
+}
+
+private struct AddMinorProfileParams: Encodable {
+    var familyID: UUID
+    var draft: MinorProfileDraft
+
+    private enum CodingKeys: String, CodingKey {
+        case targetFamilyID = "target_family_id"
+        case memberName = "member_name"
+        case minorBand = "minor_band"
+        case guardianRelationship = "guardian_relationship"
+        case consentVersion = "consent_version"
+        case healthConsent = "health_consent"
+        case nicknames
+        case relationship
+        case tone
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(familyID, forKey: .targetFamilyID)
+        try container.encode(draft.name, forKey: .memberName)
+        try container.encode(draft.band.rawValue, forKey: .minorBand)
+        try container.encode(draft.guardianRelationship.rawValue, forKey: .guardianRelationship)
+        try container.encode(draft.consentVersion, forKey: .consentVersion)
+        try container.encode(draft.healthConsent, forKey: .healthConsent)
+        try container.encode(draft.nicknames, forKey: .nicknames)
+        try container.encode(draft.relationship, forKey: .relationship)
+        try container.encode(draft.tone.rawValue, forKey: .tone)
+    }
+}
+
+private struct DeclareMinorGuardianshipParams: Encodable {
+    var memberID: UUID
+    var declaration: GuardianDeclaration
+
+    private enum CodingKeys: String, CodingKey {
+        case targetMemberID = "target_member_id"
+        case guardianRelationship = "guardian_relationship"
+        case consentVersion = "consent_version"
+        case minorBand = "minor_band"
+        case healthConsent = "health_consent"
+        case nicknames
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(memberID, forKey: .targetMemberID)
+        try container.encode(declaration.relationship.rawValue, forKey: .guardianRelationship)
+        try container.encode(declaration.consentVersion, forKey: .consentVersion)
+        try container.encode(declaration.band?.rawValue, forKey: .minorBand)
+        try container.encode(declaration.healthConsent, forKey: .healthConsent)
+        try container.encode(declaration.nicknames, forKey: .nicknames)
+    }
+}
+
+private struct SetMinorHealthConsentParams: Encodable {
+    var targetMemberID: UUID
+    var granted: Bool
+    var consentVersion: String
+
+    private enum CodingKeys: String, CodingKey {
+        case targetMemberID = "target_member_id"
+        case granted
+        case consentVersion = "consent_version"
+    }
+}
+
+// Only the keys being changed travel; the server refuses any key outside its whitelist.
+private struct MinorSupervisionPayload: Encodable {
+    var update: MinorSupervisionUpdate
+
+    private enum CodingKeys: String, CodingKey {
+        case alertsEnabled = "alerts_enabled"
+        case quietStart = "quiet_start"
+        case quietEnd = "quiet_end"
+        case dailyLimitMinutes = "daily_limit_minutes"
+        case nicknames
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(update.alertsEnabled, forKey: .alertsEnabled)
+        try container.encodeIfPresent(update.quietStart, forKey: .quietStart)
+        try container.encodeIfPresent(update.quietEnd, forKey: .quietEnd)
+        if let limit = update.dailyLimitMinutes {
+            try container.encode(limit, forKey: .dailyLimitMinutes)
+        }
+        try container.encodeIfPresent(update.nicknames, forKey: .nicknames)
+    }
+}
+
+private struct SetMinorSupervisionParams: Encodable {
+    var targetMemberID: UUID
+    var supervision: MinorSupervisionPayload
+
+    private enum CodingKeys: String, CodingKey {
+        case targetMemberID = "target_member_id"
+        case supervision
+    }
+}
+
+private struct ChangeMinorBandParams: Encodable {
+    var targetMemberID: UUID
+    var minorBand: String
+    var consentVersion: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case targetMemberID = "target_member_id"
+        case minorBand = "minor_band"
+        case consentVersion = "consent_version"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(targetMemberID, forKey: .targetMemberID)
+        try container.encode(minorBand, forKey: .minorBand)
+        try container.encode(consentVersion, forKey: .consentVersion)
+    }
+}
+
+private struct ReportNinaReplyParams: Encodable {
+    var targetMessageID: UUID
+    var reportReason: String
+
+    private enum CodingKeys: String, CodingKey {
+        case targetMessageID = "target_message_id"
+        case reportReason = "report_reason"
     }
 }
 
@@ -2007,6 +2727,8 @@ private struct FamilyJoinRequestRow: Decodable {
     var status: String
     var createdAt: Date
     var reviewedAt: Date?
+    var requesterAge: String?
+    var requesterBand: String?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -2017,6 +2739,8 @@ private struct FamilyJoinRequestRow: Decodable {
         case status
         case createdAt = "created_at"
         case reviewedAt = "reviewed_at"
+        case requesterAge = "requester_age"
+        case requesterBand = "requester_band"
     }
 
     var domainRequest: FamilyJoinRequest {
@@ -2028,7 +2752,8 @@ private struct FamilyJoinRequestRow: Decodable {
             requesterName: requesterName,
             status: FamilyJoinRequestStatus(rawValue: status) ?? .pending,
             createdAt: createdAt,
-            reviewedAt: reviewedAt
+            reviewedAt: reviewedAt,
+            requesterAge: JoinRequesterAge(status: requesterAge, band: requesterBand)
         )
     }
 }

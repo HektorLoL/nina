@@ -26,6 +26,14 @@ enum PrivateLocalDataScope {
         "premium:\(userID)"
     }
 
+    static func minorUsage(for userID: String) -> String {
+        "minor-usage:\(userID)"
+    }
+
+    static func ageAssurance(for userID: String) -> String {
+        "age-assurance:\(userID)"
+    }
+
     static let pendingInvite = "pending-invite"
 }
 

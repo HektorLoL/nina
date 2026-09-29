@@ -2,23 +2,70 @@ import Foundation
 import Observation
 
 enum PrivacyPolicyVersion {
-    static let current = "2026-06-16"
+    static let current = "2026-09-29"
 }
 
 struct AIMemoryConsentRecord: Codable, Hashable {
     var acceptedAt: Date
     var policyVersion: String
+    var transferConsented: Bool
+
+    init(acceptedAt: Date, policyVersion: String, transferConsented: Bool) {
+        self.acceptedAt = acceptedAt
+        self.policyVersion = policyVersion
+        self.transferConsented = transferConsented
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case acceptedAt
+        case policyVersion
+        case transferConsented
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        acceptedAt = try container.decodeIfPresent(Date.self, forKey: .acceptedAt) ?? .distantPast
+        policyVersion = try container.decodeIfPresent(String.self, forKey: .policyVersion) ?? ""
+        transferConsented = try container.decodeIfPresent(Bool.self, forKey: .transferConsented) ?? false
+    }
+
+    // A grant given on an older text, or without the separate transfer consent, is no grant at all.
+    var isCurrent: Bool {
+        policyVersion == PrivacyPolicyVersion.current && transferConsented
+    }
 }
 
-struct PrivacyExportPackage: Codable {
-    var exportedAt: Date
-    var policyVersion: String
-    var user: AuthUser?
-    var profile: UserProfile?
-    var profilePhotoData: Data?
-    var familyGroup: FamilyGroup
-    var aiMemoryConsent: AIMemoryConsentRecord?
-    var data: AppDataSnapshot
+// Days are counted on Brazil's clock, the same clock record_minor_usage validates against.
+enum MinorUsageClock {
+    static let timeZone = TimeZone(identifier: "America/Sao_Paulo") ?? .current
+
+    static func day(for date: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 1970,
+            components.month ?? 1,
+            components.day ?? 1
+        )
+    }
+}
+
+struct MinorUsageLedger: Codable, Hashable {
+    var day: String
+    var seconds: Int
+
+    var minutes: Int {
+        min(seconds / 60, 1_440)
+    }
+
+    func adding(seconds extra: Int, on day: String) -> MinorUsageLedger {
+        guard day == self.day else {
+            return MinorUsageLedger(day: day, seconds: max(extra, 0))
+        }
+        return MinorUsageLedger(day: day, seconds: seconds + max(extra, 0))
+    }
 }
 
 private struct LegacyReminderItem: Decodable {
@@ -161,6 +208,7 @@ struct AppDataSnapshot: Codable {
 enum HomeAccessState: Hashable {
     case loading
     case authorized
+    case minorMember
     case pendingApproval
     case accessDecision
     case noHome
@@ -180,9 +228,15 @@ private struct HomeContextToken {
 
 private enum HomeMembershipOutcome {
     case member(RemoteHomeState)
+    case minor(MinorHome)
     case awaitingApproval(FamilyJoinRequest)
     case notAMember(FamilyAccessDecision?)
     case unverifiable
+}
+
+private struct HomeMembershipLoad {
+    var outcome: HomeMembershipOutcome
+    var viewerAge: AgeStatus
 }
 
 @MainActor
@@ -214,7 +268,16 @@ final class AppStore {
     // Only the hold or a change of account closes a child's list; losing the home for a moment never does.
     var childDayPresentation: ChildDayPresentation?
     var aiMemoryConsent: AIMemoryConsentRecord?
+    var aiConsentStatus: NinaAIConsent = .withheld
+    var hasStaleLocalConsent = false
     var notificationAuthorizationStatus: HomeNotificationAuthorizationStatus = .notDetermined
+    // Capabilities come from the server's age record, never from a household role.
+    var viewerAge: AgeStatus = .unknown
+    var minorHome: MinorHome?
+    var ageCheckRequested = false
+    private(set) var isRecordingFootnoteAcceptance = false
+    // What the person typed before the chat closed on them, kept in memory only and never in a snapshot.
+    var restorableDraft: String?
 
     @ObservationIgnored private let ninaEngine: any NinaEngine
     @ObservationIgnored private let fallbackNinaEngine = MockNinaEngine()
@@ -233,6 +296,9 @@ final class AppStore {
     @ObservationIgnored private var realtimeListenerTask: Task<Void, Never>?
     @ObservationIgnored private var realtimeRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var notificationSyncTask: Task<Void, Never>?
+    @ObservationIgnored private var minorSessionStartedAt: Date?
+    @ObservationIgnored private var termsFootnoteUserID: String?
+    @ObservationIgnored private(set) var lastMutationErrorCode: RemoteRPCErrorCode?
 
     var undoableCompletionID: TaskItem.ID?
     @ObservationIgnored private var undoExpiryTask: Task<Void, Never>?
@@ -269,16 +335,62 @@ final class AppStore {
             || (remoteHomeBackend == nil && BackendServices.environment == .mock)
     }
 
+    var isUsingLocalContext: Bool {
+        isUsingLocalNina || (activeUser != nil && remoteHomeBackend == nil)
+    }
+
+    var isAdultViewer: Bool {
+        viewerAge.isAdult
+    }
+
+    var isMinorView: Bool {
+        !viewerAge.isAdult
+    }
+
+    var canActForMinors: Bool {
+        viewerAge.canActForMinors
+    }
+
+    var canBuyPremium: Bool {
+        viewerAge.canBuy
+    }
+
+    var canBuy: Bool {
+        canBuyPremium
+    }
+
+    var canUseAI: Bool {
+        viewerAge.canUseAI
+    }
+
+    var isAIBlocked: Bool {
+        viewerAge.aiBlocked
+    }
+
+    private var isAdultHouseholdMember: Bool {
+        guard let activeUser else { return false }
+        return familyGroup.members.contains {
+            $0.userID == activeUser.id && $0.role == .adult
+        }
+    }
+
+    // A declared adult runs the house but sees the confirmation gate where the conversation would be.
+    var needsConfirmedAgeForChat: Bool {
+        !isUsingLocalNina
+            && activeUser != nil
+            && viewerAge.isAdult
+            && !viewerAge.mayUseAI
+            && isAdultHouseholdMember
+    }
+
     var canUseNinaAI: Bool {
         if isUsingLocalNina {
             return true
         }
-        guard let activeUser else {
+        guard activeUser != nil else {
             return remoteHomeBackend == nil
         }
-        return familyGroup.members.contains {
-            $0.userID == activeUser.id && $0.role == .adult
-        }
+        return viewerAge.canUseAI && isAdultHouseholdMember
     }
 
     var requiresAIMemoryConsent: Bool {
@@ -289,7 +401,11 @@ final class AppStore {
     }
 
     var hasAIMemoryConsent: Bool {
-        aiMemoryConsent != nil
+        aiMemoryConsent?.isCurrent == true
+    }
+
+    var aiConsentNoticeChanged: Bool {
+        aiConsentStatus.wasWithdrawnByPolicyChange || hasStaleLocalConsent
     }
 
     var canSendNinaMessages: Bool {
@@ -418,6 +534,9 @@ final class AppStore {
         if member.userID == activeHomeUserID {
             return true
         }
+        if member.role.isMinorRole, member.minorAccess?.isViewerGuardian == true {
+            return true
+        }
         guard canManageFamily else { return false }
         if currentPermissionRole == .admin,
            member.userID != activeHomeUserID,
@@ -428,6 +547,11 @@ final class AppStore {
     }
 
     func canRemoveFamilyMember(_ member: HouseholdMember) -> Bool {
+        if member.minorAccess?.isViewerGuardian == true,
+           member.role.isMinorRole,
+           member.userID != activeHomeUserID {
+            return true
+        }
         guard canManageFamily,
               member.role != .assistant,
               member.permissionRole != .owner,
@@ -451,6 +575,12 @@ final class AppStore {
     func activateHomeContext(for user: AuthUser?) async {
         if user?.id != activeHomeUserID {
             childDayPresentation = nil
+            minorSessionStartedAt = nil
+            restorableDraft = nil
+            isRecordingFootnoteAcceptance = false
+            if termsFootnoteUserID != user?.id {
+                termsFootnoteUserID = nil
+            }
         }
         homeContextGeneration &+= 1
         remoteMutationTask?.cancel()
@@ -468,6 +598,9 @@ final class AppStore {
         familyAccessDecision = nil
         joinRequests = []
         householdPremium = .inactive
+        aiConsentStatus = .withheld
+        viewerAge = .unknown
+        minorHome = nil
 
         guard let user else {
             homeAccessState = .noHome
@@ -490,50 +623,37 @@ final class AppStore {
             isSyncingHome = true
             defer { finishSyncingHome(ifCurrent: contextToken) }
 
-            do {
-                let state = try await remoteHomeBackend.loadHome(for: user)
-                guard isCurrentHomeContext(contextToken) else { return }
+            guard let load = await loadMembershipOutcome(
+                for: user,
+                from: remoteHomeBackend,
+                contextToken: contextToken
+            ) else {
+                return
+            }
 
-                if let state {
-                    apply(state)
-                    homeAccessState = .authorized
-                    cacheActiveHomeLocally()
-                    cacheAppSnapshotLocally()
-                    startRealtimeSync()
-                    return
-                }
-
-                let request = try await remoteHomeBackend.loadPendingJoinRequest()
-                guard isCurrentHomeContext(contextToken) else { return }
-
-                if let request {
-                    pendingJoinRequest = request
-                    homeAccessState = .pendingApproval
-                    currentPermissionRole = .member
-                    familyGroup = PreviewData.familyGroup
-                    resetActivityState()
-                    return
-                }
-
-                let decision = try await remoteHomeBackend.loadFamilyAccessDecision()
-                guard isCurrentHomeContext(contextToken) else { return }
-
+            viewerAge = load.viewerAge
+            switch load.outcome {
+            case .member(let state):
+                apply(state)
+                homeAccessState = .authorized
+                cacheActiveHomeLocally()
+                cacheAppSnapshotLocally()
+                startRealtimeSync()
+            case .minor(let home):
+                enterMinorView(home, for: user.id)
+            case .awaitingApproval(let request):
+                pendingJoinRequest = request
+                homeAccessState = .pendingApproval
                 currentPermissionRole = .member
                 familyGroup = PreviewData.familyGroup
                 resetActivityState()
-
-                if let decision {
-                    familyAccessDecision = decision
-                    homeAccessState = .accessDecision
-                    return
-                }
-
-                homeAccessState = .noHome
-                return
-            } catch is CancellationError {
-                return
-            } catch {
-                guard isCurrentHomeContext(contextToken) else { return }
+            case .notAMember(let decision):
+                currentPermissionRole = .member
+                familyGroup = PreviewData.familyGroup
+                resetActivityState()
+                familyAccessDecision = decision
+                homeAccessState = decision == nil ? .noHome : .accessDecision
+            case .unverifiable:
                 homeAccessState = .unavailable
                 currentPermissionRole = .member
                 familyGroup = PreviewData.familyGroup
@@ -541,6 +661,8 @@ final class AppStore {
                 syncErrorMessage = "Não foi possível verificar sua participação nesta casa."
                 return
             }
+            recordTermsAcceptanceIfNeeded()
+            return
         }
 
         #if DEBUG
@@ -569,7 +691,7 @@ final class AppStore {
         syncErrorMessage = nil
         defer { finishSyncingHome(ifCurrent: contextToken) }
 
-        guard let outcome = await loadMembershipOutcome(
+        guard let load = await loadMembershipOutcome(
             for: user,
             from: remoteHomeBackend,
             contextToken: contextToken
@@ -577,8 +699,13 @@ final class AppStore {
             return
         }
 
+        if case .unverifiable = load.outcome {
+            // An unreachable server says nothing about age, so the last verified reading stands.
+        } else {
+            viewerAge = load.viewerAge
+        }
         applyMembershipOutcome(
-            outcome,
+            load.outcome,
             for: user.id,
             mergingContentAtRevision: requestedRevision
         )
@@ -588,28 +715,43 @@ final class AppStore {
         for user: AuthUser,
         from backend: any RemoteHomeBackend,
         contextToken: HomeContextToken
-    ) async -> HomeMembershipOutcome? {
+    ) async -> HomeMembershipLoad? {
+        var viewerAge = AgeStatus.unknown
         do {
-            let state = try await backend.loadHome(for: user)
+            let context = try await backend.loadHomeContext(for: user)
             guard isCurrentHomeContext(contextToken) else { return nil }
-            if let state {
-                return .member(state)
+            viewerAge = context.viewerAge
+            if let state = context.state {
+                return HomeMembershipLoad(outcome: .member(state), viewerAge: viewerAge)
+            }
+
+            // A non-adult reads the house only through get_minor_home_view.
+            if context.isMinorView {
+                do {
+                    let home = try await backend.loadMinorHome()
+                    guard isCurrentHomeContext(contextToken) else { return nil }
+                    if home.viewer.state.isMember {
+                        return HomeMembershipLoad(outcome: .minor(home), viewerAge: viewerAge)
+                    }
+                } catch RemoteHomeBackendError.operationUnavailable {
+                    guard isCurrentHomeContext(contextToken) else { return nil }
+                }
             }
 
             let request = try await backend.loadPendingJoinRequest()
             guard isCurrentHomeContext(contextToken) else { return nil }
             if let request {
-                return .awaitingApproval(request)
+                return HomeMembershipLoad(outcome: .awaitingApproval(request), viewerAge: viewerAge)
             }
 
             let decision = try await backend.loadFamilyAccessDecision()
             guard isCurrentHomeContext(contextToken) else { return nil }
-            return .notAMember(decision)
+            return HomeMembershipLoad(outcome: .notAMember(decision), viewerAge: viewerAge)
         } catch is CancellationError {
             return nil
         } catch {
             guard isCurrentHomeContext(contextToken) else { return nil }
-            return .unverifiable
+            return HomeMembershipLoad(outcome: .unverifiable, viewerAge: viewerAge)
         }
     }
 
@@ -628,11 +770,20 @@ final class AppStore {
 
         switch outcome {
         case .member(let state):
+            if homeAccessState == .minorMember {
+                minorHome = nil
+            }
             homeAccessState = .authorized
             guard !hasUnmergedLocalEdits else { return }
             apply(state)
             cacheActiveHomeLocally()
             cacheAppSnapshotLocally()
+        case .minor(let home):
+            if hadAuthorizedHome {
+                releaseHousehold(discardingQueuedWrites: true)
+                clearCachedHome(for: userID)
+            }
+            enterMinorView(home, for: userID)
         case .awaitingApproval(let request):
             releaseHousehold(discardingQueuedWrites: true)
             clearCachedHome(for: userID)
@@ -654,6 +805,20 @@ final class AppStore {
         }
     }
 
+    private func enterMinorView(_ home: MinorHome, for userID: String) {
+        stopRealtimeSync()
+        minorHome = home
+        pendingJoinRequest = nil
+        familyAccessDecision = nil
+        joinRequests = []
+        inviteStatus = nil
+        currentPermissionRole = .member
+        familyGroup = PreviewData.familyGroup
+        resetActivityState()
+        homeAccessState = .minorMember
+        synchronizeLocalNotifications()
+    }
+
     private func releaseHousehold(discardingQueuedWrites: Bool) {
         if discardingQueuedWrites {
             remoteMutationTask?.cancel()
@@ -663,6 +828,7 @@ final class AppStore {
         stopRealtimeSync()
         pendingJoinRequest = nil
         familyAccessDecision = nil
+        minorHome = nil
         currentPermissionRole = .member
         familyGroup = PreviewData.familyGroup
         resetActivityState()
@@ -701,7 +867,11 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não deu para criar a casa agora. Tente de novo."
+                let code = RemoteRPCErrorCode.from(error)
+                if code == .ageSignalRequired {
+                    ageCheckRequested = true
+                }
+                syncErrorMessage = code?.userMessage() ?? "Não deu para criar a casa agora. Tente de novo."
                 Haptics.error()
                 return false
             }
@@ -1160,8 +1330,14 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não foi possível aprovar este pedido."
+                let code = RemoteRPCErrorCode.from(error)
+                syncErrorMessage = code?.userMessage(name: request.requesterName)
+                    ?? "Não foi possível aprovar este pedido."
                 Haptics.error()
+                if code == .joinRequestAgeChanged {
+                    isSyncingHome = false
+                    await refreshHomeFromRemote(for: activeUser)
+                }
                 return false
             }
         }
@@ -1206,6 +1382,427 @@ final class AppStore {
         #else
         return false
         #endif
+    }
+
+    @discardableResult
+    func approveJoinRequest(
+        _ request: FamilyJoinRequest,
+        asGuardian approval: GuardianApproval
+    ) async -> Bool {
+        guard canManageFamily, canActForMinors, !request.requesterAge.isAdult else { return false }
+        guard canInviteMorePeople else {
+            syncErrorMessage = "A casa já atingiu o limite de 8 pessoas."
+            return false
+        }
+        let succeeded = await performHomeMutation(
+            name: request.requesterName,
+            fallback: "Não foi possível aprovar este pedido."
+        ) { backend in
+            try await backend.approveJoinRequestAsGuardian(request.id, approval: approval)
+        }
+        if !succeeded, lastMutationErrorCode == .joinRequestAgeChanged {
+            await refreshHomeFromRemote(for: activeUser)
+        }
+        return succeeded
+    }
+
+    @discardableResult
+    func addMinorProfile(_ draft: MinorProfileDraft) async -> Bool {
+        guard canActForMinors, canInviteMorePeople else { return false }
+        let familyID = familyGroup.id
+        return await performHomeMutation(
+            name: draft.name,
+            fallback: "Não foi possível cadastrar este perfil."
+        ) { backend in
+            try await backend.addMinorProfile(draft, familyID: familyID)
+        }
+    }
+
+    @discardableResult
+    func declareMinorGuardianship(
+        for member: HouseholdMember,
+        declaration: GuardianDeclaration
+    ) async -> Bool {
+        guard canActForMinors, member.isMinorProfile else { return false }
+        return await performHomeMutation(
+            name: member.name,
+            fallback: "Não deu para salvar agora."
+        ) { backend in
+            try await backend.declareMinorGuardianship(member.id, declaration: declaration)
+        }
+    }
+
+    @discardableResult
+    func setMinorHealthConsent(for member: HouseholdMember, granted: Bool) async -> Bool {
+        guard member.minorAccess?.isViewerGuardian == true else { return false }
+        return await performHomeMutation(
+            name: member.name,
+            fallback: "Não deu para salvar agora."
+        ) { backend in
+            try await backend.setMinorHealthConsent(
+                member.id,
+                granted: granted,
+                consentVersion: MinorConsentVersion.current
+            )
+        }
+    }
+
+    @discardableResult
+    func updateMinorSupervision(for member: HouseholdMember, update: MinorSupervisionUpdate) async -> Bool {
+        guard member.minorAccess?.isViewerGuardian == true else { return false }
+        return await performHomeMutation(
+            name: member.name,
+            fallback: "Não deu para salvar agora."
+        ) { backend in
+            try await backend.setMinorSupervision(member.id, update: update)
+        }
+    }
+
+    @discardableResult
+    func changeMinorBand(for member: HouseholdMember, to band: MinorBand) async -> Bool {
+        guard let supervision = member.minorAccess?.supervision,
+              member.minorAccess?.isViewerGuardian == true,
+              band != supervision.band else { return false }
+        // Only an unclaimed profile may grow older, and only with the consent affirmed again.
+        let consentVersion: String? = band > supervision.band ? MinorConsentVersion.current : nil
+        if band > supervision.band, member.isClaimed {
+            return false
+        }
+        return await performHomeMutation(
+            name: member.name,
+            fallback: "Não deu para salvar agora."
+        ) { backend in
+            try await backend.changeMinorBand(member.id, band: band, consentVersion: consentVersion)
+        }
+    }
+
+    @discardableResult
+    func endMinorGuardianship(for member: HouseholdMember) async -> Bool {
+        guard member.minorAccess?.isViewerGuardian == true else { return false }
+        return await performHomeMutation(
+            name: member.name,
+            fallback: "Não deu para salvar agora."
+        ) { backend in
+            try await backend.endMinorGuardianship(member.id)
+        }
+    }
+
+    @discardableResult
+    func reportNinaReply(_ message: ChatMessage, reason: NinaReplyReportReason) async -> Bool {
+        guard message.sender == .nina else { return false }
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+        guard let activeUser,
+              !usesLocalDebugBackend(for: activeUser),
+              let remoteHomeBackend else {
+            return false
+        }
+        do {
+            try await remoteHomeBackend.reportNinaReply(message.id, reason: reason)
+            guard isCurrentHomeContext(contextToken) else { return false }
+            Haptics.success()
+            return true
+        } catch {
+            guard isCurrentHomeContext(contextToken) else { return false }
+            syncErrorMessage = RemoteRPCErrorCode.from(error)?.userMessage() ?? "Não deu para enviar agora."
+            Haptics.error()
+            return false
+        }
+    }
+
+    // Only a sign-in that just passed the welcome screen's footnote may be recorded as accepting the Terms;
+    // a restored session never saw the current version, so it waits for the person to tap Aceitar.
+    func noteTermsFootnoteShown(for userID: String) {
+        termsFootnoteUserID = userID
+    }
+
+    var needsTermsAcceptance: Bool {
+        viewerAge.isAdult
+            && !viewerAge.terms.acceptedCurrent
+            && !viewerAge.terms.reachedMajority
+            && !isRecordingFootnoteAcceptance
+    }
+
+    private func recordTermsAcceptanceIfNeeded() {
+        guard viewerAge.isAdult,
+              !viewerAge.terms.acceptedCurrent,
+              !viewerAge.terms.reachedMajority,
+              let activeUser,
+              termsFootnoteUserID == activeUser.id,
+              !usesLocalDebugBackend(for: activeUser),
+              let remoteHomeBackend else {
+            return
+        }
+        termsFootnoteUserID = nil
+        isRecordingFootnoteAcceptance = true
+        let userID = activeUser.id
+        // The acceptance belongs to the account, not to one home context, so a reload that raced it still
+        // receives its result instead of showing the Terms gate to someone who just accepted them.
+        Task { [weak self] in
+            let status = try? await remoteHomeBackend.recordTermsAcceptance()
+            guard let self, self.activeHomeUserID == userID else { return }
+            self.isRecordingFootnoteAcceptance = false
+            if let status, self.viewerAge.isAdult {
+                self.viewerAge.terms = status.terms
+            }
+        }
+    }
+
+    @discardableResult
+    func acceptTermsAsAdult() async -> Bool {
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+        guard let activeUser,
+              !usesLocalDebugBackend(for: activeUser),
+              let remoteHomeBackend else {
+            viewerAge.terms.reachedMajority = false
+            viewerAge.terms.acceptedCurrent = true
+            return true
+        }
+        isSyncingHome = true
+        defer { finishSyncingHome(ifCurrent: contextToken) }
+        do {
+            let status = try await remoteHomeBackend.recordTermsAcceptance()
+            guard isCurrentHomeContext(contextToken) else { return false }
+            viewerAge = status
+            Haptics.success()
+            return true
+        } catch {
+            guard isCurrentHomeContext(contextToken) else { return false }
+            syncErrorMessage = RemoteRPCErrorCode.from(error)?.userMessage() ?? "Não deu para salvar agora."
+            Haptics.error()
+            return false
+        }
+    }
+
+    // After age-signal records a new status the whole context is read again: the shape may have changed.
+    func applyRecordedAge(_ status: AgeStatus, for user: AuthUser?) async {
+        guard user?.id == activeHomeUserID else { return }
+        viewerAge = status
+        await activateHomeContext(for: user)
+    }
+
+    func refreshMinorHome() async {
+        let contextToken = currentHomeContextToken
+        guard homeAccessState == .minorMember,
+              let activeUser,
+              !usesLocalDebugBackend(for: activeUser),
+              let remoteHomeBackend else {
+            return
+        }
+        do {
+            let home = try await remoteHomeBackend.loadMinorHome()
+            guard isCurrentHomeContext(contextToken) else { return }
+            if home.viewer.state.isMember {
+                minorHome = home
+                synchronizeLocalNotifications()
+            } else {
+                await refreshHomeFromRemote(for: activeUser)
+            }
+        } catch {
+            guard isCurrentHomeContext(contextToken) else { return }
+        }
+    }
+
+    var minorTaskItems: [TaskItem] {
+        minorHome?.taskItems ?? []
+    }
+
+    // A minor's repeating task never lands on tonight: marking it done closes every occurrence through today.
+    func markMinorTaskDone(
+        _ id: TaskItem.ID,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) async -> ChildDayMark? {
+        guard let task = minorTaskItems.first(where: { $0.id == id }),
+              let marked = ChildDay.markedDone(task, now: now, calendar: calendar) else {
+            return nil
+        }
+        let nextDueAt: Date? = task.recurrence == .none ? nil : marked.dueAt
+        if let nextDueAt, let dueAt = task.dueAt, nextDueAt <= dueAt {
+            return nil
+        }
+        guard let written = await writeMinorTask(task, markDone: true, nextDueAt: nextDueAt) else {
+            return nil
+        }
+        return ChildDayMark(baseline: task, written: written, markedAt: now)
+    }
+
+    @discardableResult
+    func reopenMinorTask(_ mark: ChildDayMark) async -> Bool {
+        guard let live = minorTaskItems.first(where: { $0.id == mark.written.id }),
+              mark.holds(on: live) else { return false }
+        let nextDueAt: Date? = live.recurrence == .none ? nil : mark.baseline.dueAt
+        return await writeMinorTask(live, markDone: false, nextDueAt: nextDueAt) != nil
+    }
+
+    private func writeMinorTask(_ task: TaskItem, markDone: Bool, nextDueAt: Date?) async -> TaskItem? {
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+        guard homeAccessState == .minorMember,
+              let activeUser,
+              !usesLocalDebugBackend(for: activeUser),
+              let remoteHomeBackend else {
+            return nil
+        }
+        do {
+            let home = try await remoteHomeBackend.setMinorTaskDone(
+                task.id,
+                expectedVersion: task.version,
+                markDone: markDone,
+                nextDueAt: nextDueAt
+            )
+            guard isCurrentHomeContext(contextToken) else { return nil }
+            minorHome = home
+            synchronizeLocalNotifications()
+            return home.taskItems.first { $0.id == task.id }
+        } catch {
+            guard isCurrentHomeContext(contextToken) else { return nil }
+            // A version conflict is settled by the house's version, silently, never by a sheet in a child's hands.
+            if RemoteRPCErrorCode.from(error) == .taskVersionConflict {
+                await refreshMinorHome()
+                return nil
+            }
+            syncErrorMessage = RemoteRPCErrorCode.from(error)?.userMessage() ?? "Não deu para salvar agora."
+            Haptics.error()
+            return nil
+        }
+    }
+
+    @discardableResult
+    func acknowledgeMinorTerms() async -> Bool {
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+        guard let kind = minorHome?.viewer.acknowledgementKind,
+              let activeUser,
+              !usesLocalDebugBackend(for: activeUser),
+              let remoteHomeBackend else {
+            return false
+        }
+        isSyncingHome = true
+        defer { finishSyncingHome(ifCurrent: contextToken) }
+        do {
+            let home = try await remoteHomeBackend.acknowledgeMinorTerms(
+                kind: kind,
+                textVersion: viewerAge.terms.currentTermsVersion
+            )
+            guard isCurrentHomeContext(contextToken) else { return false }
+            minorHome = home
+            Haptics.success()
+            return true
+        } catch {
+            guard isCurrentHomeContext(contextToken) else { return false }
+            syncErrorMessage = RemoteRPCErrorCode.from(error)?.userMessage() ?? "Não deu para salvar agora."
+            Haptics.error()
+            return false
+        }
+    }
+
+    func minorSceneBecameActive(now: Date = .now) {
+        guard homeAccessState == .minorMember, minorSessionStartedAt == nil else { return }
+        minorSessionStartedAt = now
+    }
+
+    // Foreground time is counted on the device and synced when the app leaves the screen; the counter never touches UserDefaults.
+    func minorSceneLeftForeground(now: Date = .now) async {
+        let contextToken = currentHomeContextToken
+        guard homeAccessState == .minorMember,
+              let userID = activeHomeUserID,
+              let startedAt = minorSessionStartedAt else {
+            return
+        }
+        minorSessionStartedAt = nil
+        let today = MinorUsageClock.day(for: now)
+        let ledger = loadMinorUsageLedger(for: userID)
+            .adding(seconds: Int(now.timeIntervalSince(startedAt)), on: today)
+        writeMinorUsageLedger(ledger, for: userID)
+
+        guard let activeUser,
+              !usesLocalDebugBackend(for: activeUser),
+              let remoteHomeBackend else {
+            return
+        }
+        guard let result = try? await remoteHomeBackend.recordMinorUsage(
+            day: ledger.day,
+            minutes: ledger.minutes
+        ) else { return }
+        guard isCurrentHomeContext(contextToken) else { return }
+        minorHome?.viewer.usageTodayMinutes = result.usageTodayMinutes
+        minorHome?.viewer.supervision.dailyLimitMinutes = result.dailyLimitMinutes
+    }
+
+    func minorUsageMinutes(now: Date = .now) -> Int {
+        guard let userID = activeHomeUserID else { return minorHome?.viewer.usageTodayMinutes ?? 0 }
+        let today = MinorUsageClock.day(for: now)
+        let ledger = loadMinorUsageLedger(for: userID)
+        let running = minorSessionStartedAt.map { Int(now.timeIntervalSince($0)) } ?? 0
+        let local = ledger.day == today ? ledger.adding(seconds: running, on: today).minutes : running / 60
+        return max(local, minorHome?.viewer.usageTodayMinutes ?? 0)
+    }
+
+    func isMinorOverDailyLimit(now: Date = .now) -> Bool {
+        guard let limit = minorHome?.viewer.supervision.dailyLimitMinutes else { return false }
+        return minorUsageMinutes(now: now) >= limit
+    }
+
+    private func loadMinorUsageLedger(for userID: String) -> MinorUsageLedger {
+        guard let data = PrivateLocalDataAccess.loadData(
+            forKey: Self.minorUsageKey(for: userID),
+            ownerScope: PrivateLocalDataScope.minorUsage(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        ),
+              let ledger = try? JSONDecoder().decode(MinorUsageLedger.self, from: data) else {
+            return MinorUsageLedger(day: MinorUsageClock.day(for: .now), seconds: 0)
+        }
+        return ledger
+    }
+
+    private func writeMinorUsageLedger(_ ledger: MinorUsageLedger, for userID: String) {
+        guard let data = try? JSONEncoder().encode(ledger) else { return }
+        PrivateLocalDataAccess.writeDataBestEffort(
+            data,
+            forKey: Self.minorUsageKey(for: userID),
+            ownerScope: PrivateLocalDataScope.minorUsage(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
+    }
+
+    private static func minorUsageKey(for userID: String) -> String {
+        "nina.minor.usage.\(userID)"
+    }
+
+    private func performHomeMutation(
+        name: String?,
+        fallback: String,
+        _ operation: @escaping (any RemoteHomeBackend) async throws -> RemoteHomeState
+    ) async -> Bool {
+        let contextToken = currentHomeContextToken
+        syncErrorMessage = nil
+        lastMutationErrorCode = nil
+        guard !usesLocalDebugBackend(for: activeUser), let remoteHomeBackend else {
+            return false
+        }
+        await waitForPendingRemoteMutations()
+        guard isCurrentHomeContext(contextToken) else { return false }
+        isSyncingHome = true
+        defer { finishSyncingHome(ifCurrent: contextToken) }
+
+        do {
+            let state = try await operation(remoteHomeBackend)
+            guard isCurrentHomeContext(contextToken) else { return false }
+            apply(state)
+            homeAccessState = .authorized
+            persistActiveHome()
+            return true
+        } catch {
+            guard isCurrentHomeContext(contextToken) else { return false }
+            lastMutationErrorCode = RemoteRPCErrorCode.from(error)
+            syncErrorMessage = lastMutationErrorCode?.userMessage(name: name) ?? fallback
+            Haptics.error()
+            return false
+        }
     }
 
     func sendMessage(
@@ -1255,6 +1852,40 @@ final class AppStore {
             ninaConnectionNotice = nil
         } catch let engineError as NinaEngineError where engineError != .unavailable {
             guard isCurrentHomeContext(contextToken) else { return }
+            switch engineError {
+            case .consentOutdated:
+                // The server no longer counts this consent, so the card asks again and the unread message is dropped.
+                messages.removeAll { $0.id == userMessage.id }
+                restorableDraft = text
+                applyAIMemoryConsent(nil)
+                aiConsentStatus.lastRevokeReason = "policy_changed"
+                aiConsentStatus.isGranted = false
+                persistActivityLocally()
+                Haptics.error()
+                return
+            case .ageConfirmationRequired:
+                messages.removeAll { $0.id == userMessage.id }
+                restorableDraft = text
+                viewerAge = viewerAge.withoutAI()
+                persistActivityLocally()
+                Haptics.error()
+                return
+            case .aiBlocked:
+                messages.removeAll { $0.id == userMessage.id }
+                restorableDraft = text
+                viewerAge = viewerAge.blockingAI()
+                persistActivityLocally()
+                Haptics.error()
+                return
+            case .inputNotSupported:
+                // A refused message never stays on the phone in its original words.
+                if let index = messages.firstIndex(where: { $0.id == userMessage.id }) {
+                    messages[index].text = Self.heldMessageMarker
+                    messages[index].attachments = []
+                }
+            default:
+                break
+            }
             response = NinaEngineResponse(
                 reply: engineError.userMessage,
                 suggestion: nil
@@ -1482,18 +2113,22 @@ final class AppStore {
         }
     }
 
+    static let heldMessageMarker = "Mensagem não enviada."
+
+    // The transfer abroad is its own consent: without the ticked box there is no grant to send.
     @discardableResult
-    func grantAIMemoryConsent() async -> Bool {
-        await recordAIMemoryConsent(granted: true)
+    func grantAIMemoryConsent(transferConsented: Bool) async -> Bool {
+        guard transferConsented else { return false }
+        return await recordAIMemoryConsent(granted: true, transferConsented: true)
     }
 
     @discardableResult
     func revokeAIMemoryConsent() async -> Bool {
-        await recordAIMemoryConsent(granted: false)
+        await recordAIMemoryConsent(granted: false, transferConsented: false)
     }
 
     // The local record is a mirror of the server grant, never the grant itself.
-    private func recordAIMemoryConsent(granted: Bool) async -> Bool {
+    private func recordAIMemoryConsent(granted: Bool, transferConsented: Bool) async -> Bool {
         let contextToken = currentHomeContextToken
         let previousRecord = aiMemoryConsent
         syncErrorMessage = nil
@@ -1501,7 +2136,8 @@ final class AppStore {
         let optimisticRecord = granted
             ? AIMemoryConsentRecord(
                 acceptedAt: .now,
-                policyVersion: PrivacyPolicyVersion.current
+                policyVersion: PrivacyPolicyVersion.current,
+                transferConsented: transferConsented
             )
             : nil
         applyAIMemoryConsent(optimisticRecord)
@@ -1517,19 +2153,34 @@ final class AppStore {
             do {
                 let state = try await remoteHomeBackend.recordNinaAIConsent(
                     granted: granted,
-                    policyVersion: PrivacyPolicyVersion.current
+                    policyVersion: PrivacyPolicyVersion.current,
+                    transferConsented: transferConsented
                 )
                 guard isCurrentHomeContext(contextToken) else { return false }
                 apply(state)
                 homeAccessState = .authorized
                 persistActiveHome()
+                if hasAIMemoryConsent {
+                    hasStaleLocalConsent = false
+                }
                 return hasAIMemoryConsent == granted
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
                 applyAIMemoryConsent(previousRecord)
-                syncErrorMessage = granted
+                let code = RemoteRPCErrorCode.from(error)
+                switch code {
+                case .ageConfirmationRequired:
+                    viewerAge = viewerAge.withoutAI()
+                case .ninaAIBlocked:
+                    viewerAge = viewerAge.blockingAI()
+                case .ninaConsentOutdated, .ninaTransferConsentRequired:
+                    aiConsentStatus.lastRevokeReason = "policy_changed"
+                default:
+                    break
+                }
+                syncErrorMessage = code?.userMessage() ?? (granted
                     ? "Não foi possível registrar seu consentimento. Nada mudou por enquanto."
-                    : "Não foi possível revogar seu consentimento. Ele continua ativo nesta casa."
+                    : "Não foi possível revogar seu consentimento. Ele continua ativo nesta casa.")
                 Haptics.error()
                 return false
             }
@@ -1561,24 +2212,30 @@ final class AppStore {
         )
     }
 
-    func makePrivacyExportData(
-        profile: UserProfile? = nil,
-        profilePhotoData: Data? = nil
-    ) throws -> Data {
-        let package = PrivacyExportPackage(
-            exportedAt: .now,
-            policyVersion: PrivacyPolicyVersion.current,
-            user: activeUser,
-            profile: profile,
-            profilePhotoData: profilePhotoData,
-            familyGroup: familyGroup,
-            aiMemoryConsent: aiMemoryConsent,
-            data: currentSnapshot
-        )
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(package)
+    // The file is the server's export of this account's own data, written byte for byte; the phone adds no one else.
+    func exportAccountData() async throws -> Data {
+        let contextToken = currentHomeContextToken
+        guard let activeUser,
+              !usesLocalDebugBackend(for: activeUser),
+              let remoteHomeBackend else {
+            throw RemoteHomeBackendError.operationUnavailable
+        }
+        let data = try await remoteHomeBackend.exportAccountData()
+        guard isCurrentHomeContext(contextToken) else { throw CancellationError() }
+        return data
+    }
+
+    func exportMinorData(for member: HouseholdMember) async throws -> Data {
+        let contextToken = currentHomeContextToken
+        guard member.minorAccess?.isViewerGuardian == true,
+              let activeUser,
+              !usesLocalDebugBackend(for: activeUser),
+              let remoteHomeBackend else {
+            throw RemoteHomeBackendError.operationUnavailable
+        }
+        let data = try await remoteHomeBackend.exportMinorData(member.id)
+        guard isCurrentHomeContext(contextToken) else { throw CancellationError() }
+        return data
     }
 
     var privacyExportFilename: String {
@@ -1605,6 +2262,14 @@ final class AppStore {
             forOwnerScope: PrivateLocalDataScope.aiConsent(for: userID),
             store: privateDataStore
         )
+        PrivateLocalDataAccess.removeAllData(
+            forOwnerScope: PrivateLocalDataScope.minorUsage(for: userID),
+            store: privateDataStore
+        )
+        PrivateLocalDataAccess.removeAllData(
+            forOwnerScope: PrivateLocalDataScope.ageAssurance(for: userID),
+            store: privateDataStore
+        )
         defaults.removeObject(forKey: Self.aiMemoryConsentKey(for: userID))
 
         guard clearsActiveContext else { return }
@@ -1629,6 +2294,11 @@ final class AppStore {
         isSyncingHome = false
         syncErrorMessage = nil
         aiMemoryConsent = nil
+        aiConsentStatus = .withheld
+        hasStaleLocalConsent = false
+        viewerAge = .unknown
+        minorHome = nil
+        minorSessionStartedAt = nil
         familyGroup = PreviewData.familyGroup
         resetActivityState()
     }
@@ -1885,7 +2555,7 @@ final class AppStore {
     }
 
     func presentChildDay(for child: HouseholdMember, now: Date = .now) {
-        guard child.role == .child else { return }
+        guard ChildDay.canShow(child) else { return }
         childDayPresentation = ChildDayPresentation(
             childID: child.id,
             session: ChildDaySession(child: child, tasks: tasks, members: familyGroup.members, now: now)
@@ -1965,11 +2635,21 @@ final class AppStore {
         // already on the phone stay until a verified answer replaces them.
         guard homeAccessState != .unavailable else { return }
         let canScheduleForActiveUser = activeHomeUserID != nil && hasActiveHome
-        let tasksForNotifications = canScheduleForActiveUser ? tasks : []
-        let viewer = canScheduleForActiveUser
+        var tasksForNotifications = canScheduleForActiveUser ? tasks : []
+        var viewer = canScheduleForActiveUser
             ? HomeNotificationViewer(member: currentFamilyMember)
             : HomeNotificationViewer()
-        let familyID = familyGroup.id
+        var familyID = familyGroup.id
+        // A minor's phone announces only their own tasks, in the neutral template, inside the guardian's quiet hours.
+        if homeAccessState == .minorMember, activeHomeUserID != nil, let minorHome {
+            tasksForNotifications = minorHome.taskItems
+            viewer = HomeNotificationViewer(
+                memberID: minorHome.viewer.memberID,
+                name: minorHome.ownerName,
+                minorPolicy: MinorNotificationPolicy(settings: minorHome.viewer.supervision)
+            )
+            familyID = minorHome.family?.id ?? familyID
+        }
         let scheduler = notificationScheduler
         let previousTask = notificationSyncTask
 
@@ -2334,6 +3014,7 @@ final class AppStore {
 
     #if DEBUG
     private func activateLocalHomeContext(for user: AuthUser) {
+        viewerAge = .localTrustedAdult
         if let savedHome = loadFamilyGroup(for: user.id) {
             familyGroup = savedHome
             homeAccessState = .authorized
@@ -2427,9 +3108,11 @@ final class AppStore {
         ),
               let record = try? JSONDecoder().decode(AIMemoryConsentRecord.self, from: data) else {
             aiMemoryConsent = nil
+            hasStaleLocalConsent = false
             return
         }
         aiMemoryConsent = record
+        hasStaleLocalConsent = !record.isCurrent
     }
 
     private func resetActivityState() {
@@ -2497,14 +3180,18 @@ final class AppStore {
         }
 
         householdPremium = state.householdPremium
+        viewerAge = state.viewerAge
+        aiConsentStatus = state.aiConsent
         applyAIMemoryConsent(Self.consentRecord(from: state.aiConsent))
     }
 
+    // Only a grant the server counts as current, with its transfer consent, is mirrored on the phone.
     private static func consentRecord(from consent: NinaAIConsent) -> AIMemoryConsentRecord? {
-        guard consent.isGranted else { return nil }
+        guard consent.countsAsConsent, let policyVersion = consent.policyVersion else { return nil }
         return AIMemoryConsentRecord(
             acceptedAt: consent.acceptedAt ?? .now,
-            policyVersion: consent.policyVersion ?? PrivacyPolicyVersion.current
+            policyVersion: policyVersion,
+            transferConsented: consent.transferConsented
         )
     }
 

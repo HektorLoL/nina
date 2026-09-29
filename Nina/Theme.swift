@@ -27,6 +27,23 @@ enum NinaTheme {
     }
 
     static let shadow = Color(hex: 0x131A24).opacity(0.06)
+
+    // The one regulated exception to the palette: the Ministry of Justice fixes these colours, not the glaze.
+    static func classInd(_ code: String) -> Color {
+        switch code {
+        case "L": Color(hex: 0x00A859)
+        case "10": Color(hex: 0x0095DA)
+        case "12": Color(hex: 0xFDC300)
+        case "14": Color(hex: 0xF58220)
+        case "16": Color(hex: 0xE3001B)
+        case "18": Color(hex: 0x1D1D1B)
+        default: Color(hex: 0x00A859)
+        }
+    }
+
+    static var classIndLivre: Color {
+        classInd("L")
+    }
 }
 
 extension Color {

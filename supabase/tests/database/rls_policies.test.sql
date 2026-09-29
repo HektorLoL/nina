@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(68);
+select plan(70);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -54,6 +54,12 @@ values
     now(),
     now()
   );
+
+-- Every fixture account is an Apple-confirmed adult unless a test says otherwise.
+insert into private.account_age_status (user_id, status, assurance, recheck_after)
+select users.id, 'adult', 'confirmed', now() + interval '180 days'
+from auth.users as users
+on conflict (user_id) do nothing;
 
 insert into public.families (id, name, invite_code, created_by)
 values
@@ -292,13 +298,15 @@ select is(
     where schemas.nspname = 'public'
       and routines.proname in (
         'is_family_member',
+        'is_adult_family_member',
+        'current_user_is_adult',
         'can_manage_family',
         'is_family_creator',
         'shares_family_with'
       )
       and has_function_privilege('authenticated', routines.oid, 'execute')
   ),
-  4,
+  6,
   'signed-in clients keep execute on the membership predicates every content policy evaluates'
 );
 
@@ -323,33 +331,50 @@ select set_eq(
   $$,
   array[
     'acknowledge_family_access_decision(uuid)',
+    'acknowledge_minor_terms(text, text)',
     'activate_family(uuid)',
+    'add_minor_profile(uuid, text, text, text, text, boolean, text[], text, text)',
     'add_unclaimed_family_member(uuid, text, text, text, text, text, date, text, text)',
-    'approve_family_join_request(uuid, text)',
+    'approve_family_join_request(uuid, text, text, text, boolean, text, boolean, text[])',
     'begin_nina_chat_run(uuid, uuid, text, jsonb, text, bigint, date)',
     'can_manage_family(uuid, uuid)',
     'cancel_family_join_request(uuid)',
+    'change_minor_band(uuid, text, text)',
     'create_family(text)',
+    'current_user_is_adult()',
+    'declare_minor_guardianship(uuid, text, text, text, boolean, text[])',
     'decline_family_join_request(uuid)',
     'delete_current_nina_chat_history(uuid)',
     'delete_nina_memory(uuid)',
     'delete_task_section(uuid, text)',
+    'end_minor_guardianship(uuid)',
     'ensure_current_profile(text)',
+    'export_account_data()',
+    'export_minor_data(uuid)',
     'get_current_home_context()',
     'get_current_nina_state(uuid)',
     'get_current_premium_status()',
     'get_family_access_decision()',
     'get_family_invite_preview(text)',
+    'get_minor_home_view()',
+    'get_my_age_status()',
     'get_nina_chat_result(uuid)',
     'get_pending_family_join_request()',
+    'is_adult_family_member(uuid)',
     'is_family_creator(uuid, uuid)',
     'is_family_member(uuid, uuid)',
     'join_family_by_invite(text)',
-    'record_nina_ai_consent(text, boolean)',
+    'record_minor_usage(date, integer)',
+    'record_nina_ai_consent(text, boolean, boolean)',
+    'record_terms_acceptance()',
     'remove_family_member(uuid)',
+    'report_nina_reply(uuid, text)',
     'request_family_join(text)',
     'resolve_nina_proposal(uuid, text, jsonb, text)',
     'rotate_family_invite_code(uuid)',
+    'set_minor_health_consent(uuid, boolean, text)',
+    'set_minor_supervision(uuid, jsonb)',
+    'set_minor_task_done(uuid, integer, boolean, timestamp with time zone)',
     'shares_family_with(uuid, uuid)',
     'update_family_member(uuid, text, text, text, text, text, text, date, text, text)',
     'update_family_settings(uuid, text)',
@@ -375,14 +400,26 @@ select set_eq(
       and has_function_privilege('service_role', routines.oid, 'execute')
   $$,
   array[
+    'advance_app_attest_counter(text, bigint)',
+    'authorize_guardian_account_deletion(uuid, uuid)',
     'complete_nina_chat_run(uuid, uuid, text, jsonb, integer, integer, integer, integer, bigint, integer)',
     'complete_nina_insight_run(uuid, jsonb, integer, integer, integer, integer, bigint, integer)',
+    'consume_age_signal_challenge(uuid, text)',
     'fail_nina_ai_run(uuid, text, integer)',
+    'get_app_attest_key(uuid, text)',
+    'get_nina_model_roster(uuid, uuid)',
     'get_nina_weekly_candidates()',
+    'hold_nina_chat_run_for_child_safety(uuid)',
+    'issue_age_signal_challenge(uuid)',
+    'list_minor_accounts_due_for_deletion(integer)',
     'list_waitlist_recipients(text)',
+    'premium_buyer_is_eligible(uuid)',
     'prepare_account_deletion(uuid)',
+    'record_age_signal(uuid, text, text, text, boolean)',
     'record_failed_nina_ai_run(uuid, text, integer, integer, integer, integer, bigint, integer)',
     'record_waitlist_delivery(text, text, text)',
+    'redact_refused_nina_message(uuid)',
+    'register_app_attest_key(uuid, text, text, text)',
     'register_waitlist_signup(text, text, boolean, text, text, text, text)',
     'reserve_nina_insight_run(uuid, text, bigint, date)',
     'run_nina_retention()',
@@ -823,6 +860,33 @@ select is(
   ),
   4,
   'profile photos have read, upload, update, and delete ownership policies'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname in (
+        'Users can upload their own profile photos',
+        'Users can update their own profile photos'
+      )
+      and coalesce(with_check, '') like '%current_user_is_adult()%'
+  ),
+  2,
+  'only an adult can upload or replace a profile photo'
+);
+
+select is(
+  (
+    select coalesce(string_agg(tablename || ': ' || policyname, ', ' order by tablename, policyname), '')
+    from pg_policies
+    where schemaname = 'public'
+      and (coalesce(qual, '') || ' ' || coalesce(with_check, '')) like '%is_family_member(%'
+  ),
+  '',
+  'no household policy admits a member of the house who is not an adult'
 );
 
 select is(

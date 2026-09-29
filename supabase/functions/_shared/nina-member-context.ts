@@ -5,14 +5,16 @@ export interface HouseholdMemberRow {
   memory_note?: string | null;
 }
 
-// A child's memory note never crosses the border: it is free text an adult
-// wrote about a minor who never consented, and no household task needs it.
-export function minimizeMembersForModel(
-  rows: readonly HouseholdMemberRow[],
-): HouseholdMemberRow[] {
+// A child's or teen's memory note never crosses the border: it is free text
+// an adult wrote about a minor who never consented, and no task needs it.
+export function minimizeMembersForModel<T extends HouseholdMemberRow>(
+  rows: readonly T[],
+): T[] {
   return rows.map((row) => {
-    if (row.household_role !== "child") return { ...row };
+    if (row.household_role !== "child" && row.household_role !== "teen") {
+      return { ...row };
+    }
     const { memory_note: _withheld, ...retained } = row;
-    return retained;
+    return retained as T;
   });
 }

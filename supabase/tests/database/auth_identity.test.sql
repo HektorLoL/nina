@@ -42,6 +42,12 @@ values
     now()
   );
 
+-- Every fixture account is an Apple-confirmed adult unless a test says otherwise.
+insert into private.account_age_status (user_id, status, assurance, recheck_after)
+select users.id, 'adult', 'confirmed', now() + interval '180 days'
+from auth.users as users
+on conflict (user_id) do nothing;
+
 select is(
   (select display_name from public.profiles where id = '10000000-0000-0000-0000-000000000001'),
   'Owner Person',

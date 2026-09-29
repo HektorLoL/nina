@@ -1,0 +1,25 @@
+---
+import Brand from "./Brand.astro";
+import RatingMark from "./RatingMark.astro";
+import { legalIdentity } from "../legal";
+import { ninaRating } from "../rating";
+
+const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer page-shell">
+  <Brand compact />
+  <nav aria-label="Links legais">
+    <a href="/privacidade/">Privacidade</a>
+    <a href="/termos/">Termos</a>
+    <a href="/familias/">Famílias</a>
+    <a href="/denuncia/">Denúncia</a>
+    <a href={contactMailto}>Contato</a>
+  </nav>
+  <a class="site-footer-rating" href="/familias/#classificacao">
+    <RatingMark size={28} />
+    <span aria-hidden="true">{ninaRating.name}</span>
+  </a>
+  <p>Nina © {year}. Organização da casa com mais leveza.</p>
+</footer>

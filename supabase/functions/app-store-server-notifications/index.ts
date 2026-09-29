@@ -8,6 +8,7 @@ import {
   isUUID,
   jsonResponse,
   parseConfiguredKey,
+  premiumSyncEligibility,
   readAppStoreJSONRequest,
   verificationFailureDetails,
   verifyNotification,
@@ -139,6 +140,54 @@ Deno.serve(async (request: Request) => {
         code: ledgerError.code,
       }));
       return jsonResponse({ error: "transaction_ledger_failed" }, 503);
+    }
+
+    // A notification never starts a subscription the sync path would refuse:
+    // a new original from an account the server does not let buy is recorded
+    // in the ledger and acknowledged, never turned into an entitlement.
+    if (userID && originalTransactionID) {
+      const { data: recordedOriginal, error: recordedError } = await admin
+        .from("premium_subscriptions")
+        .select("original_transaction_id")
+        .eq("original_transaction_id", originalTransactionID)
+        .eq("user_id", userID)
+        .maybeSingle();
+      if (recordedError) {
+        console.error(JSON.stringify({
+          event: "app_store_notification_eligibility_failed",
+          code: recordedError.code,
+        }));
+        return jsonResponse({ error: "subscription_sync_failed" }, 503);
+      }
+
+      let buyerEligible = true;
+      if (!recordedOriginal) {
+        const { data: eligible, error: eligibilityError } = await admin.rpc(
+          "premium_buyer_is_eligible",
+          { target_user_id: userID },
+        );
+        if (eligibilityError) {
+          console.error(JSON.stringify({
+            event: "app_store_notification_eligibility_failed",
+            code: eligibilityError.code,
+          }));
+          return jsonResponse({ error: "subscription_sync_failed" }, 503);
+        }
+        buyerEligible = eligible === true;
+      }
+
+      if (
+        premiumSyncEligibility({
+          originalRecordedForUser: Boolean(recordedOriginal),
+          buyerEligible,
+        }) === "premium_requires_adult"
+      ) {
+        console.info(JSON.stringify({
+          event: "app_store_notification_ignored",
+          code: "premium_requires_adult",
+        }));
+        return jsonResponse({ ok: true, ignored: "premium_requires_adult" });
+      }
     }
 
     const { data: subscription, error: subscriptionError } = await admin

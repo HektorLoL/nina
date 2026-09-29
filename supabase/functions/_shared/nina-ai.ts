@@ -607,3 +607,68 @@ export function environmentPricing(): Record<string, string | undefined> {
       Deno.env.get("NINA_GPT_5_4_MINI_OUTPUT_USD_PER_M"),
   };
 }
+
+export const minimumSafetySaltLength = 32;
+
+export type ModerationVerdict = {
+  flagged: boolean;
+  sexualMinors: boolean;
+  selfHarm: boolean;
+};
+
+const selfHarmCategories = [
+  "self-harm",
+  "self-harm/intent",
+  "self-harm/instructions",
+];
+
+// A category that concerns minors counts as flagged even when the provider's
+// overall flag is off, so the child-safety hold can never be skipped.
+export function moderationVerdict(payload: unknown): ModerationVerdict {
+  const results = payload && typeof payload === "object" &&
+      Array.isArray((payload as { results?: unknown }).results)
+    ? (payload as { results: unknown[] }).results
+    : [];
+  let flagged = false;
+  let sexualMinors = false;
+  let selfHarm = false;
+  for (const result of results) {
+    if (!result || typeof result !== "object") continue;
+    const entry = result as {
+      flagged?: unknown;
+      categories?: Record<string, unknown>;
+    };
+    if (entry.flagged === true) flagged = true;
+    if (entry.categories?.["sexual/minors"] === true) sexualMinors = true;
+    if (
+      selfHarmCategories.some((category) =>
+        entry.categories?.[category] === true
+      )
+    ) {
+      selfHarm = true;
+    }
+  }
+  return {
+    flagged: flagged || sexualMinors || selfHarm,
+    sexualMinors,
+    selfHarm: selfHarm && !sexualMinors,
+  };
+}
+
+export function isSafetySalt(value: string | undefined): value is string {
+  return typeof value === "string" &&
+    value.trim().length >= minimumSafetySaltLength;
+}
+
+export async function safetyIdentifier(
+  salt: string,
+  userID: string,
+): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${salt}${userID}`),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}

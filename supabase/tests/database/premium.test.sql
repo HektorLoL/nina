@@ -42,6 +42,12 @@ values
     now()
   );
 
+-- Every fixture account is an Apple-confirmed adult unless a test says otherwise.
+insert into private.account_age_status (user_id, status, assurance, recheck_after)
+select users.id, 'adult', 'confirmed', now() + interval '180 days'
+from auth.users as users
+on conflict (user_id) do nothing;
+
 insert into public.families (id, name, invite_code, created_by)
 values
   (
@@ -111,17 +117,25 @@ where id in (
   '81000000-0000-0000-0000-000000000003'
 );
 
-insert into public.nina_ai_consents (family_id, user_id, policy_version)
+insert into public.nina_ai_consents (family_id, user_id, policy_version, transfer_consented_at)
 values
   (
     '82000000-0000-0000-0000-000000000001',
     '81000000-0000-0000-0000-000000000001',
-    '2026-06-16'
+    '2026-09-29',
+    now()
+  ),
+  (
+    '82000000-0000-0000-0000-000000000001',
+    '81000000-0000-0000-0000-000000000002',
+    '2026-09-29',
+    now()
   ),
   (
     '82000000-0000-0000-0000-000000000002',
     '81000000-0000-0000-0000-000000000003',
-    '2026-06-16'
+    '2026-09-29',
+    now()
   );
 
 insert into public.premium_subscriptions (

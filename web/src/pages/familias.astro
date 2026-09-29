@@ -1,0 +1,424 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Brand from "../components/Brand.astro";
+import Glyph from "../components/Glyph.astro";
+import RatingMark from "../components/RatingMark.astro";
+import { legalIdentity } from "../legal";
+import { ninaRating } from "../rating";
+
+const updatedAt = "29 de setembro de 2026";
+const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
+const reportMailto = `mailto:${legalIdentity.reportContactEmail}`;
+
+const ageColumns = [
+  "Adulto confirmado",
+  "Adulto declarado",
+  "Menor de 18",
+  "Idade não informada",
+] as const;
+
+const capabilities: ReadonlyArray<{
+  what: string;
+  answers: readonly [string, string, string, string];
+}> = [
+  { what: "Criar uma casa", answers: ["Sim", "Sim", "Não", "Não"] },
+  {
+    what: "Administrar a casa e aprovar adultos",
+    answers: ["Se for dono ou administrador", "Se for dono ou administrador", "Não", "Não"],
+  },
+  {
+    what: "Pedir para entrar numa casa",
+    answers: [
+      "Sim",
+      "Sim",
+      "Sim, com aprovação de um responsável",
+      "Sim, como menor, com aprovação de um responsável",
+    ],
+  },
+  {
+    what: "Aprovar um menor, cadastrar uma criança ou um adolescente, ser responsável",
+    answers: ["Sim, declarando ser mãe, pai ou responsável legal", "Não", "Não", "Não"],
+  },
+  {
+    what: "Ver a casa inteira: tarefas com detalhes, compras, pessoas e memórias",
+    answers: ["Sim", "Sim", "Não", "Não"],
+  },
+  {
+    what: "Ver e marcar as próprias tarefas",
+    answers: ["Sim", "Sim", "Sim, só o título, a hora e o ícone", "Não"],
+  },
+  { what: "Criar ou editar tarefas e compras", answers: ["Sim", "Sim", "Não", "Não"] },
+  {
+    what: "Conversar com a Nina",
+    answers: ["Sim, depois de aceitar o aviso", "Não", "Não", "Não"],
+  },
+  { what: "Assinar o Nina Premium", answers: ["Sim", "Não", "Não", "Não"] },
+  { what: "Lembretes de reforço", answers: ["Sim", "Sim", "Nunca", "Não"] },
+  {
+    what: "Silêncio à noite",
+    answers: [
+      "Opcional",
+      "Opcional",
+      "Sempre ligado, das 21:00 às 7:00; o responsável pode mudar o horário",
+      "Não se aplica",
+    ],
+  },
+  {
+    what: "Limite de uso por dia",
+    answers: ["Não", "Não", "Definido pelo responsável, 30 minutos no começo", "Não se aplica"],
+  },
+  {
+    what: "Foto de perfil e data de nascimento",
+    answers: ["Opcionais", "Opcionais", "Nunca", "Nunca"],
+  },
+  {
+    what: "Nome enviado à OpenAI",
+    answers: [
+      "O nome, se aceitou a conversa; senão, um código",
+      "Um código",
+      "Um código",
+      "Um código",
+    ],
+  },
+  {
+    what: "Tarefas enviadas à OpenAI",
+    answers: [
+      "Sim, quando um adulto conversa com a Nina",
+      "Sim, com o nome trocado por um código",
+      "Nunca",
+      "Nunca",
+    ],
+  },
+  {
+    what: "Aparecer no retrato da casa e no resumo semanal",
+    answers: [
+      "No retrato, sim; no resumo, só quem aceitou a conversa",
+      "No retrato, sim; no resumo, não",
+      "Nunca",
+      "Nunca",
+    ],
+  },
+  {
+    what: "Aceitar os Termos de Uso",
+    answers: [
+      "A própria pessoa",
+      "A própria pessoa",
+      "O responsável, em nome do menor; aos 16 e 17 anos, junto com ele",
+      "Provisório, até um responsável aprovar a entrada",
+    ],
+  },
+  {
+    what: "Apagar a própria conta",
+    answers: ["Sim", "Sim", "Sim, e o responsável também pode apagar", "Sim"],
+  },
+];
+---
+
+<BaseLayout
+  title="Nina para famílias"
+  description="O que a Nina faz em cada idade, o que guarda sobre crianças e adolescentes, o que sai do Brasil, os riscos que avaliamos e as ferramentas dos responsáveis."
+  canonical="/familias/"
+>
+  <header class="site-header legal-header is-scrolled">
+    <div class="header-inner page-shell">
+      <Brand />
+      <nav class="desktop-nav" aria-label="Navegação principal">
+        <a href="/">Início</a>
+        <a href="/privacidade/">Privacidade</a>
+        <a href="/termos/">Termos</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="conteudo" class="policy-page page-shell">
+    <section class="policy-hero">
+      <p class="eyebrow">Famílias</p>
+      <h1>Nina para famílias</h1>
+      <p>
+        Para mães, pais, responsáveis, crianças e adolescentes: o que a Nina faz em cada idade, o que
+        ela guarda, os riscos que avaliamos e o que fizemos. Dá para ler sem instalar o app.
+      </p>
+      <span>Atualizada em {updatedAt}</span>
+    </section>
+
+    <section class="policy-grid" aria-label="Resumo para famílias">
+      <article>
+        <Glyph name="check" size={28} />
+        <h2>Só as próprias tarefas</h2>
+        <p>Quem tem menos de 18 anos vê só as tarefas combinadas com ele e marca o que fez.</p>
+      </article>
+      <article>
+        <Glyph name="lock" size={28} />
+        <h2>Nome trocado por código</h2>
+        <p>Nomes e tarefas de crianças e adolescentes não vão para a OpenAI.</p>
+      </article>
+      <article>
+        <Glyph name="shield" size={28} />
+        <h2>Responsável no controle</h2>
+        <p>Avisos, silêncio à noite, limite por dia e exclusão ficam com o responsável.</p>
+      </article>
+    </section>
+
+    <article class="policy-content">
+      <h2>1. O que a Nina é</h2>
+      <p>
+        A Nina é um programa de computador que organiza a rotina da casa. Ela não é uma pessoa. Os
+        adultos da casa contam o que precisa ser feito, e a Nina propõe tarefas, lembretes, compras
+        e sementes, que são intenções ainda sem data. Nada entra na casa sem a confirmação de um
+        adulto.
+      </p>
+      <p>
+        Crianças e adolescentes não conversam com a Nina. Para eles, o app mostra só as tarefas que
+        combinaram com eles.
+      </p>
+
+      <h2>2. Quem usa a Nina, por idade</h2>
+      <p>
+        A Apple informa ao app uma faixa de idade, nunca a data de nascimento. O que cada conta pode
+        fazer depende dessa faixa. Adulto confirmado é quem a Apple confirmou ter 18 anos ou mais.
+        Adulto declarado é quem informou ter 18 anos ou mais sem essa confirmação. Quando a Apple
+        não informa a faixa, a conta é tratada como a de uma criança até que a faixa seja informada.
+      </p>
+      <table class="policy-table" role="table">
+        <caption class="sr-only">O que cada idade pode fazer na Nina</caption>
+        <thead role="rowgroup">
+          <tr role="row">
+            <th scope="col" role="columnheader">O que dá para fazer</th>
+            {ageColumns.map((column) => <th scope="col" role="columnheader">{column}</th>)}
+          </tr>
+        </thead>
+        <tbody role="rowgroup">
+          {
+            capabilities.map((row) => (
+              <tr role="row">
+                <th scope="row" role="rowheader">{row.what}</th>
+                {row.answers.map((answer, index) => (
+                  <td role="cell" data-label={ageColumns[index]}>{answer}</td>
+                ))}
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+      <p>
+        Crianças e adolescentes também podem existir na Nina como perfis sem conta, cadastrados pela
+        mãe, pelo pai ou pelo responsável legal. Um perfil sem conta não tem foto nem data de
+        nascimento, e as tarefas dele nunca vão para a OpenAI.
+      </p>
+
+      <h2>3. O que guardamos sobre crianças e adolescentes</h2>
+      <p>
+        <strong>Que dados:</strong> primeiro nome, apelidos se o responsável informar, papel na
+        casa, faixa de idade (menos de 12, 12 a 15, ou 16 e 17), quem é responsável e a relação
+        (mãe, pai ou responsável legal), as tarefas atribuídas e as marcações de feito, lembretes de
+        saúde se o responsável autorizar. De quem tem conta, também o identificador de login da
+        Apple, a faixa de idade informada pela Apple com o modo como ela foi obtida, e os minutos de
+        uso por dia. A Nina não guarda data de nascimento de menores, não pede email a menores, e
+        apaga o email e a foto do perfil quando uma conta passa a ser de menor.
+      </p>
+      <p>
+        <strong>Para quê:</strong> organizar a rotina da casa, mostrar ao menor as próprias tarefas,
+        permitir a supervisão pelo responsável e cumprir as regras de proteção de crianças e
+        adolescentes. Nada sobre menores é usado para publicidade ou vendido.
+      </p>
+      <p>
+        <strong>Com que base:</strong> consentimento específico e em destaque da mãe, do pai ou do
+        responsável legal (LGPD, art. 14, §1º), dado no app e registrado com data, versão do texto e
+        quem consentiu; para lembretes de saúde, um consentimento separado (art. 11, I). A faixa de
+        idade é tratada para cumprir a lei (Lei 15.211/2025, art. 14) e só para isso.
+      </p>
+      <p>
+        <strong>Quem vê:</strong> os adultos da casa veem os perfis e as tarefas. O menor vê só as
+        próprias tarefas, sem os detalhes que os adultos escrevem.
+      </p>
+      <p>
+        <strong>Onde fica:</strong> em servidores no Brasil, em São Paulo.
+      </p>
+      <p>
+        <strong>Por quanto tempo:</strong> enquanto o perfil ou a conta existirem; minutos de uso por
+        30 dias; um pedido de entrada não aprovado some em 7 dias; uma conta de menor sem casa é
+        apagada em 30 dias; o registro das autorizações é guardado por 5 anos depois de encerrado,
+        como prova.
+      </p>
+
+      <h2>4. O que sai do Brasil, e o que nunca sai com nome</h2>
+      <p>
+        Os registros da casa ficam em servidores em São Paulo. Quando um adulto que aceitou o aviso
+        conversa com a Nina, o que ele escreve e os detalhes da casa que a conversa precisa vão para
+        a OpenAI, empresa dos Estados Unidos, que pode guardar por até 30 dias para evitar abuso.
+      </p>
+      <p>
+        Crianças, adolescentes e adultos que não aceitaram a conversa vão com o nome trocado por um
+        código, como Criança 1 ou Adolescente 1. As tarefas de menores, datas de nascimento, fotos
+        de perfil e notas sobre crianças nunca vão. A faixa de idade não vai; vai só se a pessoa é
+        criança ou adolescente, no código que substitui o nome.
+      </p>
+      <p>
+        Um apelido que a casa não informou pode passar. Por isso, quando falar de uma criança com a
+        Nina, escreva só o necessário. Os detalhes do envio estão
+        na <a href="/privacidade/#envio-para-fora">Política de Privacidade, seção 6A</a>.
+      </p>
+
+      <h2>5. Riscos que avaliamos e o que fizemos</h2>
+      <ul>
+        <li>
+          <strong>Conteúdo impróprio gerado por inteligência artificial:</strong> menores não
+          conversam com a Nina, e a conversa bloqueia conteúdo sexual e orientação sobre remédios.
+        </li>
+        <li>
+          <strong>Dados de crianças fora do país:</strong> códigos no lugar dos nomes, e as tarefas
+          de menores nunca vão.
+        </li>
+        <li><strong>Compras:</strong> menores não compram nada na Nina.</li>
+        <li>
+          <strong>Uso excessivo:</strong> sem feed, sem lembretes extras, silêncio à noite, limite
+          por dia, e o Tempo de Uso da Apple.
+        </li>
+        <li>
+          <strong>Contato com estranhos:</strong> só pessoas aprovadas da casa, e sem mensagens entre
+          pessoas.
+        </li>
+        <li>
+          <strong>Mentira sobre a idade:</strong> a faixa vem da Apple, o app verifica o aparelho, e
+          um menor só entra com a aprovação de um responsável.
+        </li>
+        <li>
+          <strong>Uma casa sem responsável:</strong> a conta do menor fica pausada, sem mostrar
+          nada, até um responsável voltar. Uma conta de menor que fica sem casa é apagada em 30
+          dias.
+        </li>
+      </ul>
+
+      <h2>6. Ferramentas do responsável</h2>
+      <p>
+        Quem aprova um menor ou cadastra uma criança ou um adolescente pode, a qualquer momento, pelo
+        app:
+      </p>
+      <ul>
+        <li>ver o que a conta do menor mostra;</li>
+        <li>ligar ou desligar os avisos;</li>
+        <li>definir o horário de silêncio e o limite de uso por dia;</li>
+        <li>ver o tempo de uso dos últimos 7 dias;</li>
+        <li>autorizar ou retirar a autorização para lembretes de saúde;</li>
+        <li>exportar os dados do menor;</li>
+        <li>tirar o menor da casa;</li>
+        <li>apagar a conta ou o perfil.</li>
+      </ul>
+      <p>
+        Tudo começa no nível mais protetor: silêncio à noite ligado, limite de 30 minutos por dia e
+        nenhum lembrete de reforço. Na conta do menor aparece sempre quem é o responsável, para que
+        ele saiba que a conta é acompanhada. Outro responsável da casa também pode se declarar. Para
+        bloquear o iPhone, use também o Tempo de Uso da Apple.
+      </p>
+
+      <h2>7. Como exportar e apagar</h2>
+      <ul>
+        <li>O responsável exporta os dados de um menor na tela dele, em Exportar dados.</li>
+        <li>
+          O responsável apaga pela mesma tela, em Apagar conta ou Apagar perfil. Retirar autorização
+          também apaga o perfil quando não sobra outro responsável.
+        </li>
+        <li>
+          O menor pode apagar a própria conta em Ajustes, em Apagar conta. As tarefas voltam para a
+          casa.
+        </li>
+        <li>Cada adulto exporta e apaga os próprios dados em Ajustes · Privacidade e dados.</li>
+        <li>
+          Por email: <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>, com resposta
+          em até 15 dias.
+        </li>
+      </ul>
+
+      <h2>8. Para crianças e adolescentes</h2>
+      <h3>O que a Nina guarda</h3>
+      <ul>
+        <li>A Nina guarda seu nome e as tarefas que combinaram com você.</li>
+        <li>Quem vê: os adultos da sua casa na Nina.</li>
+        <li>Isso fica guardado em computadores no Brasil.</li>
+        <li>A Nina é um programa de computador. Ela não conversa com você.</li>
+        <li>Quando um adulto fala de você com a Nina, seu nome vai trocado por um código.</li>
+        <li>Quer apagar tudo? Fale com quem cuida de você ou toque em Apagar conta.</li>
+        <li>Nunca passe seu acesso para ninguém.</li>
+      </ul>
+      <h3>Precisa conversar?</h3>
+      <ul>
+        <li>Se algo te preocupa, fale com um adulto de confiança.</li>
+        <li>CVV: ligue 188. É de graça, a qualquer hora.</li>
+      </ul>
+      <h3>Sua idade está errada?</h3>
+      <ul>
+        <li>A Nina usa a faixa que a Apple informa. Se ela mudou, compartilhe de novo no app.</li>
+        <li>Se quem cuida de você informou sua faixa ao aprovar sua entrada, fale com essa pessoa.</li>
+        <li>
+          Ou escreva para <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>.
+        </li>
+      </ul>
+
+      <h2>9. Denúncias</h2>
+      <p>
+        Algo na Nina fere uma criança ou um adolescente? Conte para nós. Use Denunciar um problema no
+        app ou escreva para <a href={reportMailto}>{legalIdentity.reportContactEmail}</a>. A
+        denúncia não é anônima: ela sai do seu email. Como tratamos cada denúncia está
+        em <a href="/denuncia/">ninai.app/denuncia</a>.
+      </p>
+
+      <h2>10. Resumo da avaliação de impacto</h2>
+      <p>
+        Antes de abrir a Nina para todas as idades, avaliamos os riscos para a segurança, a saúde e
+        os dados de crianças e adolescentes, como pedem a LGPD (art. 14), a Lei 15.211/2025 (art. 16)
+        e o Decreto 12.880/2026 (art. 47). O que concluímos:
+      </p>
+      <ul>
+        <li>
+          Os maiores riscos estavam na conversa com a inteligência artificial e no envio de dados
+          para fora do Brasil. Por isso, menores não conversam com a Nina, e nomes e tarefas de
+          menores não vão para a OpenAI.
+        </li>
+        <li>
+          O menor vê só as próprias tarefas, sem os detalhes que os adultos escrevem, porque esses
+          detalhes podem ter contas, remédios ou assuntos de adulto.
+        </li>
+        <li>
+          Guardamos o mínimo: sem data de nascimento de menores, sem pedir email a menores, e o
+          email e a foto do perfil são apagados quando uma conta passa a ser de menor. A faixa de
+          idade só serve para decidir o que cada conta pode fazer.
+        </li>
+        <li>
+          Saúde de um menor só entra com uma autorização separada do responsável, que pode ser
+          retirada.
+        </li>
+        <li>
+          Os controles do responsável começam no nível mais protetor, e o menor sabe que a conta é
+          acompanhada.
+        </li>
+        <li>
+          Riscos que continuam: um apelido que a casa não informou pode chegar à OpenAI; a idade
+          depende do que a Apple informa e da declaração do responsável; e o limite de tempo é
+          contado no próprio iPhone.
+        </li>
+      </ul>
+      <p>
+        Revemos a avaliação a cada mudança que afete menores. A versão completa fica disponível para
+        a ANPD quando ela pedir.
+      </p>
+
+      <h2 id="classificacao">11. Classificação indicativa</h2>
+      <div class="rating-statement">
+        <RatingMark size={56} />
+        <p>
+          A classificação indicativa da Nina é {ninaRating.termsPhrase}. A Nina se autoclassifica
+          pelos critérios do Ministério da Justiça. Se o Ministério atribuir outra classificação,
+          esta página, os Termos de Uso e o app mudam juntos.
+        </p>
+      </div>
+
+      <h2>12. Contato</h2>
+      <p>
+        Para falar sobre crianças, adolescentes e privacidade, escreva
+        para <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>. Denúncias vão
+        para <a href={reportMailto}>{legalIdentity.reportContactEmail}</a>. Quem controla os dados e
+        quem é o encarregado estão na <a href="/privacidade/">Política de Privacidade</a>, seção 1.
+      </p>
+    </article>
+  </main>
+</BaseLayout>

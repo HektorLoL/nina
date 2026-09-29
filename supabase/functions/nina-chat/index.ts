@@ -8,6 +8,7 @@ import {
   extractOutputText,
   functionCalls,
   interactiveModel,
+  isSafetySalt,
   isStructuredOutput,
   isToolCallBatchAllowed,
   legacySuggestionFromProposals,
@@ -15,11 +16,14 @@ import {
   maxInteractiveOutputTokens,
   maxToolCalls,
   maxToolRounds,
+  type ModerationVerdict,
+  moderationVerdict,
   OpenAIResponsePayload,
   pricingForModel,
   pricingVersion,
   proposalResponseSchema,
   safeErrorCode,
+  safetyIdentifier,
   usageFromResponse,
 } from "../_shared/nina-ai.ts";
 import {
@@ -28,10 +32,18 @@ import {
   NinaChatRequest,
   readNinaChatRequest,
 } from "../_shared/nina-chat-request.ts";
-import { ninaSystemPrompt } from "../_shared/nina-chat-policy.ts";
+import {
+  asksForMedicalGuidance,
+  ninaInputRefusal,
+  ninaMedicalRefusal,
+  ninaOutputRefusal,
+  ninaSupportReply,
+  ninaSystemPrompt,
+} from "../_shared/nina-chat-policy.ts";
 import { fillMissingDueAt, ninaLocalNow } from "../_shared/nina-due-date.ts";
 import { houseWorkloadKey, summarizeWorkload } from "../_shared/nina-workload.ts";
 import { minimizeMembersForModel } from "../_shared/nina-member-context.ts";
+import { isRosterEntry, Pseudonymizer } from "../_shared/nina-pseudonyms.ts";
 
 type NinaChatStart = {
   idempotent: boolean;
@@ -184,27 +196,13 @@ async function openAIJSON(
   return { response, payload };
 }
 
-async function moderateInput(
+async function moderate(
   apiKey: string,
-  body: NinaChatRequest,
-): Promise<boolean> {
-  const inputs: Array<Record<string, unknown>> = [];
-
-  if (body.message.trim().length > 0) {
-    inputs.push({ type: "text", text: body.message.trim() });
+  inputs: Array<Record<string, unknown>>,
+): Promise<ModerationVerdict> {
+  if (inputs.length === 0) {
+    return { flagged: false, sexualMinors: false, selfHarm: false };
   }
-
-  for (const attachment of body.attachments ?? []) {
-    if (attachment.kind !== "image") continue;
-    inputs.push({
-      type: "image_url",
-      image_url: {
-        url: `data:${attachment.mime_type};base64,${attachment.data_base64}`,
-      },
-    });
-  }
-
-  if (inputs.length === 0) return false;
 
   const response = await fetch("https://api.openai.com/v1/moderations", {
     method: "POST",
@@ -223,10 +221,61 @@ async function moderateInput(
     throw new Error("moderation_unavailable");
   }
 
-  const payload = await response.json() as {
-    results?: Array<{ flagged?: boolean }>;
-  };
-  return payload.results?.some((result) => result.flagged === true) ?? false;
+  return moderationVerdict(await response.json());
+}
+
+// The moderation input is the pseudonymized text, so no name the model may
+// not see reaches the moderation endpoint either.
+async function moderateInput(
+  apiKey: string,
+  pseudonymizedMessage: string,
+  body: NinaChatRequest,
+): Promise<ModerationVerdict> {
+  const inputs: Array<Record<string, unknown>> = [];
+
+  if (pseudonymizedMessage.trim().length > 0) {
+    inputs.push({ type: "text", text: pseudonymizedMessage.trim() });
+  }
+
+  for (const attachment of body.attachments ?? []) {
+    if (attachment.kind !== "image") continue;
+    inputs.push({
+      type: "image_url",
+      image_url: {
+        url: `data:${attachment.mime_type};base64,${attachment.data_base64}`,
+      },
+    });
+  }
+
+  return await moderate(apiKey, inputs);
+}
+
+async function moderateOutput(
+  apiKey: string,
+  modelOutput: { reply: string; proposals: unknown[] },
+): Promise<ModerationVerdict> {
+  const texts = [modelOutput.reply];
+  for (const proposal of modelOutput.proposals) {
+    const entry = proposal as {
+      title?: unknown;
+      detail?: unknown;
+      payload?: { title?: unknown; detail?: unknown };
+    };
+    for (
+      const value of [
+        entry.title,
+        entry.detail,
+        entry.payload?.title,
+        entry.payload?.detail,
+      ]
+    ) {
+      if (typeof value === "string" && value.trim()) texts.push(value);
+    }
+  }
+  return await moderate(
+    apiKey,
+    texts.filter((text) => text.trim()).map((text) => ({ type: "text", text })),
+  );
 }
 
 function normalizedSearch(value: unknown): string {
@@ -245,12 +294,24 @@ function matchesSearch(
   );
 }
 
+function minorOwnerFilter(names: Pseudonymizer): string | null {
+  const excluded = [...names.excludedOwnerIDs].filter((id) =>
+    /^[0-9a-f-]{36}$/i.test(id)
+  );
+  return excluded.length === 0
+    ? null
+    : `owner_member_id.is.null,owner_member_id.not.in.(${excluded.join(",")})`;
+}
+
+// A task owned by a child, a teen or a person of unknown age never reaches
+// the model through any tool, and neither does that person as a bucket.
 async function runReadOnlyTool(
   client: SupabaseClient,
   familyID: string,
   userID: string,
   name: string,
   rawArguments: string,
+  names: Pseudonymizer,
 ): Promise<Record<string, unknown>> {
   let args: Record<string, unknown> = {};
   try {
@@ -266,28 +327,44 @@ async function runReadOnlyTool(
       let request = client
         .from("tasks")
         .select(
-          "id,title,subtitle,owner_label,due_label,due_at,category_id,priority,recurrence_rule,snoozed_until,is_done",
+          "id,title,subtitle,owner_member_id,owner_label,due_label,due_at,category_id,priority,recurrence_rule,snoozed_until,is_done",
         )
         .eq("family_id", familyID)
         .limit(50);
+      const ownerFilter = minorOwnerFilter(names);
+      if (ownerFilter) request = request.or(ownerFilter);
       if (args.include_completed !== true) request = request.eq("is_done", false);
       const { data, error } = await request;
-      const tasks = (data ?? [])
+      const tasks = names.withoutMinorWork(data ?? [])
         .filter((row) => matchesSearch(row, query, ["title", "subtitle"]))
-        .slice(0, 12);
+        .slice(0, 12)
+        .map(({ owner_member_id: owner, ...task }) => ({
+          ...task,
+          owner_label: owner
+            ? names.structuredName(String(owner), String(task.owner_label ?? ""))
+            : task.owner_label,
+        }));
       return error ? { error: "tool_unavailable" } : { tasks };
     }
     case "search_shopping": {
       let request = client
         .from("shopping_items")
-        .select("id,title,amount,owner_label,is_checked")
+        .select("id,title,amount,owner_member_id,owner_label,is_checked")
         .eq("family_id", familyID)
         .limit(50);
+      const ownerFilter = minorOwnerFilter(names);
+      if (ownerFilter) request = request.or(ownerFilter);
       if (args.include_checked !== true) request = request.eq("is_checked", false);
       const { data, error } = await request;
-      const items = (data ?? [])
+      const items = names.withoutMinorWork(data ?? [])
         .filter((row) => matchesSearch(row, query, ["title"]))
-        .slice(0, 12);
+        .slice(0, 12)
+        .map(({ owner_member_id: owner, ...item }) => ({
+          ...item,
+          owner_label: owner
+            ? names.structuredName(String(owner), String(item.owner_label ?? ""))
+            : item.owner_label,
+        }));
       return error ? { error: "tool_unavailable" } : { items };
     }
     case "search_memories": {
@@ -320,11 +397,18 @@ async function runReadOnlyTool(
         return { error: "tool_unavailable" };
       }
 
+      // A bucket is named from its member id, never from the name as text,
+      // so an adult who shares a minor's first name keeps their own count.
       return {
         house_owner_label: houseWorkloadKey,
         workload: summarizeWorkload(
-          taskResult.data ?? [],
-          memberResult.data ?? [],
+          names.withoutMinorWork(taskResult.data ?? []),
+          (memberResult.data ?? [])
+            .filter((member) => !names.excludedOwnerIDs.has(String(member.id)))
+            .map((member) => ({
+              ...member,
+              name: names.structuredName(String(member.id), String(member.name ?? "")),
+            })),
         ),
       };
     }
@@ -352,11 +436,8 @@ function normalizedText(value: string): string {
 
 function deterministicSensitiveReply(message: string): string | null {
   const text = normalizedText(message);
-  const asksMedicationChange =
-    /(dose|dosagem|medicamento|remedio|receita)/.test(text)
-    && /(reduz|reduza|aument|altere|alterar|mude|mudar|metade|troque|suspenda|pare)/.test(text);
-  if (asksMedicationChange) {
-    return "Não posso alterar dose ou instrução clínica. Posso ajudar a organizar um lembrete com a orientação original, mas confirme qualquer mudança com um profissional de saúde.";
+  if (asksForMedicalGuidance(message)) {
+    return ninaMedicalRefusal;
   }
 
   const asksLegalConclusion =
@@ -450,6 +531,7 @@ Deno.serve(async (request: Request) => {
     "SUPABASE_SERVICE_ROLE_KEY",
   );
   const openAIKey = Deno.env.get("OPENAI_API_KEY") ?? "";
+  const safetySalt = Deno.env.get("NINA_SAFETY_ID_SALT");
 
   if (
     !authorization?.startsWith("Bearer ")
@@ -459,7 +541,7 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ error: "not_authenticated" }, 401);
   }
 
-  if (!secretKey || !openAIKey) {
+  if (!secretKey || !openAIKey || !isSafetySalt(safetySalt)) {
     return jsonResponse({ error: "service_not_configured" }, 503);
   }
 
@@ -490,7 +572,7 @@ Deno.serve(async (request: Request) => {
 
   const { data: membership, error: membershipError } = await userClient
     .from("family_members")
-    .select("household_role")
+    .select("id,household_role")
     .eq("family_id", body.family_id)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -520,20 +602,34 @@ Deno.serve(async (request: Request) => {
   );
 
   if (startError) {
-    const message = startError.message ?? "";
-    if (message.includes("rate_limited")) {
+    // Stable codes are matched whole: nina_ai_consent_required contains
+    // ai_consent_required, and a substring match would confuse the two.
+    const code = (startError.message ?? "").trim();
+    if (code === "nina_rate_limited") {
       return jsonResponse({ error: "rate_limited" }, 429);
     }
-    if (message.includes("budget_exceeded")) {
+    if (code === "nina_budget_exceeded") {
       return jsonResponse({ error: "monthly_budget_reached" }, 429);
     }
-    if (message.includes("adult_access")) {
+    if (code === "nina_adult_access_required") {
       return jsonResponse({ error: "adult_access_required" }, 403);
     }
-    if (message.includes("ai_consent_required")) {
+    if (code === "age_confirmation_required") {
+      return jsonResponse({ error: "nina_age_confirmation_required" }, 403);
+    }
+    if (code === "nina_ai_blocked") {
+      return jsonResponse({ error: "nina_ai_blocked" }, 403);
+    }
+    if (code === "nina_ai_consent_required") {
       return jsonResponse({ error: "ai_consent_required" }, 403);
     }
-    if (message.includes("attachments_require_premium")) {
+    if (code === "nina_consent_outdated") {
+      return jsonResponse({ error: "nina_consent_outdated" }, 403);
+    }
+    if (code === "nina_transfer_consent_required") {
+      return jsonResponse({ error: "nina_transfer_consent_required" }, 403);
+    }
+    if (code === "nina_attachments_require_premium") {
       return jsonResponse({ error: "attachments_require_premium" }, 403);
     }
     console.error(JSON.stringify({
@@ -565,7 +661,7 @@ Deno.serve(async (request: Request) => {
 
   const emptyFailureUsage = emptyUsage();
 
-  const [familyResult, profileResult, membersResult, stateResult] =
+  const [familyResult, profileResult, membersResult, stateResult, rosterResult] =
     await Promise.all([
       userClient
         .from("families")
@@ -579,19 +675,29 @@ Deno.serve(async (request: Request) => {
         .maybeSingle(),
       userClient
         .from("family_members")
-        .select("name,relationship,household_role,memory_note")
+        .select("id,name,relationship,household_role,memory_note")
         .eq("family_id", body.family_id)
         .limit(12),
       userClient.rpc("get_current_nina_state", {
         target_family_id: body.family_id,
       }),
+      adminClient.rpc("get_nina_model_roster", {
+        target_family_id: body.family_id,
+        requesting_user_id: user.id,
+      }),
     ]);
 
+  const rosterRows: unknown[] = Array.isArray(rosterResult.data)
+    ? rosterResult.data
+    : [];
   if (
     familyResult.error
     || profileResult.error
     || membersResult.error
     || stateResult.error
+    || rosterResult.error
+    || !Array.isArray(rosterResult.data)
+    || !rosterRows.every(isRosterEntry)
   ) {
     await recordFailedRun(
       adminClient,
@@ -604,8 +710,41 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ error: "context_unavailable" }, 503);
   }
 
+  const names = new Pseudonymizer(
+    rosterRows.filter(isRosterEntry),
+    (familyResult.data as { name?: string } | null)?.name ?? null,
+  );
+  const modelMessage = names.text(body.message.trim());
+
+  let needsSupport = false;
   try {
-    if (await moderateInput(openAIKey, body)) {
+    const verdict = await moderateInput(openAIKey, modelMessage, body);
+    if (verdict.sexualMinors) {
+      const { error: holdError } = await adminClient.rpc(
+        "hold_nina_chat_run_for_child_safety",
+        { target_run_id: run.run_id },
+      );
+      console.error(JSON.stringify({
+        event: holdError ? "child_safety_hold_failed" : "child_safety_hold_created",
+        run_id: run.run_id,
+      }));
+    } else if (verdict.flagged && !verdict.selfHarm) {
+      // A refused message never stays on the server in its original words,
+      // so a later refresh cannot bring it back to the phone either.
+      const { error: redactError } = await adminClient.rpc(
+        "redact_refused_nina_message",
+        { target_run_id: run.run_id },
+      );
+      if (redactError) {
+        console.error(JSON.stringify({
+          event: "refused_message_redaction_failed",
+          run_id: run.run_id,
+        }));
+      }
+    }
+    if (verdict.selfHarm) {
+      needsSupport = true;
+    } else if (verdict.flagged) {
       await recordFailedRun(
         adminClient,
         run.run_id,
@@ -616,8 +755,7 @@ Deno.serve(async (request: Request) => {
       );
       return jsonResponse({
         error: "input_not_supported",
-        reply:
-          "Não consigo ajudar com esse conteúdo. Se houver risco imediato para alguém, procure uma pessoa de confiança ou o serviço de emergência local.",
+        reply: ninaInputRefusal,
       }, 400);
     }
   } catch {
@@ -632,7 +770,9 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ error: "safety_check_unavailable" }, 503);
   }
 
-  const deterministicReply = deterministicSensitiveReply(body.message);
+  const deterministicReply = needsSupport
+    ? ninaSupportReply
+    : deterministicSensitiveReply(body.message);
   if (deterministicReply) {
     const assistantMessageID = crypto.randomUUID();
     const latency = Math.round(performance.now() - startedAt);
@@ -667,7 +807,7 @@ Deno.serve(async (request: Request) => {
     console.info(JSON.stringify({
       event: "nina_run_completed",
       run_id: run.run_id,
-      model: "deterministic_safety",
+      model: needsSupport ? "deterministic_support" : "deterministic_safety",
       latency_ms: latency,
       actual_microusd: 0,
       tool_calls: 0,
@@ -741,16 +881,26 @@ Deno.serve(async (request: Request) => {
   }
 
   const turnClock = new Date();
-  const householdContext = {
+  const householdContext = names.deep({
     local_now: ninaLocalNow(turnClock),
     family: familyResult.data,
-    current_user: profileResult.data,
-    members: minimizeMembersForModel(membersResult.data ?? []),
+    current_user: profileResult.data
+      ? {
+        ...profileResult.data,
+        display_name: names.structuredName(
+          String(membership.id),
+          String(profileResult.data.display_name ?? ""),
+        ),
+      }
+      : null,
+    members: names.memberContext(
+      minimizeMembersForModel(membersResult.data ?? []),
+    ),
     confirmed_visible_memories: state.memories ?? [],
     recent_private_messages: recentMessages,
-    new_message: body.message.trim(),
+    new_message: modelMessage,
     new_attachments: attachmentMetadata(body.attachments ?? []),
-  };
+  });
 
   const userContent = buildUserContent(
     householdContext,
@@ -776,6 +926,7 @@ Deno.serve(async (request: Request) => {
       },
     },
   };
+  const requesterSafetyIdentifier = await safetyIdentifier(safetySalt, user.id);
 
   let inputTokenCount: number;
   try {
@@ -867,6 +1018,7 @@ Deno.serve(async (request: Request) => {
           reasoning: { effort: "medium" },
           max_output_tokens: maxInteractiveOutputTokens,
           prompt_cache_options: { mode: "explicit" },
+          safety_identifier: requesterSafetyIdentifier,
         },
       );
 
@@ -897,11 +1049,12 @@ Deno.serve(async (request: Request) => {
           user.id,
           call.name,
           call.arguments,
+          names,
         );
         toolOutputs.push({
           type: "function_call_output",
           call_id: call.callId,
-          output: JSON.stringify(output),
+          output: JSON.stringify(names.deep(output)),
         });
       }
 
@@ -923,9 +1076,27 @@ Deno.serve(async (request: Request) => {
     }
 
     const datedProposals = fillMissingDueAt(structured.proposals, body.message, turnClock);
+    const restoredReply = names.restoreText(structured.reply);
+    const restoredProposals = names.restoreProposals(datedProposals.proposals);
+
+    // The model's own words are what is moderated, before any real name is
+    // put back, so the moderation call never carries a name either.
+    const outputVerdict = await moderateOutput(openAIKey, {
+      reply: structured.reply,
+      proposals: datedProposals.proposals,
+    });
+    const assistantReply = outputVerdict.flagged ? ninaOutputRefusal : restoredReply;
+    if (outputVerdict.flagged) {
+      console.error(JSON.stringify({
+        event: "nina_output_moderated",
+        run_id: run.run_id,
+        code: "nina_output_moderated",
+      }));
+    }
+
     const latency = Math.round(performance.now() - startedAt);
     const assistantMessageID = crypto.randomUUID();
-    const persistedProposals = datedProposals.proposals.map((proposal) => ({
+    const persistedProposals = (outputVerdict.flagged ? [] : restoredProposals).map((proposal) => ({
       ...proposal,
       id: crypto.randomUUID(),
     }));
@@ -934,7 +1105,7 @@ Deno.serve(async (request: Request) => {
       {
         target_run_id: run.run_id,
         assistant_message_id: assistantMessageID,
-        assistant_reply: structured.reply,
+        assistant_reply: assistantReply,
         proposals: persistedProposals,
         usage_input_tokens: aggregateUsage.inputTokens,
         usage_cached_input_tokens: aggregateUsage.cachedInputTokens,
@@ -962,6 +1133,7 @@ Deno.serve(async (request: Request) => {
       actual_microusd: actualCost,
       tool_calls: totalToolCalls,
       due_at_filled: datedProposals.filled,
+      output_moderated: outputVerdict.flagged,
     }));
 
     return jsonResponse(

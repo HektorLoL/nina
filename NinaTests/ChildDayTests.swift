@@ -55,6 +55,35 @@ final class ChildDayTests: XCTestCase {
         super.tearDown()
     }
 
+    func testOnlyALiveGuardianCanPrintOrShareAChildsDay() {
+        var consented = pedro!
+        consented.minorAccess = MinorAccess(guardianNames: ["Mirna"], hasProfileConsent: true)
+        var guarded = consented
+        guarded.minorAccess = MinorAccess(
+            guardianNames: ["Heitor"],
+            isViewerGuardian: true,
+            hasProfileConsent: true
+        )
+        var legacy = pedro!
+        legacy.minorAccess = MinorAccess(hasProfileConsent: false)
+        var claimed = guarded
+        claimed.userID = UUID().uuidString
+
+        XCTAssertTrue(ChildDay.canShow(consented))
+        XCTAssertFalse(ChildDay.canPrintOrShare(consented))
+
+        XCTAssertTrue(ChildDay.canShow(guarded))
+        XCTAssertTrue(ChildDay.canPrintOrShare(guarded))
+
+        XCTAssertFalse(ChildDay.canShow(legacy))
+        XCTAssertFalse(ChildDay.canPrintOrShare(legacy))
+        XCTAssertFalse(ChildDay.canShow(pedro))
+
+        XCTAssertFalse(ChildDay.canShow(claimed))
+        XCTAssertFalse(ChildDay.canPrintOrShare(claimed))
+        XCTAssertFalse(ChildDay.canShow(heitor))
+    }
+
     func testTheChildsListHoldsOnlyTheirOwnOpenTasksForTodayIncludingLateOnes() {
         let today = task("Dever de casa", owner: pedro, dueAt: date(2026, 9, 25, 16, 0))
         let lateOneOff = task("Guardar os brinquedos", owner: pedro, dueAt: date(2026, 9, 24, 19, 0))

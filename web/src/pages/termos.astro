@@ -3,9 +3,18 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Brand from "../components/Brand.astro";
 import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
+import { ninaRating } from "../rating";
 
-const updatedAt = "9 de agosto de 2026";
+const updatedAt = "29 de setembro de 2026";
 const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
+const reportMailto = `mailto:${legalIdentity.reportContactEmail}`;
+const { legalEntityName, legalEntityDocument } = legalIdentity;
+const documentWord = legalIdentity.documentLabel === "Documento"
+  ? "documento"
+  : legalIdentity.documentLabel;
+const addressClause = legalIdentity.legalEntityAddress
+  ? `, com endereço em ${legalIdentity.legalEntityAddress}`
+  : "";
 ---
 
 <BaseLayout
@@ -19,7 +28,7 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
       <nav class="desktop-nav" aria-label="Navegação principal">
         <a href="/">Início</a>
         <a href="/privacidade/">Privacidade</a>
-        <a href={contactMailto}>Contato</a>
+        <a href="/familias/">Famílias</a>
       </nav>
     </div>
   </header>
@@ -57,48 +66,89 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
     <article
       class="policy-content"
       data-legal-status={legalIdentity.isProductionComplete ? "complete" : "incomplete"}
+      data-legal-launch={legalIdentity.isLaunchReady ? "ready" : "pending"}
     >
       <h2>1. Quem oferece a Nina</h2>
       {
         legalIdentity.isProductionComplete ? (
           <p>
-            A Nina é oferecida por <strong>{legalIdentity.legalEntityName}</strong>, registrada sob o
-            documento <strong>{legalIdentity.legalEntityDocument}</strong>. Para falar sobre estes
-            termos, sobre a assinatura ou sobre um pedido de arrependimento, escreva para
-            <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
+            A Nina é oferecida
+            por <strong>{legalEntityName}</strong>, {documentWord} <strong>{legalEntityDocument}</strong>{addressClause}.
+            Para falar sobre estes termos, sobre a assinatura ou sobre um pedido de arrependimento,
+            escreva para <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
           </p>
         ) : (
           <p>
             A Nina está em preparação para lançamento comercial e ainda não vende assinaturas. Estes
             termos descrevem as condições que passarão a valer quando a assinatura for aberta ao
             público, e a identificação formal da empresa responsável será publicada nesta página
-            antes de qualquer cobrança. Para dúvidas até lá, escreva para
-            <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
+            antes de qualquer cobrança. Para dúvidas até lá, escreva
+            para <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
           </p>
         )
       }
 
       <h2>2. O que a Nina faz</h2>
       <p>
-        A Nina é um aplicativo para iPhone que organiza a rotina de uma casa. Você conversa com ela
-        em português, e ela transforma o que você conta em tarefas, lembretes, listas de compras e
+        A Nina é um aplicativo para iPhone que organiza a rotina de uma casa. Um adulto conversa com
+        ela em português, e ela transforma o que ele conta em tarefas, lembretes, listas de compras e
         sementes, que são intenções ainda sem data. Tudo o que a Nina sugere é uma proposta. Nada
-        entra na sua casa sem a sua confirmação.
+        entra na casa sem a confirmação de uma pessoa.
       </p>
 
       <h2>3. Aceite destes termos</h2>
       <p>
-        Ao criar uma conta, entrar em uma casa ou assinar o Nina Premium, você concorda com estes
-        termos e com a <a href="/privacidade/">Política de Privacidade</a>, que faz parte deles. Se
-        você não concorda com alguma parte, não use o app.
+        Ao criar uma conta, ou quando um responsável aprova a sua conta, você concorda com estes
+        termos e com a <a href="/privacidade/">Política de Privacidade</a>, que faz parte deles. O
+        mesmo vale ao entrar em uma casa ou assinar o Nina Premium. Se você não concorda com alguma
+        parte, não use o app.
       </p>
 
-      <h2>4. Conta, idade e responsabilidade</h2>
+      <h2>4. Idade, contas de menores e responsáveis</h2>
       <p>
-        Para usar a Nina você precisa ter 18 anos ou mais e uma conta Apple válida. A conversa com a
-        Nina é restrita a adultos. Crianças e animais existem na Nina como perfis cuidados por
-        adultos, nunca como usuários. Você é responsável pelo que registra na casa, pela guarda das
-        suas credenciais e por ter legitimidade para registrar informações de outras pessoas da casa.
+        A Nina não tem idade mínima. A classificação indicativa da Nina é {ninaRating.termsPhrase}.
+        O que cada pessoa pode fazer depende da faixa de idade que a Apple informa ao app. A Nina
+        recebe só a faixa, nunca a data de nascimento, e usa essa informação apenas para decidir o
+        que cada conta pode fazer.
+      </p>
+      <p>
+        Algumas partes são só para maiores de 18 anos: criar ou administrar uma casa, conversar com
+        a Nina, assinar o Nina Premium e decidir sobre dados de crianças e adolescentes. Para
+        conversar com a Nina, assinar e decidir por um menor, a Apple também precisa confirmar que
+        você é maior de idade.
+      </p>
+      <p>
+        Quem tem menos de 18 anos entra na Nina somente por uma casa, depois que a mãe, o pai ou o
+        responsável legal aprova a entrada no app. Ao aprovar, o responsável autoriza o uso e aceita
+        estes termos e a Política de Privacidade em nome do menor, ou junto com ele quando ele tem 16
+        ou 17 anos. A conta de menor mostra só as tarefas da própria pessoa e permite marcá-las como
+        feitas. Ela não conversa com a Nina, não faz compras, não vê o restante da casa e não
+        administra ninguém.
+      </p>
+      <p>
+        Quando a Apple não informa a faixa de idade, a Nina trata a conta como a de uma criança até
+        que a faixa seja informada.
+      </p>
+      <p>
+        Crianças e adolescentes também podem existir na Nina como perfis sem conta, cadastrados pela
+        mãe, pelo pai ou pelo responsável legal.
+      </p>
+      <p>
+        Você é responsável pelo que registra na casa, pela guarda do seu acesso e por ter
+        legitimidade para registrar informações de outras pessoas. Sobre uma criança ou um
+        adolescente, registre só o necessário. Declarar-se responsável legal por um menor sem ser é
+        uma violação destes termos.
+      </p>
+
+      <h2>4A. Responsáveis</h2>
+      <p>
+        Quem aprova um menor ou cadastra uma criança ou um adolescente pode, a qualquer momento, pelo
+        app: ver o que a conta do menor mostra; ligar ou desligar os avisos; definir o horário de
+        silêncio e o limite de uso por dia; ver o tempo de uso dos últimos 7 dias; autorizar ou
+        retirar a autorização para lembretes de saúde; exportar os dados do menor; tirar o menor da
+        casa; e apagar a conta ou o perfil. Para bloquear o iPhone, use também o Tempo de Uso da
+        Apple. Os riscos que avaliamos e as proteções para cada idade estão
+        em <a href="/familias/">ninai.app/familias</a>.
       </p>
 
       <h2>5. A casa, os participantes e os convites</h2>
@@ -107,7 +157,7 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
         um link de convite não dá acesso a nada: o pedido fica pendente até que alguém com permissão
         de dono ou administrador aprove. Quem administra a casa pode aprovar, recusar e remover
         participantes conforme as regras do app, e quem é removido perde o acesso ao conteúdo da
-        casa.
+        casa. A entrada de quem tem menos de 18 anos segue a seção 4.
       </p>
 
       <h2>6. A assinatura Nina Premium</h2>
@@ -134,16 +184,17 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
         toque no seu nome, escolha Assinaturas e selecione a Nina. Cancele com pelo menos 24 horas
         de antecedência do fim do período vigente para não ser cobrado de novo. Depois de cancelar,
         o acesso Premium continua até o fim do período já pago. A Nina não consegue cancelar a
-        assinatura por você.
+        assinatura por você. Apagar a conta da Nina não cancela a assinatura da Apple: a Apple
+        segue cobrando até você cancelar.
       </p>
 
       <h2>9. Uma assinatura cobre a casa</h2>
       <p>
         Uma assinatura ativa libera os recursos Premium para a casa inteira, dentro do limite de 8
         pessoas, sem precisar de uma assinatura por participante. A assinatura fica vinculada à conta
-        Apple de quem assinou: se essa pessoa cancelar, for removida da casa ou apagar a conta, o acesso Premium sai junto e
-        a casa volta aos recursos gratuitos. Uma mesma assinatura não cobre duas casas ao mesmo
-        tempo.
+        Apple de quem assinou: se essa pessoa cancelar, for removida da casa ou apagar a conta, o
+        acesso Premium sai junto e a casa volta aos recursos gratuitos. Uma mesma assinatura não
+        cobre duas casas ao mesmo tempo.
       </p>
 
       <h2>10. Direito de arrependimento e reembolso</h2>
@@ -151,12 +202,12 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
         O Código de Defesa do Consumidor garante o direito de arrependimento em contratações feitas
         fora do estabelecimento comercial. Você pode desistir da assinatura em até 7 dias corridos
         contados da contratação, sem precisar justificar, e receber de volta o valor pago. Como a
-        venda é processada pelo App Store, o pedido é feito à Apple em
-        <a href="https://reportaproblem.apple.com" rel="noopener">reportaproblem.apple.com</a> com
-        a mesma conta Apple usada na compra. Se esse caminho falhar, escreva dentro dos 7 dias para
-        <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a> e acompanhamos o pedido com
-        você. Fora do prazo de arrependimento, reembolsos seguem a política da Apple e a legislação
-        aplicável.
+        venda é processada pelo App Store, o pedido é feito à Apple
+        em <a href="https://reportaproblem.apple.com" rel="noopener">reportaproblem.apple.com</a> com
+        a mesma conta Apple usada na compra. Se esse caminho falhar, escreva dentro dos 7 dias
+        para <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a> e acompanhamos o pedido
+        com você. Fora do prazo de arrependimento, reembolsos seguem a política da Apple e a
+        legislação aplicável.
       </p>
 
       <h2>11. Mudanças de preço e troca de plano</h2>
@@ -175,6 +226,14 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
         suspender contas que ameacem a segurança, o custo ou a integridade do serviço, com aviso
         sempre que for possível.
       </p>
+      <p>
+        É proibido usar a Nina para pedir, produzir, guardar ou compartilhar conteúdo sexual
+        envolvendo crianças ou adolescentes, para aliciar, ameaçar, expor ou humilhar qualquer
+        pessoa, ou para buscar orientação que ponha alguém em risco. Quem descumprir estas regras
+        pode perder o acesso à conversa com a Nina ou à conta. Conteúdo de aparente exploração ou
+        abuso sexual de crianças e adolescentes é removido e comunicado às autoridades, como a lei
+        exige.
+      </p>
 
       <h2>13. Seu conteúdo</h2>
       <p>
@@ -186,12 +245,12 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
 
       <h2>14. A Nina propõe, você confirma</h2>
       <p>
-        A Nina usa modelos de inteligência artificial e pode errar. Nenhuma sugestão dela vira
-        tarefa, lembrete, compra ou memória sem a sua confirmação. A Nina não substitui orientação
-        médica, jurídica, financeira ou educacional. A leitura de boletos, receitas e comunicados
-        serve para organizar a rotina, e a conferência do documento original continua sendo sua. Os
-        recursos de IA dependem de consentimento no app e podem ter limites de uso para manter o
-        serviço sustentável.
+        A Nina é um programa de computador que usa modelos de inteligência artificial. Ela não é uma
+        pessoa e pode errar. Nenhuma sugestão dela vira tarefa, lembrete, compra ou memória sem a sua
+        confirmação. A Nina organiza a rotina e não dá orientação médica, psicológica, jurídica ou
+        financeira. Quando ela lê um boleto ou um comunicado, a conferência do documento original
+        continua sendo sua. Os recursos de IA dependem de consentimento no app e podem ter limites de
+        uso para manter o serviço sustentável.
       </p>
 
       <h2>15. Disponibilidade, suporte e evolução do serviço</h2>
@@ -199,8 +258,8 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
         Trabalhamos para manter a Nina disponível, mas não prometemos funcionamento ininterrupto.
         Recursos podem ser adicionados, alterados ou removidos conforme o produto evolui. Quando uma
         mudança afetar de forma relevante o que você assinou, avisamos com antecedência razoável e
-        você pode cancelar. O suporte é feito por
-        <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
+        você pode cancelar. O suporte é feito
+        por <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
       </p>
 
       <h2>16. Encerramento</h2>
@@ -233,6 +292,15 @@ const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
         Estes termos são regidos pelas leis brasileiras. Fica eleito o foro do domicílio do
         consumidor para resolver qualquer questão decorrente deles, conforme o Código de Defesa do
         Consumidor.
+      </p>
+
+      <h2>20. Denúncias</h2>
+      <p>
+        Para denunciar algo na Nina que fira direitos de uma criança ou de um adolescente, use
+        Denunciar um problema no app ou escreva
+        para <a href={reportMailto}>{legalIdentity.reportContactEmail}</a>. A denúncia precisa
+        identificar quem denuncia. Em <a href="/denuncia/">ninai.app/denuncia</a> explicamos como cada denúncia é
+        tratada, o prazo de resposta e como contestar uma decisão.
       </p>
     </article>
   </main>

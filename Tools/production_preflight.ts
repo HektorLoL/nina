@@ -16,6 +16,7 @@ export interface RepositoryFacts {
 export interface IOSArtifactSnapshot {
   info: Record<string, unknown>;
   archiveInfo?: Record<string, unknown>;
+  entitlements?: Record<string, unknown>;
   files: string[];
   isArchive: boolean;
   scanComplete: boolean;
@@ -59,6 +60,136 @@ const databaseGateCommands = [
   "db lint --local --fail-on error",
   "test db",
 ];
+
+export const minimumDeploymentTarget = "26.4";
+export const declaredAgeRangeEntitlement =
+  "com.apple.developer.declared-age-range";
+export const appAttestEnvironmentEntitlement =
+  "com.apple.developer.devicecheck.appattest-environment";
+
+export const retentionClaims = [
+  "fica guardado lá",
+  "servidor nenhum",
+  "usado só para responder",
+  "não guarde o que recebe",
+];
+
+const loginClaims = ["Sua amiga Nina", "Conta pra ela o que pesa."];
+
+// A statement that nothing sent to the model provider is kept is false under
+// its abuse-monitoring logs, so no shipped Swift or web source may make it.
+export function retentionClaimOffenders(
+  sources: ReadonlyArray<{ path: string; text: string }>,
+): string[] {
+  const offenders: string[] = [];
+  for (const source of sources) {
+    const scanned = /^Nina\/.+\.swift$/.test(source.path) ||
+      source.path.startsWith("web/src/");
+    if (!scanned) continue;
+    for (const claim of retentionClaims) {
+      if (source.text.includes(claim)) {
+        offenders.push(`${source.path}: ${claim}`);
+      }
+    }
+    if (source.path === "Nina/LoginView.swift") {
+      for (const claim of loginClaims) {
+        if (source.text.includes(claim)) {
+          offenders.push(`${source.path}: ${claim}`);
+        }
+      }
+    }
+  }
+  return offenders;
+}
+
+export function legalAgeRuleHolds(input: {
+  terms: string;
+  familiesPageExists: boolean;
+  reportPageExists: boolean;
+}): boolean {
+  return input.terms.includes("ninaRating") &&
+    !input.terms.includes("18 anos ou mais") &&
+    input.familiesPageExists &&
+    input.reportPageExists;
+}
+
+export function ratingCodes(
+  swiftSource: string,
+  webSource: string,
+): { app?: string; web?: string } {
+  return {
+    app: swiftSource.match(/^ {4}static let currentCode = "([^"]+)"$/m)?.[1],
+    web: webSource.match(
+      /^export const ninaRatingCode: NinaRatingCode = "([^"]+)";$/m,
+    )?.[1],
+  };
+}
+
+export function ratingConstantsAgree(
+  swiftSource: string,
+  webSource: string,
+): boolean {
+  const codes = ratingCodes(swiftSource, webSource);
+  return Boolean(codes.app) && codes.app === codes.web &&
+    /^(L|10|12|14|16|18)$/.test(codes.app!);
+}
+
+export function ageAssuranceEntitlementsPresent(entitlements: string): boolean {
+  const escaped = (value: string) =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `<key>${escaped(declaredAgeRangeEntitlement)}</key>\\s*<true\\s*/>`,
+  ).test(entitlements) &&
+    new RegExp(
+      `<key>${
+        escaped(appAttestEnvironmentEntitlement)
+      }</key>\\s*<string>production</string>`,
+    ).test(entitlements);
+}
+
+function versionParts(value: string): number[] | null {
+  if (!/^\d+(?:\.\d+){0,2}$/.test(value.trim())) return null;
+  return value.trim().split(".").map(Number);
+}
+
+export function versionAtLeast(
+  value: string | undefined,
+  minimum: string,
+): boolean {
+  const actual = versionParts(value ?? "");
+  const floor = versionParts(minimum);
+  if (!actual || !floor) return false;
+  for (
+    let index = 0;
+    index < Math.max(actual.length, floor.length);
+    index += 1
+  ) {
+    const left = actual[index] ?? 0;
+    const right = floor[index] ?? 0;
+    if (left !== right) return left > right;
+  }
+  return true;
+}
+
+export function deploymentTargetsAtLeast(
+  project: string,
+  minimum = minimumDeploymentTarget,
+): boolean {
+  const targets = [
+    ...project.matchAll(/IPHONEOS_DEPLOYMENT_TARGET = ([^;]+);/g),
+  ].map((match) => match[1].trim());
+  return targets.length > 0 &&
+    targets.every((target) => versionAtLeast(target, minimum));
+}
+
+function normalizedPersonName(value: string | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
 
 export function premiumTransactionFinishes(
   source: string,
@@ -141,6 +272,28 @@ function joinPath(root: string, relativePath: string): string {
 
 async function readText(root: string, relativePath: string): Promise<string> {
   return await Deno.readTextFile(joinPath(root, relativePath));
+}
+
+async function readOptionalText(
+  root: string,
+  relativePath: string,
+): Promise<string> {
+  try {
+    return await readText(root, relativePath);
+  } catch {
+    return "";
+  }
+}
+
+async function existsOnDisk(
+  root: string,
+  relativePath: string,
+): Promise<boolean> {
+  try {
+    return (await Deno.stat(joinPath(root, relativePath))).isFile;
+  } catch {
+    return false;
+  }
 }
 
 function firstBuildSetting(source: string, name: string): string | undefined {
@@ -363,6 +516,37 @@ export function productionEnvironmentChecks(
     ),
   ];
 
+  results.push(check(
+    "deployment.app-attest-mode",
+    value("NINA_APP_ATTEST_MODE") === "production",
+    "App Attest verification runs in production mode.",
+    "Set NINA_APP_ATTEST_MODE=production for the age-signal function; development and insecure-local are for a loopback stack only.",
+  ));
+
+  const documentDigits = (value("PUBLIC_NINA_LEGAL_ENTITY_DOCUMENT") ?? "")
+    .replace(/\D/g, "");
+  const entityName = value("PUBLIC_NINA_LEGAL_ENTITY_NAME");
+  const dpoName = value("PUBLIC_NINA_DPO_NAME");
+  const address = value("PUBLIC_NINA_LEGAL_ENTITY_ADDRESS");
+  const decisionMakersValue = value("NINA_CONTROLLER_DECISION_MAKERS");
+  const decisionMakers = (decisionMakersValue ?? "")
+    .split(",")
+    .map(normalizedPersonName)
+    .filter(Boolean);
+  results.push(check(
+    "deployment.legal-launch-identity",
+    documentDigits.length === 14 &&
+      !hasPlaceholder(address) &&
+      !hasPlaceholder(entityName) &&
+      !hasPlaceholder(dpoName) &&
+      !hasPlaceholder(decisionMakersValue) &&
+      decisionMakers.length > 0 &&
+      normalizedPersonName(dpoName) !== normalizedPersonName(entityName) &&
+      !decisionMakers.includes(normalizedPersonName(dpoName)),
+    "The controller is a company with a CNPJ and an address, and the encarregado is none of its listed partners or administrators.",
+    "Launch needs a company controller: a 14-digit CNPJ, the controller address, NINA_CONTROLLER_DECISION_MAKERS listing its partners and administrators, and an encarregado who is none of them (D2).",
+  ));
+
   const legalFields = [
     "PUBLIC_NINA_LEGAL_ENTITY_NAME",
     "PUBLIC_NINA_LEGAL_ENTITY_DOCUMENT",
@@ -512,6 +696,31 @@ export function iosArtifactChecks(
     ),
   ];
 
+  const entitlements = artifact.entitlements;
+  results.push(
+    check(
+      "artifact.declared-age-range-entitlement",
+      entitlements?.[declaredAgeRangeEntitlement] === true,
+      "The build carries the Declared Age Range entitlement.",
+      "The build is missing com.apple.developer.declared-age-range; the age step cannot run.",
+    ),
+    check(
+      "artifact.app-attest-environment-production",
+      entitlements?.[appAttestEnvironmentEntitlement] === "production",
+      "App Attest keys are generated in the production environment.",
+      "The build must carry com.apple.developer.devicecheck.appattest-environment = production.",
+    ),
+    check(
+      "artifact.deployment-target-minimum",
+      versionAtLeast(
+        stringValue(info.MinimumOSVersion),
+        minimumDeploymentTarget,
+      ),
+      `The build requires iOS ${minimumDeploymentTarget} or later.`,
+      `MinimumOSVersion must be ${minimumDeploymentTarget} or later, where requiredRegulatoryFeatures exists.`,
+    ),
+  );
+
   if (artifact.isArchive) {
     results.push(check(
       "artifact.archive-signing",
@@ -542,7 +751,7 @@ async function trackedFiles(root: string): Promise<string[]> {
   return new TextDecoder().decode(output.stdout).split("\0").filter(Boolean);
 }
 
-function looksLikeSecret(value: string): boolean {
+export function looksLikeSecret(value: string): boolean {
   const supabaseCandidates = value.match(/sb_secret_[A-Za-z0-9._-]{20,}/g) ??
     [];
   if (supabaseCandidates.some((candidate) => !hasPlaceholder(candidate))) {
@@ -554,7 +763,12 @@ function looksLikeSecret(value: string): boolean {
   if (openAICandidates.some((candidate) => !hasPlaceholder(candidate))) {
     return true;
   }
-  if (/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(value)) {
+  // A private-key armour is a secret only when a key body follows it, so a
+  // test that builds its throwaway key at run time can spell the header out.
+  if (
+    /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----(?:\s*[A-Za-z0-9+/=]){64}/
+      .test(value)
+  ) {
     return true;
   }
 
@@ -719,10 +933,18 @@ export async function loadIOSArtifactSnapshot(
       : undefined,
     collectArtifactFiles(appPath),
   ]);
+  const entitlements = scan.files.includes(
+      "archived-expanded-entitlements.xcent",
+    )
+    ? await plistJSON(
+      joinPath(appPath, "archived-expanded-entitlements.xcent"),
+    ).catch(() => undefined)
+    : undefined;
 
   return {
     info,
     archiveInfo,
+    entitlements,
     files: scan.files,
     isArchive,
     scanComplete: scan.scanComplete,
@@ -752,6 +974,11 @@ export async function repositoryChecks(
     sheets,
     ninaApp,
     premiumSubscriptionStore,
+    ratingSwift,
+    ratingWeb,
+    termsPage,
+    familiesPageExists,
+    reportPageExists,
   ] = await Promise.all([
     readText(root, "Nina.xcodeproj/project.pbxproj"),
     readText(root, "Nina/Config/Nina.xcconfig"),
@@ -770,6 +997,11 @@ export async function repositoryChecks(
     readText(root, "Nina/Sheets.swift"),
     readText(root, "Nina/NinaApp.swift"),
     readText(root, "Nina/PremiumSubscriptionStore.swift"),
+    readOptionalText(root, "Nina/NinaRating.swift"),
+    readOptionalText(root, "web/src/rating.ts"),
+    readOptionalText(root, "web/src/pages/termos.astro"),
+    existsOnDisk(root, "web/src/pages/familias.astro"),
+    existsOnDisk(root, "web/src/pages/denuncia.astro"),
   ]);
 
   const bundleID = firstBuildSetting(project, "PRODUCT_BUNDLE_IDENTIFIER") ??
@@ -797,12 +1029,16 @@ export async function repositoryChecks(
 
   const secretBearingFiles: string[] = [];
   const nonAppleSignInFiles: string[] = [];
+  const claimSources: Array<{ path: string; text: string }> = [];
   for (const path of files) {
     try {
       const metadata = await Deno.stat(joinPath(root, path));
       if (metadata.size > 2_000_000) continue;
       const source = await Deno.readTextFile(joinPath(root, path));
       if (looksLikeSecret(source)) secretBearingFiles.push(path);
+      if (/^Nina\/.+\.swift$/.test(path) || path.startsWith("web/src/")) {
+        claimSources.push({ path, text: source });
+      }
       if (
         /^Nina\/.+\.swift$/.test(path) &&
         nonAppleSignInCalls(source).length > 0
@@ -931,6 +1167,42 @@ export async function repositoryChecks(
         privacyPage.includes("data-legal-status"),
       "The privacy page renders validated release legal metadata.",
       "Render the centralized legal identity and launch-status marker on the privacy page.",
+    ),
+    check(
+      "repository.retention-claims",
+      retentionClaimOffenders(claimSources).length === 0,
+      "No shipped string claims that nothing sent to the model provider is kept.",
+      `Remove the retention claims: ${
+        retentionClaimOffenders(claimSources).join(", ")
+      }`,
+    ),
+    check(
+      "repository.legal-age-rule",
+      legalAgeRuleHolds({
+        terms: termsPage,
+        familiesPageExists,
+        reportPageExists,
+      }),
+      "The Terms state the rating and set no minimum age, and the families and report pages exist.",
+      "termos.astro must read the rating from ninaRating and never require 18 anos ou mais, and /familias/ and /denuncia/ must exist.",
+    ),
+    check(
+      "repository.rating-constant-consistency",
+      ratingConstantsAgree(ratingSwift, ratingWeb),
+      "The app and the website show the same indicative rating.",
+      "Nina/NinaRating.swift currentCode and web/src/rating.ts ninaRatingCode must be the same rating.",
+    ),
+    check(
+      "repository.age-assurance-entitlements",
+      ageAssuranceEntitlementsPresent(entitlements),
+      "The app declares Declared Age Range and a production App Attest environment.",
+      "Add com.apple.developer.declared-age-range (true) and com.apple.developer.devicecheck.appattest-environment (production) to Nina.entitlements.",
+    ),
+    check(
+      "repository.deployment-target-minimum",
+      deploymentTargetsAtLeast(project),
+      `Every build configuration targets iOS ${minimumDeploymentTarget} or later.`,
+      `Set IPHONEOS_DEPLOYMENT_TARGET to ${minimumDeploymentTarget} or later in every build configuration.`,
     ),
     check(
       "repository.ci-preflight",

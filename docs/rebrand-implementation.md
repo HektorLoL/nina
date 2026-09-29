@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-09-26
+Last updated: 2026-09-29
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -451,6 +451,88 @@ the welcome and Ajustes lose surfaces earlier passes had added.
   gone, so `Theme.swift` is again the only source of colour.
 - **The premium line for an account that cannot buy** reads "Entre com a Apple
   para assinar."
+
+## 6i. Nina for all ages (2026-09-29)
+
+Heitor's decisions D1–D4 (aim for "Livre", a company before launch, only
+Apple-confirmed adults act for AI, money and minors, iOS 26.4) plus the build-10
+Apple fixes. No board draws any of this; every screen below is built from the
+existing parts (`NinaMark`, `NinaButton`, `.ninaCard`, `NinaRow`, `Eyebrow`) and
+its strings are in `docs/text-rubric.md` §3, most of them Law-text-gated.
+
+- **The welcome says less and asks the age first.** "Sua amiga Nina" / "Conta
+  pra ela o que pesa." became "Nina" / "A rotina da casa, dividida.": a child
+  can see this screen, and the old tagline invited emotional unloading (ClassInd
+  Guia D.7.1). Step 1 is one cobalt "Continuar" that reads Apple's age range;
+  only then does the black Apple button appear, asking for name and email only
+  for an adult reading. Rubric L4 used to say "no cobalt on the welcome"; it
+  was rewritten on 2026-09-29 to add this age step, because the age sheet has
+  to come before sign-in and Apple's button cannot open it. The legal line gains the protected "Menores de 18 anos entram
+  numa casa com aprovação de um responsável.", so the welcome is 30 authored
+  words, two over the budget; the legal text wins.
+- **The ClassInd pictogram is the one colour outside the palette.**
+  `NinaTheme.classInd(_:)` holds the six official rating colours and
+  `ClassIndMark` draws a rounded square with the code in white on the welcome,
+  on `AppLoadingScreen` and on the "Classificação indicativa" settings row, as
+  Portaria MJSP 1.048 art. 50 asks ("instalação, login e inicialização"). It is
+  a named regulated exception to "`Theme.swift` is the only palette": it never
+  tints anything else, and the code inside uses `.font(.system(size:weight:))`
+  because the pictogram is artwork, not copy. **UNVERIFIED:** the hexes (L
+  `#00A859`, 10 `#0095DA`, 12 `#FDC300`, 14 `#F58220`, 16 `#E3001B`, 18
+  `#1D1D1B`) and the drawing were not read from the gov.br/mj artwork; replace
+  both from the official files before release, in `Theme.swift` and
+  `web/src/rating.ts` together.
+- **`AgeCheckView`** is a centred gate (G15): the 48pt mark, "Antes, sua faixa
+  de idade.", the protected Apple line, one cobalt "Continuar". Declined, Apple
+  error and App Attest failure each swap in one headline, one line, a cobalt
+  retry and a quiet "Continuar assim". **`AgeMajorityView`** ("Agora a conta é
+  sua.") has the same shape with "Aceitar" and a quiet "Ler os Termos".
+- **A minor never sees the four tabs.** `MinorRootView` is a single stack:
+  `MinorHeader` (the title "Suas tarefas" and the protected second line
+  "Responsável: {nome}", G1 live data), then "Hoje" and "Próximos dias" rows
+  shaped like `ChildDayRow` (title, hour, glyph, a done control; `success()` on
+  done, `selection()` on undone, as in Tarefas). Every other state — no house,
+  pending, age required, no guardian, limit reached, removed — is one centred
+  G12 block. The welcome card is grout-filled, like the consent card. No
+  terracotta anywhere a minor looks: a minor's list, like the child's day,
+  never shows lateness.
+- **Minor settings** follow S1–S9 with rows only; "O que a Nina guarda",
+  "Precisa conversar?" and "Minha idade está errada" are pushed text pages with
+  one quiet link each, and "Apagar conta" / "Sair" close the list.
+- **The guardian sheets** reuse the capture-sheet anatomy: title, a
+  grout-filled card of five lines, two chip rows (none preselected for the
+  relationship; Apple's band preselected and older bands disabled), the
+  optional nicknames field, two required checkboxes and one optional one in its
+  own grout row, then one cobalt "Aprovar" (or "Cadastrar") that is `.disabled`
+  and dimmed until everything required is chosen. `lightImpact()` on open,
+  `success()` on a recorded approval, `error()` from the store.
+- **Supervision on a minor's member screen** is an eyebrow "Supervisão" with
+  value rows (G3) and the quiet destructive actions last, in ink; `warning()`
+  arms each alert and never fires on the confirm. A claimed minor's row in Casa
+  reads "Acesso limitado", a profile without consent "Sem autorização", never
+  the band.
+- **The member editor's role chips** are "Adulto · Adolescente · Criança ·
+  Pet". "Adulto" no longer creates an account-less adult: it shows "Adultos
+  entram por convite." and "Convidar"; a viewer who is not a trusted adult sees
+  the two minor chips disabled with one helper line.
+- **The AI consent card** keeps its headline and button and gains a grout card
+  of five lines and a separate grout block, eyebrow "Envio para fora do Brasil",
+  with the transfer checkbox; the primary stays disabled until it is ticked.
+  "Este aviso mudou." appears above the headline when an older consent was
+  withdrawn. The declared-adult and blocked gates follow C14.
+- **"Denunciar resposta"** is a context-menu item on every Nina reply in the
+  adult chat, opening a sheet of four chips and "Enviar"; the confirmation is
+  the one line "Recebido. Vamos olhar." **"Denunciar um problema"** is a
+  settings row for every age.
+- **"Apagar conta" warns a subscriber** with a grout card above the typed gate:
+  "Sua assinatura continua." / "Apagar a conta não cancela a cobrança. A Apple
+  segue cobrando até você cancelar." / quiet "Gerenciar assinatura". The
+  deletion screen is also reachable with no house (`.accountDeletionSheet` on
+  `HomeSetupView`, the pending, decision and unavailable screens, and every
+  minor state).
+- **The photo line in the composer** became "A Nina não guarda a foto. A OpenAI
+  pode guardar por até 30 dias para evitar abuso.", and the Privacidade footer
+  names OpenAI and the 30 days; both were untrue before.
 
 ## 7. Verified
 

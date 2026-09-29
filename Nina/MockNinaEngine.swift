@@ -43,8 +43,12 @@ enum NinaEngineError: Error, Equatable {
     case attachmentsRequirePremium
     case inputNotSupported
     case requestInProgress
+    case consentOutdated
+    case ageConfirmationRequired
+    case aiBlocked
     case unavailable
 
+    // Codes are matched whole: "nina_ai_consent_required" must never read as "ai_consent_required".
     init(code: String) {
         switch code {
         case "rate_limited":
@@ -63,6 +67,12 @@ enum NinaEngineError: Error, Equatable {
             self = .inputNotSupported
         case "request_in_progress":
             self = .requestInProgress
+        case "nina_consent_outdated", "nina_transfer_consent_required":
+            self = .consentOutdated
+        case "nina_age_confirmation_required":
+            self = .ageConfirmationRequired
+        case "nina_ai_blocked":
+            self = .aiBlocked
         default:
             self = .unavailable
         }
@@ -86,6 +96,12 @@ enum NinaEngineError: Error, Equatable {
             "Não consigo ajudar com esse conteúdo."
         case .requestInProgress:
             "Ainda estou lendo essa mensagem. Espere um instante."
+        case .consentOutdated:
+            "Este aviso mudou."
+        case .ageConfirmationRequired:
+            "A conversa pede idade confirmada."
+        case .aiBlocked:
+            "A conversa está suspensa nesta conta."
         case .unavailable:
             "Não consigo responder agora."
         }

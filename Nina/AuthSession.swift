@@ -1,7 +1,11 @@
+import AuthenticationServices
 import CryptoKit
 import Foundation
 import Observation
 import Security
+#if canImport(UIKit)
+import UIKit
+#endif
 
 enum AuthProvider: String, Codable, Hashable {
     case email
@@ -38,6 +42,7 @@ struct AuthUser: Codable, Hashable, Identifiable {
     var provider: AuthProvider
     var isEmailVerified: Bool
     var linkedProviders: Set<AuthProvider>
+    var appleSubject: String?
 
     init(
         id: String,
@@ -45,7 +50,8 @@ struct AuthUser: Codable, Hashable, Identifiable {
         email: String?,
         provider: AuthProvider,
         isEmailVerified: Bool = false,
-        linkedProviders: Set<AuthProvider>? = nil
+        linkedProviders: Set<AuthProvider>? = nil,
+        appleSubject: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -53,6 +59,11 @@ struct AuthUser: Codable, Hashable, Identifiable {
         self.provider = provider
         self.isEmailVerified = isEmailVerified
         self.linkedProviders = linkedProviders ?? [provider]
+        self.appleSubject = appleSubject
+    }
+
+    var signedInWithApple: Bool {
+        provider == .apple || linkedProviders.contains(.apple)
     }
 }
 
@@ -182,13 +193,103 @@ enum AuthSessionRestoration {
 protocol AuthClient {
     func restoreSession() async -> AuthSessionRestoration
     func signInWithApple(credential: AppleSignInCredential) async throws -> AuthUser
-    func deleteCurrentAccount() async throws
+    func deleteAccount(_ request: DeleteAccountRequest) async throws
     func signOut() async throws
 }
 
 extension AuthClient {
-    func deleteCurrentAccount() async throws {
+    func deleteAccount(_ request: DeleteAccountRequest) async throws {
         throw AuthFlowError.unavailable
+    }
+}
+
+enum AppleReauthorizationOutcome: Equatable {
+    case code(String, user: String)
+    case cancelled
+    case failed
+}
+
+protocol AppleReauthorizing {
+    @MainActor
+    func freshAuthorizationCode() async -> AppleReauthorizationOutcome
+}
+
+struct NoAppleReauthorization: AppleReauthorizing {
+    @MainActor
+    func freshAuthorizationCode() async -> AppleReauthorizationOutcome {
+        .failed
+    }
+}
+
+// The first authorization code was never kept, so deletion asks Apple for a fresh one to revoke the token.
+final class AppleDeletionReauthorizer: AppleReauthorizing {
+    private var session: AppleReauthorizationSession?
+    private var controller: ASAuthorizationController?
+
+    @MainActor
+    func freshAuthorizationCode() async -> AppleReauthorizationOutcome {
+        guard session == nil, let anchor = Self.keyWindow() else { return .failed }
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = []
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        self.controller = controller
+        let outcome = await withCheckedContinuation { continuation in
+            let session = AppleReauthorizationSession(anchor: anchor, continuation: continuation)
+            self.session = session
+            controller.delegate = session
+            controller.presentationContextProvider = session
+            controller.performRequests()
+        }
+        session = nil
+        self.controller = nil
+        return outcome
+    }
+
+    @MainActor
+    private static func keyWindow() -> UIWindow? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.flatMap(\.windows).first(where: \.isKeyWindow) ?? scenes.first?.windows.first
+    }
+}
+
+private final class AppleReauthorizationSession: NSObject,
+    ASAuthorizationControllerDelegate,
+    ASAuthorizationControllerPresentationContextProviding {
+    private let anchor: ASPresentationAnchor
+    private var continuation: CheckedContinuation<AppleReauthorizationOutcome, Never>?
+
+    init(anchor: ASPresentationAnchor, continuation: CheckedContinuation<AppleReauthorizationOutcome, Never>) {
+        self.anchor = anchor
+        self.continuation = continuation
+    }
+
+    func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithAuthorization authorization: ASAuthorization
+    ) {
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let codeData = credential.authorizationCode,
+              let code = String(data: codeData, encoding: .utf8) else {
+            finish(.failed)
+            return
+        }
+        finish(.code(code, user: credential.user))
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        let nsError = error as NSError
+        let isCancel = nsError.domain == ASAuthorizationError.errorDomain
+            && nsError.code == ASAuthorizationError.canceled.rawValue
+        finish(isCancel ? .cancelled : .failed)
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        anchor
+    }
+
+    private func finish(_ outcome: AppleReauthorizationOutcome) {
+        continuation?.resume(returning: outcome)
+        continuation = nil
     }
 }
 
@@ -227,6 +328,8 @@ struct UnavailableAuthClient: AuthClient {
 @Observable
 final class AuthSessionStore {
     var currentUser: AuthUser?
+    // Set only by a sign-in made on the welcome screen, whose footnote states the Terms; a restore never sets it.
+    private(set) var interactiveSignInUserID: String?
     var isSigningIn = false
     var isDeletingAccount = false
     var errorMessage: String?
@@ -323,13 +426,14 @@ final class AuthSessionStore {
         return true
     }
 
+    // A cancelled Apple sheet stops the deletion; any other Apple failure still deletes, only without revocation.
     @discardableResult
-    func deleteAccount() async -> Bool {
-        guard currentUser != nil, !isDeletingAccount else { return false }
+    func deleteAccount(reauthorizer: any AppleReauthorizing = NoAppleReauthorization()) async -> Bool {
+        guard let user = currentUser, !isDeletingAccount else { return false }
         errorMessage = nil
 
         #if DEBUG
-        if currentUser?.isDebugAccount == true {
+        if user.isDebugAccount {
             clearSessionState()
             Haptics.success()
             return true
@@ -339,8 +443,12 @@ final class AuthSessionStore {
         isDeletingAccount = true
         defer { isDeletingAccount = false }
 
+        guard let request = await deletionRequest(for: user, reauthorizer: reauthorizer) else {
+            return false
+        }
+
         do {
-            try await authClient.deleteCurrentAccount()
+            try await authClient.deleteAccount(request)
             clearSessionState()
             Haptics.success()
             return true
@@ -352,6 +460,45 @@ final class AuthSessionStore {
         }
     }
 
+    // A guardian deletes a claimed ward's account and stays signed in.
+    @discardableResult
+    func deleteWardAccount(memberID: UUID) async -> Bool {
+        guard currentUser != nil, !isDeletingAccount else { return false }
+        errorMessage = nil
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+
+        do {
+            try await authClient.deleteAccount(.guardian(memberID: memberID))
+            Haptics.success()
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            handle(error)
+            return false
+        }
+    }
+
+    private func deletionRequest(
+        for user: AuthUser,
+        reauthorizer: any AppleReauthorizing
+    ) async -> DeleteAccountRequest? {
+        guard user.signedInWithApple else { return DeleteAccountRequest() }
+        switch await reauthorizer.freshAuthorizationCode() {
+        case .cancelled:
+            errorMessage = "A Apple não confirmou. Nada foi apagado."
+            return nil
+        case .failed:
+            return DeleteAccountRequest()
+        case .code(let code, let appleUser):
+            if let subject = user.appleSubject, subject != appleUser {
+                return DeleteAccountRequest()
+            }
+            return DeleteAccountRequest.revoking(appleAuthorizationCode: code) ?? DeleteAccountRequest()
+        }
+    }
+
     private func performSignIn(_ operation: () async throws -> AuthUser) async {
         guard !isSigningIn else { return }
 
@@ -360,7 +507,9 @@ final class AuthSessionStore {
         defer { isSigningIn = false }
 
         do {
-            currentUser = try await operation()
+            let user = try await operation()
+            interactiveSignInUserID = user.id
+            currentUser = user
             isBackendAvailable = true
             Haptics.success()
         } catch is CancellationError {
@@ -385,6 +534,7 @@ final class AuthSessionStore {
 
     private func clearSessionState() {
         currentUser = nil
+        interactiveSignInUserID = nil
     }
 }
 

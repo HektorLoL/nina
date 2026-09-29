@@ -342,6 +342,40 @@ enum BackendServices {
         return nil
     }
 
+    static func makeAgeRangeProvider() -> any AgeRangeProviding {
+        #if canImport(DeclaredAgeRange) && canImport(UIKit)
+        return DeclaredAgeRangeProvider()
+        #else
+        return UnavailableAgeRangeProvider()
+        #endif
+    }
+
+    // Skipping App Attest is a debug convenience for a loopback stack only; a shipped build always attests.
+    static func makeAgeSignalSubmitter(diagnostics: BackendDiagnosticsStore? = nil) -> any AgeSignalSubmitting {
+        #if canImport(Supabase) && canImport(DeviceCheck)
+        if let client = SupabaseClientFactory.shared {
+            #if DEBUG
+            let allowsInsecureLocal: Bool
+            if case .localSupabase = environment {
+                allowsInsecureLocal = true
+            } else {
+                allowsInsecureLocal = false
+            }
+            #else
+            let allowsInsecureLocal = false
+            #endif
+            return AgeSignalClient(
+                transport: SupabaseAgeSignalTransport(client: client, diagnostics: diagnostics),
+                attest: DeviceAppAttestService(),
+                keyStore: KeychainAppAttestKeyStore(),
+                allowsInsecureLocal: allowsInsecureLocal
+            )
+        }
+        #endif
+
+        return UnavailableAgeSignalSubmitter()
+    }
+
     static func makeNinaEngine(diagnostics: BackendDiagnosticsStore? = nil) -> any NinaEngine {
         #if canImport(Supabase)
         if let client = SupabaseClientFactory.shared {

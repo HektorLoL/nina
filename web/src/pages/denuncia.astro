@@ -1,0 +1,148 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Brand from "../components/Brand.astro";
+import Glyph from "../components/Glyph.astro";
+import { legalIdentity } from "../legal";
+
+const updatedAt = "29 de setembro de 2026";
+const acknowledgementHours = 48;
+const reportSubject = "Denúncia ECA Digital";
+const reportMailto = `mailto:${legalIdentity.reportContactEmail}?subject=${
+  encodeURIComponent(reportSubject)
+}`;
+const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
+---
+
+<BaseLayout
+  title="Denúncias — Nina"
+  description="Como denunciar na Nina algo que fira direitos de crianças e adolescentes, o prazo de resposta, como contestar uma decisão e o que acontece com conteúdo de abuso."
+  canonical="/denuncia/"
+>
+  <header class="site-header legal-header is-scrolled">
+    <div class="header-inner page-shell">
+      <Brand />
+      <nav class="desktop-nav" aria-label="Navegação principal">
+        <a href="/">Início</a>
+        <a href="/familias/">Famílias</a>
+        <a href="/termos/">Termos</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="conteudo" class="policy-page page-shell">
+    <section class="policy-hero">
+      <p class="eyebrow">Denúncia</p>
+      <h1>Como tratamos denúncias</h1>
+      <p>
+        Este canal recebe denúncias de algo na Nina que fira direitos de uma criança ou de um
+        adolescente. Ele é gratuito e aberto a qualquer pessoa, com ou sem conta.
+      </p>
+      <span>Atualizada em {updatedAt}</span>
+    </section>
+
+    <section class="policy-grid" aria-label="Resumo do canal de denúncia">
+      <article>
+        <Glyph name="clock" size={28} />
+        <h2>Recebimento em até {acknowledgementHours} horas</h2>
+        <p>Confirmamos o recebimento de cada denúncia em até {acknowledgementHours} horas.</p>
+      </article>
+      <article>
+        <Glyph name="people" size={28} />
+        <h2>Com identificação</h2>
+        <p>A lei não aceita denúncia anônima. A denúncia sai do seu email.</p>
+      </article>
+      <article>
+        <Glyph name="shield" size={28} />
+        <h2>Abuso vai à polícia</h2>
+        <p>Conteúdo de abuso sexual de menores é removido e comunicado à Polícia Federal.</p>
+      </article>
+    </section>
+
+    <article class="policy-content">
+      <h2>1. Como denunciar</h2>
+      <ul>
+        <li>
+          No app, em Ajustes, escolha Denunciar um problema e depois Escrever denúncia. O email já
+          sai com o assunto {reportSubject}, sem dados da casa.
+        </li>
+        <li>
+          Por email, escreva
+          para <a href={reportMailto}>{legalIdentity.reportContactEmail}</a> com o assunto {reportSubject}.
+        </li>
+        <li>
+          Para uma resposta da Nina, toque e segure a resposta na conversa e escolha Denunciar
+          resposta.
+        </li>
+      </ul>
+      <p>
+        Conte o que aconteceu, quando e onde, sem mandar mais dados da casa do que o necessário. A
+        denúncia não é anônima: ela sai do seu email, porque a lei não permite denúncia anônima (Lei
+        15.211/2025, art. 29, §2º).
+      </p>
+      <p>
+        Se alguém corre perigo agora, ligue 190. Violações de direitos de crianças e adolescentes
+        também podem ser denunciadas no Disque 100.
+      </p>
+
+      <h2>2. Prazo de resposta</h2>
+      <p>
+        Confirmamos o recebimento em até {acknowledgementHours} horas. Uma pessoa lê cada denúncia.
+        Quando a denúncia pede uma medida, como remover um conteúdo ou suspender a conversa com a
+        Nina de uma conta, agimos assim que o problema é confirmado.
+      </p>
+
+      <h2>3. Como decidimos e como avisamos</h2>
+      <ul>
+        <li>Quem fez o conteúdo denunciado recebe um aviso com os motivos da decisão.</li>
+        <li>
+          O aviso diz se quem decidiu foi uma pessoa ou um processo automático, como o filtro que
+          bloqueia conteúdo sexual na conversa com a Nina.
+        </li>
+        <li>Quem denunciou recebe a resposta sobre o que foi feito.</li>
+      </ul>
+
+      <h2>4. Como contestar</h2>
+      <p>
+        Quem discorda de uma decisão pode contestar respondendo ao email do aviso ou escrevendo
+        para <a href={reportMailto}>{legalIdentity.reportContactEmail}</a>. Uma pessoa revê o caso e
+        responde com os motivos. Quando a decisão foi automática, você pode pedir que uma pessoa a
+        revise (LGPD, art. 20).
+      </p>
+
+      <h2>5. Uso indevido do canal</h2>
+      <p>
+        O canal existe para proteger crianças e adolescentes. Denúncia falsa feita de propósito, ou
+        repetida para perseguir alguém, é uso indevido. Quem faz isso recebe um aviso e, se
+        continuar, pode perder o acesso à conta, como dizem os <a href="/termos/">Termos de Uso</a>,
+        seção 12. Denúncias de boa-fé são sempre bem-vindas, mesmo quando o problema não se
+        confirma.
+      </p>
+
+      <h2>6. Conteúdo de abuso sexual de crianças e adolescentes</h2>
+      <p>
+        Conteúdo de aparente exploração ou abuso sexual de crianças e adolescentes segue um caminho
+        próprio, como a lei exige (Lei 15.211/2025, art. 27; Decreto 12.880/2026, art. 39):
+      </p>
+      <ol>
+        <li>O conteúdo é removido na hora e não aparece para mais ninguém.</li>
+        <li>Ele fica guardado lacrado, só para ser comunicado às autoridades.</li>
+        <li>Comunicamos o caso à Polícia Federal.</li>
+        <li>
+          Quando a Polícia Federal confirma o recebimento, o conteúdo é apagado dos nossos
+          servidores. Os dados da conta e os metadados ficam guardados pelo prazo que a lei exige.
+        </li>
+        <li>A conversa com a Nina da conta envolvida fica suspensa enquanto o caso é revisto.</li>
+      </ol>
+      <p>
+        Se a suspeita não se confirmar, o conteúdo é apagado e a conversa volta a funcionar.
+      </p>
+
+      <h2>7. Contato</h2>
+      <p>
+        Denúncias: <a href={reportMailto}>{legalIdentity.reportContactEmail}</a>. Outras questões
+        de privacidade: <a href={privacyMailto}>{legalIdentity.privacyContactEmail}</a>. Quem
+        controla os dados está na <a href="/privacidade/">Política de Privacidade</a>, seção 1.
+      </p>
+    </article>
+  </main>
+</BaseLayout>

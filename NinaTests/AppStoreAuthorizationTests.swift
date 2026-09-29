@@ -1306,7 +1306,8 @@ final class AppStoreAuthorizationTests: XCTestCase {
             role: .child,
             tone: .sky,
             taskCount: 0,
-            memoryNote: ""
+            memoryNote: "",
+            minorAccess: MinorAccess(hasProfileConsent: true)
         )
         let backend = ControlledRefreshHomeBackend(initialState: makeRemoteState(members: [child]))
         let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
@@ -1335,7 +1336,8 @@ final class AppStoreAuthorizationTests: XCTestCase {
             role: .child,
             tone: .sky,
             taskCount: 0,
-            memoryNote: ""
+            memoryNote: "",
+            minorAccess: MinorAccess(hasProfileConsent: true)
         )
         let backend = RecordingHomeBackend(state: makeRemoteState(members: [child]))
         let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
@@ -1885,7 +1887,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         await store.sendMessage("Antes do consentimento")
         XCTAssertEqual(store.messages.count, initialCount)
 
-        await store.grantAIMemoryConsent()
+        await store.grantAIMemoryConsent(transferConsented: true)
         XCTAssertTrue(store.hasAIMemoryConsent)
         XCTAssertTrue(store.canSendNinaMessages)
 
@@ -1930,7 +1932,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         await store.activateHomeContext(for: user)
         XCTAssertFalse(store.hasAIMemoryConsent)
 
-        let didGrant = await store.grantAIMemoryConsent()
+        let didGrant = await store.grantAIMemoryConsent(transferConsented: true)
         let mutations = await backend.recordedMutations()
 
         XCTAssertTrue(didGrant)
@@ -1948,7 +1950,9 @@ final class AppStoreAuthorizationTests: XCTestCase {
                 aiConsent: NinaAIConsent(
                     isGranted: true,
                     policyVersion: PrivacyPolicyVersion.current,
-                    acceptedAt: Date(timeIntervalSince1970: 1_785_585_600)
+                    acceptedAt: Date(timeIntervalSince1970: 1_785_585_600),
+                    transferConsented: true,
+                    isCurrent: true
                 )
             )
         )
@@ -1973,7 +1977,9 @@ final class AppStoreAuthorizationTests: XCTestCase {
                 aiConsent: NinaAIConsent(
                     isGranted: true,
                     policyVersion: PrivacyPolicyVersion.current,
-                    acceptedAt: Date(timeIntervalSince1970: 1_785_585_600)
+                    acceptedAt: Date(timeIntervalSince1970: 1_785_585_600),
+                    transferConsented: true,
+                    isCurrent: true
                 )
             )
         )
@@ -2010,7 +2016,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         await store.activateHomeContext(for: user)
         await backend.setConsentWriteFails(true)
 
-        let didGrant = await store.grantAIMemoryConsent()
+        let didGrant = await store.grantAIMemoryConsent(transferConsented: true)
 
         XCTAssertFalse(didGrant)
         XCTAssertFalse(store.hasAIMemoryConsent)
@@ -2029,7 +2035,9 @@ final class AppStoreAuthorizationTests: XCTestCase {
                 aiConsent: NinaAIConsent(
                     isGranted: true,
                     policyVersion: PrivacyPolicyVersion.current,
-                    acceptedAt: Date(timeIntervalSince1970: 1_785_585_600)
+                    acceptedAt: Date(timeIntervalSince1970: 1_785_585_600),
+                    transferConsented: true,
+                    isCurrent: true
                 )
             )
         )
@@ -2047,65 +2055,28 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
-    func testPrivacyExportIncludesConsentAndSnapshot() async throws {
-        let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "nina-app-store-tests-\(UUID().uuidString)",
-            isDirectory: true
-        )
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
-
+    func testThePrivacyExportIsTheServersOwnDataWrittenByteForByte() async throws {
         let user = makeUser()
-        let task = TaskItem(
-            title: "Enviar autorização escolar",
-            subtitle: "Documento assinado",
-            owner: user.displayName,
-            dueLabel: "Sexta",
-            category: .school,
-            isDone: false,
-            createdBy: "Nina"
-        )
-        let adultMember = HouseholdMember(
-            userID: user.id,
-            name: user.displayName,
-            relationship: "Você",
+        let serverBytes = Data(#"{"schema_version":1,"account":{"id":"x"}}"#.utf8)
+        let otherAdult = HouseholdMember(
+            name: "Mirna",
+            relationship: "Esposa",
             role: .adult,
-            tone: .mint,
-            taskCount: 1,
-            memoryNote: ""
+            tone: .coral,
+            taskCount: 0,
+            memoryNote: "Nota que não é minha",
+            birthDate: Date(timeIntervalSince1970: 0)
         )
-        let store = AppStore(
-            defaults: defaults,
-            privateDataStore: privateDataStore,
-            remoteHomeBackend: RecordingHomeBackend(
-                state: makeRemoteState(tasks: [task], members: [adultMember])
-            ),
-            ninaEngine: MockNinaEngine()
-        )
+        let backend = RecordingHomeBackend(state: makeRemoteState(members: [otherAdult]))
+        await backend.setExportData(serverBytes)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
         await store.activateHomeContext(for: user)
-        await store.grantAIMemoryConsent()
 
-        var profile = UserProfile.default(for: user)
-        profile.phone = "+55 11 99999-0000"
-        let profilePhotoData = Data([0xFF, 0xD8, 0xFF, 0xD9])
-        let data = try store.makePrivacyExportData(
-            profile: profile,
-            profilePhotoData: profilePhotoData
-        )
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let export = try decoder.decode(PrivacyExportPackage.self, from: data)
+        let exported = try await store.exportAccountData()
 
-        XCTAssertEqual(export.policyVersion, PrivacyPolicyVersion.current)
-        XCTAssertEqual(export.user?.id, user.id)
-        XCTAssertEqual(export.profile, profile)
-        XCTAssertEqual(export.profilePhotoData, profilePhotoData)
-        XCTAssertEqual(export.familyGroup.name, "Test Home")
-        XCTAssertEqual(export.aiMemoryConsent?.policyVersion, PrivacyPolicyVersion.current)
-        XCTAssertEqual(export.data.tasks, [task])
+        XCTAssertEqual(exported, serverBytes)
+        let text = String(decoding: exported, as: UTF8.self)
+        XCTAssertFalse(text.contains("Nota que não é minha"))
     }
 
     @MainActor
@@ -2129,7 +2100,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
             ninaEngine: PersistedNinaEngine(assistantMessageID: assistantID)
         )
         await store.activateHomeContext(for: user)
-        await store.grantAIMemoryConsent()
+        await store.grantAIMemoryConsent(transferConsented: true)
         await store.waitForPendingRemoteMutations()
         let mutationsBeforeTurn = await backend.recordedMutations()
 
@@ -2158,7 +2129,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
         let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
         await store.activateHomeContext(for: user)
-        await store.grantAIMemoryConsent()
+        await store.grantAIMemoryConsent(transferConsented: true)
         await store.waitForPendingRemoteMutations()
         let mutationsBeforeTurn = await backend.recordedMutations()
         let taskIDsBeforeTurn = Set(store.tasks.map(\.id))
@@ -2310,6 +2281,22 @@ final class AppStoreAuthorizationTests: XCTestCase {
 
         XCTAssertFalse(store.canUseNinaAI)
         XCTAssertEqual(store.messages.count, initialCount)
+
+        // The capability comes from the age record: an adult role without an age that allows AI is refused too.
+        let adultMember = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        await backend.setHomeState(makeRemoteState(members: [adultMember], viewerAge: .testDeclaredAdult))
+        await store.activateHomeContext(for: user)
+
+        XCTAssertFalse(store.canUseNinaAI)
+        XCTAssertTrue(store.needsConfirmedAgeForChat)
     }
 
     @MainActor
@@ -2836,7 +2823,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
         store.attachmentGate = NinaAttachmentGate(isEnabled: true)
         await store.activateHomeContext(for: user)
-        await store.grantAIMemoryConsent()
+        await store.grantAIMemoryConsent(transferConsented: true)
 
         let thumbnail = Data("thumbnail-do-boleto".utf8)
         await store.sendMessage(
@@ -2890,7 +2877,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
             ninaEngine: PersistedNinaEngine(assistantMessageID: UUID())
         )
         await store.activateHomeContext(for: firstUser)
-        await store.grantAIMemoryConsent()
+        await store.grantAIMemoryConsent(transferConsented: true)
 
         await store.sendMessage(
             "Segue a receita do Pedro",
@@ -2943,7 +2930,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
             ninaEngine: PersistedNinaEngine(assistantMessageID: UUID())
         )
         await store.activateHomeContext(for: user)
-        await store.grantAIMemoryConsent()
+        await store.grantAIMemoryConsent(transferConsented: true)
 
         await store.sendMessage(
             "Segue o comunicado da escola",
@@ -3183,6 +3170,491 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
     }
 
+    func testTheAgeStepComesBeforeTheInviteAndTheTutorial() {
+        var inputs = AppEntryInputs(
+            isSignedIn: true,
+            needsAgeCheck: true,
+            homeAccessState: .noHome,
+            viewerIsAdult: true,
+            hasPendingInvite: true,
+            shouldShowTutorial: true
+        )
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .ageCheck)
+
+        inputs.homeAccessState = .loading
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .ageCheck)
+
+        inputs.needsAgeCheck = false
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .homeLoading)
+
+        inputs.homeAccessState = .noHome
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .invite)
+
+        inputs.hasPendingInvite = false
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .tutorial)
+
+        inputs.shouldShowTutorial = false
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .homeSetup)
+
+        inputs.isSignedIn = false
+        inputs.needsAgeCheck = true
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .signedOut)
+    }
+
+    func testANonAdultNeverMeetsTheInviteTheTutorialOrTheHouseSetup() {
+        let inputs = AppEntryInputs(
+            isSignedIn: true,
+            needsAgeCheck: false,
+            homeAccessState: .noHome,
+            viewerIsAdult: false,
+            hasPendingInvite: true,
+            shouldShowTutorial: true
+        )
+
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .minorRoot)
+    }
+
+    @MainActor
+    func testAMinorAccountLandsOnItsOwnTasksAndNeverOnTheFourTabs() async {
+        let user = makeUser()
+        let memberID = UUID()
+        let ownTask = MinorTask(
+            title: "Arrumar a cama",
+            dueAt: Date().addingTimeInterval(3_600),
+            dueLabel: "Hoje",
+            categoryID: TaskCategory.home.id
+        )
+        let backend = MinorAccountBackend(
+            viewerAge: .testMinor(.twelveToFifteen),
+            minorHome: makeMinorHome(memberID: memberID, tasks: [ownTask])
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        await store.activateHomeContext(for: user)
+
+        XCTAssertEqual(store.homeAccessState, .minorMember)
+        XCTAssertFalse(store.hasActiveHome)
+        XCTAssertEqual(store.minorTaskItems.map(\.id), [ownTask.id])
+        XCTAssertEqual(store.minorTaskItems.first?.subtitle, "")
+        XCTAssertEqual(store.minorTaskItems.first?.ownerMemberID, memberID)
+        XCTAssertTrue(store.joinRequests.isEmpty)
+        XCTAssertEqual(
+            AppEntryRouting.phase(for: entryInputs(for: store)),
+            .minorRoot
+        )
+    }
+
+    @MainActor
+    func testAMinorMarksItsOwnTaskDoneThroughTheMinorRPCWithTheChildsListSemantics() async throws {
+        let user = makeUser()
+        let calendar = Calendar(identifier: .gregorian)
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 10)))
+        let yesterdayEvening = try XCTUnwrap(calendar.date(byAdding: .hour, value: -15, to: now))
+        let daily = MinorTask(
+            title: "Escovar os dentes",
+            dueAt: yesterdayEvening,
+            recurrence: .daily,
+            version: 3
+        )
+        let backend = MinorAccountBackend(
+            viewerAge: .testMinor(.under12),
+            minorHome: makeMinorHome(memberID: UUID(), tasks: [daily])
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        _ = await store.markMinorTaskDone(daily.id, now: now, calendar: calendar)
+        let writes = await backend.recordedWrites()
+
+        let write = try XCTUnwrap(writes.first)
+        XCTAssertEqual(write.taskID, daily.id)
+        XCTAssertEqual(write.expectedVersion, 3)
+        XCTAssertTrue(write.markDone)
+        let next = try XCTUnwrap(write.nextDueAt)
+        XCTAssertGreaterThan(next, yesterdayEvening)
+        XCTAssertFalse(calendar.isDate(next, inSameDayAs: now))
+    }
+
+    @MainActor
+    func testAMinorNeverReachesTheChatThePaywallOrTheWorkloadPortrait() async {
+        let user = makeUser()
+        let backend = MinorAccountBackend(
+            viewerAge: .testMinor(.sixteenToSeventeen),
+            minorHome: makeMinorHome(memberID: UUID(), tasks: [])
+        )
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: PersistedNinaEngine(assistantMessageID: UUID())
+        )
+        await store.activateHomeContext(for: user)
+        let messageCount = store.messages.count
+
+        await store.sendMessage("Oi")
+
+        XCTAssertTrue(store.isMinorView)
+        XCTAssertFalse(store.canUseNinaAI)
+        XCTAssertFalse(store.requiresAIMemoryConsent)
+        XCTAssertFalse(store.canBuyPremium)
+        XCTAssertFalse(store.canActForMinors)
+        XCTAssertEqual(store.messages.count, messageCount)
+        XCTAssertNotEqual(AppEntryRouting.phase(for: entryInputs(for: store)), .app)
+
+        let teen = HouseholdMember(
+            userID: user.id,
+            name: "Bia",
+            relationship: "",
+            role: .teen,
+            tone: .sky,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let adult = HouseholdMember(name: "Ana", relationship: "", role: .adult, tone: .mint, taskCount: 0, memoryNote: "")
+        let teenTasks = (0..<8).map { index in
+            TaskItem(
+                title: "Tarefa \(index)",
+                subtitle: "",
+                owner: "Bia",
+                ownerMemberID: teen.id,
+                dueLabel: "Sem data",
+                category: .home,
+                isDone: false,
+                createdBy: "Manual"
+            )
+        }
+        let portrait = HouseholdWorkload.snapshot(tasks: teenTasks, members: [teen, adult])
+        XCTAssertFalse(portrait.entries.contains { $0.memberID == teen.id })
+        XCTAssertFalse(portrait.isConclusive)
+    }
+
+    @MainActor
+    func testAnUnknownAgeNeverOffersToCreateAHouse() async {
+        let user = makeUser()
+        let backend = MinorAccountBackend(viewerAge: .unknown, minorHome: nil)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        await store.activateHomeContext(for: user)
+
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertEqual(store.viewerAge.status, .unknown)
+        XCTAssertEqual(AppEntryRouting.phase(for: entryInputs(for: store)), .minorRoot)
+
+        let created = await store.createHome(named: "Casa", owner: user)
+
+        XCTAssertFalse(created)
+        XCTAssertTrue(store.ageCheckRequested)
+        XCTAssertEqual(store.syncErrorMessage, "Falta sua faixa de idade.")
+    }
+
+    @MainActor
+    func testADeclaredAdultSeesTheConfirmedAgeGateInsteadOfTheChat() async {
+        let user = makeUser()
+        let adultMember = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember], viewerAge: .testDeclaredAdult)
+        )
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: PersistedNinaEngine(assistantMessageID: UUID())
+        )
+        await store.activateHomeContext(for: user)
+        let messageCount = store.messages.count
+
+        await store.sendMessage("Comprar pão")
+
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertEqual(AppEntryRouting.phase(for: entryInputs(for: store)), .app)
+        XCTAssertFalse(store.canUseNinaAI)
+        XCTAssertTrue(store.needsConfirmedAgeForChat)
+        XCTAssertFalse(store.canBuyPremium)
+        XCTAssertFalse(store.canActForMinors)
+        XCTAssertEqual(store.messages.count, messageCount)
+    }
+
+    @MainActor
+    func testAnOlderConsentVersionCountsAsNoConsent() async throws {
+        let user = makeUser()
+        let adultMember = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let oldGrant = NinaAIConsent(
+            isGranted: true,
+            policyVersion: "2026-06-16",
+            acceptedAt: Date(timeIntervalSince1970: 1_785_585_600),
+            transferConsented: false,
+            isCurrent: false,
+            currentPolicyVersion: PrivacyPolicyVersion.current
+        )
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember], aiConsent: oldGrant)
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        XCTAssertFalse(store.hasAIMemoryConsent)
+        XCTAssertFalse(store.canSendNinaMessages)
+
+        let withdrawn = NinaAIConsent(
+            isGranted: false,
+            policyVersion: nil,
+            acceptedAt: nil,
+            currentPolicyVersion: PrivacyPolicyVersion.current,
+            lastRevokeReason: "policy_changed"
+        )
+        await backend.setAIConsent(withdrawn)
+        await store.refreshHomeFromRemote(for: user)
+
+        XCTAssertFalse(store.hasAIMemoryConsent)
+        XCTAssertTrue(store.aiConsentNoticeChanged)
+
+        let staleRecord = AIMemoryConsentRecord(
+            acceptedAt: .now,
+            policyVersion: "2026-06-16",
+            transferConsented: true
+        )
+        XCTAssertFalse(staleRecord.isCurrent)
+        let legacyData = try JSONEncoder().encode(["acceptedAt": 0.0])
+        let legacyRecord = try JSONDecoder().decode(AIMemoryConsentRecord.self, from: legacyData)
+        XCTAssertFalse(legacyRecord.isCurrent)
+    }
+
+    @MainActor
+    func testAGrantWithoutTheTransferBoxNeverReachesTheServer() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let refused = await store.grantAIMemoryConsent(transferConsented: false)
+        let afterRefusal = await backend.recordedMutations()
+
+        XCTAssertFalse(refused)
+        XCTAssertFalse(afterRefusal.contains(.recordNinaAIConsent(true)))
+
+        let granted = await store.grantAIMemoryConsent(transferConsented: true)
+        let transfer = await backend.lastTransferConsent
+
+        XCTAssertTrue(granted)
+        XCTAssertEqual(transfer, true)
+        XCTAssertTrue(store.hasAIMemoryConsent)
+    }
+
+    @MainActor
+    func testAnOutdatedConsentAtTheServerDropsTheUnreadMessageAndAsksAgain() async {
+        let store = await makeStoreForFailingTurn(error: .consentOutdated)
+        let before = store.messages
+
+        await store.sendMessage("Ler isso")
+
+        XCTAssertEqual(store.messages, before)
+        XCTAssertFalse(store.hasAIMemoryConsent)
+        XCTAssertTrue(store.aiConsentNoticeChanged)
+    }
+
+    @MainActor
+    func testARefusedMessageNeverStaysOnThePhoneInItsOriginalWords() async {
+        let store = await makeStoreForFailingTurn(error: .inputNotSupported)
+
+        await store.sendMessage("texto recusado")
+
+        XCTAssertFalse(store.messages.contains { $0.text == "texto recusado" })
+        XCTAssertTrue(store.messages.contains { $0.text == AppStore.heldMessageMarker && $0.sender == .user })
+    }
+
+    @MainActor
+    func testARefusedMessageRehydratesAsTheMarkerTheServerKeptAndNeverInItsWords() async {
+        let user = makeUser()
+        let refused = ChatMessage(sender: .user, text: AppStore.heldMessageMarker, timestamp: .now)
+        let backend = RecordingHomeBackend(state: makeRemoteState(messages: [refused]))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        await store.activateHomeContext(for: user)
+
+        XCTAssertTrue(store.messages.contains { $0.id == refused.id && $0.text == AppStore.heldMessageMarker })
+        XCTAssertTrue(store.messages.allSatisfy { $0.sender != .user || $0.attachments.isEmpty })
+    }
+
+    @MainActor
+    func testTheServerAgeCodesBecomeTheirOwnCopyAndNeverCollide() {
+        XCTAssertEqual(NinaEngineError(code: "nina_consent_outdated"), .consentOutdated)
+        XCTAssertEqual(NinaEngineError(code: "nina_transfer_consent_required"), .consentOutdated)
+        XCTAssertEqual(NinaEngineError(code: "nina_age_confirmation_required"), .ageConfirmationRequired)
+        XCTAssertEqual(NinaEngineError(code: "nina_ai_blocked"), .aiBlocked)
+        XCTAssertEqual(NinaEngineError(code: "nina_ai_consent_required"), .unavailable)
+        XCTAssertEqual(NinaEngineError(code: "ai_consent_required"), .aiConsentRequired)
+        XCTAssertEqual(RemoteRPCErrorCode(message: "age_confirmation_required"), .ageConfirmationRequired)
+        XCTAssertNil(RemoteRPCErrorCode(message: "nina_age_confirmation_required_extra"))
+        XCTAssertEqual(
+            RemoteRPCErrorCode.minorHealthConsentRequired.userMessage(name: "Pedro"),
+            "Sem autorização de saúde para Pedro."
+        )
+        for code in RemoteRPCErrorCode.allCases {
+            XCTAssertFalse(code.userMessage().contains("!"))
+        }
+    }
+
+    @MainActor
+    func testAFreshSignInRecordsTheWelcomeFootnoteOnce() async {
+        let user = makeUser()
+        var age = AgeStatus.testTrustedAdult
+        age.terms.acceptedCurrent = false
+        let backend = RecordingHomeBackend(state: makeRemoteState(viewerAge: age))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        store.noteTermsFootnoteShown(for: user.id)
+        await store.activateHomeContext(for: user)
+        XCTAssertFalse(store.needsTermsAcceptance)
+        var attempts = 0
+        while !store.viewerAge.terms.acceptedCurrent, attempts < 200 {
+            attempts += 1
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        await store.activateHomeContext(for: user)
+
+        let count = await backend.termsAcceptanceCount()
+        XCTAssertEqual(count, 1)
+        XCTAssertTrue(store.viewerAge.terms.acceptedCurrent)
+        XCTAssertFalse(store.needsTermsAcceptance)
+    }
+
+    @MainActor
+    func testARestoredSessionRecordsNothingUntilThePersonTapsAceitar() async {
+        let user = makeUser()
+        var age = AgeStatus.testTrustedAdult
+        age.terms.acceptedCurrent = false
+        let backend = RecordingHomeBackend(state: makeRemoteState(viewerAge: age))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        await store.activateHomeContext(for: user)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        let silentCount = await backend.termsAcceptanceCount()
+        XCTAssertEqual(silentCount, 0)
+        XCTAssertTrue(store.needsTermsAcceptance)
+        var inputs = entryInputs(for: store)
+        inputs.needsTermsAcceptance = store.needsTermsAcceptance
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .termsAcceptance)
+
+        let accepted = await store.acceptTermsAsAdult()
+
+        let tappedCount = await backend.termsAcceptanceCount()
+        XCTAssertTrue(accepted)
+        XCTAssertEqual(tappedCount, 1)
+        XCTAssertFalse(store.needsTermsAcceptance)
+    }
+
+    @MainActor
+    func testTheWordsOfAMessageTheChatClosedOnAreKeptOnlyInMemoryUntilTheChatReopens() async {
+        let store = await makeStoreForFailingTurn(error: .consentOutdated)
+
+        await store.sendMessage("comprar pão amanhã")
+
+        XCTAssertFalse(store.messages.contains { $0.text == "comprar pão amanhã" })
+        XCTAssertEqual(store.restorableDraft, "comprar pão amanhã")
+
+        await store.activateHomeContext(for: AuthUser(
+            id: UUID().uuidString,
+            displayName: "Outra",
+            email: nil,
+            provider: .apple
+        ))
+        XCTAssertNil(store.restorableDraft)
+    }
+
+    @MainActor
+    func testAMinorsForegroundTimeIsCountedOutsideUserDefaultsAndSynced() async throws {
+        let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-minor-usage-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let user = makeUser()
+        let backend = MinorAccountBackend(
+            viewerAge: .testMinor(.twelveToFifteen),
+            minorHome: makeMinorHome(memberID: UUID(), tasks: [])
+        )
+        let store = AppStore(
+            defaults: defaults,
+            privateDataStore: ProtectedLocalDataStore(directoryURL: directory),
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine()
+        )
+        await store.activateHomeContext(for: user)
+        var noon = DateComponents(year: 2026, month: 10, day: 1, hour: 12)
+        noon.timeZone = MinorUsageClock.timeZone
+        let start = try XCTUnwrap(Calendar(identifier: .gregorian).date(from: noon))
+
+        store.minorSceneBecameActive(now: start)
+        await store.minorSceneLeftForeground(now: start.addingTimeInterval(5 * 60 + 10))
+        let usage = await backend.recordedUsage()
+
+        XCTAssertEqual(usage.map(\.minutes), [5])
+        XCTAssertEqual(usage.first?.day, MinorUsageClock.day(for: start))
+        XCTAssertEqual(store.minorUsageMinutes(now: start.addingTimeInterval(6 * 60)), 5)
+        XCTAssertFalse(defaults.dictionaryRepresentation().keys.contains { $0.contains("minor") })
+    }
+
+    @MainActor
+    private func makeStoreForFailingTurn(error: NinaEngineError) async -> AppStore {
+        let user = makeUser()
+        let adultMember = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let backend = RecordingHomeBackend(state: makeRemoteState(members: [adultMember]))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: FailingNinaEngine(error: error))
+        await store.activateHomeContext(for: user)
+        await store.grantAIMemoryConsent(transferConsented: true)
+        return store
+    }
+
+    @MainActor
+    private func entryInputs(for store: AppStore) -> AppEntryInputs {
+        AppEntryInputs(
+            isSignedIn: true,
+            needsAgeCheck: false,
+            homeAccessState: store.homeAccessState,
+            viewerIsAdult: store.viewerAge.isAdult,
+            reachedMajority: store.viewerAge.terms.reachedMajority,
+            hasPendingInvite: false,
+            shouldShowTutorial: false
+        )
+    }
+
+    private func makeMinorHome(memberID: UUID, tasks: [MinorTask]) -> MinorHome {
+        MinorHome(
+            viewer: MinorViewer(
+                memberID: memberID,
+                firstName: "Bia",
+                guardianNames: ["Ana"],
+                state: .active
+            ),
+            family: MinorFamily(id: UUID(), name: "Casa"),
+            tasks: tasks
+        )
+    }
+
     private static let legacySuggestion = NinaSuggestion(
         title: "Veterinário do Thor",
         detail: "Marcar consulta e verificar carteira de vacinas.",
@@ -3220,7 +3692,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
             )
         )
         await store.activateHomeContext(for: user)
-        await store.grantAIMemoryConsent()
+        await store.grantAIMemoryConsent(transferConsented: true)
         return store
     }
 
@@ -3266,7 +3738,8 @@ final class AppStoreAuthorizationTests: XCTestCase {
         shoppingItems: [ShoppingItem] = [],
         members: [HouseholdMember] = [],
         messages: [ChatMessage] = [],
-        aiConsent: NinaAIConsent = .withheld
+        aiConsent: NinaAIConsent = .withheld,
+        viewerAge: AgeStatus = .testTrustedAdult
     ) -> RemoteHomeState {
         RemoteHomeState(
             familyGroup: FamilyGroup(name: familyName, inviteCode: inviteCode, members: members),
@@ -3278,7 +3751,8 @@ final class AppStoreAuthorizationTests: XCTestCase {
                 shoppingItems: shoppingItems,
                 insights: []
             ),
-            aiConsent: aiConsent
+            aiConsent: aiConsent,
+            viewerAge: viewerAge
         )
     }
 }
@@ -3309,6 +3783,174 @@ private struct PersistedNinaEngine: NinaEngine {
 
 private enum DiagnosticsTestError: Error {
     case expected
+}
+
+private struct FailingNinaEngine: NinaEngine {
+    var error: NinaEngineError
+
+    func respond(
+        to text: String,
+        attachments: [NinaAttachmentInput],
+        familyID: UUID,
+        messageID: UUID
+    ) async throws -> NinaEngineResponse {
+        throw error
+    }
+}
+
+private extension AgeStatus {
+    static var testTrustedAdult: AgeStatus {
+        AgeStatus(
+            status: .adult,
+            band: nil,
+            bandSource: .apple,
+            assurance: .confirmed,
+            parentalControlsActive: false,
+            householdMarked: false,
+            trustedAdult: true,
+            mayUseAI: true,
+            mayBuyPremium: true,
+            aiBlocked: false,
+            recordedAt: Date(timeIntervalSince1970: 1_785_585_600),
+            recheckAfter: nil,
+            guardianNames: [],
+            terms: AgeTerms(
+                currentTermsVersion: MinorConsentVersion.current,
+                currentPolicyVersion: PrivacyPolicyVersion.current,
+                currentMinorConsentVersion: MinorConsentVersion.current,
+                acceptedCurrent: true,
+                reachedMajority: false
+            )
+        )
+    }
+
+    static var testDeclaredAdult: AgeStatus {
+        var status = testTrustedAdult
+        status.assurance = .selfDeclared
+        status.trustedAdult = false
+        status.mayUseAI = false
+        status.mayBuyPremium = false
+        return status
+    }
+
+    static func testMinor(_ band: MinorBand) -> AgeStatus {
+        AgeStatus(
+            status: .minor,
+            band: band,
+            bandSource: .apple,
+            assurance: .confirmed,
+            parentalControlsActive: false,
+            householdMarked: false,
+            trustedAdult: false,
+            mayUseAI: false,
+            mayBuyPremium: false,
+            aiBlocked: false,
+            recordedAt: Date(timeIntervalSince1970: 1_785_585_600),
+            recheckAfter: nil,
+            guardianNames: ["Ana"],
+            terms: .unknown
+        )
+    }
+}
+
+private struct MinorTaskWrite: Equatable {
+    var taskID: UUID
+    var expectedVersion: Int
+    var markDone: Bool
+    var nextDueAt: Date?
+}
+
+private actor MinorAccountBackend: RemoteHomeBackend {
+    private let viewerAge: AgeStatus
+    private var minorHome: MinorHome?
+    private var writes: [MinorTaskWrite] = []
+    private var usage: [(day: String, minutes: Int)] = []
+
+    func recordedUsage() -> [(day: String, minutes: Int)] {
+        usage
+    }
+
+    func recordMinorUsage(day: String, minutes: Int) async throws -> MinorUsageResult {
+        usage.append((day, minutes))
+        return MinorUsageResult(usageTodayMinutes: minutes, dailyLimitMinutes: 30)
+    }
+
+    init(viewerAge: AgeStatus, minorHome: MinorHome?) {
+        self.viewerAge = viewerAge
+        self.minorHome = minorHome
+    }
+
+    func recordedWrites() -> [MinorTaskWrite] {
+        writes
+    }
+
+    func loadHomeContext(for user: AuthUser) async throws -> RemoteHomeContext {
+        RemoteHomeContext(viewerAge: viewerAge, state: nil)
+    }
+
+    func loadMinorHome() async throws -> MinorHome {
+        guard let minorHome else {
+            return MinorHome(
+                viewer: MinorViewer(memberID: nil, firstName: "", guardianNames: [], state: .noHome),
+                family: nil,
+                tasks: []
+            )
+        }
+        return minorHome
+    }
+
+    func setMinorTaskDone(
+        _ taskID: UUID,
+        expectedVersion: Int,
+        markDone: Bool,
+        nextDueAt: Date?
+    ) async throws -> MinorHome {
+        writes.append(
+            MinorTaskWrite(taskID: taskID, expectedVersion: expectedVersion, markDone: markDone, nextDueAt: nextDueAt)
+        )
+        guard var home = minorHome else { throw RemoteRPCError(code: .taskNotFound) }
+        if let index = home.tasks.firstIndex(where: { $0.id == taskID }) {
+            if home.tasks[index].recurrence == .none {
+                home.tasks[index].isDone = markDone
+            } else {
+                home.tasks[index].dueAt = nextDueAt
+            }
+            home.tasks[index].version += 1
+        }
+        minorHome = home
+        return home
+    }
+
+    func loadHome(for user: AuthUser) async throws -> RemoteHomeState? {
+        nil
+    }
+
+    func createHome(named name: String, owner: AuthUser?) async throws -> RemoteHomeState {
+        throw RemoteRPCError(code: viewerAge.status == .unknown ? .ageSignalRequired : .adultAccountRequired)
+    }
+
+    func joinHome(with inviteCode: String, member: AuthUser?) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func updateFamilySettings(familyID: UUID, name: String) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func addUnclaimedMember(_ member: HouseholdMember, familyID: UUID) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func updateFamilyMember(_ member: HouseholdMember) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws {}
+    func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws {}
+    func createTask(_ task: TaskItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
+    func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
 }
 
 private actor HomeLifecycleBackend: RemoteHomeBackend {
@@ -3603,6 +4245,19 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
     private var consentWriteFails = false
     private var confirmedProposalPayloads: [UUID: NinaProposalPayload] = [:]
     private var confirmedMemoryVisibilities: [UUID: NinaMemoryVisibility] = [:]
+    private var exportData = Data()
+    private(set) var lastTransferConsent: Bool?
+    private var termsAcceptances = 0
+
+    func termsAcceptanceCount() -> Int {
+        termsAcceptances
+    }
+
+    func recordTermsAcceptance() async throws -> AgeStatus {
+        termsAcceptances += 1
+        state.viewerAge.terms.acceptedCurrent = true
+        return state.viewerAge
+    }
 
     init(state: RemoteHomeState, conflictingTask: TaskItem? = nil) {
         self.state = state
@@ -3627,6 +4282,14 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
 
     func setConsentWriteFails(_ shouldFail: Bool) {
         consentWriteFails = shouldFail
+    }
+
+    func setExportData(_ data: Data) {
+        exportData = data
+    }
+
+    func exportAccountData() async throws -> Data {
+        exportData
     }
 
     func setAIConsent(_ consent: NinaAIConsent) {
@@ -3742,15 +4405,23 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         mutations.append(.deleteNinaChatHistory(familyID))
     }
 
-    func recordNinaAIConsent(granted: Bool, policyVersion: String) async throws -> RemoteHomeState {
+    func recordNinaAIConsent(
+        granted: Bool,
+        policyVersion: String,
+        transferConsented: Bool
+    ) async throws -> RemoteHomeState {
         mutations.append(.recordNinaAIConsent(granted))
+        lastTransferConsent = transferConsented
         if consentWriteFails {
             throw DiagnosticsTestError.expected
         }
         state.aiConsent = NinaAIConsent(
             isGranted: granted,
             policyVersion: granted ? policyVersion : nil,
-            acceptedAt: granted ? Date(timeIntervalSince1970: 1_785_639_600) : nil
+            acceptedAt: granted ? Date(timeIntervalSince1970: 1_785_639_600) : nil,
+            transferConsented: granted && transferConsented,
+            isCurrent: granted && transferConsented && policyVersion == PrivacyPolicyVersion.current,
+            currentPolicyVersion: PrivacyPolicyVersion.current
         )
         return state
     }

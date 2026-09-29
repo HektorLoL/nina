@@ -1,0 +1,43 @@
+---
+import { ninaRating } from "../rating";
+
+interface Props {
+  size?: number;
+  class?: string;
+}
+
+const { size = 32, class: className } = Astro.props;
+const rating = ninaRating;
+
+function relativeLuminance(hex: string): number {
+  const channels = [1, 3, 5].map((start) => {
+    const value = parseInt(hex.slice(start, start + 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+const symbolFill = relativeLuminance(rating.colorHex) > 0.4 ? "#1D1D1B" : "#FFFFFF";
+const fontSize = rating.symbolText.length > 1 ? 15 : 19;
+---
+
+<svg
+  class:list={["rating-mark", className]}
+  width={size}
+  height={size}
+  viewBox="0 0 32 32"
+  role="img"
+  aria-label={rating.accessibilityLabel}
+>
+  <rect width="32" height="32" rx="6" fill={rating.colorHex} />
+  <text
+    x="16"
+    y="16.5"
+    fill={symbolFill}
+    font-family="Inter, system-ui, -apple-system, sans-serif"
+    font-size={fontSize}
+    font-weight="700"
+    text-anchor="middle"
+    dominant-baseline="central"
+  >{rating.symbolText}</text>
+</svg>

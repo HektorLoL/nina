@@ -317,18 +317,28 @@ struct SettingsSheet: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
+    // Buying or managing Premium needs an adult Apple confirmed, so nobody else is ever routed to the paywall.
+    @ViewBuilder
     private var premiumRow: some View {
-        Button {
-            Haptics.lightImpact()
-            router.presentedSheet = .premium
-        } label: {
-            SettingsLinkRow(
-                title: "Nina Premium",
-                systemName: "star",
-                value: store.householdPremium.isActive ? "Ativo" : monthlyPriceLabel
-            )
+        if store.canBuyPremium {
+            Button {
+                Haptics.lightImpact()
+                router.presentedSheet = .premium
+            } label: {
+                SettingsLinkRow(
+                    title: "Nina Premium",
+                    systemName: "star",
+                    value: store.householdPremium.isActive ? "Ativo" : monthlyPriceLabel
+                )
+            }
+            .buttonStyle(.plain)
+        } else if store.householdPremium.isActive {
+            SettingsValueRow(title: "Nina Premium", value: "Ativo", systemName: "star")
         }
-        .buttonStyle(.plain)
+    }
+
+    private var showsPremiumRow: Bool {
+        store.canBuyPremium || store.householdPremium.isActive
     }
 
     private var monthlyPriceLabel: String? {
@@ -363,7 +373,9 @@ struct SettingsSheet: View {
                 }
                 .buttonStyle(.plain)
 
-                NinaDivider()
+                if showsPremiumRow {
+                    NinaDivider()
+                }
             }
 
             premiumRow
@@ -414,7 +426,9 @@ struct SettingsSheet: View {
 
     @ViewBuilder
     private var weeklyDigestRow: some View {
-        if !store.householdPremium.isActive {
+        if !store.householdPremium.isActive, !store.canBuyPremium {
+            SettingsValueRow(title: "Resumo semanal", value: "Premium", systemName: "calendar")
+        } else if !store.householdPremium.isActive {
             // A live switch for a digest the server will not send would read as "on".
             Button {
                 Haptics.lightImpact()
@@ -572,6 +586,19 @@ struct SettingsSheet: View {
                 )
             }
             .buttonStyle(.plain)
+
+            NinaDivider()
+
+            NavigationLink {
+                ReportProblemView()
+            } label: {
+                SettingsLinkRow(title: "Denunciar um problema", systemName: "exclamationmark.bubble")
+            }
+            .buttonStyle(.plain)
+
+            NinaDivider()
+
+            RatingSettingsRow()
         }
     }
 
@@ -760,26 +787,30 @@ private struct PrivacyAndDataView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var isConfirmingHistoryDeletion = false
+    @State private var isShowingConsentCard = false
 
     private var acceptedLabel: String? {
         guard let acceptedAt = store.aiMemoryConsent?.acceptedAt else { return nil }
         return "Aceito em \(acceptedAt.formatted(date: .abbreviated, time: .omitted))"
     }
 
+    // Turning the conversation on always goes through the full notice and its separate transfer box.
     private var consentBinding: Binding<Bool> {
         Binding(
             get: { store.hasAIMemoryConsent },
             set: { isOn in
                 Haptics.selection()
                 if isOn {
-                    Task {
-                        if await store.grantAIMemoryConsent() { Haptics.success() }
-                    }
+                    isShowingConsentCard = true
                 } else {
                     Task { _ = await store.revokeAIMemoryConsent() }
                 }
             }
         )
+    }
+
+    private var canTurnConsentOn: Bool {
+        store.hasAIMemoryConsent || store.canUseNinaAI
     }
 
     var body: some View {
@@ -806,7 +837,7 @@ private struct PrivacyAndDataView: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         Eyebrow(text: "Onde ficam os seus dados")
-                        Text("Em São Paulo. Os seus registros ficam em servidores brasileiros. Para a Nina entender o que você escreve e o que está nas fotos, o conteúdo vai para um modelo fora do Brasil e volta, usado só para responder.")
+                        Text("Em São Paulo. Os seus registros ficam em servidores no Brasil. Se você aceitou conversar com a Nina, o que você escreve vai para a OpenAI, empresa dos Estados Unidos, que pode guardar por até 30 dias para evitar abuso. Quando outro adulto conversa com a Nina, suas tarefas podem ir junto, com seu nome trocado por um código.")
                             .ninaText(.meta, NinaTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -818,12 +849,27 @@ private struct PrivacyAndDataView: View {
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $isShowingConsentCard) {
+            VStack(spacing: 0) {
+                SheetHeader(eyebrow: "Privacidade") { isShowingConsentCard = false }
+
+                ScrollView {
+                    AIMemoryConsentCard {
+                        isShowingConsentCard = false
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
+                }
+            }
+            .ninaSheetBackground()
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private var consentCard: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Deixar a Nina ler o que eu escrevo e fotografo")
+                Text("Deixar a Nina ler o que eu escrevo")
                     .ninaText(.body, NinaTheme.ink, weight: .medium)
                     .fixedSize(horizontal: false, vertical: true)
                 if let acceptedLabel {
@@ -833,11 +879,11 @@ private struct PrivacyAndDataView: View {
 
             Spacer(minLength: 12)
 
-            Toggle("Deixar a Nina ler o que eu escrevo e fotografo", isOn: consentBinding)
+            Toggle("Deixar a Nina ler o que eu escrevo", isOn: consentBinding)
                 .labelsHidden()
                 .tint(NinaTheme.ink)
-                .disabled(store.isSyncingHome)
-                .opacity(store.isSyncingHome ? 0.4 : 1)
+                .disabled(store.isSyncingHome || !canTurnConsentOn)
+                .opacity(store.isSyncingHome || !canTurnConsentOn ? 0.4 : 1)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -882,18 +928,17 @@ private struct PrivacyAndDataView: View {
 
 private struct PrivacyExportView: View {
     @Environment(AppStore.self) private var store
-    @Environment(AuthSessionStore.self) private var authSession
-    @Environment(ProfileStore.self) private var profileStore
     @Environment(\.dismiss) private var dismiss
     @State private var exportURL: URL?
     @State private var exportError: String?
+    @State private var isGenerating = false
 
+    // The server exports this account's own data only; nobody else's birth date, note or age is in it.
     private let contents = [
-        "Seu perfil e sua foto",
-        "A casa e quem mora nela",
-        "Tarefas, compras e retratos",
-        "Sua conversa com a Nina neste aparelho",
-        "Seu consentimento de leitura"
+        "Sua conta e seu perfil",
+        "O que você criou nas casas",
+        "Sua conversa com a Nina",
+        "Seus consentimentos"
     ]
 
     var body: some View {
@@ -910,7 +955,7 @@ private struct PrivacyExportView: View {
                         NoteCard(eyebrow: nil, text: exportError)
                     }
 
-                    NinaButton(title: "Gerar arquivo", fillsWidth: true) {
+                    NinaButton(title: "Gerar arquivo", fillsWidth: true, isPending: isGenerating) {
                         generateExport()
                     }
 
@@ -934,25 +979,25 @@ private struct PrivacyExportView: View {
     }
 
     private func generateExport() {
+        guard !isGenerating else { return }
         discardExport()
-        do {
-            let profile = authSession.currentUser.map { profileStore.profile(for: $0) }
-            let profilePhotoData = profile.flatMap { profileStore.photoData(for: $0) }
-            let data = try store.makePrivacyExportData(
-                profile: profile,
-                profilePhotoData: profilePhotoData
-            )
-            let url = try PrivacyExportFileStore.write(
-                data,
-                filename: store.privacyExportFilename
-            )
-            exportURL = url
-            exportError = nil
-            Haptics.success()
-        } catch {
-            exportURL = nil
-            exportError = "Não foi possível gerar a exportação agora."
-            Haptics.error()
+        isGenerating = true
+        Task {
+            defer { isGenerating = false }
+            do {
+                let data = try await store.exportAccountData()
+                let url = try PrivacyExportFileStore.write(
+                    data,
+                    filename: store.privacyExportFilename
+                )
+                exportURL = url
+                exportError = nil
+                Haptics.success()
+            } catch {
+                exportURL = nil
+                exportError = "Não foi possível gerar a exportação agora."
+                Haptics.error()
+            }
         }
     }
 
@@ -963,33 +1008,86 @@ private struct PrivacyExportView: View {
     }
 }
 
-private struct AccountDeletionView: View {
+enum AccountDeletionTarget: Hashable {
+    case ownAccount
+    case ward(HouseholdMember)
+}
+
+// One deletion flow for every signed-in state: with a house, without one, as a minor, or as a guardian for a ward.
+struct AccountDeletionView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(OnboardingStore.self) private var onboardingStore
     @Environment(ProfileStore.self) private var profileStore
     @Environment(InviteLinkStore.self) private var inviteLinkStore
+    @Environment(PremiumSubscriptionStore.self) private var premiumStore
+    @Environment(AgeCheckCoordinator.self) private var ageCheck
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    var target: AccountDeletionTarget = .ownAccount
 
     @State private var isShowingConfirmation = false
     @State private var confirmation = ""
+    @State private var reauthorizer = AppleDeletionReauthorizer()
     @FocusState private var isConfirmationFocused: Bool
 
     private static let confirmationWord = "apagar"
 
-    private static let remainingItems = [
-        "Tarefas que você criou, sem dono",
-        "Compras",
-        "Memórias compartilhadas"
-    ]
+    private var wardName: String? {
+        if case .ward(let member) = target { return member.name }
+        return nil
+    }
+
+    private var title: String {
+        wardName.map { "Apagar a conta de \($0)" } ?? "Apagar conta"
+    }
 
     private var disappearingItems: [String] {
-        [
+        if let wardName {
+            return ["A conta de \(wardName)", "O acesso de \(wardName) a \(store.familyGroup.name)"]
+        }
+        if store.homeAccessState == .minorMember {
+            return ["Sua conta", "Seu acesso à casa"]
+        }
+        if store.isMinorView, store.homeAccessState != .unavailable {
+            return ["Sua conta", "Seu pedido de entrada, se houver"]
+        }
+        var items = [
             "Sua conversa com a Nina",
             "Suas memórias privadas",
-            "Seu perfil e sua foto",
-            "Seu acesso a \(store.familyGroup.name)"
+            "Seu perfil e sua foto"
         ]
+        if store.hasActiveHome {
+            items.append("Seu acesso a \(store.familyGroup.name)")
+        }
+        return items
+    }
+
+    private var remainingItems: [String] {
+        if wardName != nil || store.homeAccessState == .minorMember {
+            return ["As tarefas, que voltam para a casa"]
+        }
+        guard store.hasActiveHome else { return [] }
+        return ["Tarefas que você criou, sem dono", "Compras", "Memórias compartilhadas"]
+    }
+
+    private var confirmationTitle: String {
+        wardName.map { "Apagar a conta de \($0)?" } ?? "Apagar sua conta?"
+    }
+
+    private var confirmationMessage: String {
+        if wardName != nil {
+            return "As tarefas voltam para a casa. Não dá para desfazer."
+        }
+        if store.homeAccessState == .minorMember {
+            return "Suas tarefas voltam para a casa. Não dá para desfazer."
+        }
+        return "Não dá para desfazer."
+    }
+
+    private var showsSubscriptionWarning: Bool {
+        wardName == nil && premiumStore.showsSubscriptionContinuesWarning
     }
 
     private var isConfirmed: Bool {
@@ -1005,15 +1103,21 @@ private struct AccountDeletionView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Apagar conta").ninaText(.screen)
+                    Text(title).ninaText(.screen)
 
                     NounList(eyebrow: "Some para sempre", items: disappearingItems)
                         .padding(16)
                         .ninaCard()
 
-                    NounList(eyebrow: "Fica na casa", items: Self.remainingItems)
-                        .padding(16)
-                        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+                    if !remainingItems.isEmpty {
+                        NounList(eyebrow: "Fica na casa", items: remainingItems)
+                            .padding(16)
+                            .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+                    }
+
+                    if showsSubscriptionWarning {
+                        subscriptionWarning
+                    }
 
                     if let errorMessage = authSession.errorMessage {
                         NoteCard(eyebrow: nil, text: errorMessage)
@@ -1028,8 +1132,14 @@ private struct AccountDeletionView: View {
                     }
                     .padding(.top, 6)
 
+                    if wardName == nil, authSession.currentUser?.signedInWithApple == true {
+                        Text("A Apple pede para confirmar com sua conta.")
+                            .ninaText(.meta, NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     InkButton(
-                        title: authSession.isDeletingAccount ? "Apagando" : "Apagar conta",
+                        title: authSession.isDeletingAccount ? "Apagando" : title,
                         isEnabled: isConfirmed && !authSession.isDeletingAccount
                     ) {
                         Haptics.warning()
@@ -1046,27 +1156,174 @@ private struct AccountDeletionView: View {
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { authSession.errorMessage = nil }
-        .alert("Apagar sua conta?", isPresented: $isShowingConfirmation) {
+        .alert(confirmationTitle, isPresented: $isShowingConfirmation) {
             Button("Cancelar", role: .cancel) {}
             Button("Apagar", role: .destructive) {
                 deleteAccount()
             }
         } message: {
-            Text("Não dá para desfazer.")
+            Text(confirmationMessage)
+        }
+    }
+
+    private var subscriptionWarning: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Sua assinatura continua.")
+                .ninaText(.section)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Apagar a conta não cancela a cobrança. A Apple segue cobrando até você cancelar.")
+                .ninaText(.label, NinaTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            NinaButton(title: "Gerenciar assinatura", kind: .quiet) {
+                Haptics.selection()
+                manageSubscription()
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+    }
+
+    private func manageSubscription() {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        guard let scene else {
+            openURL(NinaLegalLinks.manageSubscriptions)
+            return
+        }
+        Task {
+            do {
+                try await StoreKit.AppStore.showManageSubscriptions(in: scene)
+            } catch {
+                openURL(NinaLegalLinks.manageSubscriptions)
+            }
         }
     }
 
     private func deleteAccount() {
+        if case .ward(let member) = target {
+            deleteWard(member)
+            return
+        }
         guard let userID = authSession.currentUser?.id else { return }
         Task {
-            if await authSession.deleteAccount() {
+            if await authSession.deleteAccount(reauthorizer: reauthorizer) {
                 store.clearLocalData(for: userID)
                 profileStore.clearLocalData(for: userID)
                 onboardingStore.clearLocalData(for: userID)
                 inviteLinkStore.clear()
+                KeychainAppAttestKeyStore().remove(for: userID)
+                ageCheck.reset()
                 try? PrivacyExportFileStore.removeAll()
                 dismiss()
             }
+        }
+    }
+
+    private func deleteWard(_ member: HouseholdMember) {
+        Task {
+            if await authSession.deleteWardAccount(memberID: member.id) {
+                await store.refreshHomeFromRemote(for: authSession.currentUser)
+                dismiss()
+            }
+        }
+    }
+}
+
+extension View {
+    // The same deletion screen, presented over a screen that has no navigation stack of its own.
+    func accountDeletionSheet(
+        isPresented: Binding<Bool>,
+        target: AccountDeletionTarget = .ownAccount
+    ) -> some View {
+        sheet(isPresented: isPresented) {
+            NavigationStack {
+                AccountDeletionView(target: target)
+            }
+            .presentationDragIndicator(.visible)
+        }
+    }
+}
+
+// A report is never anonymous: it leaves from the person's own email, with no household data attached.
+struct ReportProblemView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(spacing: 0) {
+            BackHeader { dismiss() }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Denunciar um problema").ninaText(.screen)
+
+                    Text("Algo na Nina fere uma criança ou um adolescente? Conte para nós.")
+                        .ninaText(.label, NinaTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("A denúncia não é anônima: ela sai do seu email.")
+                        .ninaText(.label, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    NinaButton(title: "Escrever denúncia", fillsWidth: true) {
+                        Haptics.lightImpact()
+                        openURL(NinaLegalLinks.reportMail)
+                    }
+
+                    NinaButton(title: "Como tratamos denúncias", kind: .quiet) {
+                        Haptics.selection()
+                        openURL(NinaLegalLinks.reportPolicy)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 32)
+            }
+        }
+        .ninaSheetBackground()
+        .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+struct RatingSettingsRow: View {
+    var body: some View {
+        NinaRow(title: "Classificação indicativa") {
+            ClassIndMark(size: 24)
+        } trailing: {
+            Text(NinaRating.current.name)
+                .ninaText(.meta, NinaTheme.muted)
+                .multilineTextAlignment(.trailing)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Classificação indicativa")
+        .accessibilityValue(NinaRating.current.name)
+    }
+}
+
+// The paywall opens only for an adult Apple confirmed; anyone else meets the age gate instead.
+struct PremiumEntryView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        if store.canBuyPremium {
+            PremiumBenefitsSheet()
+        } else {
+            VStack(spacing: 0) {
+                SheetHeader(eyebrow: "Premium") { dismiss() }
+                Spacer(minLength: 24)
+                ZeroState(
+                    headline: "Isso pede idade confirmada pela Apple.",
+                    body_: "O resto funciona.",
+                    presence: .unavailable
+                )
+                .padding(.horizontal, 20)
+                Spacer(minLength: 24)
+            }
+            .ninaSheetBackground()
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 }
@@ -1856,6 +2113,21 @@ struct TaskEditorSheet: View {
         return categories.contains(where: { $0.id == category.id }) ? categories : categories + [category]
     }
 
+    private var isHealthBlocked: Bool {
+        category.id == TaskCategory.health.id && healthBlockedOwnerName != nil
+    }
+
+    // A minor's health reminder needs its own guardian consent, which the server enforces as well.
+    private var healthBlockedOwnerName: String? {
+        guard let ownerMemberID,
+              let owner = store.familyGroup.members.first(where: { $0.id == ownerMemberID }),
+              owner.isMinorProfile,
+              owner.minorAccess?.hasHealthConsent != true else {
+            return nil
+        }
+        return owner.name
+    }
+
     private var reminderLeadOptions: [TaskReminderLead] {
         let options = TaskReminderLead.editorOptions
         guard !options.contains(reminderLead) else { return options }
@@ -2042,13 +2314,22 @@ struct TaskEditorSheet: View {
 
             chipRow
 
+            if category.id == TaskCategory.health.id, let name = healthBlockedOwnerName {
+                Text("Sem autorização de saúde para \(name).")
+                    .ninaText(.caption, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+            }
+
             HStack(spacing: 12) {
                 Spacer(minLength: 8)
 
                 NinaButton(
                     title: primaryActionTitle,
                     systemName: "arrow.up",
-                    isEnabled: !trimmedTitle.isEmpty
+                    isEnabled: !trimmedTitle.isEmpty && !isHealthBlocked
                 ) {
                     save()
                 }
@@ -2203,6 +2484,7 @@ struct TaskEditorSheet: View {
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(categoryOptions) { item in
+                        let isBlocked = item.id == TaskCategory.health.id && healthBlockedOwnerName != nil
                         Button {
                             Haptics.selection()
                             category = item
@@ -2211,6 +2493,17 @@ struct TaskEditorSheet: View {
                             categoryChoiceRow(item, isSelected: category.id == item.id)
                         }
                         .buttonStyle(.plain)
+                        .disabled(isBlocked)
+                        .opacity(isBlocked ? 0.4 : 1)
+
+                        if isBlocked, let name = healthBlockedOwnerName {
+                            Text("Sem autorização de saúde para \(name).")
+                                .ninaText(.caption, NinaTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 20)
+                                .padding(.bottom, 8)
+                        }
 
                         NinaDivider(inset: 34)
                     }
@@ -2352,7 +2645,7 @@ struct TaskEditorSheet: View {
     }
 
     private func save() {
-        guard !trimmedTitle.isEmpty else {
+        guard !trimmedTitle.isEmpty, !isHealthBlocked else {
             Haptics.error()
             return
         }

@@ -1512,28 +1512,60 @@ details p {
   min-height: 140px;
   display: grid;
   grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "brand nav rating"
+    "note note note";
   align-items: center;
-  gap: 30px;
+  gap: 14px 30px;
   margin-top: 28px;
   border-top: 1px solid var(--line);
-  padding-block: 34px;
+  padding-block: 30px 34px;
   color: var(--muted);
   font-size: 0.875rem;
 }
 
+.site-footer .brand {
+  grid-area: brand;
+}
+
 .site-footer p {
+  grid-area: note;
   margin: 0;
   text-align: center;
 }
 
 .site-footer nav {
+  grid-area: nav;
+  justify-self: center;
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  column-gap: 20px;
   font-weight: 500;
 }
 
-.site-footer nav a:hover {
+.site-footer nav a,
+.site-footer-rating {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.site-footer nav a:hover,
+.site-footer-rating:hover {
   color: var(--cobalt);
+}
+
+.site-footer-rating {
+  grid-area: rating;
+  gap: 10px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* The rating symbol keeps the official ClassInd colours, the one colour outside the glaze. */
+.rating-mark {
+  flex: none;
 }
 
 .waitlist-dialog {
@@ -2098,6 +2130,108 @@ details p {
   text-decoration: underline;
   text-decoration-thickness: 0.08em;
   text-underline-offset: 0.18em;
+  overflow-wrap: anywhere;
+}
+
+.policy-content h3 {
+  margin: 24px 0 6px;
+  font-family: var(--ui);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.policy-content h2 + h3 {
+  margin-top: 10px;
+}
+
+.policy-content p + p,
+.policy-content p + ul,
+.policy-content p + ol,
+.policy-content ul + p,
+.policy-content ol + p,
+.policy-content table + p {
+  margin-top: 12px;
+}
+
+.policy-content ul,
+.policy-content ol {
+  margin-block: 12px 0;
+  padding-left: 1.25em;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.policy-content li + li {
+  margin-top: 6px;
+}
+
+.policy-content strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* A highlighted section is a notice the law asks to stand apart from the rest of the text. */
+.policy-highlight {
+  margin-top: 34px;
+  border-radius: var(--radius-card);
+  padding: clamp(20px, 3.4vw, 32px);
+  background: var(--grout);
+}
+
+.policy-highlight h2:first-child {
+  margin-top: 0;
+}
+
+.policy-table {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.policy-table th,
+.policy-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.policy-table th:first-child {
+  padding-left: 0;
+}
+
+.policy-table thead th {
+  color: var(--faint);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.policy-table tbody th {
+  width: 30%;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.policy-table td {
+  color: var(--muted);
+}
+
+.rating-statement {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.rating-statement p {
+  margin: 0;
 }
 
 /* ---------------------------------------------------------------------------
@@ -2515,7 +2649,52 @@ details p {
 
   .site-footer {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "brand"
+      "nav"
+      "rating"
+      "note";
     justify-items: center;
+  }
+
+  .policy-table,
+  .policy-table tbody,
+  .policy-table tr,
+  .policy-table th,
+  .policy-table td {
+    display: block;
+    width: auto;
+  }
+
+  .policy-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .policy-table tr {
+    border-bottom: 1px solid var(--line);
+    padding-block: 14px;
+  }
+
+  .policy-table th,
+  .policy-table td {
+    border: 0;
+    padding: 3px 0;
+  }
+
+  .policy-table tbody th {
+    width: auto;
+    padding-bottom: 6px;
+  }
+
+  .policy-table td::before {
+    content: attr(data-label) ": ";
+    color: var(--ink);
+    font-weight: 600;
   }
 
   .invite-card,

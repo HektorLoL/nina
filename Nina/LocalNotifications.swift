@@ -21,18 +21,42 @@ enum HomeNotificationAuthorizationStatus: Hashable {
     }
 }
 
+// A guardian's settings govern a minor's phone: alerts on or off, and a quiet window the minor cannot switch off.
+struct MinorNotificationPolicy: Hashable {
+    var alertsEnabled: Bool
+    var quietStart: Int
+    var quietEnd: Int
+
+    init(alertsEnabled: Bool, quietStart: Int, quietEnd: Int) {
+        self.alertsEnabled = alertsEnabled
+        self.quietStart = quietStart
+        self.quietEnd = quietEnd
+    }
+
+    init(settings: MinorSupervisionSettings) {
+        self.init(
+            alertsEnabled: settings.alertsEnabled,
+            quietStart: settings.quietStart,
+            quietEnd: settings.quietEnd
+        )
+    }
+}
+
 struct HomeNotificationViewer: Hashable {
     var memberID: UUID?
     var name: String?
+    var minorPolicy: MinorNotificationPolicy?
 
-    init(memberID: UUID? = nil, name: String? = nil) {
+    init(memberID: UUID? = nil, name: String? = nil, minorPolicy: MinorNotificationPolicy? = nil) {
         self.memberID = memberID
         self.name = name
+        self.minorPolicy = minorPolicy
     }
 
     init(member: HouseholdMember?) {
         memberID = member?.id
         name = member?.name
+        minorPolicy = nil
     }
 }
 
@@ -147,7 +171,11 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         defaults: UserDefaults = .standard,
         calendar: Calendar = .current
     ) -> [ScheduledNotification] {
-        let quietHours = QuietHoursConfiguration(defaults: defaults, calendar: calendar)
+        if let minorPolicy = viewer.minorPolicy, !minorPolicy.alertsEnabled {
+            return []
+        }
+        let quietHours = viewer.minorPolicy.map { QuietHoursConfiguration(minorPolicy: $0, calendar: calendar) }
+            ?? QuietHoursConfiguration(defaults: defaults, calendar: calendar)
         var alerts: [ScheduledNotification] = []
         var nudges: [ScheduledNotification] = []
 
@@ -155,6 +183,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
             let moments = reminderMoments(task, after: now, calendar: calendar)
 
             for moment in moments {
+                let isMinor = viewer.minorPolicy != nil
                 alerts.append(
                     ScheduledNotification(
                         identifier: taskIdentifier(
@@ -162,8 +191,10 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
                             familyID: familyID,
                             deliveryDate: moment.alertDate
                         ),
-                        title: task.title,
-                        body: taskNotificationBody(task),
+                        title: isMinor ? "" : task.title,
+                        body: isMinor
+                            ? minorNotificationBody(task, dueMoment: moment.dueMoment, calendar: calendar)
+                            : taskNotificationBody(task),
                         deliveryDate: moment.alertDate,
                         isSilent: quietHours.contains(moment.alertDate),
                         kind: .alert
@@ -171,7 +202,9 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
                 )
             }
 
-            guard task.priority == .high || task.priority == .urgent,
+            // A minor's phone never repeats itself: no follow-up nudge, ever.
+            guard viewer.minorPolicy == nil,
+                  task.priority == .high || task.priority == .urgent,
                   let dueMoment = moments.first?.dueMoment else { continue }
 
             let nudgeDate = dueMoment.addingTimeInterval(missedReminderNudgeDelay)
@@ -296,6 +329,16 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         return "É a hora. Ficou com você."
     }
 
+    // Neutral on a minor's phone: the title they were given and the hour, never Nina's voice.
+    static func minorNotificationBody(_ task: TaskItem, dueMoment: Date, calendar: Calendar) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.dateFormat = "HH:mm"
+        return "\(task.title) · \(formatter.string(from: dueMoment))"
+    }
+
     private static func nudgeNotificationBody(_ task: TaskItem) -> String {
         guard !HouseholdWorkload.isSharedOwner(task.owner) else {
             return "Passou da hora. Alguém pega?"
@@ -369,6 +412,13 @@ private struct QuietHoursConfiguration {
     var startMinutes: Int
     var endMinutes: Int
     var calendar: Calendar
+
+    init(minorPolicy: MinorNotificationPolicy, calendar: Calendar) {
+        isEnabled = true
+        startMinutes = minorPolicy.quietStart
+        endMinutes = minorPolicy.quietEnd
+        self.calendar = calendar
+    }
 
     init(defaults: UserDefaults, calendar: Calendar) {
         isEnabled = defaults.object(forKey: LocalHomeNotificationScheduler.quietHoursEnabledKey) as? Bool ?? true

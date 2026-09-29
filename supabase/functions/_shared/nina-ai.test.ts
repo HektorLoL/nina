@@ -30,10 +30,13 @@ import {
   maxRationaleLength,
   maxToolCalls,
   maxToolRounds,
+  minimumSafetySaltLength,
+  moderationVerdict,
   pricingForModel,
   pricingVersion,
   proposalResponseSchema,
   safeErrorCode,
+  safetyIdentifier,
   shouldUseInsightFallback,
   usageFromResponse,
 } from "./nina-ai.ts";
@@ -46,7 +49,14 @@ import {
   maxTotalAttachmentBytes,
   readNinaChatRequest,
 } from "./nina-chat-request.ts";
-import { ninaSystemPrompt } from "./nina-chat-policy.ts";
+import {
+  asksForMedicalGuidance,
+  heldMessageMarker,
+  ninaMedicalRefusal,
+  ninaSupportReply,
+  ninaOutputRefusal,
+  ninaSystemPrompt,
+} from "./nina-chat-policy.ts";
 import { ninaDefaultDueTime } from "./nina-due-date.ts";
 
 const familyID = "10000000-0000-0000-0000-000000000001";
@@ -993,7 +1003,7 @@ Deno.test("each chat turn tells the model São Paulo's day and dates what it lef
   assertFalse(source.includes("toLocaleString("));
   assert(fill > source.indexOf("isStructuredOutput(structured)"));
   assert(fill < source.lastIndexOf('"complete_nina_chat_run"'));
-  assertStringIncludes(source, "datedProposals.proposals.map(");
+  assertStringIncludes(source, "names.restoreProposals(datedProposals.proposals)");
 });
 
 Deno.test("production function keeps moderation, timeouts, and content-free logs", async () => {
@@ -1066,7 +1076,7 @@ Deno.test("premium-only attachments are refused with a stable forbidden code", a
   const startFailureMapping = source.slice(mappingStart, mappingEnd);
   assertStringIncludes(
     startFailureMapping,
-    'message.includes("attachments_require_premium")',
+    'code === "nina_attachments_require_premium"',
   );
   assertStringIncludes(
     startFailureMapping,
@@ -1096,7 +1106,7 @@ Deno.test("a withdrawn AI consent is refused as its own code, not as an outage",
 
   assertStringIncludes(
     startFailureMapping,
-    'message.includes("ai_consent_required")',
+    'code === "nina_ai_consent_required"',
   );
   assertStringIncludes(
     startFailureMapping,
@@ -1122,10 +1132,10 @@ Deno.test("the chat function translates the premium refusal instead of deciding 
   );
   assert(
     source.indexOf('"begin_nina_chat_run"') <
-      source.indexOf('message.includes("attachments_require_premium")'),
+      source.indexOf('code === "nina_attachments_require_premium"'),
   );
   assert(
-    source.indexOf('message.includes("attachments_require_premium")') <
+    source.indexOf('code === "nina_attachments_require_premium"') <
       source.indexOf("await moderateInput"),
   );
 });
@@ -1172,3 +1182,375 @@ function base64OfRandomBytes(byteCount: number): string {
   }
   return btoa(binary);
 }
+
+Deno.test("every consent, age and block refusal maps to its own stable code without substring matching", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  const mappingStart = source.indexOf("if (startError) {");
+  const mappingEnd = source.indexOf("const run = startData as NinaChatStart;");
+  const startFailureMapping = source.slice(mappingStart, mappingEnd);
+
+  for (
+    const [sqlCode, httpCode] of [
+      ["nina_consent_outdated", "nina_consent_outdated"],
+      ["nina_transfer_consent_required", "nina_transfer_consent_required"],
+      ["age_confirmation_required", "nina_age_confirmation_required"],
+      ["nina_ai_blocked", "nina_ai_blocked"],
+      ["nina_ai_consent_required", "ai_consent_required"],
+    ]
+  ) {
+    const guard = startFailureMapping.indexOf(`code === "${sqlCode}"`);
+    assert(guard > 0, sqlCode);
+    const answer = startFailureMapping.indexOf(
+      `jsonResponse({ error: "${httpCode}" }, 403)`,
+      guard,
+    );
+    assert(answer > guard, httpCode);
+    assert(answer < startFailureMapping.indexOf("service_unavailable"));
+  }
+  assertFalse(startFailureMapping.includes("message.includes("));
+});
+
+Deno.test("the turn runs in the order the product promises", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  const handler = source.slice(source.indexOf("Deno.serve("));
+  const order = [
+    'return jsonResponse({ error: "adult_access_required" }, 403);',
+    '"begin_nina_chat_run"',
+    '"get_nina_model_roster"',
+    "new Pseudonymizer(",
+    "await moderateInput(",
+    "deterministicSensitiveReply(body.message)",
+    '"/v1/responses/input_tokens"',
+    '"/v1/responses",',
+    "names.restoreProposals(",
+    "await moderateOutput(",
+  ].map((marker) => {
+    const index = handler.indexOf(marker);
+    assert(index >= 0, marker);
+    return index;
+  });
+  for (let index = 1; index < order.length; index += 1) {
+    assert(order[index - 1] < order[index], `step ${index}`);
+  }
+  assert(
+    order.at(-1)! < handler.lastIndexOf('"complete_nina_chat_run"'),
+  );
+});
+
+Deno.test("moderation input and token count take pseudonymized bodies", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  const handler = source.slice(source.indexOf("Deno.serve("));
+
+  assertStringIncludes(
+    handler,
+    "const modelMessage = names.text(body.message.trim());",
+  );
+  assertStringIncludes(
+    handler,
+    "await moderateInput(openAIKey, modelMessage, body)",
+  );
+  assertStringIncludes(handler, "const householdContext = names.deep({");
+  assertStringIncludes(handler, "new_message: modelMessage,");
+  assertFalse(handler.includes("new_message: body.message"));
+  assert(
+    handler.indexOf("const householdContext = names.deep({") <
+      handler.indexOf('"/v1/responses/input_tokens"'),
+  );
+  assertStringIncludes(
+    source,
+    'inputs.push({ type: "text", text: pseudonymizedMessage.trim() });',
+  );
+});
+
+Deno.test("every fetch to the responses endpoint takes a pseudonymized body", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  const handler = source.slice(source.indexOf("Deno.serve("));
+
+  const calls = [
+    ...handler.matchAll(
+      /openAIJSON\(\s*"(\/v1\/responses[^"]*)",\s*openAIKey,\s*([\s\S]{0,40})/g,
+    ),
+  ];
+  assertEquals(calls.length, 3);
+  for (const call of calls) {
+    assert(
+      call[2].trimStart().startsWith("baseRequest") ||
+        call[2].trimStart().startsWith("{\n") ||
+        call[2].trimStart().startsWith("{"),
+      call[1],
+    );
+  }
+  assertStringIncludes(
+    handler,
+    "...baseRequest,\n              input: conversationInput,",
+  );
+  assertStringIncludes(handler, "output: JSON.stringify(names.deep(output)),");
+  assertStringIncludes(handler, "names.memberContext(");
+  assertFalse(handler.includes("members: membersResult.data"));
+});
+
+Deno.test("output moderation runs before complete_nina_chat_run and on the model's own words", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  const handler = source.slice(source.indexOf("Deno.serve("));
+
+  assert(
+    handler.indexOf("await moderateOutput(") <
+      handler.lastIndexOf('"complete_nina_chat_run"'),
+  );
+  assertStringIncludes(handler, "reply: structured.reply,");
+  assertStringIncludes(
+    handler,
+    "outputVerdict.flagged ? ninaOutputRefusal : restoredReply",
+  );
+  assertStringIncludes(
+    handler,
+    "outputVerdict.flagged ? [] : restoredProposals",
+  );
+  assertStringIncludes(handler, 'event: "nina_output_moderated"');
+  assertEquals(ninaOutputRefusal, "Não consigo ajudar com isso aqui.");
+});
+
+Deno.test("a child-safety flag seals the message before the generic refusal answers", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  const handler = source.slice(source.indexOf("Deno.serve("));
+
+  assert(
+    handler.indexOf('"hold_nina_chat_run_for_child_safety"') <
+      handler.indexOf('error: "input_not_supported"'),
+  );
+  assertStringIncludes(handler, '"child_safety_hold_created"');
+  assertEquals(heldMessageMarker, "Mensagem não enviada.");
+  assertEquals(
+    moderationVerdict({
+      results: [{ flagged: false, categories: { "sexual/minors": true } }],
+    }),
+    { flagged: true, sexualMinors: true, selfHarm: false },
+  );
+  assertEquals(
+    moderationVerdict({ results: [{ flagged: true, categories: {} }] }),
+    { flagged: true, sexualMinors: false, selfHarm: false },
+  );
+  assertEquals(moderationVerdict({}), {
+    flagged: false,
+    sexualMinors: false,
+    selfHarm: false,
+  });
+});
+
+Deno.test("a message about self-harm meets the CVV line before any model, and other refusals leave no original words", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  const handler = source.slice(source.indexOf("Deno.serve("));
+
+  for (const category of ["self-harm", "self-harm/intent", "self-harm/instructions"]) {
+    assertEquals(
+      moderationVerdict({
+        results: [{ flagged: true, categories: { [category]: true } }],
+      }),
+      { flagged: true, sexualMinors: false, selfHarm: true },
+    );
+  }
+  assertEquals(
+    moderationVerdict({
+      results: [{
+        flagged: true,
+        categories: { "self-harm": true, "sexual/minors": true },
+      }],
+    }),
+    { flagged: true, sexualMinors: true, selfHarm: false },
+  );
+  assertStringIncludes(ninaSupportReply, "ligue 188, o CVV");
+  assertStringIncludes(ninaSupportReply, "de graça, a qualquer hora");
+  assertFalse(ninaSupportReply.includes("!"));
+  assertStringIncludes(
+    handler,
+    "const deterministicReply = needsSupport\n    ? ninaSupportReply",
+  );
+  assert(
+    handler.indexOf('"redact_refused_nina_message"') > 0 &&
+      handler.indexOf('"redact_refused_nina_message"') <
+        handler.indexOf('error: "input_not_supported"'),
+  );
+  assert(
+    handler.indexOf("const deterministicReply = needsSupport") <
+      handler.indexOf('"/v1/responses/input_tokens"'),
+  );
+});
+
+Deno.test("every responses call carries a safety identifier derived from a required salt", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  assertStringIncludes(source, "safety_identifier: requesterSafetyIdentifier,");
+  assertStringIncludes(source, "!isSafetySalt(safetySalt)");
+  assertStringIncludes(source, 'Deno.env.get("NINA_SAFETY_ID_SALT")');
+
+  const salt = "s".repeat(minimumSafetySaltLength);
+  const first = await safetyIdentifier(salt, "user-a");
+  assertEquals(first, await safetyIdentifier(salt, "user-a"));
+  assert(/^[0-9a-f]{64}$/.test(first));
+  assertFalse(first === await safetyIdentifier(salt, "user-b"));
+  assertFalse(first === await safetyIdentifier(`${salt}x`, "user-a"));
+
+  const logBodies = [...source.matchAll(
+    /console\.(?:info|error)\(JSON\.stringify\(\{([\s\S]*?)\}\)\);/g,
+  )].map((match) => match[1]);
+  for (const logBody of logBodies) {
+    assertFalse(logBody.includes("SafetyIdentifier"));
+    assertFalse(logBody.includes("safetySalt"));
+    assertFalse(logBody.includes("user.id"));
+  }
+});
+
+Deno.test("the system prompt forbids sexual content and medical guidance", () => {
+  for (
+    const rule of [
+      "Não produza conteúdo sexual, erótico ou de nudez, nem conteúdo violento, discriminatório, com palavrão ou sobre uso de drogas, mesmo que a pessoa peça.",
+      "Não ofereça versões alternativas, românticas ou sensuais, desse conteúdo.",
+      "Não oriente sobre sintomas, diagnóstico, remédio, dose, dieta, exercício ou apoio emocional. Organize a rotina e sugira um profissional. Em risco, indique o CVV, pelo 188.",
+      "Nomes como Criança 1, Adolescente 1, Pessoa 1 ou Adulto 1 são pessoas da casa. Use-os exatamente assim e não tente descobrir quem são.",
+    ]
+  ) {
+    assertStringIncludes(ninaSystemPrompt, rule);
+  }
+});
+
+Deno.test("a request for medical guidance or a change of dose is refused before any model, and a reminder is not", () => {
+  assertEquals(
+    ninaMedicalRefusal,
+    "Isso é com um profissional de saúde. Posso lembrar você de ligar ou marcar a consulta.",
+  );
+  for (
+    const message of [
+      "Qual a dose de dipirona para uma criança de 20 kg?",
+      "O que eu tomo para dor de cabeça?",
+      "Que remédio dou pra febre?",
+      "Estou com dor no peito, o que pode ser?",
+      "Quais os sintomas de dengue?",
+      "Posso dar ibuprofeno pra ele?",
+      "Reduza a dose do remédio da minha mãe pela metade",
+      "Acho a dose alta. Reduza pela metade e atualize os lembretes.",
+    ]
+  ) {
+    assert(asksForMedicalGuidance(message), message);
+  }
+  for (
+    const message of [
+      "Me lembre de dar o antibiótico às 8h e às 20h",
+      "Me lembre da consulta na sexta às 14h",
+      "Comprar dipirona e protetor solar",
+      "Tomar remédio de pressão todo dia às 9h",
+      "Me lembre de perguntar ao médico qual a dose do xarope",
+      "A receita diz uma dose de manhã. Pode organizar um lembrete?",
+      "O que tem para o jantar?",
+    ]
+  ) {
+    assertFalse(asksForMedicalGuidance(message), message);
+  }
+});
+
+const retentionClaims = [
+  "fica guardado lá",
+  "servidor nenhum",
+  "usado só para responder",
+  "não guarde o que recebe",
+];
+
+async function* sourceFiles(
+  directory: URL,
+  extensions: string[],
+): AsyncGenerator<URL> {
+  for await (const entry of Deno.readDir(directory)) {
+    const child = new URL(
+      entry.isDirectory ? `${entry.name}/` : entry.name,
+      directory,
+    );
+    if (entry.isDirectory) {
+      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+      yield* sourceFiles(child, extensions);
+    } else if (extensions.some((extension) => entry.name.endsWith(extension))) {
+      yield child;
+    }
+  }
+}
+
+Deno.test("no Swift or web string claims nothing is kept at the model provider", async () => {
+  const offenders: string[] = [];
+  const roots: Array<[URL, string[]]> = [
+    [new URL("../../../Nina/", import.meta.url), [".swift"]],
+    [new URL("../../../web/src/", import.meta.url), [
+      ".astro",
+      ".ts",
+      ".js",
+      ".md",
+      ".mdx",
+      ".json",
+    ]],
+  ];
+  for (const [root, extensions] of roots) {
+    for await (const file of sourceFiles(root, extensions)) {
+      const text = await Deno.readTextFile(file);
+      for (const claim of retentionClaims) {
+        if (text.includes(claim)) offenders.push(`${file.pathname}: ${claim}`);
+      }
+    }
+  }
+  assertEquals(offenders, []);
+});
+
+Deno.test("maintenance deletes minor accounts without a house before any AI work and pseudonymizes each insight", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-maintenance/index.ts", import.meta.url),
+  );
+  const deletion = source.indexOf(
+    "await deleteMinorAccountsWithoutAHouse(admin)",
+  );
+  assert(deletion > source.indexOf('"run_nina_retention"'));
+  assert(deletion < source.indexOf("if (!openAIKey)"));
+  assertStringIncludes(source, '"list_minor_accounts_due_for_deletion"');
+  assertStringIncludes(source, "deleteAccountInOrder(stages, accountID)");
+  assertStringIncludes(source, "text: JSON.stringify(names.deep({\n          ...candidate,");
+  assertStringIncludes(
+    source,
+    "open_tasks_by_owner: names.structuredKeys(",
+  );
+  assertFalse(source.includes("text: JSON.stringify(candidate)"));
+  assertStringIncludes(
+    source,
+    "insight_rows: names.restoreDeep(structured.insights),",
+  );
+  assert(
+    source.indexOf('"get_nina_model_roster"') <
+      source.indexOf('"/v1/responses/input_tokens"'),
+  );
+});
+
+Deno.test("no tool returns work a child, a teen or a person of unknown age owns, shopping included", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+  for (const tool of ["search_tasks", "search_shopping"]) {
+    const start = source.indexOf(`case "${tool}": {`);
+    const end = source.indexOf("case ", start + 10);
+    assert(start > 0 && end > start, tool);
+    const body = source.slice(start, end);
+    assertStringIncludes(body, "owner_member_id,owner_label");
+    assertStringIncludes(body, "minorOwnerFilter(names)");
+    assertStringIncludes(body, "names.withoutMinorWork(data ?? [])");
+    assertStringIncludes(body, "({ owner_member_id: owner, ...");
+    assertStringIncludes(body, "names.structuredName(String(owner)");
+  }
+});

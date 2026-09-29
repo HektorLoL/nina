@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(27);
+select plan(34);
 
 insert into auth.users (
   id,
@@ -31,7 +31,113 @@ values
     '{"full_name":"Replacement Admin"}'::jsonb,
     now(),
     now()
+  ),
+  (
+    '71000000-0000-0000-0000-000000000003',
+    'authenticated',
+    'authenticated',
+    'no-house@example.com',
+    '{"full_name":"No House"}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    '71000000-0000-0000-0000-000000000004',
+    'authenticated',
+    'authenticated',
+    'minor-without-house@example.com',
+    '{"full_name":"Minor Without House"}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    '71000000-0000-0000-0000-000000000005',
+    'authenticated',
+    'authenticated',
+    'minor-ward@example.com',
+    '{"full_name":"Minor Ward"}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    '71000000-0000-0000-0000-000000000006',
+    'authenticated',
+    'authenticated',
+    'only-adult@example.com',
+    '{"full_name":"Only Adult"}'::jsonb,
+    now(),
+    now()
   );
+
+-- Every fixture account is an Apple-confirmed adult unless a test says otherwise.
+insert into private.account_age_status (user_id, status, assurance, recheck_after)
+select users.id, 'adult', 'confirmed', now() + interval '180 days'
+from auth.users as users
+on conflict (user_id) do nothing;
+
+update private.account_age_status
+set status = 'minor', minor_band = '12_15', assurance = 'self_declared', minor_since = now()
+where user_id in (
+  '71000000-0000-0000-0000-000000000004',
+  '71000000-0000-0000-0000-000000000005'
+);
+
+insert into public.families (id, name, invite_code, created_by)
+values (
+  '72000000-0000-0000-0000-000000000004',
+  'House with one adult',
+  'casa-abababababababababababababababab',
+  '71000000-0000-0000-0000-000000000006'
+);
+
+insert into public.family_members (id, family_id, user_id, name, relationship, household_role, permission_role, tone)
+values
+  (
+    '73000000-0000-0000-0000-000000000006',
+    '72000000-0000-0000-0000-000000000004',
+    '71000000-0000-0000-0000-000000000006',
+    'Only Adult',
+    'Mãe',
+    'adult',
+    'owner',
+    'mint'
+  ),
+  (
+    '73000000-0000-0000-0000-000000000005',
+    '72000000-0000-0000-0000-000000000004',
+    '71000000-0000-0000-0000-000000000005',
+    'Minor Ward',
+    'Filho',
+    'teen',
+    'member',
+    'sky'
+  );
+
+insert into private.minor_profiles (member_id, family_id, declared_band)
+values (
+  '73000000-0000-0000-0000-000000000005',
+  '72000000-0000-0000-0000-000000000004',
+  '12_15'
+);
+
+insert into private.minor_guardianships (
+  family_id,
+  member_id,
+  guardian_user_id,
+  guardian_user_hash,
+  relationship,
+  consent_text_version,
+  guardian_assurance
+)
+values (
+  '72000000-0000-0000-0000-000000000004',
+  '73000000-0000-0000-0000-000000000005',
+  '71000000-0000-0000-0000-000000000006',
+  private.user_hash('71000000-0000-0000-0000-000000000006'),
+  'mae',
+  '2026-09-29',
+  'confirmed'
+);
 
 insert into public.families (id, name, invite_code, created_by)
 values
@@ -478,6 +584,82 @@ select is(
   ),
   0,
   'no invitation retains the deleted user identifier'
+);
+
+set local role service_role;
+
+select is(
+  public.prepare_account_deletion('71000000-0000-0000-0000-000000000003') ->> 'prepared',
+  'true',
+  'a signed-in person with no house is prepared for deletion like anyone else'
+);
+
+reset role;
+
+select lives_ok(
+  $$
+    delete from auth.users
+    where id = '71000000-0000-0000-0000-000000000003'
+  $$,
+  'a person with no house is deleted from Auth without a membership to unwind'
+);
+
+set local role service_role;
+
+select is(
+  public.prepare_account_deletion('71000000-0000-0000-0000-000000000006') ->> 'solo_families_deleted',
+  '1',
+  'a house is never handed to a minor: with no adult left it is deleted'
+);
+
+reset role;
+
+select is(
+  (
+    select outcome
+    from public.family_access_decisions
+    where subject_user_id = '71000000-0000-0000-0000-000000000005'
+    order by decided_at desc
+    limit 1
+  ),
+  'removed',
+  'the minor left behind is told the house is gone instead of being dropped silently'
+);
+
+select is(
+  (
+    select end_reason
+    from private.minor_guardianships
+    where guardian_user_hash = private.user_hash('71000000-0000-0000-0000-000000000006')
+  ),
+  'account_deleted',
+  'a guardianship ends, and its proof stays, when the guardian deletes the account'
+);
+
+select ok(
+  not exists (
+    select 1
+    from public.list_minor_accounts_due_for_deletion(100) as due(user_id)
+    where due.user_id = '71000000-0000-0000-0000-000000000004'
+  ),
+  'a minor account without a house is not deleted before thirty days have passed'
+);
+
+update auth.users
+set created_at = now() - interval '31 days'
+where id = '71000000-0000-0000-0000-000000000004';
+
+update private.account_age_status
+set minor_since = now() - interval '31 days'
+where user_id = '71000000-0000-0000-0000-000000000004';
+
+select ok(
+  exists (
+    select 1
+    from public.list_minor_accounts_due_for_deletion(100) as due(user_id)
+    where due.user_id = '71000000-0000-0000-0000-000000000004'
+  ),
+  'a minor account thirty days without a house is handed to maintenance for deletion'
 );
 
 select * from finish();

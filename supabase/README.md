@@ -234,8 +234,8 @@ npx supabase functions deploy delete-account --project-ref apemftmlsjocvifbptum 
 
 `delete-account` must have access to `SUPABASE_SERVICE_ROLE_KEY` or
 `SUPABASE_SECRET_KEYS` in Supabase function secrets. The iOS app calls it with
-the user's JWT and the exact JSON body `{"confirmation":"delete"}`; the service
-role key must never be shipped in the app. Apply
+the user's JWT and one of the three exact JSON bodies listed under Edge Function
+secrets below; the service role key must never be shipped in the app. Apply
 `202608020002_account_deletion_transaction.sql` before deploying the function.
 The function deletes profile photos in bounded pages and batches, calls the
 service-only transactional preparation RPC, then deletes the Auth user. A
@@ -264,6 +264,73 @@ with 400 `invalid_parameter`, so the insight fallback does not send it.
 
 The OpenAI project must have API billing or credits enabled. A valid key without
 available quota will return `429 insufficient_quota`.
+
+## Edge Function secrets
+
+Every value below is set with `supabase secrets set` and read only by the
+function that names it. None of them belongs in the iOS app, an xcconfig, a
+`PUBLIC_*` web variable or the repository.
+
+| Secret | Function | Value |
+|---|---|---|
+| `OPENAI_API_KEY` | nina-chat, nina-maintenance | OpenAI project key |
+| `NINA_SAFETY_ID_SALT` | nina-chat | at least 32 random characters; the turn is refused with `503 service_not_configured` without it |
+| `NINA_APP_ATTEST_MODE` | age-signal | `production` in the hosted project |
+| `APPLE_APP_ATTEST_ROOT_CA_PEM` | age-signal | optional; replaces the embedded Apple App Attestation Root CA |
+| `APPLE_SIGN_IN_TEAM_ID` | delete-account | `97PL8KQA8L` |
+| `APPLE_SIGN_IN_KEY_ID` | delete-account | `G558FXQWMN` |
+| `APPLE_SIGN_IN_PRIVATE_KEY` | delete-account | the text of the Sign in with Apple `.p8` key |
+
+Paste the private key from the file itself, never through a shell history or a
+tracked file:
+
+```sh
+npx supabase secrets set --project-ref apemftmlsjocvifbptum \
+  APPLE_SIGN_IN_TEAM_ID=97PL8KQA8L APPLE_SIGN_IN_KEY_ID=G558FXQWMN
+npx supabase secrets set --project-ref apemftmlsjocvifbptum \
+  APPLE_SIGN_IN_PRIVATE_KEY="$(cat ~/Documents/AuthKey_G558FXQWMN.p8)"
+```
+
+`delete-account` accepts exactly one of three bodies: `{"confirmation":"delete"}`,
+the same with `"apple_authorization_code"` (a fresh code from a Sign in with
+Apple sheet shown at deletion time), or `{"confirmation":"delete","member_id":…}`
+when a live guardian deletes a claimed minor's account. With a code, the token
+is revoked at `appleid.apple.com/auth/revoke` only after the Auth user is gone,
+so a failed revocation never blocks or undoes a deletion; it is logged as
+`apple_token_revocation_failed` with the request id and a stage
+(`configuration`, `token_exchange` or `revoke`) and nothing else. A guardian
+deletion carries no code, so that account's Apple token is not revoked.
+
+## Age assurance
+
+`age-signal` (`verify_jwt = true`) receives the band from Apple's Declared Age
+Range on the device, verified by App Attest: a single-use challenge, a
+registration attested over `SHA256(challenge ‖ "register" ‖ user id)`, then an
+assertion over `SHA256(challenge ‖ signal JSON)` with a counter that must rise.
+The service role writes it through `record_age_signal`, whose ratchet moves an
+account toward protection at once and back to adult only on an Apple-confirmed
+signal. The band lives in `private.account_age_status`; no function granted to
+signed-in clients takes a user id.
+
+App Attest does not run on the Simulator. Mark a test account from the SQL
+editor, which records assurance `operator`:
+
+```sql
+select private.operator_set_age_status('<auth user id>', 'adult', null, true, 'testflight');
+select * from private.age_assurance_distribution();
+```
+
+The second query is the D3 measurement: accounts per status, band, assurance
+and parental-controls flag, with no birth date or range bound anywhere.
+`private.age_policy.trusted_assurances` starts at `{confirmed,operator}`; adding
+`self_declared` lets self-declared adults chat and buy Premium, and never lets
+them act for a minor.
+
+Deploy the function after the age migrations, with the mode secret already set:
+
+```sh
+npx supabase functions deploy age-signal --project-ref apemftmlsjocvifbptum --use-api
+```
 
 ## Nina AI V2
 

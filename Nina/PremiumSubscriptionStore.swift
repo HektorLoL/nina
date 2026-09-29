@@ -104,6 +104,17 @@ struct PremiumEntitlement: Codable, Hashable {
 
         return "Acesso liberado"
     }
+
+    // Deleting the account never cancels an App Store subscription, so anything Apple may still bill is warned about.
+    var keepsBillingAfterAccountDeletion: Bool {
+        guard willRenew != false else { return false }
+        switch status {
+        case .active, .gracePeriod, .billingRetry, .reconciling:
+            return true
+        case .unknown, .inactive, .expired, .revoked:
+            return isActive
+        }
+    }
 }
 
 struct PremiumLocalTransaction: Hashable {
@@ -264,6 +275,10 @@ final class PremiumSubscriptionStore {
     /// reserved for confirmed states, and "nothing was found" is not one.
     var statusIsConfirmation = false
     var errorMessage: String?
+
+    var showsSubscriptionContinuesWarning: Bool {
+        entitlement.keepsBillingAfterAccountDeletion
+    }
 
     @ObservationIgnored private let backend: (any PremiumSubscriptionBackend)?
     @ObservationIgnored private let productIDs: [String]
@@ -540,6 +555,10 @@ final class PremiumSubscriptionStore {
             ledger.lastSyncFailed = true
             writeSyncLedger(ledger, for: userID)
             entitlement = reconciling(for: local)
+            // The receipt stays unfinished so Apple can redeliver it once the age is confirmed.
+            if error as? PremiumBackendRequestError == .premiumRequiresAdult {
+                errorMessage = "Isso pede idade confirmada pela Apple."
+            }
             return false
         }
     }
@@ -676,10 +695,15 @@ private struct PremiumSyncResponse: Decodable {
     var entitlement: PremiumEntitlement
 }
 
-private enum PremiumBackendRequestError: Error {
+enum PremiumBackendRequestError: Error, Equatable {
     case missingSession
     case invalidResponse
+    case premiumRequiresAdult
     case server(String)
+
+    init(serverCode: String) {
+        self = serverCode == "premium_requires_adult" ? .premiumRequiresAdult : .server(serverCode)
+    }
 }
 
 private enum PremiumDateCoding {
@@ -763,7 +787,7 @@ struct SupabasePremiumSubscriptionBackend: PremiumSubscriptionBackend {
             guard (200..<300).contains(httpResponse.statusCode) else {
                 let serverError = (try? JSONDecoder().decode(PremiumServerError.self, from: data).error)
                     ?? "premium_sync_failed"
-                throw PremiumBackendRequestError.server(serverError)
+                throw PremiumBackendRequestError(serverCode: serverError)
             }
 
             return try PremiumDateCoding.makeDecoder()

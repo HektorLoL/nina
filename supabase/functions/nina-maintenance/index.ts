@@ -1,4 +1,9 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
+import {
+  type AccountDeletionStages,
+  deleteAccountInOrder,
+} from "../_shared/delete-account.ts";
+import { isRosterEntry, Pseudonymizer } from "../_shared/nina-pseudonyms.ts";
 import {
   addUsage,
   calculateActualCostMicrousd,
@@ -36,6 +41,7 @@ type WeeklyCandidate = {
 const insightInstructions = `
 Você escreve insights semanais curtos para uma família.
 - Use somente as métricas determinísticas fornecidas.
+- Nomes como Criança 1, Adolescente 1, Pessoa 1 ou Adulto 1 são pessoas da casa. Use-os exatamente assim e não tente descobrir quem são.
 - Não atribua culpa, intenção, saúde mental ou valor moral.
 - Não invente eventos, pessoas ou causas.
 - Destaque progresso, pendências e desequilíbrios observáveis com linguagem gentil.
@@ -62,6 +68,75 @@ function parseConfiguredKey(variable: string, fallback: string): string {
     }
   }
   return Deno.env.get(fallback) ?? "";
+}
+
+function accountDeletionStages(admin: SupabaseClient): AccountDeletionStages {
+  return {
+    listProfilePhotoNames: async (userID, offset, limit) => {
+      const { data, error } = await admin.storage
+        .from("profile-photos")
+        .list(userID, {
+          limit,
+          offset,
+          sortBy: { column: "name", order: "asc" },
+        });
+      if (error) throw new Error("profile_photo_list_failed");
+      return (data ?? []).map((file) => file.name);
+    },
+    removeProfilePhotoPaths: async (paths) => {
+      const { error } = await admin.storage.from("profile-photos").remove(paths);
+      if (error) throw new Error("profile_photo_remove_failed");
+    },
+    prepareAccountDeletion: async (userID) => {
+      const { data, error } = await admin.rpc("prepare_account_deletion", {
+        target_user_id: userID,
+      });
+      if (error || (data as { prepared?: unknown } | null)?.prepared !== true) {
+        throw new Error("account_deletion_prepare_failed");
+      }
+    },
+    deleteAuthUser: async (userID) => {
+      const { error } = await admin.auth.admin.deleteUser(userID);
+      if (error) throw new Error("auth_user_delete_failed");
+    },
+  };
+}
+
+// A minor's account does not outlive its house: after thirty days without one
+// it is deleted in the order a person's own deletion follows.
+async function deleteMinorAccountsWithoutAHouse(
+  admin: SupabaseClient,
+): Promise<{ deleted: number; failed: number }> {
+  const { data, error } = await admin.rpc(
+    "list_minor_accounts_due_for_deletion",
+    { max_accounts: 25 },
+  );
+  if (error) {
+    console.error(JSON.stringify({
+      event: "minor_account_deletion_failed",
+      stage: "list",
+    }));
+    return { deleted: 0, failed: 1 };
+  }
+
+  const stages = accountDeletionStages(admin);
+  let deleted = 0;
+  let failed = 0;
+  for (const accountID of Array.isArray(data) ? data : []) {
+    const failure = typeof accountID === "string"
+      ? await deleteAccountInOrder(stages, accountID)
+      : "database";
+    if (failure) {
+      failed += 1;
+      console.error(JSON.stringify({
+        event: "minor_account_deletion_failed",
+        stage: failure,
+      }));
+    } else {
+      deleted += 1;
+    }
+  }
+  return { deleted, failed };
 }
 
 async function openAIRequest(
@@ -133,6 +208,8 @@ Deno.serve(async (request: Request) => {
     }));
   }
 
+  const minorAccounts = await deleteMinorAccountsWithoutAHouse(admin);
+
   if (!openAIKey) {
     console.warn(JSON.stringify({
       event: "nina_insights_skipped",
@@ -141,6 +218,7 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({
       retention,
       waitlist_retention: waitlistRetention,
+      minor_accounts: minorAccounts,
       candidates: 0,
       completed: 0,
       failed: 0,
@@ -159,11 +237,28 @@ Deno.serve(async (request: Request) => {
 
   for (const candidate of candidates.slice(0, 25)) {
     const startedAt = performance.now();
+    const { data: rosterData, error: rosterError } = await admin.rpc(
+      "get_nina_model_roster",
+      { target_family_id: candidate.family_id, requesting_user_id: null },
+    );
+    const roster: unknown[] = Array.isArray(rosterData) ? rosterData : [];
+    if (rosterError || !Array.isArray(rosterData) || !roster.every(isRosterEntry)) {
+      failedCount += 1;
+      continue;
+    }
+    // Only consenting carriers are named in the insight; anyone else whose
+    // name surfaces in the metrics reaches the model as a code.
+    const names = new Pseudonymizer(roster.filter(isRosterEntry), null);
     const input = [{
       role: "user",
       content: [{
         type: "input_text",
-        text: JSON.stringify(candidate),
+        text: JSON.stringify(names.deep({
+          ...candidate,
+          open_tasks_by_owner: names.structuredKeys(
+            candidate.open_tasks_by_owner ?? {},
+          ),
+        })),
       }],
     }];
     const tokenRequest = {
@@ -281,7 +376,7 @@ Deno.serve(async (request: Request) => {
         "complete_nina_insight_run",
         {
           target_run_id: runID,
-          insight_rows: structured.insights,
+          insight_rows: names.restoreDeep(structured.insights),
           usage_input_tokens: aggregateUsage.inputTokens,
           usage_cached_input_tokens: aggregateUsage.cachedInputTokens,
           usage_output_tokens: aggregateUsage.outputTokens,
@@ -328,6 +423,7 @@ Deno.serve(async (request: Request) => {
   return jsonResponse({
     retention,
     waitlist_retention: waitlistRetention,
+    minor_accounts: minorAccounts,
     candidates: candidates.length,
     completed: completedCount,
     failed: failedCount,

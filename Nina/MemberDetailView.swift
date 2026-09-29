@@ -69,7 +69,11 @@ struct MemberDetailView: View {
                         }
                     }
 
-                    if member.role == .child {
+                    if member.isMinorProfile {
+                        MinorSupervisionSection(member: member)
+                    }
+
+                    if member.role.isMinorRole, member.userID == nil, member.minorAccess?.hasProfileConsent == true {
                         ChildTodaySection(member: member)
                     }
 
@@ -138,8 +142,10 @@ struct MemberDetailView: View {
         return value.isEmpty || repeatsAnotherRow ? nil : value
     }
 
+    // A claimed minor's screen never states an age: the row reads as limited access and nothing more.
     private var subtitle: String {
         if member.role == .assistant { return "Não ocupa vaga." }
+        if member.isMinorProfile, member.isClaimed { return "Acesso limitado" }
         return member.role.title
     }
 

@@ -51,6 +51,12 @@ values
     now()
   );
 
+-- Every fixture account is an Apple-confirmed adult unless a test says otherwise.
+insert into private.account_age_status (user_id, status, assurance, recheck_after)
+select users.id, 'adult', 'confirmed', now() + interval '180 days'
+from auth.users as users
+on conflict (user_id) do nothing;
+
 set local role authenticated;
 set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
 
@@ -79,19 +85,19 @@ select matches(
 
 select lives_ok(
   $$
-    select public.add_unclaimed_family_member(
+    select public.add_minor_profile(
       current_setting('test.member_management_family_id')::uuid,
       'Lia',
+      'under_12',
+      'mae',
+      '2026-09-29',
+      false,
+      '{}'::text[],
       'Filha',
-      'child',
-      'amber',
-      'Estuda pela manhã.',
-      '2018-04-12'::date,
-      '',
-      ''
+      'amber'
     )
   $$,
-  'manager creates a child profile'
+  'a guardian creates a child profile with a declaration and a consent'
 );
 
 select lives_ok(
@@ -118,8 +124,8 @@ select is(
     where family_id = current_setting('test.member_management_family_id')::uuid
       and name = 'Lia'
   ),
-  '2018-04-12'::date,
-  'child profile stores a birth date'
+  null::date,
+  'a child profile never stores a birth date'
 );
 
 select is(
@@ -594,9 +600,9 @@ select is(
     private.nina_weekly_metrics(
       current_setting('test.member_management_family_id')::uuid
     ) -> 'open_tasks_by_owner' ->> 'Marina · Mãe'
-  )::integer,
-  2,
-  'two members sharing a name keep separate workload buckets'
+  ),
+  null::text,
+  'an adult profile with no account and no consent is never named in the weekly insight'
 );
 
 select is(
@@ -604,9 +610,9 @@ select is(
     private.nina_weekly_metrics(
       current_setting('test.member_management_family_id')::uuid
     ) -> 'open_tasks_by_owner' ->> 'Marina · Prima'
-  )::integer,
-  1,
-  'the second member sharing the name keeps her own workload bucket'
+  ),
+  null::text,
+  'her namesake without an account is left out of the weekly insight too'
 );
 
 select is(
@@ -682,9 +688,9 @@ select is(
     private.nina_weekly_metrics(
       current_setting('test.member_management_family_id')::uuid
     ) -> 'open_tasks_by_owner' ->> 'Marina Castello'
-  )::integer,
-  2,
-  'a rename keeps one member in one workload bucket instead of splitting her in two'
+  ),
+  null::text,
+  'a rename does not bring an adult who never consented into the weekly insight'
 );
 
 select is(
@@ -692,9 +698,9 @@ select is(
     private.nina_weekly_metrics(
       current_setting('test.member_management_family_id')::uuid
     ) -> 'open_tasks_by_owner' ->> 'Marina'
-  )::integer,
-  1,
-  'the former name only carries the work of the member who still answers to it'
+  ),
+  null::text,
+  'the former name carries no work of anyone the insight may not name'
 );
 
 set local role authenticated;
@@ -805,7 +811,7 @@ select lives_ok(
           current_setting('test.member_management_family_id')::uuid,
           'Perfil ' || profile_number,
           'Dependente',
-          'child',
+          'adult',
           'mint',
           '',
           null,
@@ -825,7 +831,7 @@ select throws_ok(
       current_setting('test.member_management_family_id')::uuid,
       'Perfil excedente',
       'Dependente',
-      'child',
+      'adult',
       'mint',
       '',
       null,
@@ -972,13 +978,13 @@ select ok(
   position(
     'pg_advisory_xact_lock' in lower(
       pg_get_functiondef(
-        'public.approve_family_join_request(uuid,text)'::regprocedure
+        'public.approve_family_join_request(uuid,text,text,text,boolean,text,boolean,text[])'::regprocedure
       )
     )
   ) < position(
     'for update' in lower(
       pg_get_functiondef(
-        'public.approve_family_join_request(uuid,text)'::regprocedure
+        'public.approve_family_join_request(uuid,text,text,text,boolean,text,boolean,text[])'::regprocedure
       )
     )
   ),

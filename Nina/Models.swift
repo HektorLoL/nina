@@ -2,29 +2,65 @@ import Foundation
 
 enum HouseholdRole: String, CaseIterable, Identifiable, Codable, Hashable {
     case adult
+    case teen
     case child
     case pet
     case assistant
+    case unrecognized
 
     var id: String { rawValue }
+
+    // A role this build cannot read is never an adult: an unknown or missing value holds no adult power.
+    init(wireValue: String?) {
+        guard let wireValue, let role = HouseholdRole(rawValue: wireValue), role != .unrecognized else {
+            self = .unrecognized
+            return
+        }
+        self = role
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        self.init(wireValue: try? container.decode(String.self))
+    }
 
     var title: String {
         switch self {
         case .adult: "Adulto"
+        case .teen: "Adolescente"
         case .child: "Criança"
         case .pet: "Pet"
         case .assistant: "Nina"
+        case .unrecognized: "Pessoa"
         }
     }
 
     var symbolName: String {
         switch self {
         case .adult: "person.fill"
+        case .teen: "figure.stand"
         case .child: "figure.2.and.child.holdinghands"
         case .pet: "pawprint.fill"
         case .assistant: "sparkles"
+        case .unrecognized: "person"
         }
     }
+
+    var isMinorRole: Bool {
+        self == .child || self == .teen
+    }
+
+    // A role this build could not read is never written back as if it were known.
+    var wireValue: String {
+        self == .unrecognized ? "" : rawValue
+    }
+
+    // Only these three ever carry household load; a minor, an unreadable role or Nina never does.
+    var isWorkloadCarrier: Bool {
+        self == .adult || self == .pet
+    }
+
+    static let editorRoles: [HouseholdRole] = [.adult, .teen, .child, .pet]
 }
 
 enum MemberTone: String, CaseIterable, Identifiable, Codable, Hashable {
@@ -149,6 +185,7 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
     var birthDate: Date?
     var petSpecies: String
     var petBreed: String
+    var minorAccess: MinorAccess?
 
     init(
         id: UUID = UUID(),
@@ -163,7 +200,8 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
         memoryNote: String,
         birthDate: Date? = nil,
         petSpecies: String = "",
-        petBreed: String = ""
+        petBreed: String = "",
+        minorAccess: MinorAccess? = nil
     ) {
         self.id = id
         self.userID = userID
@@ -178,6 +216,7 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
         self.birthDate = birthDate
         self.petSpecies = petSpecies
         self.petBreed = petBreed
+        self.minorAccess = minorAccess
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -194,6 +233,7 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
         case birthDate
         case petSpecies
         case petBreed
+        case minorAccess
     }
 
     init(from decoder: Decoder) throws {
@@ -202,7 +242,7 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
         userID = try container.decodeIfPresent(String.self, forKey: .userID)
         name = try container.decode(String.self, forKey: .name)
         relationship = try container.decodeIfPresent(String.self, forKey: .relationship) ?? ""
-        role = try container.decodeIfPresent(HouseholdRole.self, forKey: .role) ?? .adult
+        role = try container.decodeIfPresent(HouseholdRole.self, forKey: .role) ?? .unrecognized
         permissionRole = try container.decodeIfPresent(FamilyPermissionRole.self, forKey: .permissionRole) ?? .member
         identityState = try container.decodeIfPresent(MemberIdentityState.self, forKey: .identityState)
             ?? (userID == nil ? .unclaimed : .claimed)
@@ -212,6 +252,226 @@ struct HouseholdMember: Identifiable, Codable, Hashable {
         birthDate = try container.decodeIfPresent(Date.self, forKey: .birthDate)
         petSpecies = try container.decodeIfPresent(String.self, forKey: .petSpecies) ?? ""
         petBreed = try container.decodeIfPresent(String.self, forKey: .petBreed) ?? ""
+        minorAccess = try container.decodeIfPresent(MinorAccess.self, forKey: .minorAccess)
+    }
+
+    var isMinorProfile: Bool {
+        role.isMinorRole || minorAccess?.isMinor == true
+    }
+
+    var isClaimed: Bool {
+        userID != nil || identityState == .claimed
+    }
+}
+
+struct MinorUsageDay: Codable, Hashable, Identifiable {
+    var day: String
+    var minutes: Int
+
+    var id: String { day }
+}
+
+struct MinorSupervision: Codable, Hashable {
+    var band: MinorBand
+    var bandSource: AgeBandSource
+    var nicknames: [String]
+    var alertsEnabled: Bool
+    var quietStart: Int
+    var quietEnd: Int
+    var dailyLimitMinutes: Int?
+    var usageTodayMinutes: Int?
+    var usageLast7Days: [MinorUsageDay]
+    var viewerRelationship: GuardianRelationship?
+
+    private enum CodingKeys: String, CodingKey {
+        case band
+        case bandSource = "band_source"
+        case nicknames
+        case alertsEnabled = "alerts_enabled"
+        case quietStart = "quiet_start"
+        case quietEnd = "quiet_end"
+        case dailyLimitMinutes = "daily_limit_minutes"
+        case usageTodayMinutes = "usage_today_minutes"
+        case usageLast7Days = "usage_last_7_days"
+        case viewerRelationship = "viewer_relationship"
+    }
+
+    init(
+        band: MinorBand,
+        bandSource: AgeBandSource = .guardian,
+        nicknames: [String] = [],
+        alertsEnabled: Bool = true,
+        quietStart: Int = MinorSupervisionDefaults.quietStart,
+        quietEnd: Int = MinorSupervisionDefaults.quietEnd,
+        dailyLimitMinutes: Int? = MinorSupervisionDefaults.dailyLimitMinutes,
+        usageTodayMinutes: Int? = nil,
+        usageLast7Days: [MinorUsageDay] = [],
+        viewerRelationship: GuardianRelationship? = nil
+    ) {
+        self.band = band
+        self.bandSource = bandSource
+        self.nicknames = nicknames
+        self.alertsEnabled = alertsEnabled
+        self.quietStart = quietStart
+        self.quietEnd = quietEnd
+        self.dailyLimitMinutes = dailyLimitMinutes
+        self.usageTodayMinutes = usageTodayMinutes
+        self.usageLast7Days = usageLast7Days
+        self.viewerRelationship = viewerRelationship
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        band = MinorBand(wireValue: try container.decodeIfPresent(String.self, forKey: .band)) ?? .under12
+        bandSource = AgeBandSource(
+            rawValue: try container.decodeIfPresent(String.self, forKey: .bandSource) ?? ""
+        ) ?? .guardian
+        nicknames = try container.decodeIfPresent([String].self, forKey: .nicknames) ?? []
+        alertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .alertsEnabled) ?? true
+        quietStart = try container.decodeIfPresent(Int.self, forKey: .quietStart)
+            ?? MinorSupervisionDefaults.quietStart
+        quietEnd = try container.decodeIfPresent(Int.self, forKey: .quietEnd)
+            ?? MinorSupervisionDefaults.quietEnd
+        dailyLimitMinutes = try container.decodeIfPresent(Int.self, forKey: .dailyLimitMinutes)
+        usageTodayMinutes = try container.decodeIfPresent(Int.self, forKey: .usageTodayMinutes)
+        usageLast7Days = try container.decodeIfPresent([MinorUsageDay].self, forKey: .usageLast7Days) ?? []
+        viewerRelationship = GuardianRelationship(
+            rawValue: try container.decodeIfPresent(String.self, forKey: .viewerRelationship) ?? ""
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(band.rawValue, forKey: .band)
+        try container.encode(bandSource.rawValue, forKey: .bandSource)
+        try container.encode(nicknames, forKey: .nicknames)
+        try container.encode(alertsEnabled, forKey: .alertsEnabled)
+        try container.encode(quietStart, forKey: .quietStart)
+        try container.encode(quietEnd, forKey: .quietEnd)
+        try container.encodeIfPresent(dailyLimitMinutes, forKey: .dailyLimitMinutes)
+        try container.encodeIfPresent(usageTodayMinutes, forKey: .usageTodayMinutes)
+        try container.encode(usageLast7Days, forKey: .usageLast7Days)
+        try container.encodeIfPresent(viewerRelationship?.rawValue, forKey: .viewerRelationship)
+    }
+}
+
+enum MinorSupervisionDefaults {
+    static let quietStart = 1_260
+    static let quietEnd = 420
+    static let dailyLimitMinutes: Int? = 30
+    static let dailyLimitChoices: [Int?] = [15, 30, 60, nil]
+    static let maximumNicknames = 8
+    static let maximumNicknameLength = 40
+
+    static func limitTitle(_ minutes: Int?) -> String {
+        switch minutes {
+        case .none: "Sem limite"
+        case .some(60): "1 hora"
+        case .some(let value): "\(value) min"
+        }
+    }
+
+    static func clockLabel(minutes: Int) -> String {
+        let hour = (minutes / 60) % 24
+        let minute = minutes % 60
+        return minute == 0 ? "\(hour):00" : String(format: "%d:%02d", hour, minute)
+    }
+
+    static func quietWindowLabel(start: Int, end: Int) -> String {
+        "\(clockLabel(minutes: start)) às \(clockLabel(minutes: end))"
+    }
+
+    // A nickname list never grows past what the server accepts.
+    static func normalizedNicknames(_ raw: String) -> [String] {
+        normalizedNicknames(raw.split(separator: ",").map(String.init))
+    }
+
+    static func normalizedNicknames(_ raw: [String]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for value in raw {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed.count <= maximumNicknameLength else { continue }
+            let key = trimmed.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            result.append(trimmed)
+            if result.count == maximumNicknames { break }
+        }
+        return result
+    }
+}
+
+// Present only on child and teen rows; a band appears only inside supervision, which only a live guardian receives.
+struct MinorAccess: Codable, Hashable {
+    var isMinor: Bool
+    var isClaimed: Bool
+    var guardianNames: [String]
+    var isViewerGuardian: Bool
+    var hasProfileConsent: Bool
+    var hasHealthConsent: Bool
+    var pendingDeletionAt: Date?
+    var supervision: MinorSupervision?
+
+    private enum CodingKeys: String, CodingKey {
+        case isMinor = "is_minor"
+        case isClaimed = "is_claimed"
+        case guardianNames = "guardian_names"
+        case isViewerGuardian = "is_viewer_guardian"
+        case hasProfileConsent = "has_profile_consent"
+        case hasHealthConsent = "has_health_consent"
+        case pendingDeletionAt = "pending_deletion_at"
+        case supervision
+    }
+
+    init(
+        isMinor: Bool = true,
+        isClaimed: Bool = false,
+        guardianNames: [String] = [],
+        isViewerGuardian: Bool = false,
+        hasProfileConsent: Bool = false,
+        hasHealthConsent: Bool = false,
+        pendingDeletionAt: Date? = nil,
+        supervision: MinorSupervision? = nil
+    ) {
+        self.isMinor = isMinor
+        self.isClaimed = isClaimed
+        self.guardianNames = guardianNames
+        self.isViewerGuardian = isViewerGuardian
+        self.hasProfileConsent = hasProfileConsent
+        self.hasHealthConsent = hasHealthConsent
+        self.pendingDeletionAt = pendingDeletionAt
+        self.supervision = isViewerGuardian ? supervision : nil
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let isViewerGuardian = try container.decodeIfPresent(Bool.self, forKey: .isViewerGuardian) ?? false
+        self.init(
+            isMinor: try container.decodeIfPresent(Bool.self, forKey: .isMinor) ?? true,
+            isClaimed: try container.decodeIfPresent(Bool.self, forKey: .isClaimed) ?? false,
+            guardianNames: try container.decodeIfPresent([String].self, forKey: .guardianNames) ?? [],
+            isViewerGuardian: isViewerGuardian,
+            hasProfileConsent: try container.decodeIfPresent(Bool.self, forKey: .hasProfileConsent) ?? false,
+            hasHealthConsent: try container.decodeIfPresent(Bool.self, forKey: .hasHealthConsent) ?? false,
+            pendingDeletionAt: try container.decodeIfPresent(Date.self, forKey: .pendingDeletionAt),
+            supervision: try container.decodeIfPresent(MinorSupervision.self, forKey: .supervision)
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(isMinor, forKey: .isMinor)
+        try container.encode(isClaimed, forKey: .isClaimed)
+        try container.encode(guardianNames, forKey: .guardianNames)
+        try container.encode(isViewerGuardian, forKey: .isViewerGuardian)
+        try container.encode(hasProfileConsent, forKey: .hasProfileConsent)
+        try container.encode(hasHealthConsent, forKey: .hasHealthConsent)
+        try container.encodeIfPresent(pendingDeletionAt, forKey: .pendingDeletionAt)
+        try container.encodeIfPresent(supervision, forKey: .supervision)
+    }
+
+    var hasGuardian: Bool {
+        !guardianNames.isEmpty
     }
 }
 
@@ -268,7 +528,42 @@ enum FamilyJoinRequestStatus: String, Codable, Hashable {
     }
 }
 
-struct FamilyJoinRequest: Identifiable, Codable, Hashable {
+enum JoinRequesterAge: Hashable {
+    case adult
+    case minor(MinorBand)
+    case unknown
+
+    init(status: String?, band: String?) {
+        switch status {
+        case "adult":
+            self = .adult
+        case "minor":
+            self = .minor(MinorBand(wireValue: band) ?? .under12)
+        default:
+            self = .unknown
+        }
+    }
+
+    var tag: String {
+        switch self {
+        case .adult: "Maior de idade"
+        case .minor(let band): band.requesterTag
+        case .unknown: "Idade não informada"
+        }
+    }
+
+    var isAdult: Bool {
+        self == .adult
+    }
+
+    // The band Apple reported caps what a guardian may choose; an unknown requester has no cap and no preselection.
+    var appleBand: MinorBand? {
+        if case .minor(let band) = self { return band }
+        return nil
+    }
+}
+
+struct FamilyJoinRequest: Identifiable, Hashable {
     var id: UUID
     var familyID: UUID
     var familyName: String
@@ -277,6 +572,7 @@ struct FamilyJoinRequest: Identifiable, Codable, Hashable {
     var status: FamilyJoinRequestStatus
     var createdAt: Date
     var reviewedAt: Date?
+    var requesterAge: JoinRequesterAge = .unknown
 }
 
 enum FamilyAccessOutcome: String, Hashable {
@@ -1434,6 +1730,10 @@ struct NinaAIConsent: Decodable, Hashable {
     var isGranted: Bool
     var policyVersion: String?
     var acceptedAt: Date?
+    var transferConsented: Bool
+    var isCurrent: Bool
+    var currentPolicyVersion: String?
+    var lastRevokeReason: String?
 
     static let withheld = NinaAIConsent(isGranted: false, policyVersion: nil, acceptedAt: nil)
 
@@ -1441,12 +1741,28 @@ struct NinaAIConsent: Decodable, Hashable {
         case isGranted = "is_granted"
         case policyVersion = "policy_version"
         case acceptedAt = "accepted_at"
+        case transferConsented = "transfer_consented"
+        case isCurrent = "is_current"
+        case currentPolicyVersion = "current_policy_version"
+        case lastRevokeReason = "last_revoke_reason"
     }
 
-    init(isGranted: Bool, policyVersion: String?, acceptedAt: Date?) {
+    init(
+        isGranted: Bool,
+        policyVersion: String?,
+        acceptedAt: Date?,
+        transferConsented: Bool = false,
+        isCurrent: Bool = false,
+        currentPolicyVersion: String? = nil,
+        lastRevokeReason: String? = nil
+    ) {
         self.isGranted = isGranted
         self.policyVersion = policyVersion
         self.acceptedAt = acceptedAt
+        self.transferConsented = transferConsented
+        self.isCurrent = isCurrent
+        self.currentPolicyVersion = currentPolicyVersion
+        self.lastRevokeReason = lastRevokeReason
     }
 
     init(from decoder: Decoder) throws {
@@ -1454,6 +1770,40 @@ struct NinaAIConsent: Decodable, Hashable {
         isGranted = try container.decodeIfPresent(Bool.self, forKey: .isGranted) ?? false
         policyVersion = try container.decodeIfPresent(String.self, forKey: .policyVersion)
         acceptedAt = try container.decodeIfPresent(Date.self, forKey: .acceptedAt)
+        transferConsented = try container.decodeIfPresent(Bool.self, forKey: .transferConsented) ?? false
+        isCurrent = try container.decodeIfPresent(Bool.self, forKey: .isCurrent) ?? false
+        currentPolicyVersion = try container.decodeIfPresent(String.self, forKey: .currentPolicyVersion)
+        lastRevokeReason = try container.decodeIfPresent(String.self, forKey: .lastRevokeReason)
+    }
+
+    // A grant counts only at this build's policy version and with its separate transfer consent.
+    var countsAsConsent: Bool {
+        isGranted
+            && isCurrent
+            && transferConsented
+            && policyVersion == PrivacyPolicyVersion.current
+    }
+
+    var wasWithdrawnByPolicyChange: Bool {
+        !isGranted && lastRevokeReason == "policy_changed"
+    }
+}
+
+enum NinaReplyReportReason: String, CaseIterable, Identifiable, Hashable {
+    case inappropriate
+    case riskToSomeone = "risk_to_someone"
+    case healthOrMedicine = "health_or_medicine"
+    case other
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .inappropriate: "Conteúdo impróprio"
+        case .riskToSomeone: "Risco para alguém"
+        case .healthOrMedicine: "Saúde ou remédio"
+        case .other: "Outro"
+        }
     }
 }
 
@@ -1462,6 +1812,22 @@ enum NinaLegalLinks {
     static let privacyPolicy = URL(string: "https://ninai.app/privacidade")!
     static let termsOfUse = URL(string: "https://ninai.app/termos")!
     static let support = URL(string: "mailto:oi@ninai.app")!
+    static let families = URL(string: "https://ninai.app/familias/")!
+    static let reportPolicy = URL(string: "https://ninai.app/denuncia/")!
+    static let manageSubscriptions = URL(string: "https://apps.apple.com/account/subscriptions")!
+    static let privacyEmail = "privacidade@ninai.app"
+    static let reportEmail = "privacidade@ninai.app"
+
+    // The report leaves from the person's own mail app, carries no household data, and is never anonymous.
+    static var reportMail: URL {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = reportEmail
+        components.queryItems = [URLQueryItem(name: "subject", value: "Denúncia ECA Digital")]
+        return components.url ?? privacyMail
+    }
+
+    static let privacyMail = URL(string: "mailto:privacidade@ninai.app")!
 }
 
 struct PremiumBenefit: Identifiable, Hashable {
@@ -1523,5 +1889,298 @@ struct PremiumPlan: Hashable {
                 )
             ]
         )
+    }
+}
+
+enum MinorViewerState: String, Hashable {
+    case active
+    case noGuardian = "no_guardian"
+    case noHome = "no_home"
+    case ageRequired = "age_required"
+
+    var isMember: Bool {
+        self != .noHome
+    }
+}
+
+struct MinorSupervisionSettings: Decodable, Hashable {
+    var alertsEnabled: Bool
+    var quietStart: Int
+    var quietEnd: Int
+    var dailyLimitMinutes: Int?
+
+    static let defaults = MinorSupervisionSettings(
+        alertsEnabled: true,
+        quietStart: MinorSupervisionDefaults.quietStart,
+        quietEnd: MinorSupervisionDefaults.quietEnd,
+        dailyLimitMinutes: MinorSupervisionDefaults.dailyLimitMinutes
+    )
+
+    private enum CodingKeys: String, CodingKey {
+        case alertsEnabled = "alerts_enabled"
+        case quietStart = "quiet_start"
+        case quietEnd = "quiet_end"
+        case dailyLimitMinutes = "daily_limit_minutes"
+    }
+
+    init(alertsEnabled: Bool, quietStart: Int, quietEnd: Int, dailyLimitMinutes: Int?) {
+        self.alertsEnabled = alertsEnabled
+        self.quietStart = quietStart
+        self.quietEnd = quietEnd
+        self.dailyLimitMinutes = dailyLimitMinutes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        alertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .alertsEnabled) ?? true
+        quietStart = try container.decodeIfPresent(Int.self, forKey: .quietStart)
+            ?? MinorSupervisionDefaults.quietStart
+        quietEnd = try container.decodeIfPresent(Int.self, forKey: .quietEnd)
+            ?? MinorSupervisionDefaults.quietEnd
+        dailyLimitMinutes = try container.decodeIfPresent(Int.self, forKey: .dailyLimitMinutes)
+    }
+}
+
+struct MinorViewer: Decodable, Hashable {
+    var memberID: UUID?
+    var firstName: String
+    var guardianNames: [String]
+    var state: MinorViewerState
+    var supervision: MinorSupervisionSettings
+    var usageTodayMinutes: Int
+    var needsAcknowledgement: Bool
+    var acknowledgementKind: MinorAcknowledgementKind?
+
+    private enum CodingKeys: String, CodingKey {
+        case memberID = "member_id"
+        case firstName = "first_name"
+        case guardianNames = "guardian_names"
+        case state
+        case supervision
+        case usageTodayMinutes = "usage_today_minutes"
+        case needsAcknowledgement = "needs_acknowledgement"
+        case acknowledgementKind = "acknowledgement_kind"
+    }
+
+    init(
+        memberID: UUID?,
+        firstName: String,
+        guardianNames: [String],
+        state: MinorViewerState,
+        supervision: MinorSupervisionSettings = .defaults,
+        usageTodayMinutes: Int = 0,
+        needsAcknowledgement: Bool = false,
+        acknowledgementKind: MinorAcknowledgementKind? = nil
+    ) {
+        self.memberID = memberID
+        self.firstName = firstName
+        self.guardianNames = guardianNames
+        self.state = state
+        self.supervision = supervision
+        self.usageTodayMinutes = usageTodayMinutes
+        self.needsAcknowledgement = needsAcknowledgement
+        self.acknowledgementKind = acknowledgementKind
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        memberID = try container.decodeIfPresent(UUID.self, forKey: .memberID)
+        firstName = try container.decodeIfPresent(String.self, forKey: .firstName) ?? ""
+        guardianNames = try container.decodeIfPresent([String].self, forKey: .guardianNames) ?? []
+        state = MinorViewerState(
+            rawValue: try container.decodeIfPresent(String.self, forKey: .state) ?? ""
+        ) ?? .noHome
+        supervision = try container.decodeIfPresent(MinorSupervisionSettings.self, forKey: .supervision)
+            ?? .defaults
+        usageTodayMinutes = try container.decodeIfPresent(Int.self, forKey: .usageTodayMinutes) ?? 0
+        needsAcknowledgement = try container.decodeIfPresent(Bool.self, forKey: .needsAcknowledgement) ?? false
+        acknowledgementKind = MinorAcknowledgementKind(
+            rawValue: try container.decodeIfPresent(String.self, forKey: .acknowledgementKind) ?? ""
+        )
+    }
+
+    var guardianName: String? {
+        guardianNames.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    var guardianList: String {
+        ListFormatter.localizedString(byJoining: guardianNames)
+    }
+}
+
+struct MinorFamily: Decodable, Hashable {
+    var id: UUID
+    var name: String
+}
+
+// A minor's task carries no detail line, no owner label and nobody else's work.
+struct MinorTask: Decodable, Identifiable, Hashable {
+    var id: UUID
+    var kind: TaskKind
+    var title: String
+    var dueAt: Date?
+    var dueLabel: String
+    var categoryID: String
+    var recurrence: TaskRecurrence
+    var remindOffsetMinutes: Int?
+    var isDone: Bool
+    var completedAt: Date?
+    var version: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case kind = "task_kind"
+        case title
+        case dueAt = "due_at"
+        case dueLabel = "due_label"
+        case categoryID = "category_id"
+        case recurrence = "recurrence_rule"
+        case remindOffsetMinutes = "remind_offset_minutes"
+        case isDone = "is_done"
+        case completedAt = "completed_at"
+        case version
+    }
+
+    init(
+        id: UUID = UUID(),
+        kind: TaskKind = .task,
+        title: String,
+        dueAt: Date?,
+        dueLabel: String = "Sem data",
+        categoryID: String = TaskCategory.home.id,
+        recurrence: TaskRecurrence = .none,
+        remindOffsetMinutes: Int? = nil,
+        isDone: Bool = false,
+        completedAt: Date? = nil,
+        version: Int = 1
+    ) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.dueAt = dueAt
+        self.dueLabel = dueLabel
+        self.categoryID = categoryID
+        self.recurrence = recurrence
+        self.remindOffsetMinutes = remindOffsetMinutes
+        self.isDone = isDone
+        self.completedAt = completedAt
+        self.version = version
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        kind = TaskKind(rawValue: try container.decodeIfPresent(String.self, forKey: .kind) ?? "") ?? .task
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        dueAt = try container.decodeIfPresent(Date.self, forKey: .dueAt)
+        dueLabel = try container.decodeIfPresent(String.self, forKey: .dueLabel) ?? "Sem data"
+        categoryID = try container.decodeIfPresent(String.self, forKey: .categoryID) ?? TaskCategory.home.id
+        recurrence = TaskRecurrence(
+            rawValue: try container.decodeIfPresent(String.self, forKey: .recurrence) ?? ""
+        ) ?? .none
+        remindOffsetMinutes = try container.decodeIfPresent(Int.self, forKey: .remindOffsetMinutes)
+        isDone = try container.decodeIfPresent(Bool.self, forKey: .isDone) ?? false
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+    }
+
+    var category: TaskCategory {
+        TaskCategory.allCases.first { $0.id == categoryID } ?? .home
+    }
+
+    func taskItem(ownerMemberID: UUID?, ownerName: String) -> TaskItem {
+        TaskItem(
+            id: id,
+            kind: kind,
+            title: title,
+            subtitle: "",
+            owner: ownerName,
+            ownerMemberID: ownerMemberID,
+            dueLabel: dueLabel,
+            dueAt: dueAt,
+            category: category,
+            recurrence: recurrence,
+            reminderLead: TaskReminderLead(minutes: remindOffsetMinutes ?? 0),
+            isDone: isDone,
+            completedAt: completedAt,
+            createdBy: "",
+            version: version
+        )
+    }
+}
+
+struct MinorHome: Decodable, Hashable {
+    var viewer: MinorViewer
+    var family: MinorFamily?
+    var tasks: [MinorTask]
+    var serverTime: Date?
+
+    private enum CodingKeys: String, CodingKey {
+        case viewer
+        case family
+        case tasks
+        case serverTime = "server_time"
+    }
+
+    init(viewer: MinorViewer, family: MinorFamily?, tasks: [MinorTask], serverTime: Date? = nil) {
+        self.viewer = viewer
+        self.family = family
+        self.tasks = tasks
+        self.serverTime = serverTime
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        viewer = try container.decodeIfPresent(MinorViewer.self, forKey: .viewer)
+            ?? MinorViewer(memberID: nil, firstName: "", guardianNames: [], state: .noHome)
+        family = try container.decodeIfPresent(MinorFamily.self, forKey: .family)
+        tasks = try container.decodeIfPresent([MinorTask].self, forKey: .tasks) ?? []
+        serverTime = try container.decodeIfPresent(Date.self, forKey: .serverTime)
+    }
+
+    var ownerName: String {
+        viewer.firstName.isEmpty ? "Você" : viewer.firstName
+    }
+
+    var taskItems: [TaskItem] {
+        tasks.map { $0.taskItem(ownerMemberID: viewer.memberID, ownerName: ownerName) }
+    }
+
+    var ownerMember: HouseholdMember {
+        HouseholdMember(
+            id: viewer.memberID ?? UUID(),
+            name: ownerName,
+            relationship: "",
+            role: .child,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+    }
+
+    var isOverDailyLimit: Bool {
+        guard let limit = viewer.supervision.dailyLimitMinutes else { return false }
+        return viewer.usageTodayMinutes >= limit
+    }
+}
+
+struct MinorUsageResult: Decodable, Hashable {
+    var usageTodayMinutes: Int
+    var dailyLimitMinutes: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case usageTodayMinutes = "usage_today_minutes"
+        case dailyLimitMinutes = "daily_limit_minutes"
+    }
+
+    init(usageTodayMinutes: Int, dailyLimitMinutes: Int?) {
+        self.usageTodayMinutes = usageTodayMinutes
+        self.dailyLimitMinutes = dailyLimitMinutes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        usageTodayMinutes = try container.decodeIfPresent(Int.self, forKey: .usageTodayMinutes) ?? 0
+        dailyLimitMinutes = try container.decodeIfPresent(Int.self, forKey: .dailyLimitMinutes)
     }
 }

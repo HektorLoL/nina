@@ -11,6 +11,105 @@ final class RemoteDecodingTests: XCTestCase {
     ]
     """
 
+    func testAnUnknownOrMissingHouseholdRoleNeverReadsAsAnAdult() throws {
+        let familyID = UUID()
+        let json = """
+        {
+          "viewer_kind": "adult",
+          "viewer_age": {"status": "adult", "assurance": "confirmed", "trusted_adult": true, "may_use_ai": true},
+          "family": {"id": "\(familyID.uuidString)", "name": "Casa", "created_by": "\(UUID().uuidString)"},
+          "members": [
+            {"id": "\(UUID().uuidString)", "family_id": "\(familyID.uuidString)", "user_id": "\(UUID().uuidString)",
+             "name": "Sem papel", "created_at": "2026-09-01T12:00:00Z"},
+            {"id": "\(UUID().uuidString)", "family_id": "\(familyID.uuidString)", "name": "Papel novo",
+             "household_role": "superhero", "created_at": "2026-09-02T12:00:00Z"},
+            {"id": "\(UUID().uuidString)", "family_id": "\(familyID.uuidString)", "name": "Adolescente",
+             "household_role": "teen", "birth_date": "2012-01-01", "created_at": "2026-09-03T12:00:00Z",
+             "access": {"is_minor": true, "is_claimed": false, "guardian_names": ["Ana"], "is_viewer_guardian": false,
+                        "has_profile_consent": true, "supervision": {"band": "12_15"}}}
+          ],
+          "permission_role": "owner",
+          "membership_verified": true,
+          "pending_join_requests": [
+            {"id": "\(UUID().uuidString)", "family_id": "\(familyID.uuidString)", "family_name": "Casa",
+             "requester_user_id": "\(UUID().uuidString)", "requester_name": "Bia", "status": "pending",
+             "created_at": "2026-09-04T12:00:00Z", "requester_age": "minor", "requester_band": "12_15"},
+            {"id": "\(UUID().uuidString)", "family_id": "\(familyID.uuidString)", "family_name": "Casa",
+             "requester_user_id": "\(UUID().uuidString)", "requester_name": "Ciro", "status": "pending",
+             "created_at": "2026-09-05T12:00:00Z"}
+          ]
+        }
+        """
+
+        let context = try RemoteHomeContextDecoding.context(from: Data(json.utf8))
+        let members = try XCTUnwrap(context.state?.familyGroup.members)
+
+        XCTAssertEqual(members.map(\.role), [.unrecognized, .unrecognized, .teen])
+        XCTAssertFalse(members.contains { $0.role == .adult })
+        XCTAssertNil(members[2].birthDate)
+        XCTAssertNil(members[2].minorAccess?.supervision)
+        XCTAssertEqual(
+            context.state?.joinRequests.map(\.requesterAge),
+            [.minor(.twelveToFifteen), .unknown]
+        )
+
+        let cachedWithoutRole = try JSONDecoder().decode(
+            HouseholdMember.self,
+            from: Data(#"{"name":"Antigo"}"#.utf8)
+        )
+        XCTAssertEqual(cachedWithoutRole.role, .unrecognized)
+        XCTAssertEqual(HouseholdRole(wireValue: nil), .unrecognized)
+        XCTAssertEqual(HouseholdRole(wireValue: "unrecognized"), .unrecognized)
+        XCTAssertEqual(HouseholdRole(wireValue: "adult"), .adult)
+    }
+
+    func testTheMinorShapeAndAMissingViewerKindCarryNoHouse() throws {
+        let familyID = UUID()
+        let adultShapeWithoutKind = """
+        {"family": {"id": "\(familyID.uuidString)", "name": "Casa", "created_by": "\(UUID().uuidString)"},
+         "members": [], "permission_role": "owner", "membership_verified": true}
+        """
+        let minorShape = """
+        {"viewer_kind": "minor", "viewer_age": {"status": "minor", "band": "16_17", "trusted_adult": true,
+         "may_use_ai": true, "may_buy_premium": true}, "family": null, "members": [], "membership_verified": false}
+        """
+
+        let withoutKind = try RemoteHomeContextDecoding.context(from: Data(adultShapeWithoutKind.utf8))
+        let minor = try RemoteHomeContextDecoding.context(from: Data(minorShape.utf8))
+
+        XCTAssertNil(withoutKind.state)
+        XCTAssertTrue(withoutKind.isMinorView)
+        XCTAssertEqual(withoutKind.viewerAge.status, .unknown)
+        XCTAssertNil(minor.state)
+        XCTAssertEqual(minor.viewerAge.band, .sixteenToSeventeen)
+        XCTAssertFalse(minor.viewerAge.trustedAdult)
+        XCTAssertFalse(minor.viewerAge.mayUseAI)
+        XCTAssertFalse(minor.viewerAge.mayBuyPremium)
+    }
+
+    func testAMinorsHomeViewCarriesNoDetailLineAndDecodesWithDefaults() throws {
+        let json = """
+        {"viewer": {"member_id": "\(UUID().uuidString)", "first_name": "Bia", "guardian_names": ["Ana"],
+                    "state": "active", "usage_today_minutes": 12, "needs_acknowledgement": true,
+                    "acknowledgement_kind": "aceitar"},
+         "family": {"id": "\(UUID().uuidString)", "name": "Casa"},
+         "tasks": [{"id": "\(UUID().uuidString)", "task_kind": "task", "title": "Lavar a louça",
+                    "subtitle": "Não pode chegar", "due_at": "2026-09-29T21:00:00.123456+00:00",
+                    "recurrence_rule": "daily", "version": 4}],
+         "server_time": "2026-09-29T12:00:00Z"}
+        """
+
+        let home = try NinaDateCoding.decoder().decode(MinorHome.self, from: Data(json.utf8))
+
+        XCTAssertEqual(home.viewer.state, .active)
+        XCTAssertEqual(home.viewer.acknowledgementKind, .aceitar)
+        XCTAssertEqual(home.viewer.supervision, .defaults)
+        XCTAssertEqual(home.taskItems.first?.subtitle, "")
+        XCTAssertEqual(home.taskItems.first?.recurrence, .daily)
+        XCTAssertEqual(home.taskItems.first?.version, 4)
+        XCTAssertNotNil(home.taskItems.first?.dueAt)
+    }
+
     func testServerAttachmentMetadataDecodesWithoutAnIdentifierOrCamelCaseKeys() throws {
         let attachments = try JSONDecoder().decode(
             [ChatAttachment].self,
