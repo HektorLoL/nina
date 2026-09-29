@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(70);
+select plan(74);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -297,17 +297,31 @@ select is(
       on schemas.oid = routines.pronamespace
     where schemas.nspname = 'public'
       and routines.proname in (
-        'is_family_member',
         'is_adult_family_member',
         'current_user_is_adult',
-        'can_manage_family',
-        'is_family_creator',
         'shares_family_with'
       )
       and has_function_privilege('authenticated', routines.oid, 'execute')
   ),
-  6,
-  'signed-in clients keep execute on the membership predicates every content policy evaluates'
+  3,
+  'signed-in clients keep execute on the predicates a policy evaluates as the signed-in role'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from pg_catalog.pg_proc as routines
+    cross join (values ('anon'), ('authenticated'), ('service_role')) as api_roles (role_name)
+    where routines.pronamespace = 'public'::regnamespace
+      and routines.proname in (
+        'can_manage_family',
+        'is_family_creator',
+        'is_family_member'
+      )
+      and has_function_privilege(api_roles.role_name, routines.oid, 'execute')
+  ),
+  0,
+  'no API role executes a predicate that answers about the user it is handed'
 );
 
 -- supabase/roles.sql replays production's original default privileges before
@@ -337,7 +351,6 @@ select set_eq(
     'add_unclaimed_family_member(uuid, text, text, text, text, text, date, text, text)',
     'approve_family_join_request(uuid, text, text, text, boolean, text, boolean, text[])',
     'begin_nina_chat_run(uuid, uuid, text, jsonb, text, bigint, date)',
-    'can_manage_family(uuid, uuid)',
     'cancel_family_join_request(uuid)',
     'change_minor_band(uuid, text, text)',
     'create_family(text)',
@@ -361,8 +374,6 @@ select set_eq(
     'get_nina_chat_result(uuid)',
     'get_pending_family_join_request()',
     'is_adult_family_member(uuid)',
-    'is_family_creator(uuid, uuid)',
-    'is_family_member(uuid, uuid)',
     'join_family_by_invite(text)',
     'record_minor_usage(date, integer)',
     'record_nina_ai_consent(text, boolean, boolean)',
@@ -531,6 +542,11 @@ set local request.jwt.claim.sub = '20000000-0000-0000-0000-000000000001';
 select is((select count(*)::integer from public.families), 1, 'owner sees only their family');
 select is((select count(*)::integer from public.family_members), 2, 'owner sees only their family memberships');
 select is((select count(*)::integer from public.profiles), 2, 'owner sees only profiles in their family');
+
+select ok(
+  public.shares_family_with('20000000-0000-0000-0000-000000000002'),
+  'the profiles policy still learns who shares a house with the caller'
+);
 select is((select count(*)::integer from public.task_sections), 1, 'task sections are family scoped');
 select is((select count(*)::integer from public.task_categories), 1, 'task categories are family scoped');
 select is((select count(*)::integer from public.tasks), 1, 'tasks are family scoped');
@@ -846,6 +862,21 @@ select is(
   (select count(*)::integer from public.premium_subscriptions),
   0,
   'outsider cannot read another household premium subscription'
+);
+
+select ok(
+  not public.shares_family_with(
+    '20000000-0000-0000-0000-000000000002',
+    '20000000-0000-0000-0000-000000000001'
+  ),
+  'shares_family_with never links two people other than the caller'
+);
+
+select throws_ok(
+  $$select public.is_family_member('30000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001')$$,
+  '42501',
+  'permission denied for function is_family_member',
+  'an outsider cannot ask whether somebody belongs to a house'
 );
 
 reset role;

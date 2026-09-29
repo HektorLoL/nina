@@ -108,7 +108,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 26.4+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (48 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (49 files) |
 | Server logic | 6 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -212,9 +212,17 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   needs `confirmed` (pgTAP "an adult who once declined may self-declare
   again…"). Nina never stores a birth date, the range bounds or a history
   of ranges. The band never enters member lists, model context, logs, the
-  insight or anyone else's export, and **no function granted to
-  `authenticated` takes a user id**: `get_my_age_status()` answers about the
-  caller only, and must never gain a parameter or it becomes an age oracle.
+  insight or anyone else's export, and **no function a client may execute
+  answers about a user other than the caller**: `get_my_age_status()` answers
+  about the caller only, and must never gain a parameter or it becomes an age
+  oracle. `can_manage_family` reads age status and takes a user id, so since
+  migration `202609290009` no API role executes it, nor `is_family_member` or
+  `is_family_creator`, whose subject is also an argument; SECURITY DEFINER RPCs
+  call all three as their owner. `shares_family_with`, which the profiles
+  policy evaluates as the signed-in role, keeps its grant and answers only when
+  its subject is the caller (pgTAP "no API role executes a predicate that
+  answers about the user it is handed", "shares_family_with never links two
+  people other than the caller").
 - **Unknown is the most protective state, on both sides.** An account with no
   age row is treated as the youngest band (Decreto 12.880 art. 25 §4): it
   cannot create a house and can only enter as a minor a guardian approves
@@ -810,13 +818,14 @@ is longer than a word budget, the legal text wins.
 
 ## 6. Database
 
-48 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+49 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order. The eight
 `202609290001`–`…0008` files (age assurance, minors and guardianship, adult-only
 RLS, join and house rules, the minor home view, the AI gates, the insight and
 tools without minors, reports/holds/export/retention) are one unit: they are
 applied together, in order, before the build that reads them ships
-(`docs/production-launch-runbook.md` §3).
+(`docs/production-launch-runbook.md` §3). `202609290009` (the membership
+predicates leave the API) is not part of that unit and needs no new build.
 
 **House style for every new object:**
 
@@ -849,6 +858,16 @@ Other conventions:
   match on these.
 - **Public responses are non-enumerating.** `get_family_invite_preview` returns
   `{valid:false}` for every failure mode.
+- **A predicate whose subject is an argument is granted to no API role.**
+  SECURITY DEFINER code calls it as its owner. A policy that must evaluate one
+  as the signed-in role gets a caller-only guard instead
+  (`auth.uid() is null or target_user_id = auth.uid()`, as in
+  `shares_family_with`). New household policies use `is_adult_family_member`;
+  `authenticated` cannot execute `is_family_member`, so a policy that names it
+  denies every signed-in read with `permission denied for function`. The
+  `families` update and delete policies still name `can_manage_family`; they
+  were already unreachable, because `authenticated` holds no update or delete
+  on that table.
 - **Lock order is global: family advisory lock first**
   (`pg_advisory_xact_lock(hashtextextended(family_id::text, 0))`), then row
   `FOR UPDATE`, then re-verify `family_id` still matches.
@@ -1627,6 +1646,20 @@ the project, not bugs to fix unprompted.
   16–17 and a 13–15 Family Sharing child, an under-13, Sign in with Apple with no
   scopes, a decline and a later share, a guardian approval and a guardian
   deletion end to end.
+- **Migration `202609290009` is committed, not applied to production
+  (2026-09-29).** It revokes `can_manage_family`, `is_family_member` and
+  `is_family_creator` from every API role and makes `shares_family_with`
+  answer only about the caller. Production already refuses the age question:
+  its `can_manage_family` answers only about the caller since `…0004` (read
+  from the catalog on 2026-09-29). What production still exposes is
+  membership: any signed-in account that knows a house id and a user id can
+  ask whether that person is in the house or created it, and
+  `shares_family_with` tells whether any two user ids share a house. The app
+  and the Edge Functions call none of the four directly, and every server
+  caller is SECURITY DEFINER owned by `postgres`, so the revoke changes no app
+  behaviour. Heitor decides when; apply it from a clean `git archive` export
+  (§12), then check that `rls_policies.test.sql`'s grant map matches the
+  production catalog.
 - **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
   `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
   compares them) and Terms §4 reads the same constant. Apple's questionnaire

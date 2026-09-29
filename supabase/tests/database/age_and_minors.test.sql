@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(177);
+select plan(179);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -990,6 +990,15 @@ select ok(
 set local role authenticated;
 set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000008';
 
+select throws_ok(
+  $$select public.can_manage_family(current_setting('test.family')::uuid, 'a1000000-0000-4000-8000-000000000001')$$,
+  '42501',
+  'permission denied for function can_manage_family',
+  'no signed-in client may call can_manage_family, so no member can ask it who is an adult'
+);
+
+reset role;
+
 select ok(
   not public.can_manage_family(current_setting('test.family')::uuid)
     and not public.current_user_is_adult(),
@@ -1000,6 +1009,15 @@ select ok(
   not public.can_manage_family(current_setting('test.family')::uuid, 'a1000000-0000-4000-8000-000000000001'),
   'can_manage_family never answers about anyone but the caller'
 );
+
+set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000001';
+
+select ok(
+  public.can_manage_family(current_setting('test.family')::uuid),
+  'the owner still manages the house when a SECURITY DEFINER call asks about her'
+);
+
+set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000008';
 
 reset role;
 set local role service_role;
