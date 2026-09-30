@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-09-29
+Last updated: 2026-09-30
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -1646,20 +1646,20 @@ the project, not bugs to fix unprompted.
   16–17 and a 13–15 Family Sharing child, an under-13, Sign in with Apple with no
   scopes, a decline and a later share, a guardian approval and a guardian
   deletion end to end.
-- **Migration `202609290009` is committed, not applied to production
-  (2026-09-29).** It revokes `can_manage_family`, `is_family_member` and
-  `is_family_creator` from every API role and makes `shares_family_with`
-  answer only about the caller. Production already refuses the age question:
-  its `can_manage_family` answers only about the caller since `…0004` (read
-  from the catalog on 2026-09-29). What production still exposes is
-  membership: any signed-in account that knows a house id and a user id can
-  ask whether that person is in the house or created it, and
-  `shares_family_with` tells whether any two user ids share a house. The app
-  and the Edge Functions call none of the four directly, and every server
-  caller is SECURITY DEFINER owned by `postgres`, so the revoke changes no app
-  behaviour. Heitor decides when; apply it from a clean `git archive` export
-  (§12), then check that `rls_policies.test.sql`'s grant map matches the
-  production catalog.
+- **Migration `202609290009` is applied to production (2026-09-30).** It
+  revokes `can_manage_family`, `is_family_member` and `is_family_creator` from
+  every API role and makes `shares_family_with` answer only about the caller.
+  Production had refused the age question since `…0004`; what `…0009` closed
+  was membership: a signed-in account that knew a house id and a user id could
+  ask whether that person was in the house or created it, and whether any two
+  user ids shared a house. It went through the Supabase MCP `apply_migration`
+  with the file's body, and its `schema_migrations` row was set to
+  `202609290009` (§12). The same day the catalog was read back: no API role
+  executes the three predicates, the 13 SECURITY DEFINER callers are owned by
+  `postgres` and still execute them, a signed-in read of `profiles` and
+  `families` evaluates its policies without a permission error, and both
+  function grant maps in `rls_policies.test.sql` (47 `authenticated`, 27
+  `service_role`) equal production's.
 - **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
   `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
   compares them) and Terms §4 reads the same constant. Apple's questionnaire
