@@ -1753,28 +1753,33 @@ the project, not bugs to fix unprompted.
   opening the management screen (screenshot in `docs/premium-flow.md`). Sandbox
   subscriptions expire in minutes, so "Restaurar compras" hours later finds no
   usable receipt on the device and sends nothing — sandbox, not a bug.
-- **Legal identity is a person's, published 2026-09-26.** Heitor chose to act
-  as controller and DPO under his own name and CPF rather than wait for a CNPJ.
-  The five values (`PUBLIC_NINA_LEGAL_ENTITY_NAME`, `…_DOCUMENT`,
+- **Legal identity is a company's since 2026-09-30 (D2).** From 2026-09-26
+  Heitor was controller and DPO under his own name and CPF; on 2026-09-30 an
+  Empresa Simples de Inovação (Inova Simples, natureza jurídica 234-8, Heitor
+  its only titular) became the controller, with an encarregado who is not a
+  partner or administrator. An Inova Simples company has no legal personality
+  of its own, so Heitor still answers for it personally. The values
+  (`PUBLIC_NINA_LEGAL_ENTITY_NAME`, `…_DOCUMENT`, `…_ADDRESS`,
   `PUBLIC_NINA_DPO_NAME`, `PUBLIC_NINA_PRIVACY_CONTACT_EMAIL`,
-  `PUBLIC_NINA_DPO_CONTACT_EMAIL`) live only in the Cloudflare Workers Builds
-  build variables and the untracked `config/production.env` — **never in the
-  repo, which is public on GitHub.** `legal.ts` freezes them at build time, so a
-  site built anywhere without those variables (a local `wrangler deploy`, a new
-  Cloudflare project) publishes `data-legal-status="incomplete"` again and the
-  online preflight's `deployment.privacy` turns red. Moving to a company later
-  means swapping the CPF for a CNPJ in both places. Heitor approves the
-  child/sensitive-data wording, each Law-text-gated line cites its article in
+  `PUBLIC_NINA_DPO_CONTACT_EMAIL`, `PUBLIC_NINA_REPORT_CONTACT_EMAIL`, and
+  `NINA_CONTROLLER_DECISION_MAKERS` for the preflight) live only in the
+  Cloudflare Workers Builds build variables and the untracked
+  `config/production.env` — **never in the repo, which is public on GitHub.**
+  `legal.ts` freezes them at build time, so a site built anywhere without those
+  variables (a local `wrangler deploy`, a new Cloudflare project) publishes
+  `data-legal-status="incomplete"` again and the online preflight's
+  `deployment.privacy` turns red. `data-legal-launch` reads `ready` only for a
+  14-digit CNPJ, an address and a DPO whose name differs from the controller's
+  and from every listed decision maker, and `deployment.legal-launch-identity`
+  checks the same from the inventory. `privacidade@ninai.app` is a Cloudflare
+  Email Routing rule to the encarregado's own mailbox, which forwards a copy to
+  Heitor: a rule takes exactly one destination and one action, so a second
+  inbox needs forwarding at the mailbox or an Email Worker. The new company
+  starts outside the Simples Nacional; the option must be requested within 60
+  days of opening. Heitor approves the child/sensitive-data wording, each
+  Law-text-gated line cites its article in
   `docs/privacy/avaliacao-impacto-criancas.md` §9, and Brazilian counsel reviews
   it only if engaged (`docs/production-launch-runbook.md` §7).
-  **D2 (2026-09-29): a company and a separate encarregado before launch.** The
-  site already takes them: `PUBLIC_NINA_LEGAL_ENTITY_ADDRESS` and
-  `PUBLIC_NINA_REPORT_CONTACT_EMAIL` are new, §1 of the privacy page labels the
-  document CPF or CNPJ by its digits, and `data-legal-launch` reads `ready` only
-  for a 14-digit CNPJ, an address and a DPO whose name differs from the
-  controller's, while `data-legal-status` stays `complete` with today's values.
-  The production preflight's `deployment.legal-launch-identity` fails until
-  then — expected on a TestFlight gate, a blocker for submission.
 - **The App Store Connect record exists since 2026-09-03**: Apple ID
   `6808423946`, listed as "Nina: sua amiga da casa" because the bare name was
   taken. The number is public (it is the `apps.apple.com/br/app/id…` path) and
