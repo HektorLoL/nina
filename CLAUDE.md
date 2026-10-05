@@ -1169,10 +1169,10 @@ CI's `npm audit --audit-level=high`. Every deviation from the Paper boards is in
   `<style>` block, and including a `style="…"` attribute. `style-src 'self'` has
   no `'unsafe-inline'`, so all three are blocked at runtime and `astro check`
   catches none of them.
-- **`.reveal` starts at `opacity: 0` and only JavaScript clears it**, so the page
-  renders blank without it. `web/public/styles/noscript.css` is linked from a
-  `<noscript>` in `BaseLayout` to restore it — a linked file rather than an
-  inline rule for the reason above.
+- **The landing renders whole without JavaScript.** The old `.reveal` gate
+  (content at `opacity: 0` until a script cleared it) and its `noscript.css`
+  are gone; `home.js` only adds behaviour to a page that is already the
+  finished frame. The waitlist buttons still need the script.
   CSP is specified in two places that must stay in sync: `web/public/_headers`
   (static assets) and `securityHeaders` in `web/src/worker.ts` (dynamic).
 - Client behavior is bound by `data-*` attribute contracts
@@ -1889,10 +1889,10 @@ the project, not bugs to fix unprompted.
   digest is behind `private.family_has_premium` in `get_nina_weekly_candidates`,
   and the chat quota splits 30/hour for a covered household versus 10/day
   otherwise. Two undeliverable benefits were deleted rather than left on the
-  sheet. What is still missing is client-side: a denial becomes a plain Nina chat
-  line (`AppStore.swift` maps `NinaEngineError` to `reply`) with no button to
-  `SheetDestination.premium`, and only the attachment gate has a pre-emptive
-  affordance (the gold "Documentos" chip). Since 2026-09-06 the paywall shows a
+  sheet. A denial is routed, not just told: `NinaChatView.premiumCeiling` turns a
+  quota refusal into the composer notice "No Premium, 30 mensagens por hora."
+  with "Ver o Premium", which opens `SheetDestination.premium` for an account
+  that may buy. Since 2026-09-06 the paywall shows a
   moss activation state ("Premium ativo na casa", one cobalt "Pronto") the moment
   the house is covered, reloads the home context after a recorded purchase or
   restore — `householdPremium` comes from the server, so without that reload a
