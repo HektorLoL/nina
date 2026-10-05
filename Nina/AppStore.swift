@@ -2780,6 +2780,36 @@ final class AppStore {
         submitTaskUpdate(proposedTask, basedOn: currentTask)
     }
 
+    // Several tasks change exactly as each would alone, and a bulk change offers no undo it could not keep.
+    func completeTasks(_ ids: Set<TaskItem.ID>) {
+        for task in tasks where ids.contains(task.id) && !task.isDone && task.kind == .task {
+            toggleTask(task)
+        }
+        clearUndo()
+    }
+
+    func reassignTasks(_ ids: Set<TaskItem.ID>, to member: HouseholdMember?) {
+        for task in tasks where ids.contains(task.id) {
+            updateTask(
+                id: task.id,
+                title: task.title,
+                subtitle: task.subtitle,
+                owner: member?.name ?? HouseholdWorkload.sharedOwnerLabel,
+                ownerMemberID: member?.id,
+                dueLabel: task.dueLabel,
+                dueAt: task.dueAt,
+                category: task.category,
+                priority: task.priority
+            )
+        }
+    }
+
+    func deleteTasks(_ ids: Set<TaskItem.ID>) {
+        for id in ids {
+            deleteTask(id)
+        }
+    }
+
     func deleteTask(_ id: TaskItem.ID) {
         guard tasks.contains(where: { $0.id == id }) else { return }
         tasks.removeAll { $0.id == id }

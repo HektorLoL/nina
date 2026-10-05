@@ -397,6 +397,72 @@ final class TaskAgendaTests: XCTestCase {
         }
     }
 
+    func testFinishingSeveralTasksClosesEachAsOneTapWouldAndLeavesNoUndo() throws {
+        try withIsolatedStore { store in
+            let bill = task(dueAt: now.addingTimeInterval(60 * 60))
+            let errand = task(dueAt: nil)
+            var daily = task(dueAt: now.addingTimeInterval(2 * 60 * 60))
+            daily.recurrence = .daily
+            var seed = task(dueAt: nil)
+            seed.kind = .seed
+            let untouched = task(dueAt: nil)
+            store.tasks = [bill, errand, daily, seed, untouched]
+
+            store.completeTasks([bill.id, errand.id, daily.id, seed.id])
+
+            let byID = Dictionary(uniqueKeysWithValues: store.tasks.map { ($0.id, $0) })
+            XCTAssertEqual(byID[bill.id]?.isDone, true)
+            XCTAssertEqual(byID[errand.id]?.isDone, true)
+            XCTAssertEqual(byID[daily.id]?.isDone, false)
+            XCTAssertNotEqual(byID[daily.id]?.dueAt, daily.dueAt, "A repeating task moves to its next turn.")
+            XCTAssertEqual(byID[seed.id]?.isDone, false, "A semente is planted, never ticked.")
+            XCTAssertEqual(byID[untouched.id]?.isDone, false)
+            XCTAssertNil(store.undoableCompletionID)
+        }
+    }
+
+    func testHandingSeveralTasksOverMovesOnlyThoseAndSemDonoClearsTheOwner() throws {
+        try withIsolatedStore { store in
+            let member = HouseholdMember(
+                name: "Ana Souza",
+                relationship: "Esposa",
+                role: .adult,
+                tone: .mint,
+                taskCount: 0,
+                memoryNote: ""
+            )
+            let first = task(dueAt: nil)
+            let second = task(dueAt: nil)
+            let other = task(dueAt: nil)
+            store.tasks = [first, second, other]
+
+            store.reassignTasks([first.id, second.id], to: member)
+
+            XCTAssertEqual(store.tasks.filter { $0.ownerMemberID == member.id }.map(\.id).sorted(by: { $0.uuidString < $1.uuidString }),
+                           [first.id, second.id].sorted(by: { $0.uuidString < $1.uuidString }))
+            XCTAssertEqual(store.tasks.first { $0.id == first.id }?.owner, "Ana Souza")
+            XCTAssertNil(store.tasks.first { $0.id == other.id }?.ownerMemberID)
+
+            store.reassignTasks([first.id], to: nil)
+
+            XCTAssertEqual(store.tasks.first { $0.id == first.id }?.owner, "Casa")
+            XCTAssertNil(store.tasks.first { $0.id == first.id }?.ownerMemberID)
+        }
+    }
+
+    func testDeletingSeveralTasksRemovesOnlyThose() throws {
+        try withIsolatedStore { store in
+            let first = task(dueAt: nil)
+            let second = task(dueAt: nil)
+            let kept = task(dueAt: nil)
+            store.tasks = [first, second, kept]
+
+            store.deleteTasks([first.id, second.id])
+
+            XCTAssertEqual(store.tasks.map(\.id), [kept.id])
+        }
+    }
+
     func testAnUndoNeverMovesARepeatingTaskThatChangedSinceItWasFinished() throws {
         try withIsolatedStore { store in
             var daily = task(dueAt: now.addingTimeInterval(2 * 60 * 60))

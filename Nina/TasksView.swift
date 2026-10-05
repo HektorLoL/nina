@@ -33,6 +33,9 @@ struct TasksView: View {
     @State private var collapsed: Set<String> = []
     @State private var isShowingCompleted = false
     @State private var isConfirmingShoppingClear = false
+    @State private var isSelecting = false
+    @State private var selection: Set<TaskItem.ID> = []
+    @State private var isConfirmingBulkDelete = false
     @FocusState private var isSearchFocused: Bool
 
     private var openTasks: [TaskItem] {
@@ -74,32 +77,72 @@ struct TasksView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         header
-                        filters
+                        if !isSelecting {
+                            filters
+                        }
                         content
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 4)
-                    .padding(.bottom, 104)
+                    .padding(.bottom, isSelecting ? 176 : 104)
                     .frame(minHeight: showsZeroState ? proxy.size.height : nil, alignment: .top)
                 }
             }
 
-            if filter != .shopping {
+            if isSelecting {
+                selectionBar
+            } else if filter != .shopping {
                 fab
             }
         }
         .ninaScreenBackground()
         .ninaStatusBarMask()
         .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
+            endSelection()
             filter = .unowned
+        }
+        .onChange(of: store.tasks.map(\.id)) { _, ids in
+            selection.formIntersection(ids)
+        }
+        .alert(bulkDeleteTitle, isPresented: $isConfirmingBulkDelete) {
+            Button("Cancelar", role: .cancel) {}
+            Button("Apagar", role: .destructive) {
+                store.deleteTasks(selection)
+                endSelection()
+            }
+        } message: {
+            Text("Some para toda a casa. Não dá para desfazer.")
         }
     }
 
+    @ViewBuilder
     private var header: some View {
+        if isSelecting {
+            selectionHeader
+        } else {
+            browsingHeader
+        }
+    }
+
+    private var browsingHeader: some View {
         HStack(alignment: .center) {
             Text(screenTitle).ninaText(.screen)
 
             Spacer()
+
+            if canSelect {
+                Button {
+                    Haptics.selection()
+                    isSelecting = true
+                } label: {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 19, weight: .regular))
+                        .foregroundStyle(NinaTheme.ink)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Selecionar tarefas")
+            }
 
             Button {
                 Haptics.lightImpact()
@@ -114,6 +157,126 @@ struct TasksView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Buscar")
         }
+    }
+
+    private var selectionHeader: some View {
+        HStack(alignment: .center) {
+            Text(selectionTitle).ninaText(.screen)
+
+            Spacer()
+
+            Button {
+                Haptics.selection()
+                endSelection()
+            } label: {
+                Text("Cancelar")
+                    .ninaText(.label, NinaTheme.muted, weight: .medium)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var selectionTitle: String {
+        switch selection.count {
+        case 0: "Selecionar"
+        case 1: "1 tarefa"
+        default: "\(selection.count) tarefas"
+        }
+    }
+
+    private var bulkDeleteTitle: String {
+        selection.count == 1 ? "Apagar 1 tarefa?" : "Apagar \(selection.count) tarefas?"
+    }
+
+    private var selectableTasks: [TaskItem] {
+        switch filter {
+        case .all: openTasks
+        case .mine: mine
+        case .unowned: unowned
+        case .seeds, .shopping: []
+        }
+    }
+
+    private var canSelect: Bool {
+        !selectableTasks.isEmpty
+    }
+
+    private func endSelection() {
+        isSelecting = false
+        selection = []
+    }
+
+    private func toggleSelection(_ id: TaskItem.ID) {
+        Haptics.selection()
+        if selection.contains(id) {
+            selection.remove(id)
+        } else {
+            selection.insert(id)
+        }
+    }
+
+    private var handOverChoices: [HouseholdMember] {
+        store.familyGroup.members.filter { $0.role == .adult }
+    }
+
+    private var selectionBar: some View {
+        HStack(spacing: 10) {
+            NinaButton(
+                title: "Feitas",
+                systemName: "checkmark",
+                fillsWidth: true,
+                isEnabled: !selection.isEmpty
+            ) {
+                Haptics.success()
+                store.completeTasks(selection)
+                endSelection()
+            }
+
+            Menu {
+                ForEach(handOverChoices) { member in
+                    Button(member.id == store.currentFamilyMember?.id ? "Comigo" : member.name.firstWord) {
+                        Haptics.success()
+                        store.reassignTasks(selection, to: member)
+                        endSelection()
+                    }
+                }
+                Button("Sem dono") {
+                    Haptics.success()
+                    store.reassignTasks(selection, to: nil)
+                    endSelection()
+                }
+            } label: {
+                NinaButtonFace(title: "Passar", kind: .outline, systemName: "person.2", fillsWidth: true)
+            }
+            .buttonStyle(.plain)
+            .disabled(selection.isEmpty)
+            .opacity(selection.isEmpty ? 0.4 : 1)
+
+            Button {
+                Haptics.warning()
+                isConfirmingBulkDelete = true
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(NinaTheme.ink)
+                    .frame(width: 48, height: 48)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Apagar")
+            .disabled(selection.isEmpty)
+            .opacity(selection.isEmpty ? 0.4 : 1)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 12)
+        .background(alignment: .top) {
+            NinaTheme.ground
+                .overlay(alignment: .top) {
+                    Rectangle().fill(NinaTheme.line).frame(height: 1)
+                }
+        }
+        .padding(.bottom, 84)
     }
 
     private var screenTitle: String {
@@ -194,7 +357,7 @@ struct TasksView: View {
                     categorySection(category, items)
                 }
 
-                if !completedToday.isEmpty {
+                if !completedToday.isEmpty, !isSelecting {
                     completedSection
                 }
             }
@@ -242,7 +405,13 @@ struct TasksView: View {
             if !isCollapsed {
                 ForEach(items) { task in
                     VStack(spacing: 0) {
-                        TaskRowView(task: task)
+                        if isSelecting {
+                            SelectableTaskRow(task: task, isSelected: selection.contains(task.id)) {
+                                toggleSelection(task.id)
+                            }
+                        } else {
+                            TaskRowView(task: task)
+                        }
                         if task.id != items.last?.id {
                             NinaDivider(inset: 36)
                         }
@@ -645,5 +814,39 @@ enum TaskListOrder {
         case .high: 1
         case .normal: 0
         }
+    }
+}
+
+private struct SelectableTaskRow: View {
+    let task: TaskItem
+    let isSelected: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 12) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundStyle(isSelected ? NinaTheme.ink : NinaTheme.faint)
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title)
+                        .ninaText(.body, NinaTheme.ink, weight: .medium)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                    Text(task.effectiveDueLabel())
+                        .ninaText(.meta, task.isOverdue() ? NinaTheme.terracotta : NinaTheme.muted)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 56)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
