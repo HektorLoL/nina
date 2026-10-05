@@ -417,10 +417,20 @@ struct TaskRowView: View {
                 }
             }
         } else {
-            HStack(spacing: 10) {
-                rowTitle.lineLimit(2)
-                Spacer(minLength: 8)
-                rowTrailing
+            // A title that needs a second line takes the whole width, and the date drops under it instead of cutting it.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    rowTitle.lineLimit(1)
+                    Spacer(minLength: 8)
+                    rowTrailing
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    rowTitle.lineLimit(3)
+                    HStack(spacing: 10) {
+                        rowTrailing
+                        Spacer(minLength: 0)
+                    }
+                }
             }
         }
     }

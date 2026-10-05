@@ -288,7 +288,7 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
 - **E7. No permanent explanatory card under a populated list** (G8).
 - **E8. A no-results state** has a headline of 4 words or fewer, a hint of 3 words or fewer, and one exit the screen does not already have.
 - **E9. A footnote that describes behavior must be true.** Delete the "últimos 30 dias" note under "CONCLUÍDAS HOJE": that group only ever holds today's completions.
-- **E10. Rows (`TaskRowView`) stay as they are.** They already match every reference.
+- **E10. Rows (`TaskRowView`) stay as they are.** They already match every reference. One refinement (2026-10-04): a title that does not fit on one line beside its date takes the full width, up to three lines, and the date, glyph and owner drop under it, the layout accessibility sizes already used, so a title is never cut to "esc…".
 
 **Target strings**
 
