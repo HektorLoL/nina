@@ -191,6 +191,61 @@ final class NotificationTargetingTests: XCTestCase {
         XCTAssertEqual(request.content.categoryIdentifier, "")
     }
 
+    func testTheNoticeFollowsTheFirstRepeatingTaskToRunOutAndNotTheLastOne() throws {
+        var daily = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: 21, minute: 0))
+        daily.recurrence = .daily
+        var rent = homeTask(dueAt: date(year: 2026, month: 8, day: 10, hour: 9, minute: 0))
+        rent.recurrence = .monthly
+
+        let planned = plan([daily, rent])
+        let notice = try XCTUnwrap(planned.first { $0.kind == .horizon })
+        let lastDaily = try XCTUnwrap(planned.filter { $0.taskID == daily.id }.last)
+
+        XCTAssertEqual(notice.deliveryDate, lastDaily.deliveryDate.addingTimeInterval(60))
+    }
+
+    func testTheNoticeComesBeforeRepeatsTheBudgetLeftOutEvenWhenALaterOneOffWasBooked() throws {
+        let dailies = (11...16).map { hour in
+            var chore = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: hour, minute: 0))
+            chore.recurrence = .daily
+            return chore
+        }
+        let dentist = homeTask(dueAt: date(year: 2026, month: 8, day: 19, hour: 18, minute: 0))
+
+        let planned = plan(dailies + [dentist])
+        let notice = try XCTUnwrap(planned.first { $0.kind == .horizon })
+        let dentistAlert = try XCTUnwrap(planned.first { $0.taskID == dentist.id })
+        let lastChoreAlert = try XCTUnwrap(
+            planned.filter { $0.kind == .alert && $0.taskID != dentist.id }.map(\.deliveryDate).max()
+        )
+
+        XCTAssertLessThan(notice.deliveryDate, dentistAlert.deliveryDate)
+        XCTAssertEqual(notice.deliveryDate, lastChoreAlert.addingTimeInterval(60))
+    }
+
+    func testAMinorsPhoneIsNeverAskedToOpenTheApp() {
+        let memberID = UUID()
+        var brushing = homeTask(owner: "Bia", dueAt: date(year: 2026, month: 8, day: 8, hour: 20, minute: 0))
+        brushing.ownerMemberID = memberID
+        brushing.recurrence = .daily
+
+        let planned = LocalHomeNotificationScheduler.plannedNotifications(
+            tasks: [brushing],
+            familyID: familyID,
+            viewer: HomeNotificationViewer(
+                memberID: memberID,
+                name: "Bia",
+                minorPolicy: MinorNotificationPolicy(alertsEnabled: true, quietStart: 21 * 60, quietEnd: 7 * 60)
+            ),
+            now: now,
+            defaults: defaults,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(planned.count, 12)
+        XCTAssertTrue(planned.allSatisfy { $0.kind == .alert })
+    }
+
     func testOneOffTasksThatAllFitNeedNoNotice() {
         let planned = plan([
             homeTask(dueAt: date(year: 2026, month: 8, day: 9, hour: 9, minute: 0)),

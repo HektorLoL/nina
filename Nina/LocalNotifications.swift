@@ -227,12 +227,12 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         var nextAlerts: [ScheduledNotification] = []
         var laterAlerts: [ScheduledNotification] = []
         var nudges: [ScheduledNotification] = []
-        var hasEndlessAlerts = false
+        var endlessTaskIDs: Set<UUID> = []
 
         for task in tasks where !task.isDone && isForViewer(task, viewer: viewer) {
             let moments = reminderMoments(task, after: now, calendar: calendar)
             if task.recurrence != .none, !moments.isEmpty {
-                hasEndlessAlerts = true
+                endlessTaskIDs.insert(task.id)
             }
 
             for (index, moment) in moments.enumerated() {
@@ -291,9 +291,10 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         }
 
         // Reminders the phone could not book never stop in silence: one notice follows the last
-        // booked alert and asks for the app, whose next sync books the ones after it.
-        let needsHorizonNotice = hasEndlessAlerts
-            || nextAlerts.count + laterAlerts.count > pendingRequestLimit
+        // alert booked before the first gap and asks for the app, whose next sync books the rest.
+        // A minor's phone is never asked to open the app.
+        let needsHorizonNotice = viewer.minorPolicy == nil
+            && (!endlessTaskIDs.isEmpty || nextAlerts.count + laterAlerts.count > pendingRequestLimit)
         let alertBudget = pendingRequestLimit - (needsHorizonNotice ? 1 : 0)
 
         // Every task's next alert is booked before any task's later repeats, so a house full of
@@ -306,8 +307,20 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
             .prefix(alertBudget - guaranteedAlerts.count)
         let deliveredAlerts = Array(guaranteedAlerts) + Array(repeatAlerts)
 
+        let bookedIdentifiers = Set(deliveredAlerts.map(\.identifier))
+        let unbookedAlerts = (nextAlerts + laterAlerts).filter { !bookedIdentifiers.contains($0.identifier) }
+        let firstUnbookedAlert = unbookedAlerts.map(\.deliveryDate).min()
+        let repeatingEnds = endlessTaskIDs
+            .subtracting(unbookedAlerts.compactMap(\.taskID))
+            .compactMap { taskID in
+                deliveredAlerts.filter { $0.taskID == taskID }.map(\.deliveryDate).max()
+            }
+        let firstGap = (repeatingEnds + [firstUnbookedAlert].compactMap { $0 }).min()
+
         var horizonNotice: [ScheduledNotification] = []
-        if needsHorizonNotice, let lastAlert = deliveredAlerts.map(\.deliveryDate).max() {
+        if needsHorizonNotice,
+           let firstGap,
+           let lastAlert = deliveredAlerts.map(\.deliveryDate).filter({ $0 <= firstGap }).max() {
             let noticeDate = lastAlert.addingTimeInterval(60)
             horizonNotice.append(
                 ScheduledNotification(
