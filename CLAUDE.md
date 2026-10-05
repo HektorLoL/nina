@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -62,7 +62,8 @@ measures who is carrying more of the house.**
   file is literally `web/design-references/landing-conversa-alivio.png` —
   *conversation → relief*. Adult surfaces treat her as a friend, not an
   assistant; the login every age sees says only "Nina" and "A rotina da casa,
-  dividida." since 2026-09-29, because "Sua amiga Nina" / "Conta pra ela o que
+  dividida." since 2026-09-29, over one button, Apple's own, since 2026-10-04,
+  because "Sua amiga Nina" / "Conta pra ela o que
   pesa." invited a child to unload emotionally on a program. The workload
   feature is "Sinal de sobrecarga", subtitled
   *"Um retrato para conversar, não para cobrar"*, never "who is slacking".
@@ -168,11 +169,17 @@ product regression, not a refactor.
 - **Sign in with Apple is the only way in (decided 2026-09-26).** No email
   code, no magic link, no Google, no password: `AuthClient` has one sign-in
   method, `signInWithApple`, and the welcome shows one door over the legal
-  line: a cobalt "Continuar" that reads Apple's age range first, then the black
-  Apple button, which asks for name and email only for an adult reading. The
-  email an account carries is the one Apple shares (a
-  private relay address when the person hides theirs), shown read-only in
-  Ajustes and the profile; nothing links or changes a sign-in email. The only
+  line and the rating mark: the black system "Continuar com a Apple", whose
+  request carries `requestedScopes = []` for every account (decided 2026-10-04,
+  build 11), so Apple shares no name and no email; the age step runs after
+  sign-in. A build-11 account has no email. An earlier account keeps the one
+  Apple shared then (a private relay address when the person hid theirs), shown
+  read-only in Ajustes and the profile only when present (`AuthUser.shownEmail`);
+  nothing links or changes a sign-in email. A no-scope identity token carries no
+  email claim, so production Auth must keep Apple's "Allow users without an
+  email" (`email_optional`) on or GoTrue refuses every new account;
+  `/auth/v1/settings` does not report it, so it is a runbook §2 step, not a
+  preflight check (`supabase/config.toml` sets it for the local stack). The only
   other door, `DebugAuthAccount` (teste1/teste2@ninai.test, local home, no
   backend), exists only under `#if DEBUG`, and `artifact.debug-sign-in` fails
   the release preflight if its addresses reach the bundle. Production Auth must
@@ -181,9 +188,27 @@ product regression, not a refactor.
   otherwise. On the client, `repository.apple-only-sign-in` fails the repository
   preflight if any tracked `Nina/` Swift source calls an OTP, magic-link, password,
   OAuth or non-Apple ID-token sign-in or changes a sign-in email (pinned by
-  `"the shipped app signs in with Apple and calls no other sign-in door"`), and
-  `AuthSessionTests.testNoSignInLineNamesAnotherDoor` keeps every sign-in error
-  line from naming an email, a code or Google.
+  `"the shipped app signs in with Apple and calls no other sign-in door"`),
+  `repository.apple-sign-in-scopes` fails it if any of them assigns a scope
+  other than `[]` (pinned by `"the shipped app asks Apple for no name and no
+  email"`), and `AuthSessionTests.testNoSignInLineNamesAnotherDoor` keeps every
+  sign-in error line from naming an email, a code or Google.
+- **A house member is named by the person, never by the server's placeholder.**
+  A build-11 account reaches its profile as `auth_user_display_name`'s fallback
+  `'Família'`, and `create_family` and `request_family_join` copy the profile
+  name into the frozen `family_members.name`, the approver's card and the model
+  roster (where it would alias the common word "família"). So `HomeSetupView`
+  and `InviteAcceptanceView` show "Seu primeiro nome" whenever
+  `ProfileNaming.needsName` reads `'Família'`, `'Você'` or an empty name, and
+  push it through `ProfileStore.chooseDisplayName` (a narrow `profiles` update
+  of `display_name` and `display_name_source = 'user'`) before the RPC; the
+  phone counts it as chosen only after the server holds it. Minors are still
+  named beside the invite (`MinorNoHomeView`, server `needs_name`), unchanged,
+  and the field lives only on adult screens. Locked by
+  `AuthSessionTests.testAChosenNameCountsOnlyOnceTheServerHoldsIt`,
+  `…testANewAppleAccountIsAskedForItsNameAndANamedOrDebugAccountIsNot`, the
+  pgTAP "a house created after the person chose a name names its owner with it"
+  and the Deno "the app reads the server's fallback name as no name".
 - **8 non-assistant people per home**, enforced in three places (trigger,
   `request_family_join` count, remaining-slot arithmetic) under a family
   advisory lock taken *before* any row lock.
@@ -536,9 +561,39 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   deleted at once.
 - **Anyone signed in can delete their account, with or without a house.**
   `AccountDeletionView` is reachable from the Ajustes root and, through
-  `.accountDeletionSheet`, from `HomeSetupView`, the pending and access-decision
-  screens, `HomeAccessUnavailableView` and every minor screen (App Store
-  5.1.1(v); build-10 fix d).
+  `.accountDeletionSheet`, from `AgeCheckView` (the first screen after sign-in
+  since build 11), `HomeSetupView`, the pending and access-decision screens,
+  `HomeAccessUnavailableView`, the majority and Terms gates and every minor
+  screen (App Store 5.1.1(v); build-10 fix d). Since build 11 a failure is typed
+  (`AccountDeletionFailure`, mapped from delete-account's stable code, or, for an
+  answer with no code, 401 → session ended, 408/429 → temporary, other 4xx →
+  refused, anything else → unconfirmed) with one short line each, kept in
+  `AuthSessionStore.deletionFailure` and never in the shared `errorMessage`, so
+  it cannot bleed onto other screens. "Nada foi apagado" is said only where it
+  is provable: a cancelled Apple sheet (nothing sent), no internet (an
+  `NWPathMonitor` check before sending found no path, or DNS or the TCP connect
+  failed; a mid-flight `-1009` is unconfirmed) or a 4xx refusal before any stage
+  ran. A gateway 5xx or a dropped connection may come after the function
+  finished, so it reads "A resposta não chegou. Tente de novo."; a signed-out
+  reply right after it reads "A conta pode já ter sido apagada.", never "entre de
+  novo" (signing in again would open a new account), with a quiet "Sair" that
+  wipes this phone like a finished deletion. A refusal, an ended session, or the
+  second failure in a row (a cancelled Apple sheet counts, so a sheet that never
+  completes still reaches it) adds "Para apagar mesmo assim, escreva para
+  privacidade@ninai.app." with a quiet "Escrever" mailto whose body carries only
+  references: "Referência: <account id>", or a ward's member id plus the
+  guardian's own "Responsável: <account id>". A guardian refusal never offers
+  it. **A reference finds an account and never proves who wrote**: every adult
+  of a house can read every member's ids, so the operator deletes only after the
+  sender proves control from inside the account (runbook §2, "Deletion requests
+  by mail": a mailed one-time code typed as the Perfil name, plus
+  `authorize_guardian_account_deletion` for a ward); a minor's or unknown-age
+  account's own mail is never acted on alone. Locked by
+  `AuthSessionTests.testOnlyALineThatCanProveItSaysNothingWasDeleted`,
+  `…testARefusalOffersTheMailWayOutAtOnceAndATemporaryFailureOnlyFromTheSecondInARow`,
+  `…testOneCancelledAppleSheetSendsNothingAndARepeatedOneReachesTheMailWayOut`,
+  `…testASignedOutReplyAfterAnAnswerThatNeverArrivedReadsAsMaybeDeletedAndNeverSendsThePersonToSignIn`
+  and the Deno "the app matches every delete-account error code whole".
 - **`delete-account` accepts exactly one of three bodies**:
   `{"confirmation":"delete"}`, the same plus `"apple_authorization_code"`, or
   `{"confirmation":"delete","member_id":"<uuid>"}` from a live guardian of a
@@ -656,17 +711,19 @@ of `AppEntryInputs`) evaluates in strict order: `signedOut` → `ageCheck` →
 `homeLoading` → `homeUnavailable` → `minorRoot` (any viewer whose age status is
 not adult; the four-tab container is never mounted for them) → `majority`
 ("Agora a conta é sua.", once, when Apple confirms an ex-minor is 18) →
-`invite` → `tutorial` (adults only) → `pendingApproval` / `accessDecision` /
+`termsAcceptance` ("Os Termos mudaram.", or "Antes, os Termos.") → `invite` → `tutorial` (adults only) → `pendingApproval` / `accessDecision` /
 `homeSetup` / `app`. A failed membership check reads as unavailable before the
 minor check, because a failed verification leaves age unknown and must not
 show a minor screen. `ageCheck` appears only when the server holds no age row
 for the account, on `recheck_after`, or when `requiredRegulatoryFeatures`
-changes; Apple errors are never recorded as an answer. The Apple scopes are
-decided before sign-in: "Continuar" reads the device's age range, and only an
-adult reading asks Apple for name and email. Locked by
+changes; Apple errors are never recorded as an answer. Sign in with Apple asks
+for no scope, so nothing about the person is decided before sign-in: the age
+range is read afterwards by `ageCheck`, the first screen a new account sees.
+Locked by
 `AppStoreAuthorizationTests.testTheAgeStepComesBeforeTheInviteAndTheTutorial`,
-`…testAMinorAccountLandsOnItsOwnTasksAndNeverOnTheFourTabs` and
-`…testAMinorNeverReachesTheChatThePaywallOrTheWorkloadPortrait`. Four tabs
+`…testAMinorAccountLandsOnItsOwnTasksAndNeverOnTheFourTabs`,
+`…testAMinorNeverReachesTheChatThePaywallOrTheWorkloadPortrait` and
+`…testAnAppleFirstSignInRecordsTheFootnoteOnlyOnceTheAgeReadsAdult`. Four tabs
 (Nina / Hoje / Tarefas / Casa) in a **custom container, not `TabView`**, each
 with its own `RouterPath`. **Tabs change only by tapping the bar** — the
 horizontal swipe between tabs was removed on 2026-09-23 because it caused
@@ -687,7 +744,7 @@ its root as a `fullScreenCover`, so neither a lost home nor a tab reset can
 close it. It closes on a 2-second hold, or in one step through VoiceOver (the
 hold button's default action and the escape gesture), which must stay; it
 carries no share or print, and draws its own app-switcher cover (the same
-`AppLoadingScreen`) because the root one sits beneath it.
+`AppLoadingScreen`, without the rating) because the root one sits beneath it.
 
 **Age on the device.** `Nina/AgeAssurance.swift` holds the fail-closed
 `AgeStatus` decoder, the `AgeSignal` that writes the canonical 7-key JSON
@@ -709,13 +766,24 @@ block are `GuardianViews.swift`, and the rating constant is `NinaRating.swift`.
 A share started from a button inside the app ("Tentar de novo" on the chat's
 age gate, "Compartilhar faixa", "Compartilhar de novo") goes through
 `AgeCheckCoordinator.requestInline`, which routing never sees: the screen stays
-and shows the outcome in one line. Only the first-run prompt, a pending reading
-from the welcome screen and the launch recheck take over the root. **The Terms
-are accepted only where they were shown**: the welcome footnote counts for a
-sign-in made there (`AuthSessionStore.interactiveSignInUserID` →
-`AppStore.noteTermsFootnoteShown`); a restored session of an adult who has not
-accepted the current version lands on "Os Termos mudaram." (`AgeMajorityView`,
-reason `.termsChanged`) until they tap Aceitar. That screen and the majority
+and shows the outcome in one line. Only the first-run prompt and the launch
+recheck take over the root. **The Terms are accepted only where they were
+shown**: the welcome footnote, under the one Apple button, counts for a sign-in
+made there (`AuthSessionStore.interactiveSignInUserID` →
+`AppStore.noteTermsFootnoteShown`), and its acceptance is recorded once the age
+step reads adult. The footnote is kept in `ProtectedLocalDataStore`
+(`PrivateLocalDataScope.termsFootnote`) until the server records it, so a kill
+or relaunch between Apple's sheet and the age answer keeps it; one read back
+after a relaunch counts only for Terms whose `current_terms_version` (a
+`yyyy-MM-dd` date; keep it one) is on or before the São Paulo day it was shown,
+and it is dropped when the account changes or signs out. A restored session of
+an adult who has not accepted the current version lands on "Os Termos mudaram."
+(`AgeMajorityView`, reason `.termsChanged`) until they tap Aceitar; a footnote
+whose recording failed lands on "Antes, os Termos." (`.termsNotYetRecorded`),
+because nothing changed for that person. Locked by
+`AppStoreAuthorizationTests.testAWelcomeFootnoteSurvivesARelaunchBeforeTheAgeIsReadAndIsRecordedOnce`,
+`…testAFootnoteShownBeforeTheTermsChangedIsNeverRecordedAndTheGateSaysTheyChanged`
+and `…testAFootnoteWhoseRecordingFailedAsksAgainWithoutSayingTheTermsChanged`. That screen and the majority
 screen both carry "Sair da conta" and "Apagar conta".
 
 **Models.** Every persisted/synced model has a hand-written `init(from:)` using
@@ -761,10 +829,18 @@ branching anywhere.
   `NinaTheme.classInd(_:)` / `classIndLivre` hold the official rating colours
   (Livre green, 10 blue, 12 yellow, 14 orange, 16 red, 18 black) because
   Portaria MJSP 1.048 art. 50 requires the symbol at install, login and
-  loading; `ClassIndMark` shows it on `LoginView`, `AppLoadingScreen` and the
-  settings row, and draws only what `NinaRating.currentCode` says. The hexes and
-  the drawing are UNVERIFIED against the gov.br/mj artwork
+  loading; `ClassIndMark` shows it only on `LoginView` and the startup
+  `AppLoadingScreen`, at its 22pt default and in the same spot on both (build
+  11, 2026-10-04: no settings row, and the app-switcher cover is
+  `AppLoadingScreen(showsRating: false)`), and draws only what
+  `NinaRating.currentCode` says; `repository.rating-mark-placement` fails the
+  preflight if a call appears anywhere else or leaves either screen. The hexes,
+  the drawing and any minimum size are UNVERIFIED against the gov.br/mj artwork
   (`docs/rebrand-implementation.md` §6i).
+- **A wait is `AppWaitingScreen`**: the 64pt `.rest` mark and "Só um instante.",
+  centred on the whole screen, breathing only without Reduce Motion. `.reading`
+  (the disc stretched to a bar) belongs only to the chat's "Lendo" bubble; used
+  for a generic wait it read as a squashed disc.
 
 **Typography:** Fraunces (bundled, `Nina/Fraunces-Regular.ttf`, 45 KB, OFL) for
 brand voice — screen titles, Nina's own speech, the one big number, **never a list
@@ -1044,8 +1120,10 @@ platform bundler cannot resolve the import and the deploy fails with 400.
 - Every error response is `{"error":"<stable_snake_case_code>"}` with
   `Cache-Control: no-store`. **These codes are API surface** — Swift switches on
   them. Never reword one without updating `NinaEngineError`,
-  `PremiumBackendRequestError`, `AgeSignalError` or `RemoteRPCErrorCode` (the
-  SQL codes, whose pt-BR copy the store owns).
+  `PremiumBackendRequestError`, `AgeSignalError`, `AccountDeletionFailure`
+  (delete-account's codes; the Deno "the app matches every delete-account error
+  code whole" fails on drift) or `RemoteRPCErrorCode` (the SQL codes, whose
+  pt-BR copy the store owns).
 - Wire JSON is snake_case; TS identifiers are camelCase.
 - Money is always integer micro-USD, rounded with `Math.ceil`. Never floats.
 - Model ids are compile-time constants; only *pricing* is env-overridable, so a
@@ -1567,7 +1645,21 @@ sent either way, and its Apple button keeps working. Build 7 also carries a
 hidden "Continuar com o Google" row that appears if Google is ever enabled, so
 keep Google off; `deployment.sign-in-providers` fails the online preflight if
 it is on. The local stack keeps `[auth.email]` because the AI eval signs in
-through an admin magic link.
+through an admin magic link. Since build 11 Apple's provider must also have
+"Allow users without an email" (`email_optional`) on: the sign-in asks Apple
+for no scope, so a new Apple ID's identity token carries no email, and with the
+switch off GoTrue refuses the account and every new person reads "Não foi
+possível entrar agora. Tente de novo." `supabase/config.toml` covers only the
+local stack; production is the dashboard (runbook §2).
+
+**'Família' is the server's word for no name yet.** `auth_user_display_name`
+falls back to `'Família'` when an account has no metadata name and no email,
+which is every build-11 account, and `ProfileNaming` reads that word (with
+"Você" and an empty name) as a name nobody chose. Change both together; the
+Deno "the app reads the server's fallback name as no name" pins them. An adult
+who already sits in a house as "Família" (a pre-build-11 account whose welcome
+reading was unavailable) keeps that frozen `family_members.name` until a rename
+in Perfil reaches the profile; the house row itself never follows.
 
 **An unsigned simulator build cannot sign in.** With `CODE_SIGNING_ALLOWED=NO`
 the build carries no entitlements, Sign in with Apple included, so the Apple
@@ -1692,6 +1784,30 @@ the project, not bugs to fix unprompted.
   16–17 and a 13–15 Family Sharing child, an under-13, Sign in with Apple with no
   scopes, a decline and a later share, a guardian approval and a guardian
   deletion end to end.
+- **Build 11 (2026-10-04) is Apple first, and its sign-in is unproven on a
+  device.** Heitor's play test of build 10 decided four changes: the welcome is
+  one black Apple button with no scope for anyone (the age is read after
+  sign-in, an adult types a first name where the house first needs it), the
+  rating mark only on the welcome and the startup screen, a centred wait with a
+  round disc, and typed account-deletion failures with a mail way-out.
+  `CURRENT_PROJECT_VERSION` is 11. Release blockers before the build reaches
+  anyone: turn on Apple's "Allow users without an email" in production Auth
+  (§12), then prove the no-scope sign-in with a brand-new Apple ID (or one that
+  removed Nina under Sign in with Apple) on a device, landing on "Antes, sua
+  faixa de idade.", because every new account now takes that path; and Heitor
+  accepts handling a deletion request mailed to privacidade@ninai.app
+  (`docs/production-launch-runbook.md` §2, "Deletion requests by mail"), where
+  the mail's reference only finds the account and the sender proves control by
+  typing a mailed one-time code as their Perfil name. App
+  Review Guideline 4.0 has refused apps that ask for a name after Sign in with
+  Apple; the field sits only in house creation and joining, and the review
+  notes must say Nina asks Apple for nothing because minors use it and the age
+  is known only after sign-in. If Review still refuses, the create path can
+  accept an unnamed owner. The "Não deu para apagar a conta agora" Heitor saw on
+  build 10 came from the pre-release delete-account v6, which accepted only
+  `{"confirmation":"delete"}` and refused the Apple-code body with 400
+  `confirmation_required`; v7 (2026-09-29, the HEAD contract) accepts all three
+  bodies, so one real deletion against v7 on a device closes it.
 - **Migration `202609290009` is applied to production (2026-09-30).** It
   revokes `can_manage_family`, `is_family_member` and `is_family_creator` from
   every API role and makes `shares_family_with` answer only about the caller.

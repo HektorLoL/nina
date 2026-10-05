@@ -87,11 +87,27 @@ struct InviteAcceptanceView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(InviteLinkStore.self) private var inviteLinkStore
+    @Environment(ProfileStore.self) private var profileStore
 
     @State private var preview: FamilyInvitePreview?
     @State private var isLoading = true
     @State private var isJoining = false
     @State private var errorMessage: String?
+    @State private var firstName = ""
+    @FocusState private var isNameFocused: Bool
+
+    // The approver's card and the member row carry this name, so a placeholder must never reach them.
+    private var needsName: Bool {
+        let user = authSession.currentUser
+        return ProfileNaming.needsName(
+            user: user,
+            knownName: user.flatMap { profileStore.profiles[$0.id]?.displayName }
+        )
+    }
+
+    private var hasChosenName: Bool {
+        !needsName || !ProfileNaming.isPlaceholder(firstName)
+    }
 
     private var code: String {
         inviteLinkStore.pendingCode ?? ""
@@ -141,7 +157,7 @@ struct InviteAcceptanceView: View {
 
     private var loadingHeader: some View {
         VStack(spacing: 14) {
-            NinaMark(size: 44, presence: .reading)
+            NinaMark(size: 44, presence: .rest)
             Text("Conferindo o link.").ninaText(.label, NinaTheme.muted)
         }
     }
@@ -203,10 +219,17 @@ struct InviteAcceptanceView: View {
             // request_family_join is the real authority, so an unverified link
             // keeps the button: the server decides, not the preview.
             if preview?.isValid == true || preview == nil {
+                if needsName, !isLoading {
+                    ChosenNameField(name: $firstName, focus: $isNameFocused, focusValue: true)
+                        .submitLabel(.join)
+                        .onSubmit(acceptInvite)
+                        .padding(.bottom, 2)
+                }
+
                 NinaButton(
                     title: isJoining ? "Enviando" : "Pedir para entrar",
                     fillsWidth: true,
-                    isEnabled: !isLoading && !isJoining
+                    isEnabled: !isLoading && !isJoining && hasChosenName
                 ) {
                     acceptInvite()
                 }
@@ -232,11 +255,31 @@ struct InviteAcceptanceView: View {
     }
 
     private func acceptInvite() {
-        guard preview?.isValid != false, !isJoining else { return }
+        guard preview?.isValid != false, !isJoining, hasChosenName else { return }
+        isNameFocused = false
         isJoining = true
         errorMessage = nil
 
         Task {
+            if needsName {
+                let name = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let user = authSession.currentUser else {
+                    isJoining = false
+                    return
+                }
+                let saved = await profileStore.chooseDisplayName(name, for: user)
+                guard authSession.currentUser?.id == user.id else {
+                    isJoining = false
+                    return
+                }
+                guard saved else {
+                    isJoining = false
+                    errorMessage = ChosenNameCopy.saveFailed
+                    return
+                }
+                authSession.noteChosenDisplayName(name)
+            }
+
             let joined = await store.joinHome(with: code, member: authSession.currentUser)
             isJoining = false
 

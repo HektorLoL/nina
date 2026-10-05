@@ -198,12 +198,12 @@ struct AppRootView: View {
 
             if isShowingLoadingScreen {
                 AppLoadingScreen()
-                    .transition(.opacity.combined(with: .scale(scale: 1.015)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 1.015)))
                     .zIndex(1)
             }
 
             if isCoveringForPrivacy {
-                AppLoadingScreen()
+                AppLoadingScreen(showsRating: false)
                     .transition(.opacity)
                     .zIndex(4)
             }
@@ -360,13 +360,13 @@ struct AppRootView: View {
             AgeMajorityView()
                 .transition(.opacity)
         case .termsAcceptance:
-            AgeMajorityView(reason: .termsChanged)
+            AgeMajorityView(reason: store.hasUnrecordedTermsFootnote ? .termsNotYetRecorded : .termsChanged)
                 .transition(.opacity)
         case .tutorial:
             OnboardingTutorialView()
                 .transition(.opacity.combined(with: .scale(scale: 1.01)))
         case .homeLoading:
-            HomeAccessLoadingView()
+            AppWaitingScreen()
                 .transition(.opacity)
         case .invite:
             InviteAcceptanceView()
@@ -509,19 +509,6 @@ struct AppRootView: View {
         #if canImport(UIKit)
         UIApplication.shared.dismissKeyboard()
         #endif
-    }
-}
-
-private struct HomeAccessLoadingView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            NinaMark(size: 84, presence: .reading)
-            Text("Só um instante.")
-                .ninaText(.label, NinaTheme.muted)
-        }
-        .accessibilityElement(children: .combine)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ninaScreenBackground()
     }
 }
 
@@ -878,6 +865,7 @@ private struct KeyboardAwareBottomTabBar: View {
 
 struct AppLoadingScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var showsRating = true
     @State private var isBreathing = false
 
     var body: some View {
@@ -892,14 +880,41 @@ struct AppLoadingScreen: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Nina")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea()
 
-            // The rating is shown at install, login and startup.
-            VStack {
-                Spacer()
-                ClassIndMark(size: 30)
-                    .padding(.bottom, 24)
+            // The rating is shown at login and startup, and nowhere else in the app.
+            if showsRating {
+                ClassIndMark()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 16)
             }
         }
+        .task {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                isBreathing = true
+            }
+        }
+    }
+}
+
+// A wait never borrows Nina's reading state; that bar belongs to a turn in flight.
+struct AppWaitingScreen: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isBreathing = false
+
+    var body: some View {
+        VStack(spacing: 16) {
+            NinaMark(size: 64, presence: .rest)
+                .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1.02 : 0.98))
+            Text("Só um instante.")
+                .ninaText(.label, NinaTheme.muted)
+        }
+        .accessibilityElement(children: .combine)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+        .ninaScreenBackground()
         .task {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
@@ -1060,6 +1075,10 @@ extension View {
 
 #Preview("Loading") {
     AppLoadingScreen()
+}
+
+#Preview("Waiting") {
+    AppWaitingScreen()
 }
 
 private struct TaskRouteDetail: View {

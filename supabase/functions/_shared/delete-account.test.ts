@@ -637,6 +637,44 @@ Deno.test("delete-account endpoint delegates to the shared transactional contrac
   assert(clientSource.includes('let confirmation = "delete"'));
 });
 
+Deno.test("the app matches every delete-account error code whole", async () => {
+  const contract = await Deno.readTextFile(
+    new URL("./delete-account.ts", import.meta.url),
+  );
+  const client = await Deno.readTextFile(
+    new URL("../../../Nina/SupabaseAuthClient.swift", import.meta.url),
+  );
+  const codes = new Set(
+    [...contract.matchAll(/\{\s*error:\s*"([a-z_]+)"\s*\}/g)].map((match) =>
+      match[1]
+    ),
+  );
+
+  assert(codes.size >= 8);
+  for (const code of codes) {
+    assert(client.includes(`"${code}"`), `${code} is not matched by the app`);
+  }
+});
+
+Deno.test("the app sends only the three bodies delete-account accepts", async () => {
+  const contract = await Deno.readTextFile(
+    new URL("./delete-account.ts", import.meta.url),
+  );
+  const client = await Deno.readTextFile(
+    new URL("../../../Nina/SupabaseAuthClient.swift", import.meta.url),
+  );
+  const pattern = contract.match(
+    /const appleAuthorizationCodePattern = \/(.+)\/;/,
+  )?.[1];
+
+  assert(pattern);
+  assert(client.includes(`#"${pattern}"#`));
+  assert(client.includes('let confirmation = "delete"'));
+  assert(client.includes('"apple_authorization_code"'));
+  assert(client.includes('"member_id"'));
+  assert(client.includes("uuidString.lowercased()"));
+});
+
 Deno.test("maintenance deletes a minor account in the same order and stops at the first failure", async () => {
   const backend = new DeleteAccountBackendSpy();
   backend.listResult = () => ["profile.jpg"];

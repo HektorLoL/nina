@@ -102,6 +102,36 @@ export function retentionClaimOffenders(
   return offenders;
 }
 
+// Sign in with Apple asks no account for a name or an email, so any scope
+// assignment other than the empty list is a request for personal data.
+export function appleScopeRequests(source: string): string[] {
+  return [...source.matchAll(/requestedScopes\s*=(?!=)(?!\s*\[\s*\])[^\n]*/g)]
+    .map((match) => match[0].trim());
+}
+
+const ratingMarkScreens = ["Nina/LoginView.swift", "Nina/AppRootView.swift"];
+
+// Portaria MJSP 1.048 art. 50 asks for the rating at login and startup, and
+// the app draws it there and nowhere else.
+export function ratingMarkOffenders(
+  sources: ReadonlyArray<{ path: string; text: string }>,
+): string[] {
+  const offenders: string[] = [];
+  const drawsMark = (text: string) => /\bClassIndMark\(/.test(text);
+  for (const source of sources) {
+    if (!/^Nina\/.+\.swift$/.test(source.path)) continue;
+    if (ratingMarkScreens.includes(source.path)) continue;
+    if (drawsMark(source.text)) offenders.push(source.path);
+  }
+  for (const screen of ratingMarkScreens) {
+    const source = sources.find((candidate) => candidate.path === screen);
+    if (!source || !drawsMark(source.text)) {
+      offenders.push(`${screen} (missing)`);
+    }
+  }
+  return offenders;
+}
+
 export function legalAgeRuleHolds(input: {
   terms: string;
   familiesPageExists: boolean;
@@ -1063,6 +1093,7 @@ export async function repositoryChecks(
 
   const secretBearingFiles: string[] = [];
   const nonAppleSignInFiles: string[] = [];
+  const appleScopeFiles: string[] = [];
   const claimSources: Array<{ path: string; text: string }> = [];
   for (const path of files) {
     try {
@@ -1078,6 +1109,12 @@ export async function repositoryChecks(
         nonAppleSignInCalls(source).length > 0
       ) {
         nonAppleSignInFiles.push(path);
+      }
+      if (
+        /^Nina\/.+\.swift$/.test(path) &&
+        appleScopeRequests(source).length > 0
+      ) {
+        appleScopeFiles.push(path);
       }
     } catch {
       // Binary, removed, or unreadable tracked files are covered by path checks.
@@ -1196,6 +1233,14 @@ export async function repositoryChecks(
       }`,
     ),
     check(
+      "repository.apple-sign-in-scopes",
+      appleScopeFiles.length === 0,
+      "Sign in with Apple asks for no name and no email.",
+      `Sign in with Apple requests no scope; remove it from: ${
+        appleScopeFiles.join(", ")
+      }`,
+    ),
+    check(
       "repository.legal-metadata",
       privacyPage.includes("legalIdentity") &&
         privacyPage.includes("data-legal-status"),
@@ -1225,6 +1270,14 @@ export async function repositoryChecks(
       ratingConstantsAgree(ratingSwift, ratingWeb),
       "The app and the website show the same indicative rating.",
       "Nina/NinaRating.swift currentCode and web/src/rating.ts ninaRatingCode must be the same rating.",
+    ),
+    check(
+      "repository.rating-mark-placement",
+      ratingMarkOffenders(claimSources).length === 0,
+      "The rating mark shows on the welcome and the startup screen, and nowhere else in the app.",
+      `ClassIndMark must be drawn only in LoginView.swift and AppLoadingScreen (AppRootView.swift): ${
+        ratingMarkOffenders(claimSources).join(", ")
+      }`,
     ),
     check(
       "repository.age-assurance-entitlements",

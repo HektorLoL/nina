@@ -1,6 +1,6 @@
 # App Store Privacy Labels - Nina
 
-Last updated: 2026-09-29
+Last updated: 2026-10-04
 
 Use this as the App Store Connect privacy questionnaire source of truth for the current codebase. Re-check it before every submission because labels must match the shipped binary, backend functions, SDKs, and website data collection.
 
@@ -38,7 +38,7 @@ submission and record the answer here.
 
 | Apple Category | Nina Data | Purposes | Notes |
 | --- | --- | --- | --- |
-| Contact Info | Email address, display name | App Functionality, Account Management | The email is the one Sign in with Apple shares, which may be a private-relay address. It identifies the account and is shown read-only in the app; it is never a way to sign in. An account whose age reads as minor or unknown requests no name or email scope from Apple, and a minor's profile email is forced to null on the server. |
+| Contact Info | Email address (accounts created before build 11 only), display name | App Functionality, Account Management | Since build 11 Sign in with Apple asks no account for a name or an email, so a new account carries no email; the display name is the first name the person types when creating or joining a house, editable in Perfil. An account created before build 11 keeps the email Apple shared then, which may be a private-relay address; it identifies the account and is shown read-only in the app only when present, and it is never a way to sign in. Keep the Email Address label while those accounts hold one. A minor's profile email is forced to null on the server. |
 | User Content | Chat messages, tasks, reminders, shopping items, household members, profile photo, confirmed memories, reports on a Nina reply (reason code and message reference) | App Functionality | This is the core household data. Photo and PDF reading stay off at launch (`NINA_ATTACHMENTS_ENABLED = NO`). A message held for child-safety review is sealed server-side and reachable by no client role. |
 | Sensitive Info | Health hints, medication/school/child routine details, emotional pattern notes when users enter them; health reminders of a child or teen when a guardian gave the separate health consent | App Functionality | The app does not require these fields, but adults can enter them in messages and memories. Use the conservative label. |
 | Identifiers | Supabase Auth user ID, the Apple account identifier Supabase Auth keeps for the linked identity, family ID, invite tokens | App Functionality, Account Management | Used for login, authorization, sync, and household isolation. |

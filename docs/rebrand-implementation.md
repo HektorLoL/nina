@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-09-29
+Last updated: 2026-10-05
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -463,18 +463,20 @@ its strings are in `docs/text-rubric.md` §3, most of them Law-text-gated.
 - **The welcome says less and asks the age first.** "Sua amiga Nina" / "Conta
   pra ela o que pesa." became "Nina" / "A rotina da casa, dividida.": a child
   can see this screen, and the old tagline invited emotional unloading (ClassInd
-  Guia D.7.1). Step 1 is one cobalt "Continuar" that reads Apple's age range;
-  only then does the black Apple button appear, asking for name and email only
-  for an adult reading. Rubric L4 used to say "no cobalt on the welcome"; it
-  was rewritten on 2026-09-29 to add this age step, because the age sheet has
-  to come before sign-in and Apple's button cannot open it. The legal line gains the protected "Menores de 18 anos entram
-  numa casa com aprovação de um responsável.", so the welcome is 30 authored
-  words, two over the budget; the legal text wins.
+  Guia D.7.1). From 2026-09-29 to build 10, step 1 was one cobalt "Continuar"
+  that read Apple's age range before the black Apple button, which asked for
+  name and email only for an adult reading. That cobalt age step was removed on
+  2026-10-04 (build 11, §6j): the age is read after Sign in with Apple, which
+  now asks for no scope, so rubric L4 is back to no cobalt on the welcome. The
+  legal line gains the protected "Menores de 18 anos entram
+  numa casa com aprovação de um responsável.", so the welcome is 29 authored
+  words, one over the budget; the legal text wins.
 - **The ClassInd pictogram is the one colour outside the palette.**
   `NinaTheme.classInd(_:)` holds the six official rating colours and
-  `ClassIndMark` draws a rounded square with the code in white on the welcome,
-  on `AppLoadingScreen` and on the "Classificação indicativa" settings row, as
-  Portaria MJSP 1.048 art. 50 asks ("instalação, login e inicialização"). It is
+  `ClassIndMark` draws a rounded square with the code in white on the welcome
+  and on the startup `AppLoadingScreen`, as Portaria MJSP 1.048 art. 50 asks
+  ("instalação, login e inicialização"); since build 11 there is no settings
+  row and it is smaller (§6j). It is
   a named regulated exception to "`Theme.swift` is the only palette": it never
   tints anything else, and the code inside uses `.font(.system(size:weight:))`
   because the pictogram is artwork, not copy. **UNVERIFIED:** the hexes (L
@@ -533,6 +535,62 @@ its strings are in `docs/text-rubric.md` §3, most of them Law-text-gated.
 - **The photo line in the composer** became "A Nina não guarda a foto. A OpenAI
   pode guardar por até 30 dias para evitar abuso.", and the Privacidade footer
   names OpenAI and the 30 days; both were untrue before.
+
+## 6j. Build 11 (2026-10-04)
+
+Heitor play-tested build 10 on his iPhone and decided four changes. No board
+draws them; they reuse existing parts.
+
+- **Apple first, one button.** The welcome is the brand block, the black system
+  "Continuar com a Apple" (52pt, field radius, `requestedScopes = []` for every
+  account), the legal footnote and the rating mark. There is no cobalt control
+  on it. The age step ("Antes, sua faixa de idade.") is now the first screen a
+  new account sees after Apple's sheet, so it gained the quiet "Sair da conta"
+  and "Apagar conta" at its foot, under every phase but the wait, as the
+  majority and Terms gates have; "Continuar" stays its one cobalt control.
+- **An adult names themself where the house needs it.** "Seu primeiro nome",
+  placeholder "Como a casa chama você", sits under "Nome da casa", under "Link ou
+  código" and above "Pedir para entrar" on the invite, in the same grout field
+  as its neighbours (`ChosenNameField`), with no helper line. It appears only
+  while the profile still reads the server's "Família" (or "Você", or empty),
+  and the create or join button stays disabled and dimmed until it holds a
+  name. A failed save is one ink line, "Não deu para salvar seu nome. Tente de
+  novo.", with `error()` fired by `ProfileStore`, not the view; the create or
+  join success keeps its own `success()`. "Sair da conta" dims while the name
+  saves, and a save that finishes after the account changed does nothing.
+  The tutorial's owner chip reads "Você" instead of "Família".
+- **The email rows hide when there is no email.** The Ajustes account row is the
+  name alone, and the profile's "Contato" shows only "Telefone"; "Email não
+  vinculado" is gone.
+- **The rating mark only at login and startup, quieter.** `ClassIndMark`'s
+  default is 22pt (was 28 on the welcome and 30 on startup), and both screens
+  use it: 16pt above the safe-area bottom on both, so the startup cover fades
+  into the welcome without the "L" moving. The "Classificação indicativa" rows in
+  adult and minor settings are deleted, and the app-switcher covers
+  (`AppLoadingScreen(showsRating: false)`, the root's and `ChildDayView`'s) no
+  longer draw it, because resuming is not startup. The colour stays the official
+  one; quieter means size and position only.
+- **One centred wait with a round disc.** The "Só um instante." Heitor saw was
+  `AgeCheckView`'s progress state: its column had no width, so inside the
+  `ScrollView` it collapsed to the leading edge, and it drew `NinaMark` in
+  `.reading`, whose disc is a 1.29:1 bar meant for the chat's "Lendo". Every wait
+  (the age check's requesting and recording phases, the home load) is now
+  `AppWaitingScreen`: the 64pt `.rest` mark and the line, centred on the whole
+  screen, with the startup screen's 0.98–1.02 breath that Reduce Motion turns
+  off. `AgeCheckView`'s column also takes the full width, so no phase can
+  collapse again, and the invite's "Conferindo o link." uses `.rest` too. The
+  startup `AppLoadingScreen` centres on the physical screen, and its entrance
+  scale is dropped under Reduce Motion.
+- **Account deletion says what happened.** The single "Não deu para apagar a
+  conta agora. Nada foi apagado. Tente de novo." became eight lines, one per
+  failure (rubric §2.3), in a grout card above the ink button, announced to
+  VoiceOver together with the mail line when it shows. A refusal, an ended
+  session, or the second failure in a row (a cancelled Apple sheet counts) adds
+  the muted "Para apagar mesmo assim, escreva para privacidade@ninai.app." and a
+  quiet "Escrever", so the screen keeps its one dark control and still always
+  leaves a way out (App Store 5.1.1(v)). "A conta pode já ter sido apagada."
+  pairs "Para confirmar, escreva…" with a quiet "Sair" instead. The ink button sizes with `minHeight` now, so "Apagar a conta de
+  ‹nome›" no longer clips at accessibility sizes.
 
 ## 7. Verified
 

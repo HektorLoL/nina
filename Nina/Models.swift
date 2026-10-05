@@ -1828,6 +1828,39 @@ enum NinaLegalLinks {
     }
 
     static let privacyMail = URL(string: "mailto:privacidade@ninai.app")!
+
+    static func accountDeletionMail(reference: String?) -> URL {
+        accountRequestMail(subject: "Apagar minha conta", lines: [("Referência", reference)])
+    }
+
+    static func accountDeletionMail(ward memberID: UUID, guardianReference: String?) -> URL {
+        accountRequestMail(
+            subject: "Apagar a conta de um menor",
+            lines: [("Referência", memberID.uuidString), ("Responsável", guardianReference)]
+        )
+    }
+
+    static func ageContestMail(reference: String?) -> URL {
+        accountRequestMail(subject: "Minha idade está errada", lines: [("Referência", reference)])
+    }
+
+    // Only references, never house data; a reference finds an account and never proves who wrote.
+    private static func accountRequestMail(subject: String, lines: [(label: String, value: String?)]) -> URL {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = privacyEmail
+        var items = [URLQueryItem(name: "subject", value: subject)]
+        let body = lines.compactMap { line -> String? in
+            guard let value = line.value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else { return nil }
+            return "\(line.label): \(value.lowercased())"
+        }
+        if !body.isEmpty {
+            items.append(URLQueryItem(name: "body", value: body.joined(separator: "\n")))
+        }
+        components.queryItems = items
+        return components.url ?? privacyMail
+    }
 }
 
 struct PremiumBenefit: Identifiable, Hashable {

@@ -34,6 +34,10 @@ enum PrivateLocalDataScope {
         "age-assurance:\(userID)"
     }
 
+    static func termsFootnote(for userID: String) -> String {
+        "terms-footnote:\(userID)"
+    }
+
     static let pendingInvite = "pending-invite"
 }
 

@@ -1,6 +1,6 @@
 # Age Rating (Classificação Indicativa) - Nina
 
-Last updated: 2026-09-29
+Last updated: 2026-10-04
 
 Nina aims for an all-ages rating: "Livre" in Brazil, AL on Apple's Brazil
 self-rating. That is a target, not a guarantee: Apple computes the App Store
@@ -47,8 +47,9 @@ login and startup; Decreto 12.880/2026 art. 12 §4 and Portaria art. 55 ask for
 the Terms):
 
 - the App Store listing (Apple);
-- LoginView and the loading screen (`AppLoadingScreen`);
-- the minor's settings row "Classificação indicativa";
+- LoginView and the startup loading screen (`AppLoadingScreen`; not its
+  app-switcher cover), both at 22pt in the same spot (build 11; the settings
+  rows were removed, and `repository.rating-mark-placement` keeps it there);
 - the footer of every page of `ninai.app`;
 - Terms §4, through `ninaRating.termsPhrase`;
 - `/familias/` §11.

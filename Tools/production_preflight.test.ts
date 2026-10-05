@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import {
   ageAssuranceEntitlementsPresent,
+  appleScopeRequests,
   containsDebugSignIn,
   deploymentChecks,
   deploymentTargetsAtLeast,
@@ -19,6 +20,7 @@ import {
   productionEnvironmentChecks,
   ratingCodes,
   ratingConstantsAgree,
+  ratingMarkOffenders,
   type RepositoryFacts,
   retentionClaimOffenders,
   signInProviderCheck,
@@ -290,6 +292,75 @@ Deno.test("the shipped app signs in with Apple and calls no other sign-in door",
     assertEquals(nonAppleSignInCalls(source), []);
   }
   assert(sources[0].includes("provider: .apple"));
+});
+
+Deno.test("the shipped app asks Apple for no name and no email", async () => {
+  const paths = [
+    "../Nina/LoginView.swift",
+    "../Nina/AuthSession.swift",
+    "../Nina/SupabaseAuthClient.swift",
+  ];
+  const [login, session, client] = await Promise.all(
+    paths.map((path) => Deno.readTextFile(new URL(path, import.meta.url))),
+  );
+
+  for (const source of [login, session, client]) {
+    assertEquals(appleScopeRequests(source), []);
+  }
+  assert(login.includes("requestedScopes = []"));
+  assertFalse(client.includes("update_user_metadata"));
+  assertFalse(client.includes('"full_name": .string('));
+});
+
+Deno.test("a name or email scope request reads as asking Apple for data", () => {
+  assertEquals(
+    appleScopeRequests("request.requestedScopes = [.fullName, .email]"),
+    ["requestedScopes = [.fullName, .email]"],
+  );
+  assertEquals(
+    appleScopeRequests("request.requestedScopes = [.email]"),
+    ["requestedScopes = [.email]"],
+  );
+  assertEquals(
+    appleScopeRequests(
+      "request.requestedScopes = Self.requestedScopes(for: reading)",
+    ),
+    ["requestedScopes = Self.requestedScopes(for: reading)"],
+  );
+  assertEquals(appleScopeRequests("request.requestedScopes = []"), []);
+  assertEquals(appleScopeRequests("request.requestedScopes = [ ]"), []);
+  assertEquals(appleScopeRequests("request.requestedScopes=[]"), []);
+});
+
+Deno.test("the app reads the server's fallback name as no name", async () => {
+  const migrations = new URL("../supabase/migrations/", import.meta.url);
+  const names: string[] = [];
+  for await (const entry of Deno.readDir(migrations)) {
+    if (entry.isFile && /^\d{12}_[a-z0-9_]+\.sql$/.test(entry.name)) {
+      names.push(entry.name);
+    }
+  }
+  names.sort();
+  let definition = "";
+  for (const name of names) {
+    const sql = await Deno.readTextFile(new URL(name, migrations));
+    const start = sql.indexOf(
+      "create or replace function public.auth_user_display_name(",
+    );
+    if (start === -1) continue;
+    const end = sql.indexOf("$$;", start);
+    if (end === -1) continue;
+    definition = sql.slice(start, end);
+  }
+
+  assert(definition.length > 0);
+  assert(/'Família'\s*\);\s*$/.test(definition));
+
+  const profileStore = await Deno.readTextFile(
+    new URL("../Nina/ProfileStore.swift", import.meta.url),
+  );
+  assert(profileStore.includes('"família"'));
+  assert(profileStore.includes('"você"'));
 });
 
 Deno.test("an email code, magic link, password, OAuth or non-Apple ID token reads as another door", () => {
@@ -775,6 +846,46 @@ Deno.test("the app and the website rating constants must agree", () => {
       'enum NinaRating {\n    static let currentCode = "X"\n}',
       'export const ninaRatingCode: NinaRatingCode = "X";',
     ),
+  );
+});
+
+Deno.test("the rating mark is drawn on the welcome and the startup screen and nowhere else in the app", async () => {
+  const shipped = await Promise.all(
+    [
+      "Nina/LoginView.swift",
+      "Nina/AppRootView.swift",
+      "Nina/Sheets.swift",
+      "Nina/MinorViews.swift",
+      "Nina/ChildDayView.swift",
+      "Nina/NinaRating.swift",
+    ].map(async (path) => ({
+      path,
+      text: await Deno.readTextFile(new URL(`../${path}`, import.meta.url)),
+    })),
+  );
+  assertEquals(ratingMarkOffenders(shipped), []);
+
+  const passing = [
+    { path: "Nina/LoginView.swift", text: "ClassIndMark()" },
+    { path: "Nina/AppRootView.swift", text: "ClassIndMark()" },
+    { path: "Nina/NinaRating.swift", text: "struct ClassIndMark: View {}" },
+    { path: "web/src/components/RatingMark.astro", text: "ClassIndMark(" },
+  ];
+  assertEquals(ratingMarkOffenders(passing), []);
+
+  assertEquals(
+    ratingMarkOffenders([
+      ...passing,
+      { path: "Nina/Sheets.swift", text: "ClassIndMark(size: 24)" },
+    ]),
+    ["Nina/Sheets.swift"],
+  );
+  assertEquals(
+    ratingMarkOffenders([
+      { path: "Nina/LoginView.swift", text: 'Text("Nina")' },
+      { path: "Nina/AppRootView.swift", text: "ClassIndMark()" },
+    ]),
+    ["Nina/LoginView.swift (missing)"],
   );
 });
 

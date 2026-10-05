@@ -1,6 +1,6 @@
 # Children's Impact Assessment - Nina
 
-Last updated: 2026-09-29
+Last updated: 2026-10-04
 
 One document for every assessment the law asks of a product that children and
 adolescents are likely to use. It was written by the controller, without a
@@ -76,8 +76,9 @@ A child is under 12 and an adolescent is 12 to 17 (ECA art. 2; ECA Digital art.
 
 - **Minimization (LGPD art. 6 III, art. 14 §4).** A minor's participation never
   depends on a photo, a birth date, an email or AI consent. Sign in with Apple
-  asks a minor or unknown-age account for no name or email. The server forces a
-  minor's profile email to null and optional fields to empty.
+  asks no account for a name or an email (since build 11, 2026-10-04); a minor
+  types only a first name where they ask to join. The server forces a minor's
+  profile email to null and optional fields to empty.
 - **Single-purpose age data (ECA Digital art. 13; Decreto 12.880 art. 24; Apple
   DPLA §3.3.3(O)).** The band gates features and nothing else: it never enters
   member lists outside the guardian's supervision block, model context, logs,

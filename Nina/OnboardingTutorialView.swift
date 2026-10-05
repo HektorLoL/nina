@@ -18,7 +18,7 @@ struct OnboardingTutorialView: View {
 
     private var meLabel: String {
         let name = (authSession.currentUser?.displayName ?? "").firstWord
-        return name.isEmpty ? "Você" : name
+        return ProfileNaming.isPlaceholder(name) ? "Você" : name
     }
 
     var body: some View {

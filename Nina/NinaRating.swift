@@ -40,7 +40,7 @@ struct NinaRatingDescriptor: Hashable {
 // The symbol shows only what NinaRating.currentCode says; the screen never decides a rating of its own.
 struct ClassIndMark: View {
     var rating: NinaRatingDescriptor = NinaRating.current
-    var size: CGFloat = 28
+    var size: CGFloat = 22
 
     var body: some View {
         RoundedRectangle(cornerRadius: size * 0.18, style: .continuous)

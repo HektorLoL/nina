@@ -65,6 +65,13 @@ struct AuthUser: Codable, Hashable, Identifiable {
     var signedInWithApple: Bool {
         provider == .apple || linkedProviders.contains(.apple)
     }
+
+    // An account made with no Apple scope has no email, and no row stands in for one.
+    var shownEmail: String? {
+        guard let trimmed = email?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
 }
 
 #if DEBUG
@@ -127,7 +134,6 @@ extension AuthUser {
 struct AppleSignInCredential: Sendable {
     var identityToken: String
     var rawNonce: String
-    var fullName: String?
 }
 
 enum AppleSignInNonce {
@@ -163,15 +169,12 @@ enum AppleSignInNonce {
 }
 
 enum AuthFlowError: Error {
-    case deletionFailed
     case appleCredentialInvalid
     case configurationMissing
     case unavailable
 
     var userMessage: String {
         switch self {
-        case .deletionFailed:
-            "Não deu para apagar a conta agora. Nada foi apagado. Tente de novo."
         case .appleCredentialInvalid:
             "A Apple não retornou uma credencial válida. Tente novamente."
         case .configurationMissing:
@@ -199,7 +202,7 @@ protocol AuthClient {
 
 extension AuthClient {
     func deleteAccount(_ request: DeleteAccountRequest) async throws {
-        throw AuthFlowError.unavailable
+        throw AccountDeletionFailure.serverUnavailable
     }
 }
 
@@ -303,8 +306,8 @@ struct MockAuthClient: AuthClient {
 
         return AuthUser(
             id: "apple:mock-family",
-            displayName: credential.fullName ?? "Família Nina",
-            email: "familia@nina.local",
+            displayName: "Família",
+            email: nil,
             provider: .apple,
             isEmailVerified: true,
             linkedProviders: [.apple]
@@ -334,6 +337,10 @@ final class AuthSessionStore {
     var isDeletingAccount = false
     var errorMessage: String?
     var isBackendAvailable = true
+    private(set) var deletionFailure: AccountDeletionFailure?
+    private(set) var failedDeletionAttempts = 0
+    @ObservationIgnored private var ownDeletionMayHaveRun = false
+    static let failedDeletionAttemptsBeforeMail = 2
 
     var isSignedIn: Bool {
         currentUser != nil
@@ -402,6 +409,26 @@ final class AuthSessionStore {
         setError(error)
     }
 
+    func noteChosenDisplayName(_ name: String) {
+        currentUser?.displayName = name
+    }
+
+    // App Store 5.1.1(v): a refusal, an ended session or a second failure in a row always leaves a way out.
+    var offersDeletionByMail: Bool {
+        switch deletionFailure {
+        case nil, .guardianAccessDenied?:
+            false
+        case .sessionEnded?, .rejected?, .mayAlreadyBeDeleted?:
+            true
+        case .appleCancelled?, .offline?, .unconfirmed?, .serverUnavailable?:
+            failedDeletionAttempts >= Self.failedDeletionAttemptsBeforeMail
+        }
+    }
+
+    func clearDeletionFailure() {
+        deletionFailure = nil
+    }
+
     @discardableResult
     func signOut() async -> Bool {
         errorMessage = nil
@@ -430,7 +457,7 @@ final class AuthSessionStore {
     @discardableResult
     func deleteAccount(reauthorizer: any AppleReauthorizing = NoAppleReauthorization()) async -> Bool {
         guard let user = currentUser, !isDeletingAccount else { return false }
-        errorMessage = nil
+        deletionFailure = nil
 
         #if DEBUG
         if user.isDebugAccount {
@@ -455,27 +482,35 @@ final class AuthSessionStore {
         } catch is CancellationError {
             return false
         } catch {
-            handle(error)
+            recordOwnDeletionFailure(error)
             return false
         }
+    }
+
+    // The account may be gone already, so leaving never depends on the server answering.
+    func leaveAccountThatMayBeDeleted() async {
+        guard deletionFailure == .mayAlreadyBeDeleted else { return }
+        try? await authClient.signOut()
+        clearSessionState()
     }
 
     // A guardian deletes a claimed ward's account and stays signed in.
     @discardableResult
     func deleteWardAccount(memberID: UUID) async -> Bool {
         guard currentUser != nil, !isDeletingAccount else { return false }
-        errorMessage = nil
+        deletionFailure = nil
         isDeletingAccount = true
         defer { isDeletingAccount = false }
 
         do {
             try await authClient.deleteAccount(.guardian(memberID: memberID))
+            failedDeletionAttempts = 0
             Haptics.success()
             return true
         } catch is CancellationError {
             return false
         } catch {
-            handle(error)
+            recordDeletionFailure(error)
             return false
         }
     }
@@ -487,7 +522,9 @@ final class AuthSessionStore {
         guard user.signedInWithApple else { return DeleteAccountRequest() }
         switch await reauthorizer.freshAuthorizationCode() {
         case .cancelled:
-            errorMessage = "A Apple não confirmou. Nada foi apagado."
+            // A cancelled sheet sends nothing, but it still counts: a sheet that never completes must reach the mail.
+            failedDeletionAttempts += 1
+            deletionFailure = .appleCancelled
             return nil
         case .failed:
             return DeleteAccountRequest()
@@ -532,9 +569,31 @@ final class AuthSessionStore {
         Haptics.error()
     }
 
+    private func recordDeletionFailure(_ error: Error) {
+        failedDeletionAttempts += 1
+        deletionFailure = (error as? AccountDeletionFailure) ?? .unconfirmed
+        Haptics.error()
+    }
+
+    // After an answer that never arrived, a signed-out reply most likely means the deletion finished.
+    private func recordOwnDeletionFailure(_ error: Error) {
+        let failure = (error as? AccountDeletionFailure) ?? .unconfirmed
+        if failure == .sessionEnded, ownDeletionMayHaveRun {
+            recordDeletionFailure(AccountDeletionFailure.mayAlreadyBeDeleted)
+            return
+        }
+        if failure == .unconfirmed {
+            ownDeletionMayHaveRun = true
+        }
+        recordDeletionFailure(failure)
+    }
+
     private func clearSessionState() {
         currentUser = nil
         interactiveSignInUserID = nil
+        deletionFailure = nil
+        failedDeletionAttempts = 0
+        ownDeletionMayHaveRun = false
     }
 }
 

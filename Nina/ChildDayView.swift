@@ -209,7 +209,7 @@ struct ChildDayView: View {
         .overlay {
             // The root app-switcher cover sits under every full-screen cover, so this list draws its own.
             if isCoveredForPrivacy {
-                AppLoadingScreen()
+                AppLoadingScreen(showsRating: false)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }

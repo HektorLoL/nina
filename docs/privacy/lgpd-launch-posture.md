@@ -1,6 +1,6 @@
 # LGPD Launch Posture - Nina
 
-Last updated: 2026-09-29
+Last updated: 2026-10-05
 
 This is an engineering/privacy operations checklist for launch readiness. It is
 not a substitute for Brazilian legal review, but it documents the product
@@ -32,10 +32,11 @@ Official references:
 
 Nina processes:
 
-- Account data: Supabase Auth ID, Apple identity provider metadata, the email
-  Apple shares at sign-in (a private-relay address when the person hides
-  theirs), display name. An account whose age reads as minor or unknown asks
-  Apple for no name or email.
+- Account data: Supabase Auth ID, Apple identity provider metadata, display
+  name (the first name the person types), and, only for an account created
+  before build 11, the email Apple shared at sign-in (a private-relay address
+  when the person hid theirs). Since build 11 Sign in with Apple asks no
+  account for a name or an email.
 - Age data: one row per account with status (`adult`, `minor`, `unknown`), the
   minor band (`under_12`, `12_15`, `16_17`), the assurance method
   (`confirmed`, `self_declared`, `guardian_declared`, `operator`, `none`), a
@@ -218,8 +219,24 @@ Recommended request handling:
   privacy policy promises for requests about minors.
 - Verify identity before exporting or deleting data outside the in-app
   authenticated flows.
-- Log request date, requester, verified account, action taken, completion date,
-  and retained exceptions.
+- A deletion request mailed from the app's way-out (a refusal, or a second
+  failure in a row, on "Apagar conta") carries only references: "Referência:
+  ‹auth user id›", or a ward's member id plus "Responsável: ‹guardian's auth
+  user id›". Build-11 accounts and minors have no email, so the reference is how
+  the account is found, and it proves nothing: other adults of the house can
+  read it. There is no sender address to check either. Follow
+  `docs/production-launch-runbook.md` §2, "Deletion requests by mail": the
+  sender proves control from inside the account (a one-time code the operator
+  mails, typed as the Perfil name and read back from `profiles`), a guardian
+  proves their own account and passes `authorize_guardian_account_deletion`, a
+  minor's or unknown-age account's own mail is never acted on alone, then the
+  profile photos and the Auth user are deleted (the database trigger runs the
+  same preparation as the app) and the request is logged with the proof used.
+- An age contest mailed from "Minha idade está errada" carries "Referência:
+  ‹auth user id›" the same way, and the same proof rules hold before any move
+  (`docs/age-contest-runbook.md`).
+- Log request date, requester, verified account and the proof that verified it,
+  action taken, completion date, and retained exceptions.
 
 ## Retention
 

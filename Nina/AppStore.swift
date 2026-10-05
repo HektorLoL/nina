@@ -297,7 +297,14 @@ final class AppStore {
     @ObservationIgnored private var realtimeRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var notificationSyncTask: Task<Void, Never>?
     @ObservationIgnored private var minorSessionStartedAt: Date?
-    @ObservationIgnored private var termsFootnoteUserID: String?
+    @ObservationIgnored private var termsFootnote: TermsFootnote?
+    private(set) var hasUnrecordedTermsFootnote = false
+
+    private struct TermsFootnote {
+        let userID: String
+        let shownAt: Date
+        let wasRestored: Bool
+    }
     @ObservationIgnored private(set) var lastMutationErrorCode: RemoteRPCErrorCode?
 
     var undoableCompletionID: TaskItem.ID?
@@ -578,9 +585,13 @@ final class AppStore {
             minorSessionStartedAt = nil
             restorableDraft = nil
             isRecordingFootnoteAcceptance = false
-            if termsFootnoteUserID != user?.id {
-                termsFootnoteUserID = nil
+            if let previousUserID = activeHomeUserID {
+                removeStoredTermsFootnote(for: previousUserID)
             }
+            if termsFootnote?.userID != user?.id {
+                termsFootnote = user.flatMap { storedTermsFootnote(for: $0.id) }
+            }
+            hasUnrecordedTermsFootnote = termsFootnote != nil
         }
         homeContextGeneration &+= 1
         remoteMutationTask?.cancel()
@@ -1512,8 +1523,17 @@ final class AppStore {
 
     // Only a sign-in that just passed the welcome screen's footnote may be recorded as accepting the Terms;
     // a restored session never saw the current version, so it waits for the person to tap Aceitar.
-    func noteTermsFootnoteShown(for userID: String) {
-        termsFootnoteUserID = userID
+    // The footnote outlives a relaunch on this phone until the server records it.
+    func noteTermsFootnoteShown(for userID: String, at shownAt: Date = .now) {
+        termsFootnote = TermsFootnote(userID: userID, shownAt: shownAt, wasRestored: false)
+        hasUnrecordedTermsFootnote = true
+        PrivateLocalDataAccess.writeDataBestEffort(
+            Data(Self.termsFootnoteDateFormatter.string(from: shownAt).utf8),
+            forKey: Self.termsFootnoteKey(for: userID),
+            ownerScope: PrivateLocalDataScope.termsFootnote(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        )
     }
 
     var needsTermsAcceptance: Bool {
@@ -1523,30 +1543,90 @@ final class AppStore {
             && !isRecordingFootnoteAcceptance
     }
 
+    // A footnote read back after a relaunch covers only Terms dated on or before the São Paulo day it was shown.
+    static func termsFootnote(shownAt: Date, covers termsVersion: String) -> Bool {
+        guard termsVersion.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil else {
+            return false
+        }
+        return termsVersionDayFormatter.string(from: shownAt) >= termsVersion
+    }
+
     private func recordTermsAcceptanceIfNeeded() {
         guard viewerAge.isAdult,
               !viewerAge.terms.acceptedCurrent,
               !viewerAge.terms.reachedMajority,
               let activeUser,
-              termsFootnoteUserID == activeUser.id,
+              let footnote = termsFootnote,
+              footnote.userID == activeUser.id,
               !usesLocalDebugBackend(for: activeUser),
               let remoteHomeBackend else {
             return
         }
-        termsFootnoteUserID = nil
-        isRecordingFootnoteAcceptance = true
+        termsFootnote = nil
         let userID = activeUser.id
+        if footnote.wasRestored,
+           !Self.termsFootnote(shownAt: footnote.shownAt, covers: viewerAge.terms.currentTermsVersion) {
+            removeStoredTermsFootnote(for: userID)
+            hasUnrecordedTermsFootnote = false
+            return
+        }
+        isRecordingFootnoteAcceptance = true
         // The acceptance belongs to the account, not to one home context, so a reload that raced it still
         // receives its result instead of showing the Terms gate to someone who just accepted them.
         Task { [weak self] in
             let status = try? await remoteHomeBackend.recordTermsAcceptance()
             guard let self, self.activeHomeUserID == userID else { return }
             self.isRecordingFootnoteAcceptance = false
-            if let status, self.viewerAge.isAdult {
+            guard let status else {
+                self.termsFootnote = footnote
+                return
+            }
+            if self.viewerAge.isAdult {
                 self.viewerAge.terms = status.terms
             }
+            self.removeStoredTermsFootnote(for: userID)
+            self.hasUnrecordedTermsFootnote = false
         }
     }
+
+    private func storedTermsFootnote(for userID: String) -> TermsFootnote? {
+        guard let stored = PrivateLocalDataAccess.loadString(
+            forKey: Self.termsFootnoteKey(for: userID),
+            ownerScope: PrivateLocalDataScope.termsFootnote(for: userID),
+            store: privateDataStore,
+            legacyDefaults: defaults
+        ),
+              let shownAt = Self.termsFootnoteDateFormatter.date(from: stored) else {
+            return nil
+        }
+        return TermsFootnote(userID: userID, shownAt: shownAt, wasRestored: true)
+    }
+
+    private func removeStoredTermsFootnote(for userID: String) {
+        PrivateLocalDataAccess.removeAllData(
+            forOwnerScope: PrivateLocalDataScope.termsFootnote(for: userID),
+            store: privateDataStore
+        )
+    }
+
+    private static func termsFootnoteKey(for userID: String) -> String {
+        "nina.termsFootnote.\(userID)"
+    }
+
+    private static let termsFootnoteDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let termsVersionDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "America/Sao_Paulo")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     @discardableResult
     func acceptTermsAsAdult() async -> Bool {
@@ -1565,6 +1645,9 @@ final class AppStore {
             let status = try await remoteHomeBackend.recordTermsAcceptance()
             guard isCurrentHomeContext(contextToken) else { return false }
             viewerAge = status
+            termsFootnote = nil
+            removeStoredTermsFootnote(for: activeUser.id)
+            hasUnrecordedTermsFootnote = false
             Haptics.success()
             return true
         } catch {
@@ -2270,6 +2353,7 @@ final class AppStore {
             forOwnerScope: PrivateLocalDataScope.ageAssurance(for: userID),
             store: privateDataStore
         )
+        removeStoredTermsFootnote(for: userID)
         defaults.removeObject(forKey: Self.aiMemoryConsentKey(for: userID))
 
         guard clearsActiveContext else { return }

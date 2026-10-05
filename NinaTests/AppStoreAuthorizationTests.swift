@@ -3531,6 +3531,36 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testAnAppleFirstSignInRecordsTheFootnoteOnlyOnceTheAgeReadsAdult() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState(viewerAge: .unknown))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        store.noteTermsFootnoteShown(for: user.id)
+        await store.activateHomeContext(for: user)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        let beforeAge = await backend.termsAcceptanceCount()
+        XCTAssertEqual(beforeAge, 0)
+        XCTAssertFalse(store.needsTermsAcceptance)
+
+        var adult = AgeStatus.testTrustedAdult
+        adult.terms.acceptedCurrent = false
+        await backend.setViewerAge(adult)
+        await store.applyRecordedAge(adult, for: user)
+        var attempts = 0
+        while !store.viewerAge.terms.acceptedCurrent, attempts < 200 {
+            attempts += 1
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        let afterAge = await backend.termsAcceptanceCount()
+        XCTAssertEqual(afterAge, 1)
+        XCTAssertTrue(store.viewerAge.terms.acceptedCurrent)
+        XCTAssertFalse(store.needsTermsAcceptance)
+    }
+
+    @MainActor
     func testARestoredSessionRecordsNothingUntilThePersonTapsAceitar() async {
         let user = makeUser()
         var age = AgeStatus.testTrustedAdult
@@ -3554,6 +3584,186 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertTrue(accepted)
         XCTAssertEqual(tappedCount, 1)
         XCTAssertFalse(store.needsTermsAcceptance)
+    }
+
+    @MainActor
+    func testAWelcomeFootnoteSurvivesARelaunchBeforeTheAgeIsReadAndIsRecordedOnce() async throws {
+        let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nina-footnote-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState(viewerAge: .unknown))
+
+        let beforeRelaunch = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine()
+        )
+        beforeRelaunch.noteTermsFootnoteShown(for: user.id)
+        await beforeRelaunch.activateHomeContext(for: user)
+
+        let relaunched = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine()
+        )
+        await relaunched.activateHomeContext(for: user)
+        XCTAssertTrue(relaunched.hasUnrecordedTermsFootnote)
+
+        var adult = AgeStatus.testTrustedAdult
+        adult.terms.acceptedCurrent = false
+        await backend.setViewerAge(adult)
+        await relaunched.applyRecordedAge(adult, for: user)
+        var attempts = 0
+        while !relaunched.viewerAge.terms.acceptedCurrent, attempts < 200 {
+            attempts += 1
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        let recorded = await backend.termsAcceptanceCount()
+        XCTAssertEqual(recorded, 1)
+        XCTAssertFalse(relaunched.needsTermsAcceptance)
+        XCTAssertFalse(relaunched.hasUnrecordedTermsFootnote)
+
+        let afterRecording = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine()
+        )
+        await afterRecording.activateHomeContext(for: user)
+        XCTAssertFalse(afterRecording.hasUnrecordedTermsFootnote)
+        let stillOnce = await backend.termsAcceptanceCount()
+        XCTAssertEqual(stillOnce, 1)
+    }
+
+    @MainActor
+    func testAFootnoteShownBeforeTheTermsChangedIsNeverRecordedAndTheGateSaysTheyChanged() async throws {
+        let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nina-footnote-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
+        let user = makeUser()
+        var adult = AgeStatus.testTrustedAdult
+        adult.terms.acceptedCurrent = false
+        adult.terms.currentTermsVersion = "2026-11-02"
+        let backend = RecordingHomeBackend(state: makeRemoteState(viewerAge: .unknown))
+
+        let beforeRelaunch = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine()
+        )
+        beforeRelaunch.noteTermsFootnoteShown(for: user.id, at: Date(timeIntervalSince1970: 1_793_000_000))
+        await beforeRelaunch.activateHomeContext(for: user)
+
+        await backend.setViewerAge(adult)
+        let relaunched = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine()
+        )
+        await relaunched.activateHomeContext(for: user)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        let recorded = await backend.termsAcceptanceCount()
+        XCTAssertEqual(recorded, 0)
+        XCTAssertTrue(relaunched.needsTermsAcceptance)
+        XCTAssertFalse(relaunched.hasUnrecordedTermsFootnote)
+    }
+
+    @MainActor
+    func testAFootnoteWhoseRecordingFailedAsksAgainWithoutSayingTheTermsChanged() async {
+        let user = makeUser()
+        var adult = AgeStatus.testTrustedAdult
+        adult.terms.acceptedCurrent = false
+        let backend = RecordingHomeBackend(state: makeRemoteState(viewerAge: adult))
+        await backend.setTermsAcceptanceFails(true)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        store.noteTermsFootnoteShown(for: user.id)
+        await store.activateHomeContext(for: user)
+        var attempts = 0
+        while store.isRecordingFootnoteAcceptance || !store.needsTermsAcceptance, attempts < 200 {
+            attempts += 1
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        XCTAssertTrue(store.needsTermsAcceptance)
+        XCTAssertTrue(store.hasUnrecordedTermsFootnote)
+
+        await backend.setTermsAcceptanceFails(false)
+        await store.activateHomeContext(for: user)
+        attempts = 0
+        while !store.viewerAge.terms.acceptedCurrent, attempts < 200 {
+            attempts += 1
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        let count = await backend.termsAcceptanceCount()
+        XCTAssertEqual(count, 2)
+        XCTAssertFalse(store.needsTermsAcceptance)
+        XCTAssertFalse(store.hasUnrecordedTermsFootnote)
+    }
+
+    @MainActor
+    func testSigningOutBeforeTheAgeStepDropsTheStoredFootnote() async throws {
+        let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nina-footnote-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState(viewerAge: .unknown))
+        let store = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine()
+        )
+
+        store.noteTermsFootnoteShown(for: user.id)
+        await store.activateHomeContext(for: user)
+        await store.activateHomeContext(for: nil)
+
+        let relaunched = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine()
+        )
+        await relaunched.activateHomeContext(for: user)
+        XCTAssertFalse(relaunched.hasUnrecordedTermsFootnote)
+    }
+
+    @MainActor
+    func testARestoredFootnoteCoversOnlyTermsDatedOnOrBeforeTheDayItWasShown() {
+        let shownAt = Date(timeIntervalSince1970: 1_791_331_200)
+
+        XCTAssertTrue(AppStore.termsFootnote(shownAt: shownAt, covers: "2026-09-29"))
+        XCTAssertTrue(AppStore.termsFootnote(shownAt: shownAt, covers: "2026-10-06"))
+        XCTAssertFalse(AppStore.termsFootnote(shownAt: shownAt, covers: "2026-10-07"))
+        XCTAssertFalse(AppStore.termsFootnote(shownAt: shownAt, covers: "v3"))
+        XCTAssertFalse(AppStore.termsFootnote(shownAt: shownAt, covers: ""))
     }
 
     @MainActor
@@ -4248,13 +4458,21 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
     private var exportData = Data()
     private(set) var lastTransferConsent: Bool?
     private var termsAcceptances = 0
+    private var termsAcceptanceFails = false
 
     func termsAcceptanceCount() -> Int {
         termsAcceptances
     }
 
+    func setTermsAcceptanceFails(_ shouldFail: Bool) {
+        termsAcceptanceFails = shouldFail
+    }
+
     func recordTermsAcceptance() async throws -> AgeStatus {
         termsAcceptances += 1
+        if termsAcceptanceFails {
+            throw RemoteHomeBackendError.operationUnavailable
+        }
         state.viewerAge.terms.acceptedCurrent = true
         return state.viewerAge
     }
@@ -4298,6 +4516,10 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
 
     func setHomeState(_ state: RemoteHomeState) {
         self.state = state
+    }
+
+    func setViewerAge(_ age: AgeStatus) {
+        state.viewerAge = age
     }
 
     func waitUntilRealtimeSubscribed() async {

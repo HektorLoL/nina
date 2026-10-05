@@ -29,7 +29,7 @@ secret = ""
 redirect_uri = ""
 url = ""
 skip_nonce_check = false
-email_optional = false
+email_optional = true
 
 [functions.nina-chat]
 verify_jwt = true

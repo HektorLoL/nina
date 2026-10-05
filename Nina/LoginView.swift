@@ -1,21 +1,12 @@
 import AuthenticationServices
 import SwiftUI
 
-// Every age sees this screen: it names no friend and asks for a name and email only from a reported adult.
+// Every age sees this screen: it names no friend and asks Apple for nothing beyond the sign-in.
 struct LoginView: View {
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(InviteLinkStore.self) private var inviteLinkStore
-    @Environment(AgeCheckCoordinator.self) private var ageCheck
 
     @State private var appleRawNonce: String?
-    @State private var ageReading: AgeReadingResult?
-    @State private var isReadingAge = false
-
-    // Apple is asked for a name and an email only when the device reported an adult.
-    static func requestedScopes(for reading: AgeReadingResult?) -> [ASAuthorization.Scope] {
-        guard case .reading(let mapping) = reading, mapping.status == .adult else { return [] }
-        return [.fullName, .email]
-    }
 
     private var isInvited: Bool {
         inviteLinkStore.pendingCode != nil
@@ -63,37 +54,25 @@ struct LoginView: View {
 
     private var actionGroup: some View {
         VStack(spacing: 12) {
-            if ageReading == nil {
-                NinaButton(
-                    title: "Continuar",
-                    fillsWidth: true,
-                    isEnabled: authSession.isBackendAvailable,
-                    isPending: isReadingAge
-                ) {
-                    readAge()
+            SignInWithAppleButton(.continue) { request in
+                do {
+                    let rawNonce = try AppleSignInNonce.make()
+                    appleRawNonce = rawNonce
+                    request.requestedScopes = []
+                    request.nonce = AppleSignInNonce.sha256(rawNonce)
+                } catch {
+                    appleRawNonce = nil
+                    authSession.report(.unavailable)
                 }
-                .accessibilityIdentifier("age-continue")
-            } else {
-                SignInWithAppleButton(.continue) { request in
-                    do {
-                        let rawNonce = try AppleSignInNonce.make()
-                        appleRawNonce = rawNonce
-                        request.requestedScopes = Self.requestedScopes(for: ageReading)
-                        request.nonce = AppleSignInNonce.sha256(rawNonce)
-                    } catch {
-                        appleRawNonce = nil
-                        authSession.report(.unavailable)
-                    }
-                } onCompletion: { result in
-                    handleAppleCompletion(result)
-                }
-                .signInWithAppleButtonStyle(.black)
-                .frame(height: 52)
-                .clipShape(RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
-                .disabled(authSession.isSigningIn || !authSession.isBackendAvailable)
-                .opacity(authSession.isSigningIn || !authSession.isBackendAvailable ? 0.4 : 1)
-                .accessibilityIdentifier("apple-sign-in")
+            } onCompletion: { result in
+                handleAppleCompletion(result)
             }
+            .signInWithAppleButtonStyle(.black)
+            .frame(height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
+            .disabled(authSession.isSigningIn || !authSession.isBackendAvailable)
+            .opacity(authSession.isSigningIn || !authSession.isBackendAvailable ? 0.4 : 1)
+            .accessibilityIdentifier("apple-sign-in")
 
             #if DEBUG
             debugAccountRow
@@ -126,17 +105,7 @@ struct LoginView: View {
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity)
 
-            ClassIndMark(size: 28)
-        }
-    }
-
-    private func readAge() {
-        guard !isReadingAge else { return }
-        Haptics.lightImpact()
-        isReadingAge = true
-        Task {
-            ageReading = await ageCheck.readBeforeSignIn()
-            isReadingAge = false
+            ClassIndMark()
         }
     }
 
@@ -181,16 +150,9 @@ struct LoginView: View {
                 return
             }
 
-            let fullName = credential.fullName.map {
-                PersonNameComponentsFormatter().string(from: $0)
-            }
             Task {
                 await authSession.signInWithApple(
-                    credential: AppleSignInCredential(
-                        identityToken: identityToken,
-                        rawNonce: rawNonce,
-                        fullName: fullName
-                    )
+                    credential: AppleSignInCredential(identityToken: identityToken, rawNonce: rawNonce)
                 )
                 appleRawNonce = nil
             }
@@ -202,5 +164,4 @@ struct LoginView: View {
     LoginView()
         .environment(AuthSessionStore())
         .environment(InviteLinkStore())
-        .environment(AgeCheckCoordinator())
 }

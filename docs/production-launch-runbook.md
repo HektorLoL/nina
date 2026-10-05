@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-09-29
+Last updated: 2026-10-05
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -162,6 +162,92 @@ turned on, so keep Google off. Turning Email off most likely does not end
 sessions that were already signed in by code; they last until that person signs
 out.
 
+**Allow users without an email (before build 11 reaches anyone).** In the same
+Apple provider settings, turn on "Allow users without an email". Since build 11
+the sign-in asks Apple for no scope, so a new Apple ID's identity token carries
+no email claim; with the switch off GoTrue refuses the account as an
+unverified email, and every new person reads "Não foi possível entrar agora.
+Tente de novo." It is backward-compatible with build 10, whose minor, unknown
+and unreadable sign-ins already asked for no scope. `/auth/v1/settings` does
+not report the switch, so no preflight can prove it; prove it on a device
+instead: sign in with a brand-new Apple ID (or one that removed Nina under
+Settings › Apple Account › Sign in with Apple) on build 11 and land on "Antes,
+sua faixa de idade.". `supabase/config.toml` sets `email_optional = true` for
+the local stack only.
+
+### Deletion requests by mail
+
+Since build 11, a deletion that is refused, or fails twice in a row (a
+cancelled Apple sheet counts), offers "Para apagar mesmo assim, escreva para
+privacidade@ninai.app." The mail carries the subject "Apagar minha conta" and
+"Referência: ‹auth user id›", or, for a guardian, "Apagar a conta de um menor"
+with "Referência: ‹ward's `family_members.id`›" and "Responsável: ‹the
+guardian's own auth user id›". Build-11 accounts and minors have no email, so
+the reference is how the account is found. **The reference proves nothing**:
+every adult of a house can read every member's `user_id` and member id, and an
+owner or admin also sees the ids on join requests, so a mail carrying only a
+reference may come from someone else in the house. A deletion cannot be undone,
+and deleting an owner hands the house to the remaining adult, so the id alone is
+never enough. Answer within the 15 days the privacy policy promises:
+
+1. **Find the account by the reference**, never by a name or an address:
+
+   ```sql
+   select id, email, created_at from auth.users where id = '<auth user id>';
+   select id, user_id, family_id, household_role
+     from public.family_members where id = '<ward member id>';
+   ```
+
+   No row means the account is already gone (a deletion whose answer was lost
+   reads "A conta pode já ter sido apagada." in the app); say so and stop.
+2. **Prove that the sender controls the account, from inside it.** Reply to the
+   sender with a one-time code and nothing else about the account:
+
+   ```sh
+   openssl rand -hex 3
+   ```
+
+   and ask them to open Ajustes › Perfil, type that code as their name, save,
+   and answer the mail. Only the signed-in account can write its own profile
+   row (`profiles` policy "Users can update own profile"), so another adult who
+   knows the id cannot pass this. Then read it back:
+
+   ```sql
+   select display_name, updated_at from public.profiles where id = '<auth user id>';
+   ```
+
+   It must equal the code exactly. A code is used once; a code that appeared in
+   an earlier request is never accepted again.
+3. **A guardian's request for a ward**: run step 2 on the guardian's own
+   reference (the "Responsável" line), then check that this guardian may act for
+   that ward today, with the same rule the app's guardian deletion uses:
+
+   ```sql
+   select public.authorize_guardian_account_deletion('<guardian auth user id>', '<ward member id>');
+   ```
+
+   It returns the ward's auth user id, or raises `guardian_access_denied`; stop
+   on the error. The guardian can also delete the ward in the app (Casa › the
+   ward's screen › Apagar conta), which needs none of this.
+4. **A minor's or an unknown-age account's own request** cannot pass step 2:
+   those accounts have no Perfil editor, and nothing new is asked of a minor.
+   Never delete one on the reference alone. If it has a live guardian, answer
+   that the guardian can delete it in the app or write in under step 3. If it is
+   a minor with no house and no pending request, `nina-maintenance` deletes it
+   30 days after its last house, request or decision; say so. Otherwise (an
+   unknown-age account with no house) the in-app "Apagar conta" is the only
+   proven path: find why it fails (the `delete-account` logs carry the request
+   id and a stable code), fix it, and ask the person to try again.
+5. **Delete in the same order the app does**: storage
+   `profile-photos/<uid>/*` first, then the Auth user in Authentication › Users.
+   The `BEFORE DELETE` trigger on `auth.users` runs `prepare_account_deletion`
+   itself, so the house, memberships and authored data follow the same rules as
+   an in-app deletion. The person's Apple token is not revoked on this path
+   (there is no authorization code); say so in the answer.
+6. **Record** the date, the reference, which proof passed (step 2 or 3) and the
+   outcome in the request log (`docs/privacy/lgpd-launch-posture.md`), and
+   answer the person. Keep no copy of the code beyond the thread.
+
 ## 3. Database and Edge Functions
 
 Run the local gate first — `docs/local-database.md` — so a migration that cannot
@@ -310,8 +396,10 @@ schema every adult would see the minor screen.
   conversar com a Nina" stays grey until the separate "Envio para fora do
   Brasil" box is ticked. Until two adults of a house accept again, that house
   gets no weekly insight.
-- **The age step comes first.** "Continuar" asks the iPhone for the age range
-  before the Apple button appears. A declared (not Apple-confirmed) adult keeps
+- **One Apple button, and Apple asks nothing** (build 11). The welcome shows only
+  "Continuar com a Apple"; Apple's sheet asks for no name and no email, the
+  age step comes right after it, and an adult types a first name when creating
+  or joining a house. A declared (not Apple-confirmed) adult keeps
   the house but sees "A conversa pede idade confirmada." instead of the chat,
   and no paywall.
 - **Children's profiles need a guardian.** An existing child profile reads "Sem
@@ -508,8 +596,11 @@ Build 6 was uploaded this way on 2026-09-25.
 Run the release candidate through TestFlight on at least one current iPhone and
 one supported older device. Exercise:
 
-- first launch, Apple sign-in (including an account that hides its email behind
-  Apple's private relay), sign-out, and session restoration;
+- first launch, Apple sign-in with a brand-new Apple ID (no email reaches Nina:
+  the Ajustes account row is the name alone, and "Seu primeiro nome" appears
+  when creating or joining a house) and with a pre-build-11 account (keeps its
+  email, including one hidden behind Apple's private relay), sign-out, and
+  session restoration;
 - home creation, invitation acceptance/revocation/expiry, and member removal;
 - task/reminder recurrence, notifications, offline edits, and conflict repair;
 - Nina consent, attachments, proposal confirmation, privacy export, history
@@ -538,7 +629,15 @@ one supported older device. Exercise:
   · ‹hora›", silent at night);
 - account deletion by a subscriber (the "Sua assinatura continua." card and
   "Gerenciar assinatura"), by a person with no house, and with the Apple token
-  revoked.
+  revoked; one real Apple-account deletion against delete-account v7; in
+  airplane mode it reads "Sem internet. Nada foi apagado." and a second failure
+  shows "Para apagar mesmo assim, escreva para privacidade@ninai.app."; a
+  cancelled Apple sheet sends nothing and reads "A Apple não confirmou. Nada foi
+  apagado.", and a second cancellation adds the same mail line; the "Antes, sua
+  faixa de idade." prompt carries "Sair da conta" and "Apagar conta";
+- the welcome and the startup screen show the rating mark in the same spot, and
+  no other screen (settings, the app switcher) shows it; the "Só um instante."
+  wait is centred with a round disc.
 
 Record the tested build number, devices, OS versions, tester, date, and result.
 Do not promote a different build number without rerunning the affected gates.

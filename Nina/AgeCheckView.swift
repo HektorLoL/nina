@@ -5,33 +5,64 @@ struct AgeCheckView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(AgeCheckCoordinator.self) private var ageCheck
+    @Environment(OnboardingStore.self) private var onboardingStore
+
+    @State private var isShowingDeletion = false
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 32)
-                    content
-                    Spacer(minLength: 32)
+        if isWaiting {
+            AppWaitingScreen()
+        } else {
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 32)
+                        content
+                        Spacer(minLength: 32)
+                        accountExits
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 16)
-                .frame(minHeight: proxy.size.height)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .ninaScreenBackground()
+            .accountDeletionSheet(isPresented: $isShowingDeletion)
         }
-        .ninaScreenBackground()
+    }
+
+    // The first screen after sign-in still lets a person leave or delete before answering Apple.
+    private var accountExits: some View {
+        VStack(spacing: 4) {
+            NinaButton(title: "Sair da conta", kind: .quiet) {
+                Haptics.warning()
+                Task {
+                    onboardingStore.cancelReplay()
+                    await authSession.signOut()
+                }
+            }
+
+            NinaButton(title: "Apagar conta", kind: .quiet) {
+                Haptics.lightImpact()
+                isShowingDeletion = true
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var isWaiting: Bool {
+        switch ageCheck.phase {
+        case .requesting, .recording: true
+        case .idle, .prompt, .declined, .appleError, .attestFailure: false
+        }
     }
 
     @ViewBuilder
     private var content: some View {
         switch ageCheck.phase {
-        case .idle where ageCheck.pendingSignal != nil:
-            progress
-        case .idle, .prompt:
+        case .idle, .prompt, .requesting, .recording:
             prompt
-        case .requesting, .recording:
-            progress
         case .declined:
             failure(
                 headline: "Falta sua faixa de idade.",
@@ -51,14 +82,6 @@ struct AgeCheckView: View {
                 retryTitle: "Tentar de novo"
             )
         }
-    }
-
-    private var progress: some View {
-        VStack(spacing: 16) {
-            NinaMark(size: 64, presence: .reading)
-            Text("Só um instante.").ninaText(.label, NinaTheme.muted)
-        }
-        .accessibilityElement(children: .combine)
     }
 
     private var prompt: some View {
@@ -114,6 +137,24 @@ struct AgeMajorityView: View {
     enum Reason {
         case majority
         case termsChanged
+        // This phone's welcome footnote was accepted but never recorded, so nothing here may say the Terms changed.
+        case termsNotYetRecorded
+
+        var headline: String {
+            switch self {
+            case .majority: "Agora a conta é sua."
+            case .termsChanged: "Os Termos mudaram."
+            case .termsNotYetRecorded: "Antes, os Termos."
+            }
+        }
+
+        var line: String {
+            switch self {
+            case .majority: "A Apple informou que você tem 18 anos ou mais."
+            case .termsChanged: "Para continuar, leia e aceite a nova versão."
+            case .termsNotYetRecorded: "Para continuar, leia e aceite os Termos."
+            }
+        }
     }
 
     @Environment(AppStore.self) private var store
@@ -133,13 +174,11 @@ struct AgeMajorityView: View {
 
                     NinaMark(size: 48)
 
-                    Text(reason == .majority ? "Agora a conta é sua." : "Os Termos mudaram.")
+                    Text(reason.headline)
                         .ninaText(.screen)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text(reason == .majority
-                        ? "A Apple informou que você tem 18 anos ou mais."
-                        : "Para continuar, leia e aceite a nova versão.")
+                    Text(reason.line)
                         .ninaText(.label, NinaTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
 

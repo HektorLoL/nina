@@ -1,6 +1,6 @@
 # Record of Processing Operations - Nina
 
-Last updated: 2026-09-29
+Last updated: 2026-10-04
 
 LGPD art. 37 asks the controller and each processor to keep a record of the
 processing operations they carry out, especially those based on legitimate
@@ -54,9 +54,10 @@ processors and transfers, retention, and the controls that hold it in place.
 - **Purpose:** create and keep an account, sign in, authorize every request.
 - **Subjects:** every person who signs in, adults and minors.
 - **Data:** Supabase Auth user id, the Apple subject identifier Supabase keeps
-  for the linked identity, the email Apple shares (possibly a private-relay
-  address), display name. An account whose age reads as minor or unknown asks
-  Apple for no name or email.
+  for the linked identity, display name (typed by the person), and, only for an
+  account created before build 11, the email Apple shared then (possibly a
+  private-relay address). Since build 11 Sign in with Apple asks no account for
+  a name or an email.
 - **Source:** Sign in with Apple.
 - **Basis:** contract execution (art. 7 V); for a minor, the guardian's consent
   (art. 14 §1) once a guardian approves them.

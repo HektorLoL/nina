@@ -239,11 +239,13 @@ struct ProfileEditorView: View {
         VStack(alignment: .leading, spacing: 14) {
             Eyebrow(text: "Contato")
 
-            ProfileReadOnlyField(
-                label: "Email",
-                value: user.email ?? "Email não vinculado",
-                note: user.provider == .apple ? user.provider.title : nil
-            )
+            if let email = user.shownEmail {
+                ProfileReadOnlyField(
+                    label: "Email",
+                    value: email,
+                    note: user.provider == .apple ? user.provider.title : nil
+                )
+            }
 
             ProfileField(label: "Telefone") {
                 TextField("(00) 00000-0000", text: $draft.phone)

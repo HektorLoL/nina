@@ -678,16 +678,10 @@ enum InlineAgeOutcome: Equatable {
     }
 }
 
-enum AgeReadingResult: Equatable {
-    case reading(AgeMapping)
-    case unavailable
-}
-
 @MainActor
 @Observable
 final class AgeCheckCoordinator {
     private(set) var phase: AgeCheckPhase = .idle
-    private(set) var pendingSignal: AgeSignal?
     private(set) var isRequestingInline = false
     private(set) var inlineOutcome: InlineAgeOutcome?
     @ObservationIgnored var onRejection: ((String) -> Void)?
@@ -711,27 +705,14 @@ final class AgeCheckCoordinator {
         self.privateDataStore = privateDataStore
     }
 
-    // A reading taken on the welcome screen is recorded before anything else is shown.
+    // An age share in flight or awaiting an answer holds the root.
     var needsAgeCheck: Bool {
-        phase != .idle || pendingSignal != nil
-    }
-
-    // Read on the welcome screen, before Sign in with Apple, so the scopes asked for follow the age.
-    func readBeforeSignIn() async -> AgeReadingResult {
-        do {
-            let signal = try await provider.requestAgeRange()
-            pendingSignal = signal
-            return .reading(AgeAssurance.map(signal))
-        } catch {
-            pendingSignal = nil
-            return .unavailable
-        }
+        phase != .idle
     }
 
     func reset() {
         generation &+= 1
         phase = .idle
-        pendingSignal = nil
         isRequestingInline = false
         inlineOutcome = nil
         settledUserIDs = []
@@ -750,13 +731,8 @@ final class AgeCheckCoordinator {
         }
         guard !isLocalContext, !user.isDebugAccount else {
             settledUserIDs.insert(user.id)
-            pendingSignal = nil
             phase = .idle
             return nil
-        }
-        // The reading taken before sign-in does not depend on the house, so it is recorded even when the house is unreachable.
-        if let pendingSignal, phase == .idle {
-            return await record(pendingSignal, for: user)
         }
         guard isVerified, !settledUserIDs.contains(user.id), phase == .idle else { return nil }
         if age.hasNoAppleRecord {
@@ -783,7 +759,6 @@ final class AgeCheckCoordinator {
             return nil
         }
         guard token == generation else { return nil }
-        pendingSignal = signal
         return await record(signal, for: user)
     }
 
@@ -842,7 +817,6 @@ final class AgeCheckCoordinator {
         if let user {
             settledUserIDs.insert(user.id)
         }
-        pendingSignal = nil
         phase = .idle
     }
 
@@ -852,7 +826,6 @@ final class AgeCheckCoordinator {
         do {
             let status = try await submitter.submit(signal, for: user)
             guard token == generation else { return nil }
-            pendingSignal = nil
             storeRegulatoryFeatures(signal.regulatoryFeatures, for: user)
             if signal.outcome == .declined {
                 phase = .declined
@@ -863,7 +836,6 @@ final class AgeCheckCoordinator {
             return status
         } catch AgeSignalError.rejected(let status) {
             guard token == generation else { return nil }
-            pendingSignal = nil
             settledUserIDs.insert(user.id)
             phase = .idle
             onRejection?(RemoteRPCErrorCode.ageSignalRejected.userMessage())

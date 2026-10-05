@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(39);
+select plan(42);
 
 insert into auth.users (
   id,
@@ -38,6 +38,15 @@ values
     'authenticated',
     'outsider@example.com',
     '{"full_name":"Outside Person"}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    '10000000-0000-0000-0000-000000000004',
+    'authenticated',
+    'authenticated',
+    null,
+    '{}'::jsonb,
     now(),
     now()
   );
@@ -460,6 +469,51 @@ select is(
   (select count(*)::integer from public.families where id = current_setting('test.family_id')::uuid),
   0,
   'RLS hides a family from users without membership'
+);
+
+reset role;
+
+-- Since build 11 Sign in with Apple asks for no scope, so a new account carries no name and no email.
+select ok(
+  (
+    select display_name = 'Família'
+      and email is null
+      and display_name_source = 'auth'
+    from public.profiles
+    where id = '10000000-0000-0000-0000-000000000004'
+  ),
+  'an Apple account with no email and no name gets the placeholder name and no email'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = '10000000-0000-0000-0000-000000000004';
+
+with chosen as (
+  update public.profiles
+  set display_name = 'Ana', display_name_source = 'user'
+  where id = auth.uid()
+  returning id
+)
+select is(
+  (select count(*)::integer from chosen),
+  1,
+  'the person''s own profile write makes the name chosen'
+);
+
+do $$
+begin
+  perform public.create_family('Casa da Ana');
+end
+$$;
+
+select is(
+  (
+    select name
+    from public.family_members
+    where user_id = auth.uid()
+  ),
+  'Ana',
+  'a house created after the person chose a name names its owner with it'
 );
 
 select * from finish();

@@ -124,7 +124,7 @@ private struct InkButton: View {
             Text(title)
                 .ninaText(.body, NinaTheme.ground, weight: .semibold)
                 .frame(maxWidth: .infinity)
-                .frame(height: 52)
+                .frame(minHeight: 52)
                 .background(
                     NinaTheme.ink,
                     in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
@@ -357,7 +357,7 @@ struct SettingsSheet: View {
                 } label: {
                     NinaRow(
                         title: profile.displayName,
-                        subtitle: user.email ?? user.provider.title
+                        subtitle: user.shownEmail
                     ) {
                         ProfileAvatarView(
                             profile: profile,
@@ -599,10 +599,6 @@ struct SettingsSheet: View {
                 SettingsLinkRow(title: "Denunciar um problema", systemName: "exclamationmark.bubble")
             }
             .buttonStyle(.plain)
-
-            NinaDivider()
-
-            RatingSettingsRow()
         }
     }
 
@@ -1038,6 +1034,32 @@ struct AccountDeletionView: View {
 
     private static let confirmationWord = "apagar"
 
+    // "Nada foi apagado" is said only where it is provable: nothing was sent, or a refusal came before any stage ran.
+    static func line(for failure: AccountDeletionFailure) -> String {
+        switch failure {
+        case .appleCancelled: "A Apple não confirmou. Nada foi apagado."
+        case .offline: "Sem internet. Nada foi apagado."
+        case .unconfirmed: "A resposta não chegou. Tente de novo."
+        case .serverUnavailable: "Não deu para apagar agora. Tente em alguns minutos."
+        case .sessionEnded: "Sua sessão terminou. Saia e entre de novo para apagar."
+        case .mayAlreadyBeDeleted: "A conta pode já ter sido apagada."
+        case .guardianAccessDenied: "Você não é mais responsável por esta conta."
+        case .rejected: "Não deu para apagar por aqui. Nada foi apagado."
+        }
+    }
+
+    // A possibly finished deletion never points to sign-in, which would open a new account.
+    static func mailWayOut(for failure: AccountDeletionFailure) -> String {
+        switch failure {
+        case .mayAlreadyBeDeleted: "Para confirmar, escreva para \(NinaLegalLinks.privacyEmail)."
+        default: "Para apagar mesmo assim, escreva para \(NinaLegalLinks.privacyEmail)."
+        }
+    }
+
+    static func announcement(for failure: AccountDeletionFailure, offersMail: Bool) -> String {
+        offersMail ? "\(line(for: failure)) \(mailWayOut(for: failure))" : line(for: failure)
+    }
+
     private var wardName: String? {
         if case .ward(let member) = target { return member.name }
         return nil
@@ -1123,10 +1145,6 @@ struct AccountDeletionView: View {
                         subscriptionWarning
                     }
 
-                    if let errorMessage = authSession.errorMessage {
-                        NoteCard(eyebrow: nil, text: errorMessage)
-                    }
-
                     SheetField(label: "Escreva \(Self.confirmationWord) para confirmar") {
                         TextField(Self.confirmationWord, text: $confirmation)
                             .focused($isConfirmationFocused)
@@ -1140,6 +1158,10 @@ struct AccountDeletionView: View {
                         Text("A Apple pede para confirmar com sua conta.")
                             .ninaText(.meta, NinaTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let failure = authSession.deletionFailure {
+                        deletionFailureNote(failure)
                     }
 
                     InkButton(
@@ -1159,7 +1181,13 @@ struct AccountDeletionView: View {
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear { authSession.errorMessage = nil }
+        .onAppear { authSession.clearDeletionFailure() }
+        .onChange(of: authSession.deletionFailure) { _, failure in
+            guard let failure else { return }
+            AccessibilityNotification.Announcement(
+                Self.announcement(for: failure, offersMail: authSession.offersDeletionByMail)
+            ).post()
+        }
         .alert(confirmationTitle, isPresented: $isShowingConfirmation) {
             Button("Cancelar", role: .cancel) {}
             Button("Apagar", role: .destructive) {
@@ -1167,6 +1195,68 @@ struct AccountDeletionView: View {
             }
         } message: {
             Text(confirmationMessage)
+        }
+    }
+
+    // A failure is not lateness, so it is grout and ink, never terracotta.
+    private func deletionFailureNote(_ failure: AccountDeletionFailure) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(Self.line(for: failure))
+                .ninaText(.label, NinaTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if authSession.offersDeletionByMail {
+                Text(Self.mailWayOut(for: failure))
+                    .ninaText(.label, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 28) {
+                    NinaButton(title: "Escrever", kind: .quiet) {
+                        Haptics.selection()
+                        openURL(deletionMail)
+                    }
+                    .accessibilityLabel("Escrever para \(NinaLegalLinks.privacyEmail)")
+
+                    if failure == .mayAlreadyBeDeleted {
+                        NinaButton(title: "Sair", kind: .quiet) {
+                            Haptics.selection()
+                            leaveAccountThatMayBeDeleted()
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+    }
+
+    private var deletionMail: URL {
+        if case .ward(let member) = target {
+            return NinaLegalLinks.accountDeletionMail(
+                ward: member.id,
+                guardianReference: authSession.currentUser?.id
+            )
+        }
+        return NinaLegalLinks.accountDeletionMail(reference: authSession.currentUser?.id)
+    }
+
+    private func clearDeletedAccountFromThisPhone(_ userID: String) {
+        store.clearLocalData(for: userID)
+        profileStore.clearLocalData(for: userID)
+        onboardingStore.clearLocalData(for: userID)
+        inviteLinkStore.clear()
+        KeychainAppAttestKeyStore().remove(for: userID)
+        ageCheck.reset()
+        try? PrivacyExportFileStore.removeAll()
+    }
+
+    private func leaveAccountThatMayBeDeleted() {
+        guard let userID = authSession.currentUser?.id else { return }
+        Task {
+            await authSession.leaveAccountThatMayBeDeleted()
+            clearDeletedAccountFromThisPhone(userID)
+            dismiss()
         }
     }
 
@@ -1213,13 +1303,7 @@ struct AccountDeletionView: View {
         guard let userID = authSession.currentUser?.id else { return }
         Task {
             if await authSession.deleteAccount(reauthorizer: reauthorizer) {
-                store.clearLocalData(for: userID)
-                profileStore.clearLocalData(for: userID)
-                onboardingStore.clearLocalData(for: userID)
-                inviteLinkStore.clear()
-                KeychainAppAttestKeyStore().remove(for: userID)
-                ageCheck.reset()
-                try? PrivacyExportFileStore.removeAll()
+                clearDeletedAccountFromThisPhone(userID)
                 dismiss()
             }
         }
@@ -1230,6 +1314,8 @@ struct AccountDeletionView: View {
             if await authSession.deleteWardAccount(memberID: member.id) {
                 await store.refreshHomeFromRemote(for: authSession.currentUser)
                 dismiss()
+            } else if authSession.deletionFailure == .guardianAccessDenied {
+                await store.refreshHomeFromRemote(for: authSession.currentUser)
             }
         }
     }
@@ -1288,21 +1374,6 @@ struct ReportProblemView: View {
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
-    }
-}
-
-struct RatingSettingsRow: View {
-    var body: some View {
-        NinaRow(title: "Classificação indicativa") {
-            ClassIndMark(size: 24)
-        } trailing: {
-            Text(NinaRating.current.name)
-                .ninaText(.meta, NinaTheme.muted)
-                .multilineTextAlignment(.trailing)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Classificação indicativa")
-        .accessibilityValue(NinaRating.current.name)
     }
 }
 

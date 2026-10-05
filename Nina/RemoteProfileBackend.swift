@@ -6,6 +6,13 @@ protocol RemoteProfileBackend {
     func loadPhotoData(for userID: String) async throws -> Data
     func savePhotoData(_ data: Data, for userID: String) async throws
     func deletePhoto(for userID: String) async throws
+    func saveChosenName(_ name: String, for userID: String) async throws
+}
+
+extension RemoteProfileBackend {
+    func saveChosenName(_ name: String, for userID: String) async throws {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
 }
 
 #if canImport(Supabase)
@@ -68,6 +75,31 @@ struct SupabaseRemoteProfileBackend: RemoteProfileBackend {
         }
     }
 
+    // Only the name and its source are written: a person's first name never carries demo notes or an email.
+    func saveChosenName(_ name: String, for userID: String) async throws {
+        guard let id = UUID(uuidString: userID) else {
+            throw RemoteProfileBackendError.invalidUserID
+        }
+
+        let rows: [ProfileIDRow] = try await BackendRequestLogger.perform(
+            component: "profile",
+            operation: "choose_name",
+            diagnostics: diagnostics
+        ) {
+            try await client
+                .from("profiles")
+                .update(ChosenNameUpdate(displayName: name, displayNameSource: "user"))
+                .eq("id", value: id)
+                .select("id")
+                .execute()
+                .value
+        }
+
+        guard rows.count == 1 else {
+            throw RemoteProfileBackendError.nameNotSaved
+        }
+    }
+
     func loadPhotoData(for userID: String) async throws -> Data {
         try await BackendRequestLogger.perform(
             component: "profile_photo",
@@ -127,6 +159,21 @@ struct SupabaseRemoteProfileBackend: RemoteProfileBackend {
 
 private enum RemoteProfileBackendError: Error {
     case invalidUserID
+    case nameNotSaved
+}
+
+private struct ProfileIDRow: Decodable {
+    var id: UUID
+}
+
+private struct ChosenNameUpdate: Encodable {
+    var displayName: String
+    var displayNameSource: String
+
+    private enum CodingKeys: String, CodingKey {
+        case displayName = "display_name"
+        case displayNameSource = "display_name_source"
+    }
 }
 
 private struct ProfileRow: Decodable {

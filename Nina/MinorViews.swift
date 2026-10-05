@@ -786,8 +786,6 @@ struct MinorSettingsView: View {
                         external("Termos de uso", systemName: "text.book.closed", url: NinaLegalLinks.termsOfUse)
                         NinaDivider()
                         external("Política de privacidade", systemName: "doc.text", url: NinaLegalLinks.privacyPolicy)
-                        NinaDivider()
-                        RatingSettingsRow()
                     }
 
                     VStack(spacing: 4) {
@@ -1041,7 +1039,7 @@ private struct MinorAgeContestView: View {
 
                     NinaButton(title: NinaLegalLinks.privacyEmail, kind: .quiet) {
                         Haptics.selection()
-                        openURL(NinaLegalLinks.privacyMail)
+                        openURL(NinaLegalLinks.ageContestMail(reference: authSession.currentUser?.id))
                     }
                 }
                 .padding(.horizontal, 20)

@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 // Exactly one of three bodies reaches delete-account; an absent key is omitted, never sent as null.
 struct DeleteAccountRequest: Encodable, Equatable {
@@ -43,12 +44,95 @@ struct DeleteAccountRequest: Encodable, Equatable {
     }
 }
 
+// Codes are matched whole; an answer without a code (the gateway's) falls back to its status.
+enum AccountDeletionFailure: Error, Equatable {
+    case appleCancelled
+    case offline
+    case unconfirmed
+    case serverUnavailable
+    case sessionEnded
+    case mayAlreadyBeDeleted
+    case guardianAccessDenied
+    case rejected
+
+    init(status: Int, body: Data) {
+        switch (try? JSONDecoder().decode(DeleteAccountErrorBody.self, from: body))?.error {
+        case "not_authenticated":
+            self = .sessionEnded
+        case "guardian_access_denied":
+            self = .guardianAccessDenied
+        case "delete_account_failed", "service_not_configured":
+            self = .serverUnavailable
+        case "confirmation_required", "invalid_request", "payload_too_large",
+             "unsupported_media_type", "method_not_allowed":
+            self = .rejected
+        default:
+            // A gateway 5xx can arrive after the function finished, so it proves nothing either way.
+            switch status {
+            case 401: self = .sessionEnded
+            case 408, 429: self = .serverUnavailable
+            case 400...499: self = .rejected
+            default: self = .unconfirmed
+            }
+        }
+    }
+
+    // Only a failure before any byte left the phone may be called offline; any later drop may have deleted.
+    init(transportError error: Error) {
+        switch (error as? URLError)?.code {
+        case .cannotFindHost?, .dnsLookupFailed?, .cannotConnectToHost?:
+            self = .offline
+        default:
+            self = .unconfirmed
+        }
+    }
+}
+
+private struct DeleteAccountErrorBody: Decodable {
+    var error: String
+}
+
+enum NetworkPathProbe {
+    static func isSatisfied() async -> Bool {
+        await withCheckedContinuation { continuation in
+            let monitor = NWPathMonitor()
+            let queue = DispatchQueue(label: "com.heitor.nina.network-path")
+            let once = ResumeOnce()
+            monitor.pathUpdateHandler = { path in
+                guard once.claim() else { return }
+                monitor.cancel()
+                continuation.resume(returning: path.status == .satisfied)
+            }
+            monitor.start(queue: queue)
+            queue.asyncAfter(deadline: .now() + 2) {
+                guard once.claim() else { return }
+                monitor.cancel()
+                continuation.resume(returning: true)
+            }
+        }
+    }
+
+    private final class ResumeOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var claimed = false
+
+        func claim() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !claimed else { return false }
+            claimed = true
+            return true
+        }
+    }
+}
+
 #if canImport(Supabase)
 import Supabase
 
 struct SupabaseAuthClient: AuthClient {
     var client: SupabaseClient
     var diagnostics: BackendDiagnosticsStore? = nil
+    var networkIsReachable: @Sendable () async -> Bool = { await NetworkPathProbe.isSatisfied() }
 
     func restoreSession() async -> AuthSessionRestoration {
         guard let storedSession = client.auth.currentSession else {
@@ -93,38 +177,16 @@ struct SupabaseAuthClient: AuthClient {
             )
         }
 
-        if let fullName = credential.fullName?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !fullName.isEmpty {
-            _ = try? await BackendRequestLogger.perform(
-                component: "auth",
-                operation: "update_user_metadata",
-                diagnostics: diagnostics
-            ) {
-                try await client.auth.update(
-                    user: UserAttributes(
-                        data: [
-                            "full_name": .string(fullName),
-                            "display_name": .string(fullName)
-                        ]
-                    )
-                )
-            }
-        }
-
-        let refreshedUser = (
-            try? await BackendRequestLogger.perform(
-                component: "auth",
-                operation: "get_current_user",
-                diagnostics: diagnostics
-            ) {
-                try await client.auth.user()
-            }
-        ) ?? session.user
-        let profile = try await ensureProfile(displayNameHint: credential.fullName)
-        return AuthUser(supabaseUser: refreshedUser, profile: profile, preferredProvider: .apple)
+        let profile = try await ensureProfile(displayNameHint: nil)
+        return AuthUser(supabaseUser: session.user, profile: profile, preferredProvider: .apple)
     }
 
     func deleteAccount(_ request: DeleteAccountRequest) async throws {
+        // "Sem internet" is said only when the phone had no path before sending, so nothing reached the server.
+        guard await networkIsReachable() else {
+            throw AccountDeletionFailure.offline
+        }
+
         let response: DeleteAccountResponse
         do {
             response = try await BackendRequestLogger.perform(
@@ -137,13 +199,19 @@ struct SupabaseAuthClient: AuthClient {
                     options: FunctionInvokeOptions(body: request)
                 )
             }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch FunctionsError.httpError(let status, let data) {
+            throw AccountDeletionFailure(status: status, body: data)
+        } catch FunctionsError.relayError {
+            throw AccountDeletionFailure.serverUnavailable
         } catch {
-            throw AuthFlowError.deletionFailed
+            throw AccountDeletionFailure(transportError: error)
         }
 
         // A non-deleting response must not let the caller erase local data.
         guard response.deleted else {
-            throw AuthFlowError.deletionFailed
+            throw AccountDeletionFailure.unconfirmed
         }
     }
 
@@ -213,7 +281,7 @@ extension AuthUser {
         self.init(
             id: user.id.uuidString,
             displayName: profile.displayName,
-            email: profile.email ?? user.email,
+            email: Self.nonEmpty(profile.email) ?? Self.nonEmpty(user.email),
             provider: providerResolution.primary,
             isEmailVerified: user.emailConfirmedAt != nil,
             linkedProviders: providerResolution.linked,
@@ -223,6 +291,12 @@ extension AuthUser {
 
     private static func appleSubject(of user: User) -> String? {
         user.identities?.first { $0.provider == AuthProvider.apple.rawValue }?.id
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     init(offlineSupabaseUser user: User) {
@@ -236,8 +310,8 @@ extension AuthUser {
 
         self.init(
             id: user.id.uuidString,
-            displayName: metadataName ?? user.email ?? "Você",
-            email: user.email,
+            displayName: metadataName ?? Self.nonEmpty(user.email) ?? "Você",
+            email: Self.nonEmpty(user.email),
             provider: providerResolution.primary,
             isEmailVerified: user.emailConfirmedAt != nil,
             linkedProviders: providerResolution.linked,

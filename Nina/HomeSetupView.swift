@@ -9,11 +9,14 @@ struct HomeSetupView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(OnboardingStore.self) private var onboardingStore
+    @Environment(ProfileStore.self) private var profileStore
 
     @State private var mode: HomeSetupMode = .create
     @State private var homeName = ""
     @State private var inviteText = ""
+    @State private var firstName = ""
     @State private var errorMessage: String?
+    @State private var isSavingName = false
     @FocusState private var focusedField: FocusedField?
 
     @State private var canCreateHome = false
@@ -23,6 +26,20 @@ struct HomeSetupView: View {
     private enum FocusedField {
         case homeName
         case invite
+        case firstName
+    }
+
+    // The house copies this name into the member row it creates, so a placeholder must never reach it.
+    private var needsName: Bool {
+        let user = authSession.currentUser
+        return ProfileNaming.needsName(
+            user: user,
+            knownName: user.flatMap { profileStore.profiles[$0.id]?.displayName }
+        )
+    }
+
+    private var hasChosenName: Bool {
+        !needsName || !ProfileNaming.isPlaceholder(firstName)
     }
 
     private var displayedError: String? {
@@ -91,8 +108,8 @@ struct HomeSetupView: View {
                     .frame(minHeight: 44)
             }
             .buttonStyle(.plain)
-            .disabled(authSession.isSigningIn)
-            .opacity(authSession.isSigningIn ? 0.4 : 1)
+            .disabled(authSession.isSigningIn || isSavingName)
+            .opacity(authSession.isSigningIn || isSavingName ? 0.4 : 1)
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)
@@ -115,20 +132,34 @@ struct HomeSetupView: View {
                     .ninaText(.display)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HomeSetupField(title: "Nome da casa") {
-                    TextField("Casa Castello", text: $homeName)
-                        .textInputAutocapitalization(.words)
-                        .submitLabel(.done)
-                        .focused($focusedField, equals: .homeName)
-                        .onSubmit(createHome)
+                VStack(alignment: .leading, spacing: 10) {
+                    HomeSetupField(title: "Nome da casa") {
+                        TextField("Casa Castello", text: $homeName)
+                            .textInputAutocapitalization(.words)
+                            .submitLabel(needsName ? .next : .done)
+                            .focused($focusedField, equals: .homeName)
+                            .onSubmit {
+                                if needsName {
+                                    focusedField = .firstName
+                                } else {
+                                    createHome()
+                                }
+                            }
+                    }
+
+                    if needsName {
+                        ChosenNameField(name: $firstName, focus: $focusedField, focusValue: .firstName)
+                            .submitLabel(.done)
+                            .onSubmit(createHome)
+                    }
                 }
             }
 
             Spacer(minLength: 32)
 
             actionGroup(
-                title: store.isSyncingHome ? "Criando" : "Criar",
-                isEnabled: canCreateHome && !store.isSyncingHome,
+                title: store.isSyncingHome || isSavingName ? "Criando" : "Criar",
+                isEnabled: canCreateHome && hasChosenName && !store.isSyncingHome && !isSavingName,
                 action: createHome,
                 alternateTitle: "Tenho um convite",
                 alternateTarget: .join
@@ -148,8 +179,20 @@ struct HomeSetupView: View {
                         TextField("casa-47a9f2d0b3c1e8a4d6f2", text: $inviteText)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                            .submitLabel(.join)
+                            .submitLabel(needsName ? .next : .join)
                             .focused($focusedField, equals: .invite)
+                            .onSubmit {
+                                if needsName {
+                                    focusedField = .firstName
+                                } else {
+                                    joinHome()
+                                }
+                            }
+                    }
+
+                    if needsName {
+                        ChosenNameField(name: $firstName, focus: $focusedField, focusValue: .firstName)
+                            .submitLabel(.join)
                             .onSubmit(joinHome)
                     }
 
@@ -163,8 +206,8 @@ struct HomeSetupView: View {
             Spacer(minLength: 32)
 
             actionGroup(
-                title: store.isSyncingHome ? "Enviando" : "Pedir para entrar",
-                isEnabled: canJoinHome && !store.isSyncingHome,
+                title: store.isSyncingHome || isSavingName ? "Enviando" : "Pedir para entrar",
+                isEnabled: canJoinHome && hasChosenName && !store.isSyncingHome && !isSavingName,
                 action: joinHome,
                 alternateTitle: "Criar minha casa",
                 alternateTarget: .create
@@ -203,9 +246,11 @@ struct HomeSetupView: View {
     }
 
     private func createHome() {
-        guard canCreateHome else { return }
+        guard canCreateHome, hasChosenName, !isSavingName else { return }
         focusedField = nil
+        errorMessage = nil
         Task {
+            guard await saveChosenNameIfNeeded() else { return }
             if await store.createHome(named: homeName, owner: authSession.currentUser) {
                 Haptics.success()
             }
@@ -218,11 +263,13 @@ struct HomeSetupView: View {
             Haptics.error()
             return
         }
+        guard hasChosenName, !isSavingName else { return }
 
         focusedField = nil
         errorMessage = nil
 
         Task {
+            guard await saveChosenNameIfNeeded() else { return }
             if await store.joinHome(with: inviteText, member: authSession.currentUser) {
                 Haptics.success()
             } else {
@@ -230,9 +277,49 @@ struct HomeSetupView: View {
             }
         }
     }
+
+    private func saveChosenNameIfNeeded() async -> Bool {
+        guard needsName else { return true }
+        guard let user = authSession.currentUser else { return false }
+        isSavingName = true
+        defer { isSavingName = false }
+        let name = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let saved = await profileStore.chooseDisplayName(name, for: user)
+        guard authSession.currentUser?.id == user.id else { return false }
+        guard saved else {
+            errorMessage = ChosenNameCopy.saveFailed
+            return false
+        }
+        authSession.noteChosenDisplayName(name)
+        return true
+    }
 }
 
-private struct HomeSetupField<Field: View>: View {
+// An adult names themself where the house first needs the name, in the same words the minor path uses.
+enum ChosenNameCopy {
+    static let title = "Seu primeiro nome"
+    static let placeholder = "Como a casa chama você"
+    static let saveFailed = "Não deu para salvar seu nome. Tente de novo."
+}
+
+struct ChosenNameField<Focus: Hashable>: View {
+    @Binding var name: String
+    var focus: FocusState<Focus>.Binding
+    var focusValue: Focus
+
+    var body: some View {
+        HomeSetupField(title: ChosenNameCopy.title) {
+            TextField(ChosenNameCopy.placeholder, text: $name)
+                .textContentType(.givenName)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .focused(focus, equals: focusValue)
+                .accessibilityLabel(ChosenNameCopy.title)
+        }
+    }
+}
+
+struct HomeSetupField<Field: View>: View {
     var title: String
     @ViewBuilder var field: Field
 

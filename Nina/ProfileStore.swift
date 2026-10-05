@@ -400,6 +400,23 @@ struct UserProfile: Codable, Hashable, Identifiable {
     }
 }
 
+// A name the server or this device filled in is never one the person chose.
+enum ProfileNaming {
+    static let placeholderNames: Set<String> = ["", "você", "família"]
+
+    static func isPlaceholder(_ name: String) -> Bool {
+        let folded = name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(with: Locale(identifier: "pt_BR"))
+        return placeholderNames.contains(folded)
+    }
+
+    static func needsName(user: AuthUser?, knownName: String?) -> Bool {
+        guard let user, !user.isDebugAccount else { return false }
+        return isPlaceholder(knownName ?? user.displayName)
+    }
+}
+
 @MainActor
 @Observable
 final class ProfileStore {
@@ -521,6 +538,32 @@ final class ProfileStore {
         } catch {
             return false
         }
+    }
+
+    // The server names a new member from its own profile row, so a name counts as chosen only once the server holds it.
+    func chooseDisplayName(_ raw: String, for user: AuthUser) async -> Bool {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ProfileNaming.isPlaceholder(name) else {
+            Haptics.error()
+            return false
+        }
+        let generation = localDataGeneration(for: user.id)
+
+        if !user.isDebugAccount, let remoteProfileBackend {
+            do {
+                try await remoteProfileBackend.saveChosenName(name, for: user.id)
+            } catch {
+                Haptics.error()
+                return false
+            }
+            guard isCurrentLocalDataGeneration(generation, for: user.id) else { return false }
+        }
+
+        var profile = profile(for: user)
+        profile.displayName = name
+        profiles[user.id] = profile
+        persistProfileLocally(profile)
+        return true
     }
 
     @discardableResult
