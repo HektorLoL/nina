@@ -18,10 +18,30 @@ struct TaskDetailView: View {
         store.familyGroup.members.first { $0.id == task.ownerMemberID }
     }
 
-    private var otherAdult: HouseholdMember? {
-        store.familyGroup.members.first {
+    private var otherAdults: [TaskOwnerChoice] {
+        let eligible = Set(store.familyGroup.members.filter {
             $0.role == .adult && $0.id != task.ownerMemberID && $0.id != store.currentFamilyMember?.id
-        }
+        }.map(\.id))
+        return TaskOwnerChoice.options(
+            members: store.familyGroup.members,
+            selectedName: HouseholdWorkload.sharedOwnerLabel,
+            selectedMemberID: nil
+        )
+        .filter { $0.memberID.map(eligible.contains) ?? false }
+    }
+
+    private func hand(to choice: TaskOwnerChoice) {
+        store.updateTask(
+            id: task.id,
+            title: task.title,
+            subtitle: task.subtitle,
+            owner: choice.name,
+            ownerMemberID: choice.memberID,
+            dueLabel: task.dueLabel,
+            dueAt: task.dueAt,
+            category: task.category,
+            priority: task.priority
+        )
     }
 
     var body: some View {
@@ -224,20 +244,22 @@ struct TaskDetailView: View {
                     }
                 }
 
-                if let otherAdult {
-                    actionChip("Passar para \(otherAdult.name.firstWord)") {
-                        store.updateTask(
-                            id: task.id,
-                            title: task.title,
-                            subtitle: task.subtitle,
-                            owner: otherAdult.name,
-                            ownerMemberID: otherAdult.id,
-                            dueLabel: task.dueLabel,
-                            dueAt: task.dueAt,
-                            category: task.category,
-                            priority: task.priority
-                        )
+                if otherAdults.count == 1, let only = otherAdults.first {
+                    actionChip("Passar para \(only.name.firstWord)") {
+                        hand(to: only)
                     }
+                } else if otherAdults.count > 1 {
+                    Menu {
+                        ForEach(otherAdults) { choice in
+                            Button(choice.label) {
+                                Haptics.lightImpact()
+                                hand(to: choice)
+                            }
+                        }
+                    } label: {
+                        NinaChip(text: "Passar para…")
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 if task.kind == .task {
