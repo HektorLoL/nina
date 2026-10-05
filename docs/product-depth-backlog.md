@@ -18,7 +18,7 @@ partly closed, 14 still open. Each item now ends with one dated line: `Closed:` 
 symptom no longer happens, with the evidence), `Progress:` (what is fixed and what is still
 true) or `Checked:` (still open, and how). The file and line anchors in the older fields are
 from 2026-08-08 and are stale; search by symbol. Later the same day the improvement loop closed
-three more and moved two from open to partly closed: 50 closed, 30 partly closed, 11 still open.
+four more and moved three from open to partly closed: 51 closed, 30 partly closed, 10 still open.
 
 The audit was taken against the tree as of 2026-08-08. The section below records what has since
 been closed; everything else in this document is still open.
@@ -455,7 +455,8 @@ been closed; everything else in this document is still open.
 - **Where:** Nina/TasksView.swift:28-61 (the entire toolbar is one plus button); Nina/TasksView.swift:167-191 (list body iterates store.tasks(in:) unsorted); Nina/TasksView.swift:264-335 (TaskSectionChooser is the only control on the screen); Nina/AppStore.swift:313-315 (tasks(in:) preserves the created_at desc order set by Nina/RemoteHomeBackend.swift:871)
 - **Backend:** none
 - **Sketch:** Add a compact segmented filter row and a sort Menu under TaskSectionChooser in TasksView.swift:33-42, holding @State for a filter enum (todas / abertas / atrasadas / sementes) and a sort enum (data / prioridade / criação). Reuse the comparator already written in TodayView.swift:220-244 rather than writing a second one — lift it to a `static func prioritySorted(_:relativeTo:)` on TaskItem so both screens share it. For bulk work, an edit mode toggling a Set<TaskItem.ID> with a bottom action bar (concluir / mover de seção / apagar) is enough; every underlying store call already exists (toggleTask, updateTask, deleteTask) and enqueueRemoteMutation serialises them FIFO, so batching is a view-layer concern only. Drag-to-reorder is the one item here that would need a new sort_order column on tasks — task_sections already has one (202606020001_initial_nina_schema.sql:63) as the precedent.
-- **Progress:** 2026-10-05 — TasksView now has `TaskListFilter` chips (Tudo/Minhas/Sem dono/Sementes/Compras), finished tasks are hidden behind "Concluídas hoje", and TaskDetailView's footer has "Apagar". Still open: There is no sort control. `categoryGroups` keeps `created_at desc` order inside each category, so priority and due date still decide nothing. Since 2026-10-05 later, the checklist button beside the search selects several open tasks, and a bar finishes them ("Feitas"), hands them to an adult or to nobody ("Passar") or deletes them after a confirm (`AppStore.completeTasks`, `reassignTasks`, `deleteTasks`; TaskAgendaTests).
+- **Progress:** 2026-10-05 — TasksView now has `TaskListFilter` chips (Tudo/Minhas/Sem dono/Sementes/Compras), finished tasks are hidden behind "Concluídas hoje", and TaskDetailView's footer has "Apagar".
+- **Closed:** 2026-10-05 — inside each category `TaskListOrder.sorted` puts late tasks first, then the soonest, then the undated; and the checklist button beside the search selects several open tasks, which a bar finishes ("Feitas"), hands to an adult or to nobody ("Passar") or deletes after a confirm (`AppStore.completeTasks`, `reassignTasks`, `deleteTasks`; TaskAgendaTests).
 
 #### [MEDIUM] No subtasks, no notes beyond one line, and no attachments on a task — the photographed document never travels with the work it created
 
