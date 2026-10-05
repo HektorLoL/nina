@@ -206,6 +206,9 @@ begin
     raise exception 'family_owner_transfer_denied' using errcode = '42501';
   end if;
 
+  delete from private.family_ownership_offers
+  where offered_at <= now() - interval '7 days';
+
   insert into private.family_ownership_offers (family_id, member_id, offered_by, offered_at)
   values (target_member.family_id, target_member.id, current_user_id, now())
   on conflict (family_id) do update
@@ -241,6 +244,15 @@ begin
     raise exception 'not_authenticated' using errcode = '28000';
   end if;
 
+  if not exists (
+    select 1
+    from public.family_members as members
+    where members.family_id = target_family_id
+      and members.user_id = current_user_id
+  ) then
+    raise exception 'family_not_found' using errcode = 'P0002';
+  end if;
+
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(target_family_id::text, 0)
   );
@@ -254,6 +266,9 @@ begin
   if not found then
     raise exception 'family_not_found' using errcode = 'P0002';
   end if;
+
+  delete from private.family_ownership_offers as offers
+  where offers.offered_at <= now() - interval '7 days';
 
   delete from private.family_ownership_offers as offers
   where offers.family_id = target_family_id
@@ -295,6 +310,15 @@ begin
     raise exception 'not_authenticated' using errcode = '28000';
   end if;
 
+  if not exists (
+    select 1
+    from public.family_members as members
+    where members.family_id = target_family_id
+      and members.user_id = current_user_id
+  ) then
+    raise exception 'family_not_found' using errcode = 'P0002';
+  end if;
+
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(target_family_id::text, 0)
   );
@@ -302,7 +326,7 @@ begin
   perform families.id
   from public.families
   where families.id = target_family_id
-  for update;
+  for no key update;
 
   select *
   into caller_member

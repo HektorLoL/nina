@@ -1973,7 +1973,7 @@ the project, not bugs to fix unprompted.
   `authenticated` alone (read back after the apply: anon and service_role
   false). It went through the Supabase MCP `apply_migration`, and its
   `schema_migrations` row was set to `202610050001` (§12). The authenticated
-  function grant map is now 48 names. The "Sair da casa" row that calls it
+  function grant map became 48 names. The "Sair da casa" row that calls it
   reaches people with the first build after 11.
 - **Migration `202610050002` (foreign-key indexes) is applied to production
   (2026-10-05).** It indexes the 33 foreign keys the production advisor listed
