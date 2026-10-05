@@ -1530,7 +1530,7 @@ private struct NinaProposalCard: View {
                     proposalField("Detalhes", text: $draftDetail)
                     if proposal.kind != .memory {
                         ownerPicker
-                        if !isSeed {
+                        if !isSeed && proposal.kind != .shopping {
                             proposalField("Quando", text: $draftDueLabel, hint: dueCorrectionHint)
                         }
                     }
@@ -1660,7 +1660,8 @@ private struct NinaProposalCard: View {
     // on a household suggestion reads as a verdict on the house instead of a portrait of it.
     private var metaPairs: [MetaPair] {
         var pairs: [MetaPair] = []
-        if proposal.kind != .memory {
+        // A shopping item has no date anywhere in the house, so its card never asks or shows one.
+        if proposal.kind != .memory && proposal.kind != .shopping {
             pairs.append(
                 MetaPair(
                     systemName: isSeed ? "leaf" : "calendar",
@@ -1669,6 +1670,8 @@ private struct NinaProposalCard: View {
                     isMuted: isSeed
                 )
             )
+        }
+        if proposal.kind != .memory {
             pairs.append(MetaPair(systemName: "person", value: ownerValue, label: "Dono"))
             if proposal.kind == .shopping, !confirmationPayload.amount.isEmpty {
                 pairs.append(
