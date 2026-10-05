@@ -6,6 +6,7 @@ struct MemberDetailView: View {
     @Environment(AppStore.self) private var store
     @Environment(RouterPath.self) private var router
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let member: HouseholdMember
 
@@ -155,10 +156,13 @@ struct MemberDetailView: View {
     }
 
     private func row(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 12) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
             Text(label)
                 .ninaText(.caption, NinaTheme.muted)
-                .frame(width: 92, alignment: .leading)
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 92, alignment: .leading)
             Text(value).ninaText(.label)
             Spacer(minLength: 0)
         }

@@ -1629,6 +1629,7 @@ struct PremiumBenefitsSheet: View {
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(PremiumSubscriptionStore.self) private var premiumStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1818,10 +1819,13 @@ struct PremiumBenefitsSheet: View {
     }
 
     private func detailRow(title: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
+        return layout {
             Text(title)
                 .ninaText(.label, NinaTheme.muted)
-                .frame(width: 92, alignment: .leading)
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 92, alignment: .leading)
             Text(value)
                 .ninaText(.label, NinaTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1929,20 +1933,22 @@ struct PremiumBenefitsSheet: View {
     // Each row is a ceiling the server actually enforces; nothing else is sold here.
     private var comparison: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                Text("Grátis")
-                    .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
-                    .frame(width: 76)
-                Text("Premium")
-                    .ninaText(.eyebrow, NinaTheme.cobalt, weight: .bold)
-                    .frame(width: 76)
-            }
-            .padding(.horizontal, 14)
-            .frame(minHeight: 38)
-            .accessibilityHidden(true)
+            if !dynamicTypeSize.isAccessibilitySize {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    Text("Grátis")
+                        .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+                        .frame(width: 76)
+                    Text("Premium")
+                        .ninaText(.eyebrow, NinaTheme.cobalt, weight: .bold)
+                        .frame(width: 76)
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 38)
+                .accessibilityHidden(true)
 
-            NinaDivider(inset: 0)
+                NinaDivider(inset: 0)
+            }
 
             if NinaAttachmentGate.current.isEnabled {
                 comparisonRow("Fotos de documentos", free: nil, premium: nil)
@@ -1955,16 +1961,32 @@ struct PremiumBenefitsSheet: View {
         .ninaCard()
     }
 
+    @ViewBuilder
     private func comparisonRow(_ title: String, free: String?, premium: String?) -> some View {
-        HStack(spacing: 0) {
-            Text(title)
-                .ninaText(.label, NinaTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .ninaText(.label, NinaTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Grátis: \(free ?? "não") · Premium: \(premium ?? "sim")")
+                        .ninaText(.meta, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 10)
+            } else {
+                HStack(spacing: 0) {
+                    Text(title)
+                        .ninaText(.label, NinaTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
 
-            Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-            comparisonCell(free, isPremium: false)
-            comparisonCell(premium, isPremium: true)
+                    comparisonCell(free, isPremium: false)
+                    comparisonCell(premium, isPremium: true)
+                }
+            }
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 52)
@@ -2363,7 +2385,8 @@ struct TaskEditorSheet: View {
             Text(option.title)
                 .ninaText(.label, isSelected ? NinaTheme.ink : NinaTheme.muted, weight: isSelected ? .semibold : .medium)
                 .frame(maxWidth: .infinity)
-                .frame(height: 40)
+                .padding(.vertical, 4)
+                .frame(minHeight: 40)
                 .background(
                     isSelected ? NinaTheme.ground : Color.clear,
                     in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field - 4, style: .continuous)
