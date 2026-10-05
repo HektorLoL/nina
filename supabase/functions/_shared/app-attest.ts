@@ -1,4 +1,6 @@
 // deno-lint-ignore no-import-prefix
+import { p256, p384 } from "npm:@noble/curves@2.4.0/nist.js";
+// deno-lint-ignore no-import-prefix
 import * as x509 from "npm:@peculiar/x509@1.14.3";
 import {
   mapAgeRange,
@@ -7,8 +9,8 @@ import {
   parseAgeSignalJSON,
 } from "./age-assurance.ts";
 
-// Apple's own verifiers lean on node:crypto's X509Certificate, which the
-// Supabase edge runtime only stubs; WebCrypto is the path every runtime has.
+// Apple's CA 1 signs device certificates with a P-384 key over SHA-256, which
+// the edge runtime's WebCrypto refuses, so no chain link may go through it.
 
 export type AppAttestMode = "production" | "development" | "insecure-local";
 export type AppAttestEnvironment = "production" | "development";
@@ -324,19 +326,136 @@ function withinValidity(certificate: x509.X509Certificate, now: Date): boolean {
     now.getTime() <= certificate.notAfter.getTime();
 }
 
+function hexBytes(value: string): Uint8Array {
+  return Uint8Array.from(
+    value.match(/../g) ?? [],
+    (pair) => Number.parseInt(pair, 16),
+  );
+}
+
+const certificateSignatureAlgorithms = [
+  { identifier: hexBytes("300a06082a8648ce3d040302"), hash: "SHA-256" },
+  { identifier: hexBytes("300a06082a8648ce3d040303"), hash: "SHA-384" },
+] as const;
+
+const certificateIssuerCurves = [
+  {
+    identifier: hexBytes("301306072a8648ce3d020106082a8648ce3d030107"),
+    curve: p256,
+  },
+  {
+    identifier: hexBytes("301006072a8648ce3d020106052b81040022"),
+    curve: p384,
+  },
+] as const;
+
+type CertificateParts = {
+  signedBytes: Uint8Array;
+  signatureAlgorithm: Uint8Array;
+  signature: Uint8Array;
+  publicKeyAlgorithm: Uint8Array;
+  publicKey: Uint8Array;
+};
+
+function bitStringBytes(content: Uint8Array): Uint8Array {
+  if (content.byteLength < 2 || content[0] !== 0) invalid();
+  return content.slice(1);
+}
+
+function certificateParts(der: Uint8Array): CertificateParts {
+  const certificate = readDER(der, 0);
+  if (certificate.tag !== 0x30 || certificate.next !== der.byteLength) {
+    invalid();
+  }
+  const body = certificate.content;
+  const tbs = readDER(body, 0);
+  const algorithm = readDER(body, tbs.next);
+  const signature = readDER(body, algorithm.next);
+  if (
+    tbs.tag !== 0x30 || algorithm.tag !== 0x30 || signature.tag !== 0x03 ||
+    signature.next !== body.byteLength
+  ) invalid();
+  const signatureAlgorithm = body.slice(tbs.next, algorithm.next);
+
+  const fields = tbs.content;
+  let field = readDER(fields, 0);
+  if (field.tag === 0xa0) field = readDER(fields, field.next);
+  if (field.tag !== 0x02) invalid();
+  const innerAlgorithm = readDER(fields, field.next);
+  if (
+    innerAlgorithm.tag !== 0x30 ||
+    !sameBytes(
+      fields.slice(field.next, innerAlgorithm.next),
+      signatureAlgorithm,
+    )
+  ) invalid();
+  let cursor = innerAlgorithm.next;
+  for (let index = 0; index < 3; index += 1) {
+    const name = readDER(fields, cursor);
+    if (name.tag !== 0x30) invalid();
+    cursor = name.next;
+  }
+  const subjectPublicKeyInfo = readDER(fields, cursor);
+  if (subjectPublicKeyInfo.tag !== 0x30) invalid();
+  const keyAlgorithm = readDER(subjectPublicKeyInfo.content, 0);
+  const key = readDER(subjectPublicKeyInfo.content, keyAlgorithm.next);
+  if (
+    keyAlgorithm.tag !== 0x30 || key.tag !== 0x03 ||
+    key.next !== subjectPublicKeyInfo.content.byteLength
+  ) invalid();
+
+  return {
+    signedBytes: body.slice(0, tbs.next),
+    signatureAlgorithm,
+    signature: bitStringBytes(signature.content),
+    publicKeyAlgorithm: subjectPublicKeyInfo.content.slice(
+      0,
+      keyAlgorithm.next,
+    ),
+    publicKey: bitStringBytes(key.content),
+  };
+}
+
+// A link holds only for ECDSA over SHA-256 or SHA-384 by a P-256 or P-384
+// issuer, checked on the certificate's own DER; a high-S signature is valid
+// X.509 and is verified as it arrived.
+export async function certificateSignedBy(
+  certificate: Uint8Array,
+  issuer: Uint8Array,
+): Promise<boolean> {
+  try {
+    const signed = certificateParts(certificate);
+    const signer = certificateParts(issuer);
+    const algorithm = certificateSignatureAlgorithms.find((candidate) =>
+      sameBytes(candidate.identifier, signed.signatureAlgorithm)
+    );
+    const issuerCurve = certificateIssuerCurves.find((candidate) =>
+      sameBytes(candidate.identifier, signer.publicKeyAlgorithm)
+    );
+    if (!algorithm || !issuerCurve) return false;
+    const digest = new Uint8Array(
+      await crypto.subtle.digest(algorithm.hash, buffer(signed.signedBytes)),
+    );
+    return issuerCurve.curve.verify(
+      signed.signature,
+      digest,
+      signer.publicKey,
+      { prehash: false, lowS: false, format: "der" },
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function signedBy(
   certificate: x509.X509Certificate,
   issuer: x509.X509Certificate,
 ): Promise<boolean> {
   if (certificate.issuer !== issuer.subject) return false;
-  try {
-    return await certificate.verify({
-      publicKey: issuer.publicKey,
-      signatureOnly: true,
-    });
-  } catch {
-    return false;
-  }
+  return await certificateSignedBy(
+    new Uint8Array(certificate.rawData),
+    new Uint8Array(issuer.rawData),
+  );
 }
 
 export function rootCertificatesFrom(
@@ -364,6 +483,7 @@ export async function verifyAttestation(input: {
   mode: AppAttestEnvironment;
   rootCertificates: x509.X509Certificate[];
   now: Date;
+  appID?: string;
 }): Promise<VerifiedAttestation> {
   const keyIDBytes = decodeBase64(input.keyID);
   if (!keyIDBytes || keyIDBytes.byteLength !== 32) invalid();
@@ -440,7 +560,7 @@ export async function verifyAttestation(input: {
   if (
     !sameBytes(
       rpIDHash,
-      await sha256(new TextEncoder().encode(appAttestAppID)),
+      await sha256(new TextEncoder().encode(input.appID ?? appAttestAppID)),
     ) ||
     counter !== 0 ||
     !sameBytes(credentialID, keyIDBytes)

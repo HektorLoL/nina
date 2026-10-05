@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-09-30
+Last updated: 2026-10-04
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -986,6 +986,17 @@ platform bundler cannot resolve the import and the deploy fails with 400.
   keys. `NINA_APP_ATTEST_MODE` must be `production`; `development` and
   `insecure-local` are refused unless the project URL is loopback. Every
   signal that leaves an account not adult also removes its profile photos.
+  **Chain links are verified with `@noble/curves` on each certificate's own
+  DER, never through WebCrypto** (`certificateSignedBy`; `@peculiar/x509` only
+  parses). Apple's CA 1 is a P-384 key that signs the device certificate over
+  SHA-256, and the edge runtime's Deno 2.1.4 WebCrypto throws "Not implemented"
+  for that pairing (and for P-256 with SHA-384), so `age-signal` v1 (2026-09-29)
+  refused every real iPhone at `register` (`age_signal_failed`, stage
+  `attestation`) while every test passed on the newer local and CI Deno. Two
+  real Apple attestations (production and development, from
+  `uebelack/node-app-attest`) now verify against the embedded root in
+  `app-attest.test.ts`; run that file under a Deno 2.1.4 binary too before
+  deploying, because CI never does.
 - **`premium-subscription-sync`** refuses a new original transaction from an
   account that may not buy with `403 premium_requires_adult`
   (`premium_buyer_is_eligible`).
@@ -1550,9 +1561,10 @@ on a loopback `SUPABASE_URL` accepts; against production, mark the account with
 SQL editor. Real age answers come only from a device: Apple's age-assurance
 sandbox on iOS 26.4+ (Settings › Developer › Sandbox Apple Account) and real
 Brazilian accounts. The embedded Apple App Attestation Root CA in
-`_shared/app-attest.ts` was reproduced, not downloaded; its self-signature
-checks out, but compare it byte for byte with Apple's published file, and prove
-one real-device assertion (the digest is hashed twice, as ECDSA-P256-SHA256 over
+`_shared/app-attest.ts` is byte-identical to Apple's published
+`Apple_App_Attestation_Root_CA.pem` (compared 2026-10-04), and two real Apple
+attestations chain to it (§7); still prove one real-device assertion
+(the digest is hashed twice, as ECDSA-P256-SHA256 over
 `SHA256(authenticatorData ‖ clientDataHash)`) before launch.
 
 **iOS 26.4 is the floor everywhere, CI included.** Every build configuration
@@ -1595,10 +1607,13 @@ suggested, and an unattested legacy member (unknown) cannot inherit either, so
 on TestFlight a house can disappear when its only confirmed adult deletes the
 account before the other adult has attested.
 
-**Three inline `npm:` imports carry `// deno-lint-ignore no-import-prefix`**
-(`_shared/app-attest.ts`, its test, `age-signal/index.ts`), so `age-signal`
-needs no import map and `deno.lock` stayed unchanged. `delete-account` still
-imports by bare specifier through `import_map = "../deno.json"` (§7).
+**Five inline `npm:` imports carry `// deno-lint-ignore no-import-prefix`**
+(`@noble/curves` and `@peculiar/x509` in `_shared/app-attest.ts` and in its
+test, and `age-signal/index.ts`), so `age-signal` needs no import map.
+`deno.lock` pins `@noble/curves@2.4.0` and its one dependency
+`@noble/hashes@2.4.0`, added 2026-10-04 for the chain check (§7).
+`delete-account` still imports by bare specifier through
+`import_map = "../deno.json"` (§7).
 
 **The report and privacy mailboxes are constants in the app.**
 `NinaLegalLinks.privacyEmail` and `.reportEmail` are both
