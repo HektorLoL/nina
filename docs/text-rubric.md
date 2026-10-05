@@ -367,6 +367,8 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Consent gate: see §3 row 3. It is exempt from the line limits, because every line is Law-text-gated.
 - **C15. "Denunciar resposta"** is a context-menu item on every Nina reply. The sheet has four chips ("Conteúdo impróprio", "Risco para alguém", "Saúde ou remédio", "Outro") and "Enviar"; the confirmation is "Recebido. Vamos olhar."
 
+- **C16. Cards waiting in older turns are counted above the thread** (2026-10-05). A floating capsule at the top of the conversation, an up arrow and "N propostas esperando" ("1 proposta esperando"), jumps to the oldest turn that still has a pending card. The newest turn never counts, because its cards are already on screen; resolved cards never count. It is the one way back to a proposal left behind, short of an Inbox.
+
 **Target empty chat:** "Jogue uma lembrança aqui." + "Eu proponho. Você confirma." Chips: "Acabou o café" · "Autorização da escola até sexta" · "Um dia, pintar a sala".
 
 ### 2.6 Cards, sheets and alerts (capture sheet, task detail, invite sheet, permission prompts)

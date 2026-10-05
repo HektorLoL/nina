@@ -173,6 +173,35 @@ struct NinaChatView: View {
                 .padding(.bottom, 18)
             }
             .scrollDismissesKeyboard(.interactively)
+            .overlay(alignment: .top) {
+                let backlog = ProposalBacklog(messages: store.messages)
+                if let firstID = backlog.firstMessageID {
+                    Button {
+                        Haptics.selection()
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            proxy.scrollTo(firstID, anchor: .top)
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 11, weight: .bold))
+                                .accessibilityHidden(true)
+                            Text(backlog.line)
+                                .ninaText(.meta, NinaTheme.ink, weight: .semibold)
+                        }
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 36)
+                        .background(NinaTheme.ground, in: Capsule())
+                        .overlay(Capsule().strokeBorder(NinaTheme.line, lineWidth: 1))
+                        .cardShadow()
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 8)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .accessibilityHint("Mostra a mais antiga")
+                }
+            }
             // The newest turn is the one being read, and a pending proposal
             // card sits under it. Opening at the top of the thread hides both.
             .task(id: store.messages.last?.id) {
@@ -2077,4 +2106,25 @@ private extension Int {
         .environment(AuthSessionStore())
         .environment(AgeCheckCoordinator())
         .environment(RouterPath())
+}
+
+// Cards still waiting in older turns are counted above the thread, so a proposal never waits unseen up the scroll.
+struct ProposalBacklog: Equatable {
+    let count: Int
+    let firstMessageID: ChatMessage.ID?
+
+    init(messages: [ChatMessage]) {
+        let newestID = messages.last?.id
+        let waiting = messages.filter { message in
+            message.id != newestID && message.proposals.contains { $0.state == .pending }
+        }
+        count = waiting.reduce(0) { total, message in
+            total + message.proposals.count { $0.state == .pending }
+        }
+        firstMessageID = waiting.first?.id
+    }
+
+    var line: String {
+        count == 1 ? "1 proposta esperando" : "\(count) propostas esperando"
+    }
 }
