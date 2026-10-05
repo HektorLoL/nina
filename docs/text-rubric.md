@@ -166,7 +166,7 @@ The two equal spacers center the brand block in the space above the actions. On 
 - **L5.** Retired 2026-09-26: there is no email sheet.
 - **L6.** Retired 2026-09-26: there is no code step.
 - **L7. The legal footnote** is centered, in the `.meta` tier, 14pt under the last button, followed by the ClassInd mark (Portaria MJSP 1.048 art. 50: the rating shows at login). It appears on the welcome screen only. It carries the protected age line (§3 row 18), so it runs to 3–4 lines.
-- **L8.** The error line sits inside the action group, centered, in ink (never terracotta). One state gets one sentence.
+- **L8.** The error line sits inside the action group, centered, in alert red with its glyph (`NinaErrorNote`, since 2026-10-04), never terracotta. One state gets one sentence.
 
 **Target strings**
 

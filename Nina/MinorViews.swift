@@ -147,9 +147,7 @@ struct MinorWelcomeView: View {
                     .ninaCard(fill: NinaTheme.grout, stroke: .clear)
 
                     if let error = store.syncErrorMessage {
-                        Text(error)
-                            .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                            .fixedSize(horizontal: false, vertical: true)
+                        NinaErrorNote(text: error)
                     }
 
                     NinaButton(
@@ -257,9 +255,7 @@ struct MinorHomeView: View {
                                     .ninaText(.label, NinaTheme.muted)
                             }
                             if let error = store.syncErrorMessage {
-                                Text(error)
-                                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                NinaErrorNote(text: error)
                                     .padding(.top, 4)
                             }
                         }
@@ -519,9 +515,7 @@ private struct MinorNoHomeView: View {
                         }
 
                         if let outcome = ageCheck.inlineOutcome {
-                            Text(outcome.line)
-                                .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                                .fixedSize(horizontal: false, vertical: true)
+                            AgeOutcomeNote(outcome: outcome)
                         }
                     }
                 }
@@ -614,10 +608,7 @@ private struct MinorAgeRequiredView: View {
                     }
 
                     if let outcome = ageCheck.inlineOutcome {
-                        Text(outcome.line)
-                            .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
+                        AgeOutcomeNote(outcome: outcome, alignment: .center)
                     }
                 }
             }
@@ -1040,9 +1031,7 @@ private struct MinorAgeContestView: View {
                         }
 
                         if let outcome = ageCheck.inlineOutcome {
-                            Text(outcome.line)
-                                .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                                .fixedSize(horizontal: false, vertical: true)
+                            AgeOutcomeNote(outcome: outcome)
                         }
                     }
 

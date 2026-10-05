@@ -745,9 +745,17 @@ branching anywhere.
 - `cobalt #1B4FD8` is brand, Nina and commit — **one cobalt control per screen**.
 - `terracotta #C2410C` is **lateness only**. Never destruction, never offline,
   never a category. Destruction is carried by weight and friction (ink fill,
-  terminal position, a typed gate); negative-but-not-late states use grout + ink.
+  terminal position, a typed gate); blocked, empty and offline states use grout
+  + ink.
+- `alert #D92D20` (text `alertInk`, ground `alertWash`) is **errors only**,
+  since 2026-10-04 (Heitor: an error reads red, a success green): a failed
+  write, a refused step, a field to fix. Always through `NinaErrorNote` or the
+  sync toast, so the `exclamationmark.circle.fill` glyph travels with it.
+  Never lateness, never destruction, never a blocked or empty state. A step a
+  person completed may answer in moss (`NinaSuccessNote`, the undo toast).
 - `moss #3F6B4A` marks confirmed/done, and only for something a *human* confirmed.
-- **Category is a monochrome outline glyph, never a colour.** `MemberTone`'s case
+- **Category is a monochrome outline glyph, never a colour** (kids mode is the
+  one exception, §4 "Kids mode is presentation only"). `MemberTone`'s case
   names are wire values that outlived their hues; they render as neutral ink tints.
 - **One regulated exception: the ClassInd rating pictogram.**
   `NinaTheme.classInd(_:)` / `classIndLivre` hold the official rating colours

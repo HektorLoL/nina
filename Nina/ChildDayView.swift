@@ -60,9 +60,7 @@ struct ChildTodaySection: View {
                 }
 
                 if didFailToPrint {
-                    Text("Não deu para imprimir agora.")
-                        .ninaText(.caption, NinaTheme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
+                    NinaErrorNote(text: "Não deu para imprimir agora.")
                 }
             }
         }

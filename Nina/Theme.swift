@@ -15,6 +15,11 @@ enum NinaTheme {
     static let terracotta = Color(hex: 0xC2410C)
     static let terracottaWash = Color(hex: 0xFBEAE1)
     static let moss = Color(hex: 0x3F6B4A)
+    static let mossWash = Color(hex: 0xE8F1EA)
+    // Red is errors only and always travels with its glyph: never lateness (terracotta) and never destruction (ink).
+    static let alert = Color(hex: 0xD92D20)
+    static let alertInk = Color(hex: 0xB42318)
+    static let alertWash = Color(hex: 0xFDECEA)
     /// Stroke for unfilled controls. Lighter than muted, but above the 3:1
     /// non-text contrast floor that `line` fails at 1.24:1.
     static let control = Color(hex: 0x848E9D)

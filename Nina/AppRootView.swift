@@ -781,9 +781,9 @@ private struct SyncErrorToast: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "exclamationmark.circle")
+            Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(NinaTheme.ink)
+                .foregroundStyle(NinaTheme.alert)
                 .padding(.top, 1)
 
             Text(message)
@@ -807,7 +807,7 @@ private struct SyncErrorToast: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .ninaCard(fill: NinaTheme.grout, stroke: NinaTheme.line)
+        .ninaCard(fill: NinaTheme.alertWash, stroke: NinaTheme.alert.opacity(0.35))
         .padding(.horizontal, 20)
         .accessibilityElement(children: .combine)
         .task(id: message) {
@@ -826,8 +826,10 @@ private struct UndoCompletionToast: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "checkmark")
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 12, weight: .heavy))
                 .foregroundStyle(NinaTheme.ground)
+                .frame(width: 24, height: 24)
+                .background(NinaTheme.moss, in: Circle())
                 .accessibilityHidden(true)
 
             Text(title)

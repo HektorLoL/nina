@@ -64,10 +64,7 @@ struct NinaChatView: View {
                     }
 
                     if let outcome = ageCheck.inlineOutcome {
-                        Text(outcome.line)
-                            .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
+                        AgeOutcomeNote(outcome: outcome, alignment: .center)
                     }
                 }
             }
@@ -324,21 +321,7 @@ struct AIMemoryConsentCard: View {
             }
 
             if let error = store.syncErrorMessage {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "exclamationmark.circle")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(NinaTheme.ink)
-
-                    Text(error)
-                        .ninaText(.caption, NinaTheme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    NinaTheme.grout,
-                    in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
-                )
+                NinaErrorNote(text: error, style: .card)
             }
 
             Text("Sem aceitar, tudo o mais continua funcionando: tarefas, compras, casa. Só a conversa fica desligada.")
@@ -1225,9 +1208,7 @@ private struct ReportReplySheet: View {
                         FlowChips(reasons: NinaReplyReportReason.allCases, selection: $reason)
 
                         if let error = store.syncErrorMessage {
-                            Text(error)
-                                .ninaText(.caption, NinaTheme.ink)
-                                .fixedSize(horizontal: false, vertical: true)
+                            NinaErrorNote(text: error)
                         }
 
                         NinaButton(

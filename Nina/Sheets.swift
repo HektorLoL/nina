@@ -834,7 +834,7 @@ private struct PrivacyAndDataView: View {
                     }
 
                     if let error = store.syncErrorMessage {
-                        NoteCard(eyebrow: nil, text: error)
+                        NinaErrorNote(text: error, style: .card)
                     }
 
                     dataRows
@@ -1903,7 +1903,7 @@ struct PremiumBenefitsSheet: View {
             }
 
             if let errorMessage = premiumStore.errorMessage, !errorMessage.isEmpty {
-                NoteCard(eyebrow: nil, text: errorMessage)
+                NinaErrorNote(text: errorMessage, style: .card)
             }
         }
     }
@@ -3202,9 +3202,7 @@ struct InviteFamilySheet: View {
                 }
 
                 if renewFailed, let message = store.syncErrorMessage {
-                    Text(message)
-                        .ninaText(.caption, NinaTheme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
+                    NinaErrorNote(text: message)
                 }
             }
         }

@@ -369,12 +369,7 @@ struct MemberEditorSheet: View {
             }
 
             if let error = store.syncErrorMessage {
-                Text(error)
-                    .ninaText(.caption, NinaTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-                    .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+                NinaErrorNote(text: error, style: .card)
             }
         }
         .padding(.top, 4)
@@ -732,10 +727,7 @@ struct PendingHomeApprovalView: View {
                     ZeroState(headline: "Pedido enviado.", body_: waitingBody, presence: .waiting) {
                         VStack(spacing: 10) {
                             if let message = store.syncErrorMessage ?? authSession.errorMessage {
-                                Text(message)
-                                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                                    .multilineTextAlignment(.center)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                NinaErrorNote(text: message, alignment: .center)
                             }
 
                             NinaButton(
@@ -832,13 +824,7 @@ struct FamilyAccessDecisionView: View {
                             }
 
                             if let syncErrorMessage = store.syncErrorMessage ?? authSession.errorMessage {
-                                Text(syncErrorMessage)
-                                    .ninaText(.caption, NinaTheme.ink)
-                                    .multilineTextAlignment(.center)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(14)
-                                    .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+                                NinaErrorNote(text: syncErrorMessage, style: .card, alignment: .center)
                             }
 
                             NinaButton(

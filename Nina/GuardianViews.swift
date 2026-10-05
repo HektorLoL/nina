@@ -250,9 +250,7 @@ struct GuardianApprovalSheet: View {
                     .ninaCard(fill: NinaTheme.grout, stroke: .clear)
 
                     if let error = store.syncErrorMessage {
-                        Text(error)
-                            .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                            .fixedSize(horizontal: false, vertical: true)
+                        NinaErrorNote(text: error)
                     }
 
                     VStack(spacing: 6) {
@@ -838,9 +836,7 @@ struct MinorHealthConsentSheet: View {
             }
 
             if let error = store.syncErrorMessage {
-                Text(error)
-                    .ninaText(.caption, NinaTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
+                NinaErrorNote(text: error)
             }
 
             Spacer(minLength: 0)

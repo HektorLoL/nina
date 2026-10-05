@@ -78,9 +78,7 @@ struct KidsHomeContent: View {
             header
 
             if let syncError {
-                Text(syncError)
-                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                    .fixedSize(horizontal: false, vertical: true)
+                NinaErrorNote(text: syncError)
             }
 
             if todayRows.isEmpty && upcoming.isEmpty {

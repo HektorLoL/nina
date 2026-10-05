@@ -142,6 +142,79 @@ struct NinaChip: View {
     }
 }
 
+// A failed write or a refused step: the red glyph says "error" before the words do.
+struct NinaErrorNote: View {
+    enum Style {
+        case line
+        case card
+    }
+
+    var text: String
+    var style: Style = .line
+    var alignment: TextAlignment = .leading
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(NinaTheme.alert)
+                .accessibilityHidden(true)
+            Text(text)
+                .ninaText(.caption, NinaTheme.alertInk, weight: .medium)
+                .multilineTextAlignment(alignment)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(style == .card ? 14 : 0)
+        .frame(maxWidth: style == .card ? .infinity : nil, alignment: alignment == .center ? .center : .leading)
+        .background {
+            if style == .card {
+                RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+                    .fill(NinaTheme.alertWash)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Erro: \(text)")
+    }
+}
+
+// Something a person did went through: moss, with its check, never for anything Nina did alone.
+struct NinaSuccessNote: View {
+    var text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(NinaTheme.moss)
+                .accessibilityHidden(true)
+            Text(text)
+                .ninaText(.caption, NinaTheme.moss, weight: .semibold)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+// A shared age reading lands green, a refusal by Apple or the server lands red, and a person's own "no" stays neutral.
+struct AgeOutcomeNote: View {
+    var outcome: InlineAgeOutcome
+    var alignment: TextAlignment = .leading
+
+    var body: some View {
+        switch outcome {
+        case .updated:
+            NinaSuccessNote(text: outcome.line)
+        case .appleError, .attestFailure, .rejected:
+            NinaErrorNote(text: outcome.line, alignment: alignment)
+        case .declined:
+            Text(outcome.line)
+                .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                .multilineTextAlignment(alignment)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 enum NinaButtonKind {
     case primary
     case outline
