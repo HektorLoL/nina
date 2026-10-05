@@ -248,6 +248,86 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testAnAdultMemberLeavesTheHouseOnTheServerAndLandsWithoutAHome() async {
+        let user = makeUser()
+        let me = HouseholdMember(
+            userID: user.id,
+            name: "Membro",
+            relationship: "Irmão",
+            role: .adult,
+            permissionRole: .member,
+            tone: .sky,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let state = makeRemoteState(permissionRole: .member, members: [me])
+        let backend = LeavingHomeBackend(state: state)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertTrue(store.canLeaveFamily)
+
+        let left = await store.leaveFamily()
+        let leftFamilies = await backend.leftFamilyIDs()
+
+        XCTAssertTrue(left)
+        XCTAssertEqual(leftFamilies, [state.familyGroup.id])
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertFalse(store.hasActiveHome)
+    }
+
+    @MainActor
+    func testTheOwnerIsNeverOfferedToLeaveTheHouseItHolds() async {
+        let user = makeUser()
+        let me = HouseholdMember(
+            userID: user.id,
+            name: "Dona",
+            relationship: "Mãe",
+            role: .adult,
+            permissionRole: .owner,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let state = makeRemoteState(permissionRole: .owner, members: [me])
+        let backend = LeavingHomeBackend(state: state)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let left = await store.leaveFamily()
+        let leftFamilies = await backend.leftFamilyIDs()
+
+        XCTAssertFalse(store.canLeaveFamily)
+        XCTAssertFalse(left)
+        XCTAssertTrue(leftFamilies.isEmpty)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+    }
+
+    @MainActor
+    func testAFailedLeaveKeepsTheHouseAndSaysSo() async {
+        let user = makeUser()
+        let me = HouseholdMember(
+            userID: user.id,
+            name: "Membro",
+            relationship: "Irmão",
+            role: .adult,
+            permissionRole: .member,
+            tone: .sky,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let state = makeRemoteState(permissionRole: .member, members: [me])
+        let backend = LeavingHomeBackend(state: state, failLeave: true)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let left = await store.leaveFamily()
+
+        XCTAssertFalse(left)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertEqual(store.syncErrorMessage, "Não deu para sair da casa agora. Tente de novo.")
+    }
+
+    @MainActor
     func testJoinHomeNormalizesInviteAndAppliesMemberState() async {
         let user = makeUser()
         let inviteCode = "casa-47a9f2d0b3c1e8a4d6f2a9c5e7b1d304"
@@ -4265,6 +4345,46 @@ private actor HomeLifecycleBackend: RemoteHomeBackend {
         return state
     }
 
+    func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws {}
+    func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws {}
+    func createTask(_ task: TaskItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
+    func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
+}
+
+private actor LeavingHomeBackend: RemoteHomeBackend {
+    enum LeaveError: Error {
+        case expected
+    }
+
+    private let state: RemoteHomeState
+    private let failLeave: Bool
+    private var left: [UUID] = []
+
+    init(state: RemoteHomeState, failLeave: Bool = false) {
+        self.state = state
+        self.failLeave = failLeave
+    }
+
+    func leftFamilyIDs() -> [UUID] {
+        left
+    }
+
+    func loadHome(for user: AuthUser) async throws -> RemoteHomeState? {
+        left.isEmpty ? state : nil
+    }
+
+    func leaveFamily(familyID: UUID) async throws {
+        guard !failLeave else { throw LeaveError.expected }
+        left.append(familyID)
+    }
+
+    func createHome(named name: String, owner: AuthUser?) async throws -> RemoteHomeState { state }
+    func joinHome(with inviteCode: String, member: AuthUser?) async throws -> RemoteHomeState { state }
+    func updateFamilySettings(familyID: UUID, name: String) async throws -> RemoteHomeState { state }
+    func addUnclaimedMember(_ member: HouseholdMember, familyID: UUID) async throws -> RemoteHomeState { state }
+    func updateFamilyMember(_ member: HouseholdMember) async throws -> RemoteHomeState { state }
     func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws {}
     func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws {}
     func createTask(_ task: TaskItem, familyID: UUID, currentUser: AuthUser) async throws {}

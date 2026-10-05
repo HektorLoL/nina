@@ -1308,6 +1308,42 @@ final class AppStore {
         #endif
     }
 
+    // The owner holds the house and a minor leaves only through a guardian, so only another adult may walk out.
+    var canLeaveFamily: Bool {
+        hasActiveHome
+            && currentPermissionRole != .owner
+            && currentFamilyMember?.role == .adult
+            && !usesLocalDebugBackend(for: activeUser)
+            && remoteHomeBackend != nil
+    }
+
+    @discardableResult
+    func leaveFamily() async -> Bool {
+        guard canLeaveFamily, let remoteHomeBackend else { return false }
+        let contextToken = currentHomeContextToken
+        let familyID = familyGroup.id
+        syncErrorMessage = nil
+
+        await waitForPendingRemoteMutations()
+        guard isCurrentHomeContext(contextToken) else { return false }
+        isSyncingHome = true
+
+        do {
+            try await remoteHomeBackend.leaveFamily(familyID: familyID)
+        } catch {
+            finishSyncingHome(ifCurrent: contextToken)
+            guard isCurrentHomeContext(contextToken) else { return false }
+            syncErrorMessage = "Não deu para sair da casa agora. Tente de novo."
+            Haptics.error()
+            return false
+        }
+
+        finishSyncingHome(ifCurrent: contextToken)
+        guard isCurrentHomeContext(contextToken) else { return false }
+        await activateHomeContext(for: activeUser)
+        return true
+    }
+
     @discardableResult
     func approveJoinRequest(
         _ request: FamilyJoinRequest,

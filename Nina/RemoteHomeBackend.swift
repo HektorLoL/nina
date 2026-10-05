@@ -262,6 +262,7 @@ protocol RemoteHomeBackend {
     func approveJoinRequest(_ requestID: UUID, permissionRole: FamilyPermissionRole) async throws -> RemoteHomeState
     func declineJoinRequest(_ requestID: UUID) async throws -> RemoteHomeState
     func cancelJoinRequest(_ requestID: UUID) async throws
+    func leaveFamily(familyID: UUID) async throws
     func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws
     func deleteTaskSection(_ sectionID: String, familyID: UUID) async throws
     func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws
@@ -382,6 +383,10 @@ extension RemoteHomeBackend {
     }
 
     func cancelJoinRequest(_ requestID: UUID) async throws {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func leaveFamily(familyID: UUID) async throws {
         throw RemoteHomeBackendError.operationUnavailable
     }
 
@@ -1070,6 +1075,17 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
             throw RemoteHomeBackendError.familyNotFound
         }
         return state
+    }
+
+    func leaveFamily(familyID: UUID) async throws {
+        try await perform(operation: "leave_family") {
+            _ = try await client
+                .rpc(
+                    "leave_family",
+                    params: FamilyIDParams(targetFamilyID: familyID)
+                )
+                .execute()
+        }
     }
 
     func cancelJoinRequest(_ requestID: UUID) async throws {

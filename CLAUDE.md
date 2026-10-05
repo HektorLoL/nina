@@ -145,7 +145,10 @@ product regression, not a refactor.
   important invariant in the schema.
 - **Only an `owner` changes permission roles**, and `owner` can be neither
   granted nor revoked via any RPC. An `admin` may not modify another
-  owner/admin. Nobody removes themselves, the owner, or the assistant row.
+  owner/admin. Nobody removes themselves, the owner, or the assistant row; an
+  adult who is not the owner leaves through `leave_family` instead (since
+  2026-10-05), which runs a removal's guardian cleanup and records no access
+  decision, and the owner cannot leave without a successor.
 - **A claimed member's `household_role` is derived from age, never chosen by a
   client** (since 2026-09-29; it used to be forced to `'adult'`). The trigger
   `family_members_enforce_age` sets it from `private.effective_age`: adult →

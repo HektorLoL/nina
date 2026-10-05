@@ -281,6 +281,7 @@ struct SettingsSheet: View {
 
     @State private var isRenamingHouse = false
     @State private var houseNameDraft = ""
+    @State private var isConfirmingLeave = false
 
     @AppStorage(LocalHomeNotificationScheduler.notificationsEnabledKey)
     private var notificationsEnabled = true
@@ -527,6 +528,36 @@ struct SettingsSheet: View {
                     value: store.currentPermissionRole.title,
                     systemName: store.currentPermissionRole.symbolName
                 )
+            }
+
+            if store.canLeaveFamily {
+                NinaDivider()
+
+                Button {
+                    Haptics.warning()
+                    isConfirmingLeave = true
+                } label: {
+                    SettingsLinkRow(
+                        title: "Sair da casa",
+                        systemName: "rectangle.portrait.and.arrow.right",
+                        destination: .action
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(store.isSyncingHome)
+                .opacity(store.isSyncingHome ? 0.4 : 1)
+                .alert("Sair desta casa?", isPresented: $isConfirmingLeave) {
+                    Button("Sair", role: .destructive) {
+                        Task {
+                            if await store.leaveFamily() {
+                                dismiss()
+                            }
+                        }
+                    }
+                    Button("Cancelar", role: .cancel) {}
+                } message: {
+                    Text("Suas tarefas ficam com a casa.")
+                }
             }
         }
     }

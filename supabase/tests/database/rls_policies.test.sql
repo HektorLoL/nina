@@ -375,6 +375,7 @@ select set_eq(
     'get_pending_family_join_request()',
     'is_adult_family_member(uuid)',
     'join_family_by_invite(text)',
+    'leave_family(uuid)',
     'record_minor_usage(date, integer)',
     'record_nina_ai_consent(text, boolean, boolean)',
     'record_terms_acceptance()',
