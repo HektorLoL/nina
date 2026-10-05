@@ -1038,7 +1038,10 @@ from commit d26a730 on 2026-09-29 (`age-signal` v1, `nina-chat` v18,
 `app-store-server-notifications` v9), from a clean `git archive` export
 because iCloud leaves ignored "… 2" copies of source files in the working tree
 (§12). `age-signal` v2 (2026-10-04, commit c724166, same clean-export route)
-carries the chain-signature fix below. Before that, `nina-maintenance` was redeployed on 2026-09-23 with the
+carries the chain-signature fix below. `nina-chat` v19 (2026-10-05, commit
+4125c7b, same clean-export route) carries the search over up to 500 ordered
+candidates with accents folded, the workload summary without sementes, and a
+pet's species and breed in the member context. Before that, `nina-maintenance` was redeployed on 2026-09-23 with the
 GPT-6 Luna switch, and `nina-chat` v14 (2026-09-28) carried the bounded body
 reader and v12 (2026-09-26) the spoken-dates fix, commit 84ef7c9.
 Until 2026-09-23 both still ran the 2026-06-15 build, so check `list_edge_functions` dates against
@@ -1864,12 +1867,12 @@ the project, not bugs to fix unprompted.
   `schema_migrations` row was set to `202610050001` (§12). The authenticated
   function grant map is now 48 names. The "Sair da casa" row that calls it
   reaches people with the first build after 11.
-- **Migration `202610050002` (foreign-key indexes) is committed and tested,
-  not applied.** It indexes the 33 foreign keys the production advisor listed
+- **Migration `202610050002` (foreign-key indexes) is applied to production
+  (2026-10-05).** It indexes the 33 foreign keys the production advisor listed
   and fixes `set_updated_at`'s search path; `foreign_key_indexes.test.sql`
   fails if any foreign key in `public` or `private` lacks a leading index. It
-  waits for Heitor's go, then goes through the Supabase MCP `apply_migration`
-  with its version row repaired (§12), like `202610050001`.
+  went through the Supabase MCP `apply_migration`, its version row was set to
+  `202610050002` (§12), and the same canary query read 0 on production.
 - **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
   `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
   compares them) and Terms §4 reads the same constant. Apple's questionnaire
