@@ -112,7 +112,11 @@ struct TaskDetailView: View {
         VStack(spacing: 0) {
             metaRow(
                 "Quando",
-                value: task.kind == .seed ? "Plante depois" : task.effectiveDueLabel(),
+                value: task.kind == .seed
+                    ? "Plante depois"
+                    : task.namesADayWithoutAReminder
+                        ? "\(task.dueLabel) · sem lembrete"
+                        : task.effectiveDueLabel(),
                 isLate: isOverdue
             ) {
                 metaGlyph("calendar")

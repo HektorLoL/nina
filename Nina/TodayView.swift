@@ -499,8 +499,18 @@ struct TaskRowView: View {
                 .ninaText(.meta, isOverdue ? NinaTheme.terracotta : NinaTheme.muted, weight: isOverdue ? .semibold : .regular)
                 .lineLimit(1)
                 .accessibilityLabel(
-                    isOverdue ? "Atrasada, \(task.effectiveDueLabel())" : task.effectiveDueLabel()
+                    isOverdue
+                        ? "Atrasada, \(task.effectiveDueLabel())"
+                        : task.namesADayWithoutAReminder
+                            ? "\(task.dueLabel), sem lembrete"
+                            : task.effectiveDueLabel()
                 )
+            if task.namesADayWithoutAReminder {
+                Image(systemName: "bell.slash")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(NinaTheme.muted)
+                    .accessibilityHidden(true)
+            }
         } else {
             Text("Plante depois").ninaText(.meta, NinaTheme.muted)
         }

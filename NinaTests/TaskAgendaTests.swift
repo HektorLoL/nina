@@ -185,6 +185,27 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertEqual(seed.effectiveDueLabel(), "Sem data")
     }
 
+    func testALabelTheReaderCouldNotPlaceSaysItHasNoReminder() {
+        var vague = task(dueAt: nil)
+        vague.dueLabel = "Sexta à tarde"
+        XCTAssertTrue(vague.namesADayWithoutAReminder)
+
+        var undated = vague
+        undated.dueLabel = "Sem data"
+        XCTAssertFalse(undated.namesADayWithoutAReminder)
+
+        var seed = vague
+        seed.kind = .seed
+        XCTAssertFalse(seed.namesADayWithoutAReminder)
+
+        var done = vague
+        done.isDone = true
+        XCTAssertFalse(done.namesADayWithoutAReminder)
+
+        let dated = task(dueAt: date(year: 2026, month: 8, day: 14, hour: 15, minute: 0))
+        XCTAssertFalse(dated.namesADayWithoutAReminder)
+    }
+
     func testClosingATaskStampsWhenItClosedAndReopeningClearsIt() {
         let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
         guard let open = store.tasks.first(where: { !$0.isDone && $0.recurrence == .none }) else {

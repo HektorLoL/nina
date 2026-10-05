@@ -962,6 +962,14 @@ struct TaskItem: Identifiable, Codable, Hashable {
         return recurrence == .none ? "Marcar como feita" : "Feita por hoje"
     }
 
+    // A label the date reader could not place books no reminder, and the task must say so
+    // wherever its label reads like a date.
+    var namesADayWithoutAReminder: Bool {
+        guard kind == .task, !isDone, dueAt == nil, snoozedUntil == nil else { return false }
+        let label = dueLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !label.isEmpty && label.caseInsensitiveCompare("Sem data") != .orderedSame
+    }
+
     /// The label to draw. `dueLabel` is stored at write time and never recomputed,
     /// so a snoozed or recurring task keeps showing the date it used to have —
     /// while lateness colour is computed from `displayDate`. Both must agree.
