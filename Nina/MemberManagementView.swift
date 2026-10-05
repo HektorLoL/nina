@@ -26,7 +26,10 @@ struct MemberEditorSheet: View {
     @State private var isSaving = false
     @State private var isShowingRemoveConfirmation = false
     @State private var guardianSheet: GuardianSheetMode?
+    @State private var isHandingOver = false
+    @State private var handOverConfirmation = ""
     @FocusState private var isNameFocused: Bool
+    @FocusState private var isHandOverFocused: Bool
 
     private var member: HouseholdMember? {
         guard case .edit(let id) = mode else { return nil }
@@ -307,7 +310,7 @@ struct MemberEditorSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 Eyebrow(text: "Permissão")
 
-                // Owner is never offered here: no RPC can grant or revoke it.
+                // Owner is never a chip: the house changes hands only through Passar a casa.
                 if store.canChangePermissionRole(for: member) {
                     HStack(spacing: 8) {
                         permissionChip(.admin)
@@ -322,8 +325,79 @@ struct MemberEditorSheet: View {
                 } else {
                     Text(permissionRole.title).ninaText(.label)
                 }
+
+                if store.canOfferHouse(to: member) {
+                    handOverBlock(for: member)
+                }
             }
         }
+    }
+
+    // Handing the house over is weighed like a deletion: the person's name typed, then an ink button.
+    @ViewBuilder
+    private func handOverBlock(for member: HouseholdMember) -> some View {
+        if store.houseOffer(to: member) != nil {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Esperando \(member.name) aceitar a casa.")
+                    .ninaText(.caption, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                NinaButton(title: "Desfazer pedido", kind: .quiet, isEnabled: !isSaving) {
+                    withdrawOffer()
+                }
+            }
+            .padding(.top, 6)
+        } else if isHandingOver {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("\(member.name) recebe um pedido para virar titular. Quando aceitar, você passa a administrar a casa e pode sair depois.")
+                    .ninaText(.caption, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                SheetField(label: "Escreva \(member.name) para confirmar") {
+                    TextField(member.name, text: $handOverConfirmation)
+                        .accessibilityLabel("Escreva \(member.name) para confirmar")
+                        .focused($isHandOverFocused)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .submitLabel(.done)
+                }
+
+                InkButton(
+                    title: isSaving ? "Enviando" : "Passar para \(member.name)",
+                    isEnabled: confirmsHandOver(to: member) && !isSaving
+                ) {
+                    handOver(to: member)
+                }
+
+                NinaButton(title: "Cancelar", kind: .quiet, isEnabled: !isSaving) {
+                    Haptics.selection()
+                    closeHandOver()
+                }
+            }
+            .padding(.top, 6)
+        } else {
+            NinaButton(title: "Passar a casa", kind: .quiet, isEnabled: !isSaving) {
+                Haptics.warning()
+                isHandingOver = true
+                Task {
+                    await Task.yield()
+                    isHandOverFocused = true
+                }
+            }
+        }
+    }
+
+    private func closeHandOver() {
+        isHandOverFocused = false
+        handOverConfirmation = ""
+        isHandingOver = false
+    }
+
+    private func confirmsHandOver(to member: HouseholdMember) -> Bool {
+        let typed = handOverConfirmation.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = member.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty
+            && typed.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
     }
 
     private func permissionChip(_ role: FamilyPermissionRole) -> some View {
@@ -496,6 +570,34 @@ struct MemberEditorSheet: View {
             if success {
                 Haptics.success()
                 dismiss()
+            }
+        }
+    }
+
+    private func handOver(to member: HouseholdMember) {
+        guard confirmsHandOver(to: member), !isSaving else { return }
+        isSaving = true
+        isHandOverFocused = false
+
+        Task {
+            let success = await store.offerHouse(to: member)
+            isSaving = false
+            if success {
+                Haptics.success()
+                closeHandOver()
+            }
+        }
+    }
+
+    private func withdrawOffer() {
+        guard !isSaving else { return }
+        isSaving = true
+
+        Task {
+            let success = await store.withdrawHouseOffer()
+            isSaving = false
+            if success {
+                Haptics.selection()
             }
         }
     }
@@ -711,6 +813,88 @@ struct PendingJoinRequestCard: View {
     }
 }
 
+// The person an owner offered the house to decides here; nothing changes until they accept.
+struct HouseOwnershipOfferCard: View {
+    @Environment(AppStore.self) private var store
+    @State private var isWorking = false
+    @State private var isShowingDeclineConfirmation = false
+    @State private var didFail = false
+
+    private var isBusy: Bool {
+        isWorking || store.isSyncingHome
+    }
+
+    private var ownerName: String {
+        store.houseOfferOwnerName ?? "O titular"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("\(ownerName) quer passar a casa para você.")
+                .ninaText(.title)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Como titular, você cuida de convites, permissões e ajustes. Para sair depois, passe a casa para outra pessoa.")
+                .ninaText(.caption, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                NinaButton(title: isWorking ? "Aceitando" : "Aceitar", fillsWidth: true, isEnabled: !isBusy) {
+                    accept()
+                }
+
+                NinaButton(title: "Recusar", kind: .outline, isEnabled: !isBusy) {
+                    Haptics.warning()
+                    isShowingDeclineConfirmation = true
+                }
+            }
+
+            if didFail, let error = store.syncErrorMessage {
+                NinaErrorNote(text: error, style: .card)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard()
+        .alert("Recusar a casa?", isPresented: $isShowingDeclineConfirmation) {
+            Button("Cancelar", role: .cancel) {}
+            Button("Recusar", role: .destructive) {
+                decline()
+            }
+        } message: {
+            Text("\(ownerName) continua como titular.")
+        }
+    }
+
+    private func accept() {
+        guard !isWorking else { return }
+        isWorking = true
+        didFail = false
+        Task {
+            let success = await store.acceptHouseOffer()
+            isWorking = false
+            didFail = !success
+            if success {
+                Haptics.success()
+            }
+        }
+    }
+
+    private func decline() {
+        guard !isWorking else { return }
+        isWorking = true
+        didFail = false
+        Task {
+            let success = await store.withdrawHouseOffer()
+            isWorking = false
+            didFail = !success
+            if success {
+                Haptics.selection()
+            }
+        }
+    }
+}
+
 struct PendingHomeApprovalView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
@@ -909,7 +1093,7 @@ struct MemberPermissionBadge: View {
 
     var body: some View {
         if member.role != .assistant, effectivePermissionRole == .owner {
-            CategoryGlyph(systemName: "crown.fill", size: 14, tint: NinaTheme.ink, label: "Responsável pela casa")
+            CategoryGlyph(systemName: "crown.fill", size: 14, tint: NinaTheme.ink, label: "Titular da casa")
         }
     }
 

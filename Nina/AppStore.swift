@@ -252,6 +252,7 @@ final class AppStore {
     var pendingJoinRequest: FamilyJoinRequest?
     var familyAccessDecision: FamilyAccessDecision?
     var joinRequests: [FamilyJoinRequest] = []
+    var houseOwnershipOffer: HouseOwnershipOffer?
     var messages: [ChatMessage]
     var taskSections: [TaskSection]
     var customTaskCategories: [TaskCategory]
@@ -312,6 +313,8 @@ final class AppStore {
     @ObservationIgnored private(set) var lastMutationErrorCode: RemoteRPCErrorCode?
 
     var undoableCompletionID: TaskItem.ID?
+    // Counts closings on this phone, so the mark in the tab bar can notice each one.
+    private(set) var completionPulse = 0
     @ObservationIgnored private var undoExpiryTask: Task<Void, Never>?
     @ObservationIgnored private var undoableRoll: (before: TaskItem, after: TaskItem)?
     var isSyncingHome = false
@@ -639,6 +642,7 @@ final class AppStore {
         pendingJoinRequest = nil
         familyAccessDecision = nil
         joinRequests = []
+        houseOwnershipOffer = nil
         householdPremium = .inactive
         aiConsentStatus = .withheld
         viewerAge = .unknown
@@ -853,6 +857,7 @@ final class AppStore {
         pendingJoinRequest = nil
         familyAccessDecision = nil
         joinRequests = []
+        houseOwnershipOffer = nil
         inviteStatus = nil
         currentPermissionRole = .member
         familyGroup = PreviewData.familyGroup
@@ -924,7 +929,7 @@ final class AppStore {
             name: name,
             inviteCode: Self.secureLocalInviteCode(),
             members: [
-                Self.householdMember(for: owner, relationship: "Criador", permissionRole: .owner),
+                Self.householdMember(for: owner, relationship: "", permissionRole: .owner),
                 Self.ninaAssistantMember
             ]
         )
@@ -1345,6 +1350,112 @@ final class AppStore {
             && currentFamilyMember?.role == .adult
             && !usesLocalDebugBackend(for: activeUser)
             && remoteHomeBackend != nil
+    }
+
+    // The owner holds the house, so leaving it starts with handing it to someone else.
+    var ownerMustHandOverBeforeLeaving: Bool {
+        hasActiveHome
+            && currentPermissionRole == .owner
+            && currentFamilyMember?.role == .adult
+            && !usesLocalDebugBackend(for: activeUser)
+            && remoteHomeBackend != nil
+    }
+
+    var hasAdultToHoldTheHouse: Bool {
+        familyGroup.members.contains { canOfferHouse(to: $0) }
+    }
+
+    // Only the owner offers the house, and only to another adult with an account in it.
+    func canOfferHouse(to member: HouseholdMember) -> Bool {
+        ownerMustHandOverBeforeLeaving
+            && member.role == .adult
+            && member.identityState == .claimed
+            && member.userID != nil
+            && member.userID != activeHomeUserID
+    }
+
+    func houseOffer(to member: HouseholdMember) -> HouseOwnershipOffer? {
+        guard let offer = houseOwnershipOffer, offer.memberID == member.id else { return nil }
+        return offer
+    }
+
+    // The offer waiting for this person, shown only while its owner still holds the house.
+    var houseOfferForMe: HouseOwnershipOffer? {
+        guard hasActiveHome,
+              let offer = houseOwnershipOffer,
+              let me = currentFamilyMember,
+              offer.memberID == me.id,
+              me.role == .adult,
+              currentPermissionRole != .owner,
+              houseOfferOwnerName != nil else { return nil }
+        return offer
+    }
+
+    var houseOfferOwnerName: String? {
+        guard let offer = houseOwnershipOffer else { return nil }
+        return familyGroup.members.first {
+            $0.userID == offer.offeredBy && $0.permissionRole == .owner
+        }?.name
+    }
+
+    @discardableResult
+    func offerHouse(to member: HouseholdMember) async -> Bool {
+        guard canOfferHouse(to: member) else { return false }
+        return await changeHouseHolder(
+            failure: { RemoteRPCErrorCode.from($0)?.userMessage(name: member.name) ?? "Não deu para passar a casa agora. Tente de novo." }
+        ) { backend, _ in
+            try await backend.offerFamilyOwnership(to: member.id)
+        }
+    }
+
+    // The owner withdraws an offer and the person it was made to declines it through the same call.
+    @discardableResult
+    func withdrawHouseOffer() async -> Bool {
+        guard houseOwnershipOffer != nil else { return false }
+        return await changeHouseHolder(
+            failure: { _ in "Não deu para desfazer agora. Tente de novo." }
+        ) { backend, familyID in
+            try await backend.cancelFamilyOwnershipOffer(familyID: familyID)
+        }
+    }
+
+    @discardableResult
+    func acceptHouseOffer() async -> Bool {
+        guard houseOfferForMe != nil else { return false }
+        return await changeHouseHolder(
+            failure: { RemoteRPCErrorCode.from($0)?.userMessage() ?? "Não deu para aceitar agora. Tente de novo." }
+        ) { backend, familyID in
+            try await backend.acceptFamilyOwnershipOffer(familyID: familyID)
+        }
+    }
+
+    private func changeHouseHolder(
+        failure: (Error) -> String,
+        _ operation: (any RemoteHomeBackend, UUID) async throws -> RemoteHomeState
+    ) async -> Bool {
+        guard hasActiveHome, !usesLocalDebugBackend(for: activeUser), let remoteHomeBackend else { return false }
+        let contextToken = currentHomeContextToken
+        let familyID = familyGroup.id
+        syncErrorMessage = nil
+
+        await waitForPendingRemoteMutations()
+        guard isCurrentHomeContext(contextToken) else { return false }
+        isSyncingHome = true
+        defer { finishSyncingHome(ifCurrent: contextToken) }
+
+        do {
+            let state = try await operation(remoteHomeBackend, familyID)
+            guard isCurrentHomeContext(contextToken) else { return false }
+            apply(state)
+            homeAccessState = .authorized
+            persistActiveHome()
+            return true
+        } catch {
+            guard isCurrentHomeContext(contextToken) else { return false }
+            syncErrorMessage = failure(error)
+            Haptics.error()
+            return false
+        }
     }
 
     @discardableResult
@@ -2463,6 +2574,7 @@ final class AppStore {
         pendingJoinRequest = nil
         familyAccessDecision = nil
         joinRequests = []
+        houseOwnershipOffer = nil
         isNinaResponding = false
         ninaConnectionNotice = nil
         taskEditConflict = nil
@@ -2696,6 +2808,9 @@ final class AppStore {
         }
         submitTaskUpdate(proposedTask, basedOn: currentTask)
 
+        if !currentTask.isDone {
+            completionPulse &+= 1
+        }
         if proposedTask.isDone, !currentTask.isDone {
             offerUndo(for: proposedTask.id)
         } else if !currentTask.isDone, currentTask.recurrence != .none {
@@ -3438,6 +3553,7 @@ final class AppStore {
         currentPermissionRole = state.permissionRole
         inviteStatus = state.inviteStatus
         joinRequests = state.joinRequests
+        houseOwnershipOffer = state.ownershipOffer
         pendingJoinRequest = nil
         familyAccessDecision = nil
 

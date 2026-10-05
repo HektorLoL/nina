@@ -990,9 +990,17 @@ private struct BottomTabBar: View {
                 } label: {
                     VStack(spacing: 4) {
                         ZStack(alignment: .topTrailing) {
-                            Image(systemName: tab.systemImage)
-                                .font(.system(size: 22, weight: .regular))
-                                .frame(height: 24)
+                            if tab == .nina {
+                                NinaMark(
+                                    size: 24,
+                                    tint: tab == selectedTab ? NinaTheme.ink : NinaTheme.muted,
+                                    hops: store.completionPulse
+                                )
+                            } else {
+                                Image(systemName: tab.systemImage)
+                                    .font(.system(size: 22, weight: .regular))
+                                    .frame(height: 24)
+                            }
 
                             if showsDot(on: tab) {
                                 Circle()
@@ -1032,7 +1040,10 @@ private struct BottomTabBar: View {
 
     private func showsDot(on tab: AppTab) -> Bool {
         switch tab {
-        case .house: store.pendingJoinRequestCount > 0 || (tab != selectedTab && store.hasUnseenInsight)
+        case .house:
+            store.pendingJoinRequestCount > 0
+                || store.houseOfferForMe != nil
+                || (tab != selectedTab && store.hasUnseenInsight)
         case .nina: tab != selectedTab && store.waitingProposalCount > 0
         case .today, .tasks: false
         }
@@ -1042,9 +1053,10 @@ private struct BottomTabBar: View {
         guard showsDot(on: tab) else { return "" }
         switch tab {
         case .house:
-            return store.pendingJoinRequestCount > 0
-                ? "\(store.pendingJoinRequestCount) pedindo para entrar"
-                : "Resumo semanal novo"
+            if store.pendingJoinRequestCount > 0 {
+                return "\(store.pendingJoinRequestCount) pedindo para entrar"
+            }
+            return store.houseOfferForMe != nil ? "Pedido para virar titular" : "Resumo semanal novo"
         case .nina: return ProposalBacklog.line(count: store.waitingProposalCount)
         case .today, .tasks: return ""
         }

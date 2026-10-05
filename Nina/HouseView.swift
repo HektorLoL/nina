@@ -24,6 +24,10 @@ struct HouseView: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
 
+                if store.houseOfferForMe != nil {
+                    HouseOwnershipOfferCard()
+                }
+
                 members
 
                 if isAloneInHouse {
@@ -102,7 +106,7 @@ struct HouseView: View {
                             Image(systemName: "crown.fill")
                                 .font(.system(size: 13, weight: .regular))
                                 .foregroundStyle(NinaTheme.ink)
-                                .accessibilityLabel("Responsável pela casa")
+                                .accessibilityLabel("Titular da casa")
                         } else if let value = accessValue(member) {
                             Text(value).ninaText(.meta, NinaTheme.muted)
                         }

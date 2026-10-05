@@ -75,7 +75,7 @@ struct BackHeader: View {
     }
 }
 
-private struct SheetField<Field: View>: View {
+struct SheetField<Field: View>: View {
     var label: String
     @ViewBuilder var field: Field
 
@@ -116,7 +116,7 @@ private struct NoteCard: View {
 }
 
 // Destruction is carried by weight and terminal position, never by hue.
-private struct InkButton: View {
+struct InkButton: View {
     var title: String
     var isEnabled: Bool = true
     var action: () -> Void
@@ -285,6 +285,7 @@ struct SettingsSheet: View {
     @State private var isRenamingHouse = false
     @State private var houseNameDraft = ""
     @State private var isConfirmingLeave = false
+    @State private var isExplainingHandOver = false
 
     @AppStorage(LocalHomeNotificationScheduler.notificationsEnabledKey)
     private var notificationsEnabled = true
@@ -561,6 +562,29 @@ struct SettingsSheet: View {
                     Button("Cancelar", role: .cancel) {}
                 } message: {
                     Text("Suas tarefas ficam com a casa.")
+                }
+            } else if store.ownerMustHandOverBeforeLeaving {
+                NinaDivider()
+
+                Button {
+                    Haptics.selection()
+                    isExplainingHandOver = true
+                } label: {
+                    SettingsLinkRow(
+                        title: "Sair da casa",
+                        systemName: "rectangle.portrait.and.arrow.right",
+                        destination: .action
+                    )
+                }
+                .buttonStyle(.plain)
+                .alert("Antes, passe a casa.", isPresented: $isExplainingHandOver) {
+                    Button("Entendi", role: .cancel) {}
+                } message: {
+                    Text(
+                        store.hasAdultToHoldTheHouse
+                            ? "Em Casa, abra outro adulto e toque em Passar a casa. Quando aceitar, você pode sair."
+                            : "Só outro adulto com conta recebe a casa. Convide alguém primeiro."
+                    )
                 }
             }
         }

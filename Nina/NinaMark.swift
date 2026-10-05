@@ -21,6 +21,8 @@ struct NinaMark: View {
     var presence: NinaPresence = .rest
     var tint: Color = NinaTheme.cobalt
     var label: String?
+    // Each change lifts the disc and lets it fall back into the cup; the rest position never moves.
+    var hops: Int = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hasSettled = false
@@ -95,6 +97,12 @@ struct NinaMark: View {
                 ZStack {
                     cup
                     held
+                        .keyframeAnimator(initialValue: CGFloat.zero, trigger: hops) { disc, lift in
+                            disc.offset(y: reduceMotion ? 0 : -lift * size)
+                        } keyframes: { _ in
+                            CubicKeyframe(0.16, duration: 0.16)
+                            SpringKeyframe(0, duration: 0.5, spring: Spring(response: 0.4, dampingRatio: 0.5))
+                        }
                 }
             }
         }

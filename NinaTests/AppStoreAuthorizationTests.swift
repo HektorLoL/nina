@@ -395,6 +395,150 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testOnlyTheOwnerIsOfferedToHandTheHouseToAnotherAdultWithAnAccount() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let partner = HouseholdMember(userID: UUID().uuidString, name: "Ana", relationship: "Esposa", role: .adult, permissionRole: .member, tone: .sky, taskCount: 0, memoryNote: "")
+        let profileOnly = HouseholdMember(name: "Vó", relationship: "Avó", role: .adult, tone: .amber, taskCount: 0, memoryNote: "")
+        let pet = HouseholdMember(name: "Rex", relationship: "Pet", role: .pet, tone: .lavender, taskCount: 0, memoryNote: "")
+        let nina = HouseholdMember(name: "Nina", relationship: "IA da casa", role: .assistant, tone: .mint, taskCount: 0, memoryNote: "")
+        let members = [me, partner, profileOnly, pet, nina]
+
+        let ownerStore = AppStore(
+            remoteHomeBackend: HandOverHomeBackend(state: makeRemoteState(permissionRole: .owner, members: members)),
+            ninaEngine: MockNinaEngine()
+        )
+        await ownerStore.activateHomeContext(for: user)
+        let adminStore = AppStore(
+            remoteHomeBackend: HandOverHomeBackend(state: makeRemoteState(permissionRole: .admin, members: members)),
+            ninaEngine: MockNinaEngine()
+        )
+        await adminStore.activateHomeContext(for: user)
+
+        XCTAssertEqual(FamilyPermissionRole.owner.title, "Titular")
+        XCTAssertEqual(members.filter(ownerStore.canOfferHouse(to:)).map(\.name), ["Ana"])
+        XCTAssertTrue(members.filter(adminStore.canOfferHouse(to:)).isEmpty)
+        XCTAssertTrue(ownerStore.ownerMustHandOverBeforeLeaving)
+        XCTAssertTrue(ownerStore.hasAdultToHoldTheHouse)
+        XCTAssertFalse(adminStore.ownerMustHandOverBeforeLeaving)
+    }
+
+    @MainActor
+    func testOfferingTheHouseChangesNothingUntilThePersonAccepts() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let partner = HouseholdMember(userID: UUID().uuidString, name: "Ana", relationship: "Esposa", role: .adult, permissionRole: .member, tone: .sky, taskCount: 0, memoryNote: "")
+        let before = makeRemoteState(permissionRole: .owner, members: [me, partner])
+        var offered = before
+        offered.ownershipOffer = HouseOwnershipOffer(memberID: partner.id, offeredBy: user.id, offeredAt: .now, expiresAt: .now.addingTimeInterval(7 * 86_400))
+        let backend = HandOverHomeBackend(state: before, afterOffer: offered)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let sent = await store.offerHouse(to: partner)
+        let calls = await backend.recordedCalls()
+
+        XCTAssertTrue(sent)
+        XCTAssertEqual(calls, [.offer(partner.id)])
+        XCTAssertEqual(store.currentPermissionRole, .owner)
+        XCTAssertNotNil(store.houseOffer(to: partner))
+        XCTAssertNil(store.houseOfferForMe)
+        XCTAssertFalse(store.canLeaveFamily)
+    }
+
+    @MainActor
+    func testThePersonOfferedTheHouseAcceptsItAndBecomesItsOwner() async {
+        let user = makeUser()
+        let ownerID = UUID().uuidString
+        let owner = HouseholdMember(userID: ownerID, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let me = HouseholdMember(userID: user.id, name: "Ana", relationship: "Esposa", role: .adult, permissionRole: .member, tone: .sky, taskCount: 0, memoryNote: "")
+        var before = makeRemoteState(permissionRole: .member, members: [owner, me])
+        before.ownershipOffer = HouseOwnershipOffer(memberID: me.id, offeredBy: ownerID, offeredAt: .now, expiresAt: .now.addingTimeInterval(7 * 86_400))
+        var formerOwner = owner
+        formerOwner.permissionRole = .admin
+        var newOwner = me
+        newOwner.permissionRole = .owner
+        let after = makeRemoteState(permissionRole: .owner, members: [formerOwner, newOwner])
+        let backend = HandOverHomeBackend(state: before, afterAccept: after)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertNotNil(store.houseOfferForMe)
+        XCTAssertEqual(store.houseOfferOwnerName, "Dona")
+
+        let accepted = await store.acceptHouseOffer()
+        let calls = await backend.recordedCalls()
+
+        XCTAssertTrue(accepted)
+        XCTAssertEqual(calls, [.accept(before.familyGroup.id)])
+        XCTAssertEqual(store.currentPermissionRole, .owner)
+        XCTAssertNil(store.houseOfferForMe)
+        XCTAssertFalse(store.canLeaveFamily)
+    }
+
+    @MainActor
+    func testThePersonOfferedTheHouseDeclinesItThroughTheSameCallTheOwnerWithdrawsWith() async {
+        let user = makeUser()
+        let ownerID = UUID().uuidString
+        let owner = HouseholdMember(userID: ownerID, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let me = HouseholdMember(userID: user.id, name: "Ana", relationship: "Esposa", role: .adult, permissionRole: .member, tone: .sky, taskCount: 0, memoryNote: "")
+        let after = makeRemoteState(permissionRole: .member, members: [owner, me])
+        var before = after
+        before.ownershipOffer = HouseOwnershipOffer(memberID: me.id, offeredBy: ownerID, offeredAt: .now, expiresAt: .now.addingTimeInterval(7 * 86_400))
+        let backend = HandOverHomeBackend(state: before, afterCancel: after)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let declined = await store.withdrawHouseOffer()
+        let calls = await backend.recordedCalls()
+
+        XCTAssertTrue(declined)
+        XCTAssertEqual(calls, [.cancel(before.familyGroup.id)])
+        XCTAssertNil(store.houseOfferForMe)
+        XCTAssertEqual(store.currentPermissionRole, .member)
+    }
+
+    @MainActor
+    func testAnOfferFromSomeoneWhoNoLongerHoldsTheHouseIsNeverShown() async {
+        let user = makeUser()
+        let formerOwnerID = UUID().uuidString
+        let formerOwner = HouseholdMember(userID: formerOwnerID, name: "Dona", relationship: "", role: .adult, permissionRole: .admin, tone: .mint, taskCount: 0, memoryNote: "")
+        let owner = HouseholdMember(userID: UUID().uuidString, name: "Beto", relationship: "", role: .adult, permissionRole: .owner, tone: .coral, taskCount: 0, memoryNote: "")
+        let me = HouseholdMember(userID: user.id, name: "Ana", relationship: "Esposa", role: .adult, permissionRole: .member, tone: .sky, taskCount: 0, memoryNote: "")
+        var state = makeRemoteState(permissionRole: .member, members: [formerOwner, owner, me])
+        state.ownershipOffer = HouseOwnershipOffer(memberID: me.id, offeredBy: formerOwnerID, offeredAt: .now, expiresAt: .now.addingTimeInterval(7 * 86_400))
+        let backend = HandOverHomeBackend(state: state)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let accepted = await store.acceptHouseOffer()
+        let calls = await backend.recordedCalls()
+
+        XCTAssertNil(store.houseOfferForMe)
+        XCTAssertFalse(accepted)
+        XCTAssertTrue(calls.isEmpty)
+    }
+
+    @MainActor
+    func testARefusedOfferKeepsTheHouseAsItWasAndSaysSo() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let partner = HouseholdMember(userID: UUID().uuidString, name: "Ana", relationship: "Esposa", role: .adult, permissionRole: .member, tone: .sky, taskCount: 0, memoryNote: "")
+        let backend = HandOverHomeBackend(
+            state: makeRemoteState(permissionRole: .owner, members: [me, partner]),
+            refusal: RemoteRPCError(code: .familyOwnerTransferDenied)
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let sent = await store.offerHouse(to: partner)
+
+        XCTAssertFalse(sent)
+        XCTAssertEqual(store.currentPermissionRole, .owner)
+        XCTAssertNil(store.houseOffer(to: partner))
+        XCTAssertEqual(store.syncErrorMessage, "Não deu para passar a casa para Ana.")
+    }
+
+    @MainActor
     func testAFailedLeaveKeepsTheHouseAndSaysSo() async {
         let user = makeUser()
         let me = HouseholdMember(
@@ -4555,6 +4699,74 @@ private actor LeavingHomeBackend: RemoteHomeBackend {
     func leaveFamily(familyID: UUID) async throws {
         guard !failLeave else { throw LeaveError.expected }
         left.append(familyID)
+    }
+
+    func createHome(named name: String, owner: AuthUser?) async throws -> RemoteHomeState { state }
+    func joinHome(with inviteCode: String, member: AuthUser?) async throws -> RemoteHomeState { state }
+    func updateFamilySettings(familyID: UUID, name: String) async throws -> RemoteHomeState { state }
+    func addUnclaimedMember(_ member: HouseholdMember, familyID: UUID) async throws -> RemoteHomeState { state }
+    func updateFamilyMember(_ member: HouseholdMember) async throws -> RemoteHomeState { state }
+    func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws {}
+    func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws {}
+    func createTask(_ task: TaskItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
+    func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
+}
+
+private actor HandOverHomeBackend: RemoteHomeBackend {
+    enum Call: Equatable {
+        case offer(UUID)
+        case cancel(UUID)
+        case accept(UUID)
+    }
+
+    private var state: RemoteHomeState
+    private let afterOffer: RemoteHomeState?
+    private let afterCancel: RemoteHomeState?
+    private let afterAccept: RemoteHomeState?
+    private let refusal: Error?
+    private var calls: [Call] = []
+
+    init(
+        state: RemoteHomeState,
+        afterOffer: RemoteHomeState? = nil,
+        afterCancel: RemoteHomeState? = nil,
+        afterAccept: RemoteHomeState? = nil,
+        refusal: Error? = nil
+    ) {
+        self.state = state
+        self.afterOffer = afterOffer
+        self.afterCancel = afterCancel
+        self.afterAccept = afterAccept
+        self.refusal = refusal
+    }
+
+    func recordedCalls() -> [Call] {
+        calls
+    }
+
+    func loadHome(for user: AuthUser) async throws -> RemoteHomeState? { state }
+
+    func offerFamilyOwnership(to memberID: UUID) async throws -> RemoteHomeState {
+        if let refusal { throw refusal }
+        calls.append(.offer(memberID))
+        state = afterOffer ?? state
+        return state
+    }
+
+    func cancelFamilyOwnershipOffer(familyID: UUID) async throws -> RemoteHomeState {
+        if let refusal { throw refusal }
+        calls.append(.cancel(familyID))
+        state = afterCancel ?? state
+        return state
+    }
+
+    func acceptFamilyOwnershipOffer(familyID: UUID) async throws -> RemoteHomeState {
+        if let refusal { throw refusal }
+        calls.append(.accept(familyID))
+        state = afterAccept ?? state
+        return state
     }
 
     func createHome(named name: String, owner: AuthUser?) async throws -> RemoteHomeState { state }

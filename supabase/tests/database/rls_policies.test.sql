@@ -344,6 +344,7 @@ select set_eq(
       and has_function_privilege('authenticated', routines.oid, 'execute')
   $$,
   array[
+    'accept_family_ownership_offer(uuid)',
     'acknowledge_family_access_decision(uuid)',
     'acknowledge_minor_terms(text, text)',
     'activate_family(uuid)',
@@ -352,6 +353,7 @@ select set_eq(
     'approve_family_join_request(uuid, text, text, text, boolean, text, boolean, text[])',
     'begin_nina_chat_run(uuid, uuid, text, jsonb, text, bigint, date)',
     'cancel_family_join_request(uuid)',
+    'cancel_family_ownership_offer(uuid)',
     'change_minor_band(uuid, text, text)',
     'create_family(text)',
     'current_user_is_adult()',
@@ -376,6 +378,7 @@ select set_eq(
     'is_adult_family_member(uuid)',
     'join_family_by_invite(text)',
     'leave_family(uuid)',
+    'offer_family_ownership(uuid)',
     'record_minor_usage(date, integer)',
     'record_nina_ai_consent(text, boolean, boolean)',
     'record_terms_acceptance()',

@@ -254,6 +254,22 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertNil(store.undoableCompletionID)
     }
 
+    func testClosingATaskLiftsTheMarkAndReopeningItLeavesTheMarkStill() {
+        let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
+        guard let open = store.tasks.first(where: { !$0.isDone && $0.recurrence == .none }),
+              let repeating = store.tasks.first(where: { !$0.isDone && $0.recurrence != .none }) else {
+            return XCTFail("PreviewData should seed an open one-off task and an open repeating task.")
+        }
+
+        store.toggleTask(open)
+        store.toggleTask(repeating)
+        XCTAssertEqual(store.completionPulse, 2)
+
+        guard let closed = store.tasks.first(where: { $0.id == open.id }) else { return XCTFail() }
+        store.toggleTask(closed)
+        XCTAssertEqual(store.completionPulse, 2)
+    }
+
     func testAGroupListsWhatIsLateFirstThenTheSoonestAndUndatedLast() {
         var undated = task(dueAt: nil)
         undated.title = "Um dia, pintar a sala"

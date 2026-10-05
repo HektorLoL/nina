@@ -123,6 +123,14 @@ struct FamilyGroup: Identifiable, Codable, Hashable {
     }
 }
 
+// The owner's offer of the house to another adult; it changes nothing until that person accepts.
+struct HouseOwnershipOffer: Equatable {
+    var memberID: UUID
+    var offeredBy: String
+    var offeredAt: Date
+    var expiresAt: Date
+}
+
 enum FamilyPermissionRole: String, CaseIterable, Identifiable, Codable, Hashable {
     case owner
     case admin
@@ -132,7 +140,7 @@ enum FamilyPermissionRole: String, CaseIterable, Identifiable, Codable, Hashable
 
     var title: String {
         switch self {
-        case .owner: "Responsável"
+        case .owner: "Titular"
         case .admin: "Administrador"
         case .member: "Participante"
         }

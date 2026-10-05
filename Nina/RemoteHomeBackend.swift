@@ -9,6 +9,7 @@ struct RemoteHomeState {
     var householdPremium: HouseholdPremium = .inactive
     var aiConsent: NinaAIConsent = .withheld
     var viewerAge: AgeStatus = .unknown
+    var ownershipOffer: HouseOwnershipOffer? = nil
 }
 
 // The server answers a non-adult caller with the minor shape, which carries no house at all.
@@ -91,6 +92,8 @@ enum RemoteRPCErrorCode: String, CaseIterable {
     case ninaAdultAccessRequired = "nina_adult_access_required"
     case rateLimited = "rate_limited"
     case familyMemberLimitReached = "family_member_limit_reached"
+    case familyOwnerTransferDenied = "family_owner_transfer_denied"
+    case familyOwnershipOfferNotFound = "family_ownership_offer_not_found"
 
     // The message is the code itself; a longer message never contains another code by accident because matching is exact.
     init?(message: String?) {
@@ -143,6 +146,10 @@ enum RemoteRPCErrorCode: String, CaseIterable {
             return "A conversa está suspensa nesta conta."
         case .familyMemberLimitReached:
             return "A casa já atingiu o limite de 8 pessoas."
+        case .familyOwnerTransferDenied:
+            return "Não deu para passar a casa para \(person)."
+        case .familyOwnershipOfferNotFound:
+            return "Esse pedido já não vale."
         case .minorBirthDateNotAllowed, .invalidNicknames, .invalidSupervisionSettings,
              .invalidAcknowledgement, .invalidUsage, .invalidNextDueAt, .invalidReportReason,
              .notAMinorMember, .minorAccountRequired, .taskVersionConflict, .taskNotFound,
@@ -263,6 +270,9 @@ protocol RemoteHomeBackend {
     func declineJoinRequest(_ requestID: UUID) async throws -> RemoteHomeState
     func cancelJoinRequest(_ requestID: UUID) async throws
     func leaveFamily(familyID: UUID) async throws
+    func offerFamilyOwnership(to memberID: UUID) async throws -> RemoteHomeState
+    func cancelFamilyOwnershipOffer(familyID: UUID) async throws -> RemoteHomeState
+    func acceptFamilyOwnershipOffer(familyID: UUID) async throws -> RemoteHomeState
     func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws
     func deleteTaskSection(_ sectionID: String, familyID: UUID) async throws
     func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws
@@ -387,6 +397,18 @@ extension RemoteHomeBackend {
     }
 
     func leaveFamily(familyID: UUID) async throws {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func offerFamilyOwnership(to memberID: UUID) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func cancelFamilyOwnershipOffer(familyID: UUID) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func acceptFamilyOwnershipOffer(familyID: UUID) async throws -> RemoteHomeState {
         throw RemoteHomeBackendError.operationUnavailable
     }
 
@@ -1088,6 +1110,57 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         }
     }
 
+    func offerFamilyOwnership(to memberID: UUID) async throws -> RemoteHomeState {
+        let context: HomeContextRow = try await perform(operation: "offer_family_ownership") {
+            try await client
+                .rpc(
+                    "offer_family_ownership",
+                    params: MemberIDParams(targetMemberID: memberID)
+                )
+                .execute()
+                .value
+        }
+
+        guard let state = try await loadRemoteState(from: context) else {
+            throw RemoteHomeBackendError.familyNotFound
+        }
+        return state
+    }
+
+    func cancelFamilyOwnershipOffer(familyID: UUID) async throws -> RemoteHomeState {
+        let context: HomeContextRow = try await perform(operation: "cancel_family_ownership_offer") {
+            try await client
+                .rpc(
+                    "cancel_family_ownership_offer",
+                    params: FamilyIDParams(targetFamilyID: familyID)
+                )
+                .execute()
+                .value
+        }
+
+        guard let state = try await loadRemoteState(from: context) else {
+            throw RemoteHomeBackendError.familyNotFound
+        }
+        return state
+    }
+
+    func acceptFamilyOwnershipOffer(familyID: UUID) async throws -> RemoteHomeState {
+        let context: HomeContextRow = try await perform(operation: "accept_family_ownership_offer") {
+            try await client
+                .rpc(
+                    "accept_family_ownership_offer",
+                    params: FamilyIDParams(targetFamilyID: familyID)
+                )
+                .execute()
+                .value
+        }
+
+        guard let state = try await loadRemoteState(from: context) else {
+            throw RemoteHomeBackendError.familyNotFound
+        }
+        return state
+    }
+
     func cancelJoinRequest(_ requestID: UUID) async throws {
         try await perform(operation: "cancel_family_join_request") {
             _ = try await client
@@ -1571,6 +1644,7 @@ private struct HomeContextRow: Decodable {
     var pendingJoinRequests: [FamilyJoinRequestRow]
     var premium: HouseholdPremium
     var aiConsent: NinaAIConsent
+    var ownershipOffer: OwnershipOfferRow?
 
     private enum CodingKeys: String, CodingKey {
         case viewerKind = "viewer_kind"
@@ -1583,6 +1657,7 @@ private struct HomeContextRow: Decodable {
         case pendingJoinRequests = "pending_join_requests"
         case premium
         case aiConsent = "ai_consent"
+        case ownershipOffer = "ownership_offer"
     }
 
     // A response without a viewer kind comes from a server that cannot vouch for an adult, so it reads as minor.
@@ -1605,6 +1680,7 @@ private struct HomeContextRow: Decodable {
         ) ?? []
         premium = try container.decodeIfPresent(HouseholdPremium.self, forKey: .premium) ?? .inactive
         aiConsent = try container.decodeIfPresent(NinaAIConsent.self, forKey: .aiConsent) ?? .withheld
+        ownershipOffer = try? container.decodeIfPresent(OwnershipOfferRow.self, forKey: .ownershipOffer)
     }
 
     var remoteState: RemoteHomeState? {
@@ -1623,8 +1699,30 @@ private struct HomeContextRow: Decodable {
             joinRequests: pendingJoinRequests.map(\.domainRequest),
             householdPremium: premium,
             aiConsent: aiConsent,
-            viewerAge: viewerAge
+            viewerAge: viewerAge,
+            ownershipOffer: ownershipOffer.map {
+                HouseOwnershipOffer(
+                    memberID: $0.memberID,
+                    offeredBy: $0.offeredBy.uuidString,
+                    offeredAt: $0.offeredAt,
+                    expiresAt: $0.expiresAt
+                )
+            }
         )
+    }
+}
+
+private struct OwnershipOfferRow: Decodable {
+    var memberID: UUID
+    var offeredBy: UUID
+    var offeredAt: Date
+    var expiresAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case memberID = "member_id"
+        case offeredBy = "offered_by"
+        case offeredAt = "offered_at"
+        case expiresAt = "expires_at"
     }
 }
 
