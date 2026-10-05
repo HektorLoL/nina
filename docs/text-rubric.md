@@ -300,7 +300,7 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
 | Tarefas, first use | "Nada combinado ainda." + "Conta pra Nina. Ela propõe, você confirma." + one button. The + is visible. |
 | Sementes, empty | "Semente é vontade sem data." + the example card + "Nova semente" |
 | Sementes, populated | At most a dismissible "Semente não vira atraso." with "Entendi" |
-| Compras | Empty: "Nada faltando." + "O que acabar em casa aparece aqui." Clear button: "Limpar comprados". Alert: "Limpar comprados?" / "Some da lista para todo mundo da casa." |
+| Compras | Empty: "Nada faltando." + "O que acabar em casa aparece aqui." The inline field "Adicionar item" sits above the list (since 2026-10-04): return adds the item to the top and keeps the keyboard up; its trailing control opens the full sheet for quantity and owner ("Adicionar com quantidade e dono"). Clear button: "Limpar comprados". Alert: "Limpar comprados?" / "Some da lista para todo mundo da casa." |
 | Search, no results | "Nada com esse nome." + "Tenta outra palavra." + one chip, "Conversar com a Nina" |
 | Memórias, empty | "A Nina propõe guardar. Memórias começam privadas." |
 

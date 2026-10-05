@@ -508,6 +508,7 @@ struct TaskRowView: View {
             }
             .buttonStyle(.plain)
         }
+        .padding(.vertical, 5)
         .frame(minHeight: 48)
         // Rows live in a ScrollView, not a List, so there are no swipe actions:
         // long-press is the substitute, and it must be simultaneous or the row's

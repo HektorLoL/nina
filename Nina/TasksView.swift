@@ -340,11 +340,14 @@ struct TasksView: View {
                     body_: "O que acabar em casa aparece aqui."
                 )
 
-                addShoppingField
+                ShoppingQuickAdd()
             }
             .centeredBelowHeader(minimumGap: 34)
         } else {
             VStack(spacing: 0) {
+                ShoppingQuickAdd()
+                    .padding(.bottom, 8)
+
                 // Checked items stay exactly where they are: in an aisle you need
                 // positional stability, so nothing reflows under your thumb.
                 ForEach(store.shoppingItems) { item in
@@ -353,8 +356,6 @@ struct TasksView: View {
                         NinaDivider(inset: 36)
                     }
                 }
-
-                addShoppingField.padding(.top, 16)
 
                 if store.shoppingItems.contains(where: \.isChecked) {
                     NinaButton(title: "Limpar comprados", kind: .quiet) {
@@ -424,28 +425,6 @@ struct TasksView: View {
         }
         .frame(minHeight: 48)
     }
-
-    private var addShoppingField: some View {
-        Button {
-            Haptics.lightImpact()
-            router.presentedSheet = .addShoppingItem
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "plus")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(NinaTheme.cobalt)
-                Text("Adicionar item")
-                    .ninaText(.label, NinaTheme.muted)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 50)
-            .frame(maxWidth: .infinity)
-            .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-
 
     private var searchScreen: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -548,5 +527,75 @@ struct TasksView: View {
         .accessibilityLabel("Adicionar")
         .padding(.trailing, 20)
         .padding(.bottom, 96)
+    }
+}
+
+// A list is built one word at a time: return adds the item and keeps the keyboard up for the next.
+private struct ShoppingQuickAdd: View {
+    @Environment(AppStore.self) private var store
+    @Environment(RouterPath.self) private var router
+
+    @State private var draft = ""
+    @FocusState private var isFocused: Bool
+
+    private var trimmed: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "plus")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(NinaTheme.cobalt)
+                .accessibilityHidden(true)
+
+            TextField("Adicionar item", text: $draft)
+                .ninaText(.label, NinaTheme.ink, weight: .medium)
+                .tint(NinaTheme.cobalt)
+                .focused($isFocused)
+                .submitLabel(.next)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.sentences)
+                .onSubmit(add)
+
+            if !trimmed.isEmpty {
+                Button(action: add) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(NinaTheme.cobalt)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Adicionar")
+            } else {
+                Button {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .addShoppingItem
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(NinaTheme.muted)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Adicionar com quantidade e dono")
+            }
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 4)
+        .frame(minHeight: 50)
+        .frame(maxWidth: .infinity)
+        .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
+    }
+
+    private func add() {
+        guard !trimmed.isEmpty else {
+            isFocused = false
+            return
+        }
+        Haptics.success()
+        store.addShoppingItem(title: trimmed, amount: "", owner: "")
+        draft = ""
+        isFocused = true
     }
 }
