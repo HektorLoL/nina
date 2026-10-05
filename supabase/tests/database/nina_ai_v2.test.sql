@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(107);
+select plan(108);
 
 insert into auth.users (
   id,
@@ -1685,7 +1685,7 @@ set window_started_at = now() - interval '2 hours'
 where user_id = '61000000-0000-0000-0000-000000000005';
 
 select ok(
-  public.claim_nina_chat_request(30, 3600),
+  public.claim_nina_chat_request(50, 86400),
   'the same adult may still speak inside the premium household they belong to'
 );
 
@@ -1696,7 +1696,7 @@ select is(
     where user_id = '61000000-0000-0000-0000-000000000005'
   ),
   12,
-  'an hourly premium claim counts inside the open daily window instead of restarting it'
+  'a premium claim counts inside the same open daily window instead of restarting it'
 );
 
 select ok(
@@ -1711,6 +1711,19 @@ where user_id = '61000000-0000-0000-0000-000000000005';
 select ok(
   public.claim_nina_chat_request(10, 86400),
   'a daily window that genuinely elapsed still opens a fresh allowance'
+);
+
+select ok(
+  pg_catalog.pg_get_functiondef(
+    'public.begin_nina_chat_run(uuid, uuid, text, jsonb, text, bigint, date)'::regprocedure
+  ) like '%claim_nina_chat_request(50, 86400)%'
+    and pg_catalog.pg_get_functiondef(
+      'public.begin_nina_chat_run(uuid, uuid, text, jsonb, text, bigint, date)'::regprocedure
+    ) like '%claim_nina_chat_request(10, 86400)%'
+    and pg_catalog.pg_get_functiondef(
+      'public.begin_nina_chat_run(uuid, uuid, text, jsonb, text, bigint, date)'::regprocedure
+    ) not like '%3600)%',
+  'a covered adult gets 50 messages a day and a free one 10, both counted by the day'
 );
 
 select * from finish();

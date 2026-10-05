@@ -1985,7 +1985,7 @@ struct PremiumBenefitsSheet: View {
                 comparisonRow("Fotos de documentos", free: nil, premium: nil)
                 NinaDivider(inset: 0)
             }
-            comparisonRow("Conversa com a Nina", free: "10/dia", premium: "30/hora")
+            comparisonRow("Conversa com a Nina", free: "10/dia", premium: "50/dia")
             NinaDivider(inset: 0)
             comparisonRow("Resumo semanal", free: nil, premium: nil)
         }

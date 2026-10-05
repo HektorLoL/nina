@@ -588,7 +588,7 @@ private struct ChatInputBar: View {
             return "Ler foto e documento é do Premium."
         }
         if latest.text == NinaEngineError.rateLimited.userMessage {
-            return "No Premium, 30 mensagens por hora."
+            return "No Premium, 50 mensagens por dia."
         }
         return nil
     }

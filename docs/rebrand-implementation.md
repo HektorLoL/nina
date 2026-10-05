@@ -637,6 +637,9 @@ No board draws any of these; each reuses a part the app already has.
   ("Aceitar", cobalt, and "Recusar", outline, like a join request), and the
   Casa tab carries a dot until they do. Ajustes shows the owner a "Sair da
   casa" row that only explains the order: pass the house, then leave.
+- **The Premium chat row reads "50/dia".** The paywall's comparison table drew
+  "30 por hora"; Heitor moved Premium to a daily limit on 2026-10-05, so the
+  row, the chat's ceiling notice and the FAQ say 50 a day.
 
 ## 7. Verified
 

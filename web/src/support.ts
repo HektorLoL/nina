@@ -61,7 +61,7 @@ export const supportTopics: readonly SupportTopic[] = [
       {
         question: "O que o Premium inclui?",
         answer:
-          "Vale para a casa toda: cada adulto manda até 30 mensagens por hora para a Nina. Sem o Premium, são 10 mensagens por dia. Quando dois adultos aceitaram conversar com a Nina, a casa também recebe o resumo semanal nas semanas com movimento.",
+          "Vale para a casa toda: cada adulto manda até 50 mensagens por dia para a Nina. Sem o Premium, são 10 mensagens por dia. Quando dois adultos aceitaram conversar com a Nina, a casa também recebe o resumo semanal nas semanas com movimento.",
       },
       {
         question: "Como cancelo o Premium?",

@@ -98,7 +98,7 @@ Deno.test("the landing sells as Premium only what the server gates", async () =>
   assertEquals(landing.includes("retrato faz parte do Nina Premium"), false);
   assertEquals(landing.includes("o retrato da casa e o resumo semanal"), false);
   assertEquals(
-    landing.includes("até 30 mensagens por hora para cada adulto"),
+    landing.includes("até 50 mensagens por dia para cada adulto"),
     true,
   );
 });

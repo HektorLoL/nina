@@ -8,9 +8,11 @@ draft: Heitor approves every line before it is pasted. The name was decided on
 server as of this date; re-check the marked ones before submitting.
 
 The App Store page is visible to every age, so it follows the voice rule for
-surfaces a minor can see (CLAUDE.md §2): Nina is spoken of in the third person,
-is called "um programa de computador" once, and is never "amiga". No "para
-crianças" anywhere in the metadata (runbook §6.3).
+surfaces a minor can see (CLAUDE.md §2): Nina is spoken of in the third person
+and is never "amiga". It does not call her "um programa de computador"
+(Heitor's call, 2026-10-05): the store page is not a conversation, and every
+screen a minor sees in the app still says it once. No "para crianças" anywhere
+in the metadata (runbook §6.3).
 
 ## 1. App information
 
@@ -42,7 +44,7 @@ indexes the name and subtitle, so the keywords below never repeat "rotina",
 
 > A Nina organiza a rotina da casa a partir de uma conversa. Você escreve do seu jeito, como escreveria para alguém da família, e a Nina transforma isso em tarefas, lembretes, compras e sementes. Nada entra na casa antes de você confirmar.
 >
-> A Nina é um programa de computador. Ela propõe; as pessoas da casa decidem.
+> A Nina propõe; as pessoas da casa decidem.
 >
 > PARA A CASA TODA
 > • Até 8 pessoas na mesma casa, entre adultos, crianças e pets. A Nina não ocupa vaga.
@@ -69,7 +71,7 @@ indexes the name and subtitle, so the keywords below never repeat "rotina",
 >
 > NINA PREMIUM
 > Uma assinatura vale para a casa toda:
-> • Até 30 mensagens por hora para cada adulto. Sem o Premium, são 10 por dia.
+> • Até 50 mensagens por dia para cada adulto. Sem o Premium, são 10.
 > • O resumo semanal da casa, quando dois adultos conversam com a Nina.
 >
 > Nina Premium mensal: R$ 24,90 por mês. Nina Premium anual: R$ 249,90 por ano. A assinatura renova sozinha pelo App Store e pode ser cancelada a qualquer momento nos Ajustes do iPhone, até 24 horas antes da renovação. Apagar a conta da Nina não cancela a assinatura.
@@ -79,8 +81,10 @@ indexes the name and subtitle, so the keywords below never repeat "rotina",
 
 Re-check before pasting:
 
-- The quotas (30 per hour, 10 per day) are `begin_nina_chat_run` in
-  `202609290006_ai_gates.sql`; the support FAQ says the same.
+- The quotas (50 per day with Premium, 10 per day without) are
+  `begin_nina_chat_run` in `202610050004_premium_daily_chat_limit.sql`, which
+  must be live in production before submission; the support FAQ says the
+  same.
 - The weekly summary needs at least two adults with a live AI consent and a
   week with some movement (`get_nina_weekly_candidates`), which the Premium
   line says; the in-app FAQ says the same.

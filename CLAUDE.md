@@ -109,7 +109,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 26.4+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (52 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (53 files) |
 | Server logic | 6 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -995,7 +995,7 @@ is longer than a word budget, the legal text wins.
 
 ## 6. Database
 
-52 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+53 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order. The eight
 `202609290001`–`…0008` files (age assurance, minors and guardianship, adult-only
 RLS, join and house rules, the minor home view, the AI gates, the insight and
@@ -1981,6 +1981,13 @@ the project, not bugs to fix unprompted.
   fails if any foreign key in `public` or `private` lacks a leading index. It
   went through the Supabase MCP `apply_migration`, its version row was set to
   `202610050002` (§12), and the same canary query read 0 on production.
+- **Migration `202610050004` (Premium chat limit by the day) is in the repo
+  and not yet in production.** It copies `begin_nina_chat_run` from
+  `202609290006` with one change: a covered adult's claim is 50 per 86,400
+  seconds instead of 30 per 3,600. Apply it with the build whose copy says "50
+  por dia" (build 13): until then build 12 still tells a Premium adult "30
+  mensagens por hora" while the server keeps the hourly limit, and after it,
+  build 12's line is wrong until people update.
 - **Migration `202610050003` (owner title and handover) is in the repo and
   not yet in production.** It adds `private.family_ownership_offers` and the
   offer, accept and withdraw RPCs (the authenticated function grant map
@@ -2054,10 +2061,12 @@ the project, not bugs to fix unprompted.
   enforced where the resource is spent: attachments raise
   `nina_attachments_require_premium` inside `begin_nina_chat_run`, the weekly
   digest is behind `private.family_has_premium` in `get_nina_weekly_candidates`,
-  and the chat quota splits 30/hour for a covered household versus 10/day
-  otherwise. Two undeliverable benefits were deleted rather than left on the
-  sheet. A denial is routed, not just told: `NinaChatView.premiumCeiling` turns a
-  quota refusal into the composer notice "No Premium, 30 mensagens por hora."
+  and the chat quota is 50 a day per adult for a covered household versus 10 a
+  day otherwise (migration `202610050004`, Heitor's call on 2026-10-05; it was
+  30 an hour before), both under the house's 100 a day. Two undeliverable
+  benefits were deleted rather than left on the sheet. A denial is routed, not
+  just told: `NinaChatView.premiumCeiling` turns a quota refusal into the
+  composer notice "No Premium, 50 mensagens por dia."
   with "Ver o Premium", which opens `SheetDestination.premium` for an account
   that may buy. Since 2026-09-06 the paywall shows a
   moss activation state ("Premium ativo na casa", one cobalt "Pronto") the moment

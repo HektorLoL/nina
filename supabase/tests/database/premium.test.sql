@@ -820,8 +820,8 @@ insert into public.nina_chat_rate_limits (
 )
 values (
   '81000000-0000-0000-0000-000000000001',
-  now() - interval '2 hours',
-  30
+  now() - interval '25 hours',
+  50
 )
 on conflict (user_id) do update
 set window_started_at = excluded.window_started_at,
@@ -834,13 +834,13 @@ select lives_ok(
   $$select public.begin_nina_chat_run(
     '82000000-0000-0000-0000-000000000001',
     '84000000-0000-0000-0000-000000000005',
-    'Primeira mensagem da nova hora',
+    'Primeira mensagem do novo dia',
     '[]'::jsonb,
     'gpt-5.4-mini',
     1000,
     '2026-08-09'
   )$$,
-  'a paying household window reopens an hour later'
+  'a paying household window reopens a day later'
 );
 
 reset role;
@@ -852,11 +852,11 @@ select is(
     where user_id = '81000000-0000-0000-0000-000000000001'
   ),
   1,
-  'the paying household claim starts a fresh hourly window'
+  'the paying household claim starts a fresh daily window'
 );
 
 update public.nina_chat_rate_limits
-set window_started_at = now(), request_count = 29
+set window_started_at = now(), request_count = 49
 where user_id = '81000000-0000-0000-0000-000000000001';
 
 set local role authenticated;
@@ -866,19 +866,19 @@ select lives_ok(
   $$select public.begin_nina_chat_run(
     '82000000-0000-0000-0000-000000000001',
     '84000000-0000-0000-0000-000000000006',
-    'Trigésima mensagem da hora',
+    'Quinquagésima mensagem do dia',
     '[]'::jsonb,
     'gpt-5.4-mini',
     1000,
     '2026-08-09'
   )$$,
-  'a paying household gets thirty messages inside the hour'
+  'a paying household gets fifty messages inside the day'
 );
 
 reset role;
 
 update public.nina_chat_rate_limits
-set window_started_at = now(), request_count = 30
+set window_started_at = now(), request_count = 50
 where user_id = '81000000-0000-0000-0000-000000000001';
 
 set local role authenticated;
@@ -888,7 +888,7 @@ select throws_ok(
   $$select public.begin_nina_chat_run(
     '82000000-0000-0000-0000-000000000001',
     '84000000-0000-0000-0000-000000000007',
-    'Mensagem trinta e um',
+    'Mensagem cinquenta e um',
     '[]'::jsonb,
     'gpt-5.4-mini',
     1000,
@@ -896,7 +896,7 @@ select throws_ok(
   )$$,
   'P0001',
   'nina_rate_limited',
-  'the paying household hourly quota still stops at thirty'
+  'the paying household daily quota still stops at fifty'
 );
 
 reset role;

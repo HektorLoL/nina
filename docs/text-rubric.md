@@ -355,7 +355,7 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - "Sem conexão. Esta resposta veio do aparelho."
   - "Modo local. Nada sai deste aparelho."
   - "Ler foto e documento é do Premium." with the action "Ver o Premium"
-  - "No Premium, 30 mensagens por hora." with the action "Ver o Premium"
+  - "No Premium, 50 mensagens por dia." with the action "Ver o Premium"
   - The withheld-proposals notice becomes "Confirmação ainda fechada nesta versão. Nada entrou na casa."
 - **C12. The typing indicator** is the mark in `.reading` presence, plus "Lendo" or no text at all.
 - **C13. Date correction hints.**

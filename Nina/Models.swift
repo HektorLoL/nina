@@ -1953,7 +1953,7 @@ struct PremiumPlan: Hashable {
                 ),
                 PremiumBenefit(
                     title: "Prioridade da Nina",
-                    detail: "Mais conversa com a Nina, 30 por hora.",
+                    detail: "Mais conversa com a Nina, 50 por dia.",
                     systemName: "sparkles",
                     tone: .lavender
                 )
