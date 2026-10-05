@@ -227,6 +227,9 @@ struct MinorHomeView: View {
                 if isKidsMode {
                     KidsHomeContent(
                         firstName: home.viewer.firstName,
+                        guardianLine: home.viewer.guardianNames.isEmpty
+                            ? nil
+                            : "Responsável: \(home.viewer.guardianList)",
                         syncError: store.syncErrorMessage,
                         todayRows: todayRows,
                         upcoming: upcoming.map { task in

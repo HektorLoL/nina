@@ -533,23 +533,21 @@ struct TasksView: View {
     }
 
 
+    // One quick-add field for both states: a second instance would drop the keyboard the moment
+    // the first item turns the empty list into a list.
     @ViewBuilder
     private var shopping: some View {
-        if store.shoppingItems.isEmpty {
-            VStack(spacing: 22) {
+        VStack(spacing: 0) {
+            ShoppingQuickAdd()
+                .padding(.bottom, 8)
+
+            if store.shoppingItems.isEmpty {
                 ZeroState(
                     headline: "Nada faltando.",
                     body_: "O que acabar em casa aparece aqui."
                 )
-
-                ShoppingQuickAdd()
-            }
-            .centeredBelowHeader(minimumGap: 34)
-        } else {
-            VStack(spacing: 0) {
-                ShoppingQuickAdd()
-                    .padding(.bottom, 8)
-
+                .padding(.top, 34)
+            } else {
                 // Checked items stay exactly where they are: in an aisle you need
                 // positional stability, so nothing reflows under your thumb.
                 ForEach(store.shoppingItems) { item in
@@ -567,15 +565,15 @@ struct TasksView: View {
                     .padding(.top, 10)
                 }
             }
-            .padding(.top, 4)
-            .alert("Limpar comprados?", isPresented: $isConfirmingShoppingClear) {
-                Button("Limpar", role: .destructive) {
-                    _ = store.clearCheckedShoppingItems()
-                }
-                Button("Cancelar", role: .cancel) {}
-            } message: {
-                Text("Some da lista para todo mundo da casa.")
+        }
+        .padding(.top, 4)
+        .alert("Limpar comprados?", isPresented: $isConfirmingShoppingClear) {
+            Button("Limpar", role: .destructive) {
+                _ = store.clearCheckedShoppingItems()
             }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Some da lista para todo mundo da casa.")
         }
     }
 

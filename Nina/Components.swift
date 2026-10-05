@@ -75,7 +75,7 @@ struct NinaCheckbox: View {
     var size: CGFloat = 24
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pop: CGFloat = 1
+    @State private var popTrigger = 0
 
     private var stroke: Color {
         isOverdue ? NinaTheme.terracotta : NinaTheme.control
@@ -104,15 +104,17 @@ struct NinaCheckbox: View {
             }
         }
         .frame(width: size, height: size)
-        .scaleEffect(pop)
+        .keyframeAnimator(initialValue: CGFloat(1), trigger: popTrigger) { content, scale in
+            content.scaleEffect(scale)
+        } keyframes: { _ in
+            CubicKeyframe(1.16, duration: 0.09)
+            SpringKeyframe(1, duration: 0.3, spring: Spring(response: 0.32, dampingRatio: 0.45))
+        }
         .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: isOn)
         // Only closing something pops; reopening it stays quiet, like its haptic.
         .onChange(of: isOn) { wasOn, nowOn in
             guard nowOn, !wasOn, !reduceMotion else { return }
-            pop = 1.16
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.45)) {
-                pop = 1
-            }
+            popTrigger &+= 1
         }
     }
 }

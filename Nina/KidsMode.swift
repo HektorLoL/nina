@@ -59,6 +59,7 @@ struct KidsHomeContent: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let firstName: String
+    var guardianLine: String? = nil
     let syncError: String?
     let todayRows: [ChildDayRow]
     let upcoming: [KidsUpcomingItem]
@@ -124,6 +125,13 @@ struct KidsHomeContent: View {
             Text(KidsMode.greeting(firstName: firstName))
                 .ninaText(.display)
                 .accessibilityAddTraits(.isHeader)
+
+            // ECA Digital art. 17 III: the child's home names who answers for the account, in every mode.
+            if let guardianLine {
+                Text(guardianLine)
+                    .ninaText(.label, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if !todayRows.isEmpty {
                 HStack(spacing: 10) {
@@ -277,7 +285,7 @@ private struct KidsCheck: View {
     var isOn: Bool
     var size: CGFloat = 46
 
-    @State private var pop: CGFloat = 1
+    @State private var popTrigger = 0
 
     var body: some View {
         ZStack {
@@ -293,14 +301,16 @@ private struct KidsCheck: View {
             }
         }
         .frame(width: size, height: size)
-        .scaleEffect(pop)
+        .keyframeAnimator(initialValue: CGFloat(1), trigger: popTrigger) { content, scale in
+            content.scaleEffect(scale)
+        } keyframes: { _ in
+            CubicKeyframe(1.25, duration: 0.1)
+            SpringKeyframe(1, duration: 0.35, spring: Spring(response: 0.35, dampingRatio: 0.4))
+        }
         .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: isOn)
         .onChange(of: isOn) { wasOn, nowOn in
             guard nowOn, !wasOn, !reduceMotion else { return }
-            pop = 1.25
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.4)) {
-                pop = 1
-            }
+            popTrigger &+= 1
         }
     }
 }
@@ -395,8 +405,6 @@ private struct KidsShapes: View {
 private struct KidsConfetti: View {
     let trigger: Int
 
-    @State private var progress: CGFloat = 1
-
     private static let pieces: [(angle: Double, distance: CGFloat, size: CGFloat, spin: Double)] = (0 ..< 14).map { index in
         let angle = Double(index) / 14 * 2 * .pi + (index.isMultiple(of: 2) ? 0.2 : -0.15)
         let distance: CGFloat = index.isMultiple(of: 3) ? 58 : 44
@@ -404,7 +412,18 @@ private struct KidsConfetti: View {
         return (angle, distance, size, Double(index * 47 % 360))
     }
 
+    // The burst runs on a keyframe track: a jump to 0 and an ease back to 1 in one handler would merge into nothing.
     var body: some View {
+        burst(progress: 1)
+            .keyframeAnimator(initialValue: CGFloat(1), trigger: trigger) { _, progress in
+                burst(progress: progress)
+            } keyframes: { _ in
+                MoveKeyframe(0)
+                LinearKeyframe(1, duration: 0.85, timingCurve: .easeOut)
+            }
+    }
+
+    private func burst(progress: CGFloat) -> some View {
         ZStack {
             ForEach(Array(Self.pieces.enumerated()), id: \.offset) { index, piece in
                 confettiPiece(index: index, size: piece.size)
@@ -414,12 +433,6 @@ private struct KidsConfetti: View {
                         y: sin(piece.angle) * piece.distance * progress + 18 * progress * progress
                     )
                     .opacity(progress >= 1 ? 0 : 1 - Double(progress) * 0.8)
-            }
-        }
-        .onChange(of: trigger) { _, _ in
-            progress = 0
-            withAnimation(.easeOut(duration: 0.85)) {
-                progress = 1
             }
         }
     }

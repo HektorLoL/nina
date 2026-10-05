@@ -31,12 +31,12 @@ export const supportTopics: readonly SupportTopic[] = [
       {
         question: "Por que um aviso não chegou?",
         answer:
-          "Confira Avisos nos Ajustes da Nina e nos Ajustes do iPhone. Uma tarefa sem horário não tem aviso. No silêncio da noite, o aviso chega na hora, sem som.",
+          "Confira Avisos nos Ajustes da Nina e nos Ajustes do iPhone. Uma tarefa sem data não tem aviso. No silêncio da noite, o aviso chega na hora, sem som.",
       },
       {
         question: "Por que a conversa pede idade confirmada?",
         answer:
-          "Só adultos com idade confirmada pela Apple conversam com a Nina. O resto da Nina funciona sem isso.",
+          "Conversar com a Nina, assinar o Premium e incluir uma criança pedem idade confirmada pela Apple. Tarefas, lembretes e compras funcionam sem isso.",
       },
     ],
   },
@@ -61,7 +61,7 @@ export const supportTopics: readonly SupportTopic[] = [
       {
         question: "O que o Premium inclui?",
         answer:
-          "Vale para a casa toda: cada adulto manda até 30 mensagens por hora para a Nina, e a casa recebe o resumo semanal. Sem o Premium, são 10 mensagens por dia.",
+          "Vale para a casa toda: cada adulto manda até 30 mensagens por hora para a Nina. Sem o Premium, são 10 mensagens por dia. Quando dois adultos aceitaram conversar com a Nina, a casa também recebe o resumo semanal nas semanas com movimento.",
       },
       {
         question: "Como cancelo o Premium?",
@@ -86,7 +86,7 @@ export const supportTopics: readonly SupportTopic[] = [
       {
         question: "Como apago minha conta?",
         answer:
-          "Em Ajustes, no fim da lista, em Apagar conta. As tarefas que você criou ficam na casa, sem dono.",
+          "Em Ajustes, no fim da lista, em Apagar conta. As tarefas que eram suas voltam para a casa, sem dono. Se a casa é sua e nenhum outro adulto fica nela, ela é apagada junto.",
       },
     ],
   },
