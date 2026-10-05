@@ -89,3 +89,16 @@ Deno.test("the support page lists every topic from the shared list and links the
   assertEquals(page.includes("style="), false);
   assertEquals(footer.includes('href="/suporte/"'), true);
 });
+
+Deno.test("the landing sells as Premium only what the server gates", async () => {
+  const landing = await Deno.readTextFile(
+    new URL("../src/pages/index.astro", import.meta.url),
+  );
+
+  assertEquals(landing.includes("retrato faz parte do Nina Premium"), false);
+  assertEquals(landing.includes("o retrato da casa e o resumo semanal"), false);
+  assertEquals(
+    landing.includes("até 30 mensagens por hora para cada adulto"),
+    true,
+  );
+});
