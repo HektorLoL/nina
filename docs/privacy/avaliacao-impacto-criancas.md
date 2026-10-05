@@ -146,7 +146,10 @@ is this design.
 - **I. Transparency to minors about the synthetic nature.** Every surface a minor
   can see calls Nina "um programa de computador" once per flow, speaks of her in
   the third person, and never calls her "amiga". The minor's first run and "O
-  que a Nina guarda" say it; `/familias/` §1 and §8 say it on the web.
+  que a Nina guarda" say it; `/familias/` §1 and §8 say it on the web. The App
+  Store description does not carry the phrase (Heitor's decision, 2026-10-05):
+  it is a store page, not a conversation, and every flow a minor uses in the
+  app still says it.
 - **II. No behavioral manipulation.** Minors do not interact with the model at
   all. Their surface has no streaks, rewards, urgency or nudges, and no copy
   pushes a guardian toward weaker settings (ECA Digital art. 18 §§1-2).

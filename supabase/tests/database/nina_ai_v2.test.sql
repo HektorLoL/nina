@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(108);
+select plan(110);
 
 insert into auth.users (
   id,
@@ -626,10 +626,10 @@ insert into public.nina_chat_rate_limits (
 values (
   '61000000-0000-0000-0000-000000000001',
   now(),
-  30
+  10
 )
 on conflict (user_id) do update
-set window_started_at = now(), request_count = 30;
+set window_started_at = now(), request_count = 10;
 
 set local role authenticated;
 set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
@@ -646,7 +646,7 @@ select throws_ok(
   )$$,
   'P0001',
   null,
-  'the hourly per-user limit rejects request 31'
+  'the daily per-user limit refuses the message after the free allowance'
 );
 
 reset role;
@@ -1697,6 +1697,21 @@ select is(
   ),
   12,
   'a premium claim counts inside the same open daily window instead of restarting it'
+);
+
+select ok(
+  public.claim_nina_chat_request(50, 3600),
+  'a claim with a shorter window still counts inside the open daily one'
+);
+
+select is(
+  (
+    select window_length_seconds
+    from public.nina_chat_rate_limits
+    where user_id = '61000000-0000-0000-0000-000000000005'
+  ),
+  86400,
+  'a shorter window never shortens the daily window already open'
 );
 
 select ok(

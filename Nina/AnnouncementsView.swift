@@ -47,7 +47,7 @@ struct NinaAnnouncementBoard: Hashable {
             ),
             NinaAnnouncement(
                 title: "Sair da casa",
-                detail: "Quem não é dono pode sair pelos Ajustes.",
+                detail: "Quem não é titular sai pelos Ajustes.",
                 systemName: "rectangle.portrait.and.arrow.right",
                 stage: .live
             ),

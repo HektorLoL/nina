@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(84);
+select plan(85);
 
 insert into auth.users (
   id,
@@ -854,6 +854,30 @@ select is(
   1,
   'the paying household claim starts a fresh daily window'
 );
+
+update public.nina_chat_rate_limits
+set window_started_at = now() - interval '2 hours', request_count = 50
+where user_id = '81000000-0000-0000-0000-000000000001';
+
+set local role authenticated;
+set local request.jwt.claim.sub = '81000000-0000-0000-0000-000000000001';
+
+select throws_ok(
+  $$select public.begin_nina_chat_run(
+    '82000000-0000-0000-0000-000000000001',
+    '84000000-0000-0000-0000-000000000016',
+    'Ainda no mesmo dia',
+    '[]'::jsonb,
+    'gpt-5.4-mini',
+    1000,
+    '2026-08-09'
+  )$$,
+  'P0001',
+  'nina_rate_limited',
+  'a paying household at fifty is still closed two hours in'
+);
+
+reset role;
 
 update public.nina_chat_rate_limits
 set window_started_at = now(), request_count = 49

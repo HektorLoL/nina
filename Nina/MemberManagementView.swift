@@ -349,7 +349,7 @@ struct MemberEditorSheet: View {
             .padding(.top, 6)
         } else if isHandingOver {
             VStack(alignment: .leading, spacing: 14) {
-                Text("\(member.name) recebe um pedido para virar titular. Quando aceitar, você passa a administrar a casa e pode sair depois.")
+                Text("\(member.name) recebe um pedido para virar titular. Quando aceitar, você fica com a permissão de Administrador e pode sair da casa.")
                     .ninaText(.caption, NinaTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -830,7 +830,7 @@ struct HouseOwnershipOfferCard: View {
     }
 
     private var ownerName: String {
-        store.houseOfferOwnerName ?? "O titular"
+        store.houseOfferOwnerName ?? "Quem é titular"
     }
 
     var body: some View {

@@ -591,7 +591,7 @@ struct SettingsSheet: View {
             return "Esperando \(waiting) aceitar a casa. Depois disso, você pode sair."
         }
         return store.hasAdultToHoldTheHouse
-            ? "Em Casa, abra a pessoa, toque em Editar e depois em Passar a casa. Quando ela aceitar, você pode sair."
+            ? "Em Casa, toque na pessoa, depois em Editar e em Passar a casa. Quando ela aceitar, você pode sair."
             : "Só outro adulto com conta recebe a casa. Convide alguém primeiro."
     }
 

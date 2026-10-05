@@ -143,20 +143,23 @@ product regression, not a refactor.
   own row to `permission_role='owner'`. Migration `202606100004` revoked the
   table privilege so the policy can never be reached. This is the single most
   important invariant in the schema.
-- **Only an `owner` changes permission roles**, and `owner` moves only one
-  way: the owner offers it and the receiver accepts (since 2026-10-05).
-  `offer_family_ownership` takes any claimed member the list shows as an adult
-  and reads nobody's age; `accept_family_ownership_offer` reads only the
-  caller's own (`require_adult_account`, the same bar
+- **Only an `owner` changes permission roles**, and `owner` moves in two ways
+  only: the owner offers it and the receiver accepts (since 2026-10-05), or
+  `prepare_account_deletion` hands it to the next adult (owner, admin, then
+  the oldest member) when the owner's account is deleted. No client RPC grants
+  `owner` to the caller. `offer_family_ownership` takes any claimed member the
+  list shows as an adult and reads only the caller's own age (through
+  `can_manage_family`), never the receiver's; `accept_family_ownership_offer`
+  reads only the caller's own (`require_adult_account`, the same bar
   `prepare_account_deletion` sets for a successor), makes the former owner an
   admin and moves `families.created_by`; `cancel_family_ownership_offer` is
   the owner's withdrawal and the receiver's refusal. So neither answer tells
-  anyone about another person's age, and nobody becomes owner without saying
-  yes. One offer per house lives in `private.family_ownership_offers`, void
-  after seven days or once its owner no longer holds the house, and reaches
-  the app as `ownership_offer` in the adult home context; offers and
-  withdrawals bump `families.updated_at` so realtime carries them. No RPC
-  grants or revokes `owner` otherwise. The app offers it as "Passar a casa" in
+  anyone about another person's age, and an offer makes nobody owner until
+  they say yes. One offer per house lives in `private.family_ownership_offers`,
+  void after seven days or once its owner no longer holds the house (swept by
+  the next offer or withdrawal), and reaches the app as `ownership_offer` in
+  the adult home context; offers and withdrawals bump `families.updated_at` so
+  realtime carries them. The app offers it as "Passar a casa" in
   the member editor, behind the person's name typed and an ink button, and the
   receiver answers on a card at the top of Casa. An `admin` may not modify
   another owner/admin.
