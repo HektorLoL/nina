@@ -214,6 +214,11 @@ struct AppRootView: View {
         .animation(.easeInOut(duration: 0.28), value: entryPhase)
         .onChange(of: authSession.currentUser?.id) { oldValue, newValue in
             guard oldValue != newValue else { return }
+            // Signing out takes the household off this phone; the server holds it for the next sign-in.
+            if let oldValue, newValue == nil {
+                store.clearHouseholdCopy(for: oldValue)
+                profileStore.clearLocalData(for: oldValue)
+            }
             if let newValue, authSession.interactiveSignInUserID == newValue {
                 store.noteTermsFootnoteShown(for: newValue)
             }

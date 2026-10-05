@@ -2371,6 +2371,16 @@ final class AppStore {
         clearLocalData(for: userID)
     }
 
+    // A minor's usage ledger and the last age reading stay, so signing out never resets a limit or the age step.
+    func clearHouseholdCopy(for userID: String) {
+        clearCachedHome(for: userID)
+        PrivateLocalDataAccess.removeAllData(
+            forOwnerScope: PrivateLocalDataScope.aiConsent(for: userID),
+            store: privateDataStore
+        )
+        defaults.removeObject(forKey: Self.aiMemoryConsentKey(for: userID))
+    }
+
     func clearLocalData(for userID: String) {
         let clearsActiveContext = activeHomeUserID == userID
         if clearsActiveContext {

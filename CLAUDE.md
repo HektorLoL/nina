@@ -1485,9 +1485,13 @@ intact Keychain session. The same rule holds for joining (`inviteRefused` is the
 only error that may call an invite dead) and for reminders (an `.unavailable`
 membership never re-syncs notifications).
 
-**Nothing wipes protected local data on plain sign-out.** Only account deletion
-does. Household, profile, photo, and consent files persist on disk after
-`signOut()`.
+**Signing out takes the household off the phone (since 2026-10-05).**
+`AppRootView` calls `AppStore.clearHouseholdCopy` and
+`ProfileStore.clearLocalData` for the account that just left, removing the
+cached house, the consent cache, the profile and the photo; the server holds
+them for the next sign-in. A minor's usage ledger and the last age reading
+stay, so signing out and in never resets a daily limit or re-runs the age step,
+and the tutorial flag stays. Account deletion still clears everything.
 
 **Notification scheduling is capped at 60 requests globally**, sorted by soonest
 delivery, with recurring tasks expanded 12 occurrences deep. A busy home silently

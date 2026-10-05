@@ -328,6 +328,41 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testSigningOutTakesTheHouseholdOffThePhoneButKeepsAMinorsLedger() async throws {
+        let suiteName = "nina.tests.signout.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-signout-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
+        let user = makeUser()
+        let homeKey = "nina.home.familyGroup.\(user.id)"
+        let consentKey = "nina.privacy.aiMemoryConsent.\(user.id)"
+        let householdScope = PrivateLocalDataScope.household(for: user.id)
+        let consentScope = PrivateLocalDataScope.aiConsent(for: user.id)
+        let usageScope = PrivateLocalDataScope.minorUsage(for: user.id)
+        try privateDataStore.set(Data("home".utf8), forKey: homeKey, ownerScope: householdScope)
+        try privateDataStore.set(Data("consent".utf8), forKey: consentKey, ownerScope: consentScope)
+        try privateDataStore.set(Data("minutes".utf8), forKey: "usage", ownerScope: usageScope)
+        let store = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: nil,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: NoopHomeNotificationScheduler()
+        )
+
+        store.clearHouseholdCopy(for: user.id)
+
+        XCTAssertNil(try privateDataStore.data(forKey: homeKey, ownerScope: householdScope))
+        XCTAssertNil(try privateDataStore.data(forKey: consentKey, ownerScope: consentScope))
+        XCTAssertNotNil(try privateDataStore.data(forKey: "usage", ownerScope: usageScope))
+    }
+
+    @MainActor
     func testJoinHomeNormalizesInviteAndAppliesMemberState() async {
         let user = makeUser()
         let inviteCode = "casa-47a9f2d0b3c1e8a4d6f2a9c5e7b1d304"
