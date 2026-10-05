@@ -309,6 +309,7 @@ final class AppStore {
 
     var undoableCompletionID: TaskItem.ID?
     @ObservationIgnored private var undoExpiryTask: Task<Void, Never>?
+    @ObservationIgnored private var undoableRoll: (before: TaskItem, after: TaskItem)?
     var isSyncingHome = false
     var syncErrorMessage: String?
 
@@ -2608,6 +2609,8 @@ final class AppStore {
 
         if proposedTask.isDone, !currentTask.isDone {
             offerUndo(for: proposedTask.id)
+        } else if !currentTask.isDone, currentTask.recurrence != .none {
+            offerUndo(for: proposedTask.id, rolledFrom: currentTask, to: proposedTask)
         } else {
             clearUndo()
         }
@@ -2618,17 +2621,34 @@ final class AppStore {
     func undoLastCompletion() {
         guard let id = undoableCompletionID,
               let task = tasks.first(where: { $0.id == id }) else { return }
+        let roll = undoableRoll
         clearUndo()
-        toggleTask(task)
+        guard let roll, roll.after.id == id else {
+            toggleTask(task)
+            return
+        }
+        // A repeating task goes back to the occurrence it left, and only if nobody moved it since.
+        guard task.isDone == roll.after.isDone,
+              task.dueAt == roll.after.dueAt,
+              task.snoozedUntil == roll.after.snoozedUntil else { return }
+        var restored = task
+        restored.dueAt = roll.before.dueAt
+        restored.dueLabel = roll.before.dueLabel
+        restored.snoozedUntil = roll.before.snoozedUntil
+        submitTaskUpdate(restored, basedOn: task)
     }
 
-    private func offerUndo(for id: TaskItem.ID) {
+    private func offerUndo(for id: TaskItem.ID, rolledFrom before: TaskItem? = nil, to after: TaskItem? = nil) {
         undoExpiryTask?.cancel()
+        undoableRoll = before.flatMap { before in after.map { (before: before, after: $0) } }
         undoableCompletionID = id
         undoExpiryTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             guard !Task.isCancelled else { return }
-            await MainActor.run { self?.undoableCompletionID = nil }
+            await MainActor.run {
+                self?.undoableCompletionID = nil
+                self?.undoableRoll = nil
+            }
         }
     }
 
@@ -2636,6 +2656,7 @@ final class AppStore {
         undoExpiryTask?.cancel()
         undoExpiryTask = nil
         undoableCompletionID = nil
+        undoableRoll = nil
     }
 
     func presentChildDay(for child: HouseholdMember, now: Date = .now) {

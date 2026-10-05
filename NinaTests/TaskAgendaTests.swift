@@ -233,6 +233,45 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertNil(store.undoableCompletionID)
     }
 
+    func testFinishingARepeatingTaskForTodayOffersAnUndoThatPutsTheOccurrenceBack() throws {
+        try withIsolatedStore { store in
+            var daily = task(dueAt: now.addingTimeInterval(2 * 60 * 60))
+            daily.recurrence = .daily
+            daily.dueLabel = "Hoje, 12:00"
+            store.tasks = [daily]
+
+            store.toggleTask(daily)
+            let rolled = try XCTUnwrap(store.tasks.first { $0.id == daily.id })
+            XCTAssertNotEqual(rolled.dueAt, daily.dueAt)
+            XCTAssertEqual(store.undoableCompletionID, daily.id)
+
+            store.undoLastCompletion()
+
+            let restored = try XCTUnwrap(store.tasks.first { $0.id == daily.id })
+            XCTAssertEqual(restored.dueAt, daily.dueAt)
+            XCTAssertEqual(restored.dueLabel, daily.dueLabel)
+            XCTAssertFalse(restored.isDone)
+            XCTAssertNil(store.undoableCompletionID)
+        }
+    }
+
+    func testAnUndoNeverMovesARepeatingTaskThatChangedSinceItWasFinished() throws {
+        try withIsolatedStore { store in
+            var daily = task(dueAt: now.addingTimeInterval(2 * 60 * 60))
+            daily.recurrence = .daily
+            store.tasks = [daily]
+
+            store.toggleTask(daily)
+            let elsewhere = now.addingTimeInterval(5 * 24 * 60 * 60)
+            store.tasks[0].dueAt = elsewhere
+
+            store.undoLastCompletion()
+
+            XCTAssertEqual(store.tasks.first { $0.id == daily.id }?.dueAt, elsewhere)
+            XCTAssertNil(store.undoableCompletionID)
+        }
+    }
+
     func testMarkingAChildsTaskDoneNeitherOffersNorWithdrawsTheAppWideUndo() throws {
         try withIsolatedStore { store in
             let other = task(dueAt: date(year: 2026, month: 8, day: 8, hour: 18, minute: 0))
