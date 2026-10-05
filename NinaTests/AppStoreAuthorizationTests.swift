@@ -519,6 +519,43 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testAnExpiredOfferIsNeverShownToEitherSide() async {
+        let user = makeUser()
+        let ownerID = UUID().uuidString
+        let owner = HouseholdMember(userID: ownerID, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let me = HouseholdMember(userID: user.id, name: "Ana", relationship: "Esposa", role: .adult, permissionRole: .member, tone: .sky, taskCount: 0, memoryNote: "")
+        var state = makeRemoteState(permissionRole: .member, members: [owner, me])
+        state.ownershipOffer = HouseOwnershipOffer(memberID: me.id, offeredBy: ownerID, offeredAt: .now.addingTimeInterval(-8 * 86_400), expiresAt: .now.addingTimeInterval(-86_400))
+        let store = AppStore(remoteHomeBackend: HandOverHomeBackend(state: state), ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        XCTAssertNil(store.houseOfferForMe)
+        XCTAssertNil(store.houseOffer(to: me))
+        XCTAssertNil(store.houseOfferRecipientName)
+    }
+
+    @MainActor
+    func testAnOfferTheServerNoLongerHoldsLeavesTheCardWhenAcceptingIt() async {
+        let user = makeUser()
+        let ownerID = UUID().uuidString
+        let owner = HouseholdMember(userID: ownerID, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let me = HouseholdMember(userID: user.id, name: "Ana", relationship: "Esposa", role: .adult, permissionRole: .member, tone: .sky, taskCount: 0, memoryNote: "")
+        var state = makeRemoteState(permissionRole: .member, members: [owner, me])
+        state.ownershipOffer = HouseOwnershipOffer(memberID: me.id, offeredBy: ownerID, offeredAt: .now, expiresAt: .now.addingTimeInterval(7 * 86_400))
+        let backend = HandOverHomeBackend(state: state, refusal: RemoteRPCError(code: .familyOwnershipOfferNotFound))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertNotNil(store.houseOfferForMe)
+
+        let accepted = await store.acceptHouseOffer()
+
+        XCTAssertFalse(accepted)
+        XCTAssertNil(store.houseOfferForMe)
+        XCTAssertEqual(store.syncErrorMessage, "Esse pedido já não vale.")
+        XCTAssertEqual(store.currentPermissionRole, .member)
+    }
+
+    @MainActor
     func testARefusedOfferKeepsTheHouseAsItWasAndSaysSo() async {
         let user = makeUser()
         let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")

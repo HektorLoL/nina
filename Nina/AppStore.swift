@@ -1375,14 +1375,25 @@ final class AppStore {
     }
 
     func houseOffer(to member: HouseholdMember) -> HouseOwnershipOffer? {
-        guard let offer = houseOwnershipOffer, offer.memberID == member.id else { return nil }
+        guard let offer = liveHouseOffer, offer.memberID == member.id else { return nil }
         return offer
+    }
+
+    // The server stops honouring an offer after seven days, so the phone stops showing it then too.
+    var liveHouseOffer: HouseOwnershipOffer? {
+        guard let offer = houseOwnershipOffer, offer.expiresAt > .now else { return nil }
+        return offer
+    }
+
+    var houseOfferRecipientName: String? {
+        guard let offer = liveHouseOffer else { return nil }
+        return familyGroup.members.first { $0.id == offer.memberID }?.name
     }
 
     // The offer waiting for this person, shown only while its owner still holds the house.
     var houseOfferForMe: HouseOwnershipOffer? {
         guard hasActiveHome,
-              let offer = houseOwnershipOffer,
+              let offer = liveHouseOffer,
               let me = currentFamilyMember,
               offer.memberID == me.id,
               me.role == .adult,
@@ -1452,6 +1463,9 @@ final class AppStore {
             return true
         } catch {
             guard isCurrentHomeContext(contextToken) else { return false }
+            if RemoteRPCErrorCode.from(error) == .familyOwnershipOfferNotFound {
+                houseOwnershipOffer = nil
+            }
             syncErrorMessage = failure(error)
             Haptics.error()
             return false

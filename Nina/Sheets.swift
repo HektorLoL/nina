@@ -580,14 +580,19 @@ struct SettingsSheet: View {
                 .alert("Antes, passe a casa.", isPresented: $isExplainingHandOver) {
                     Button("Entendi", role: .cancel) {}
                 } message: {
-                    Text(
-                        store.hasAdultToHoldTheHouse
-                            ? "Em Casa, abra outro adulto e toque em Passar a casa. Quando aceitar, você pode sair."
-                            : "Só outro adulto com conta recebe a casa. Convide alguém primeiro."
-                    )
+                    Text(ownerLeaveExplanation)
                 }
             }
         }
+    }
+
+    private var ownerLeaveExplanation: String {
+        if let waiting = store.houseOfferRecipientName {
+            return "Esperando \(waiting) aceitar a casa. Depois disso, você pode sair."
+        }
+        return store.hasAdultToHoldTheHouse
+            ? "Em Casa, abra a pessoa, toque em Editar e depois em Passar a casa. Quando ela aceitar, você pode sair."
+            : "Só outro adulto com conta recebe a casa. Convide alguém primeiro."
     }
 
     private var notificationStatusValue: String? {

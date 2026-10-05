@@ -11,6 +11,42 @@ final class RemoteDecodingTests: XCTestCase {
     ]
     """
 
+    func testAnOfferOfTheHouseIsReadAsPostgresWritesItAndANullOneIsNoOffer() throws {
+        let familyID = UUID()
+        let memberID = UUID()
+        let ownerID = UUID()
+        func context(offer: String) -> String {
+            """
+            {
+              "viewer_kind": "adult",
+              "viewer_age": {"status": "adult", "assurance": "confirmed", "trusted_adult": true, "may_use_ai": true},
+              "family": {"id": "\(familyID.uuidString)", "name": "Casa", "created_by": "\(ownerID.uuidString.lowercased())"},
+              "members": [],
+              "permission_role": "member",
+              "membership_verified": true,
+              "pending_join_requests": [],
+              "ownership_offer": \(offer)
+            }
+            """
+        }
+        let offered = context(offer: """
+        {"member_id": "\(memberID.uuidString.lowercased())", "offered_by": "\(ownerID.uuidString.lowercased())",
+         "offered_at": "2026-10-05T19:18:32.123456+00:00", "expires_at": "2026-10-12T19:18:32.123456+00:00"}
+        """)
+
+        let offer = try XCTUnwrap(
+            RemoteHomeContextDecoding.context(from: Data(offered.utf8)).state?.ownershipOffer
+        )
+        let none = try RemoteHomeContextDecoding.context(from: Data(context(offer: "null").utf8))
+
+        XCTAssertEqual(offer.memberID, memberID)
+        // Compared with member user ids, which the app spells as Foundation does.
+        XCTAssertEqual(offer.offeredBy, ownerID.uuidString)
+        XCTAssertEqual(offer.expiresAt.timeIntervalSince(offer.offeredAt), 7 * 86_400, accuracy: 1)
+        XCTAssertNotNil(none.state)
+        XCTAssertNil(none.state?.ownershipOffer)
+    }
+
     func testAnUnknownOrMissingHouseholdRoleNeverReadsAsAnAdult() throws {
         let familyID = UUID()
         let json = """

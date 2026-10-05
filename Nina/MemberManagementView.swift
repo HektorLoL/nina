@@ -376,6 +376,12 @@ struct MemberEditorSheet: View {
             }
             .padding(.top, 6)
         } else {
+            if let waiting = store.houseOfferRecipientName {
+                Text("A casa já foi oferecida a \(waiting). Um novo pedido substitui esse.")
+                    .ninaText(.caption, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             NinaButton(title: "Passar a casa", kind: .quiet, isEnabled: !isSaving) {
                 Haptics.warning()
                 isHandingOver = true
@@ -818,7 +824,6 @@ struct HouseOwnershipOfferCard: View {
     @Environment(AppStore.self) private var store
     @State private var isWorking = false
     @State private var isShowingDeclineConfirmation = false
-    @State private var didFail = false
 
     private var isBusy: Bool {
         isWorking || store.isSyncingHome
@@ -848,10 +853,6 @@ struct HouseOwnershipOfferCard: View {
                     isShowingDeclineConfirmation = true
                 }
             }
-
-            if didFail, let error = store.syncErrorMessage {
-                NinaErrorNote(text: error, style: .card)
-            }
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -869,11 +870,9 @@ struct HouseOwnershipOfferCard: View {
     private func accept() {
         guard !isWorking else { return }
         isWorking = true
-        didFail = false
         Task {
             let success = await store.acceptHouseOffer()
             isWorking = false
-            didFail = !success
             if success {
                 Haptics.success()
             }
@@ -883,11 +882,9 @@ struct HouseOwnershipOfferCard: View {
     private func decline() {
         guard !isWorking else { return }
         isWorking = true
-        didFail = false
         Task {
             let success = await store.withdrawHouseOffer()
             isWorking = false
-            didFail = !success
             if success {
                 Haptics.selection()
             }
