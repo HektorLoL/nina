@@ -2319,7 +2319,7 @@ struct TaskEditorSheet: View {
 
     private var subtitleField: some View {
         TextField("Nota", text: $subtitle, axis: .vertical)
-            .lineLimit(1...3)
+            .lineLimit(1...8)
             .ninaText(.body, NinaTheme.muted)
             .tint(NinaTheme.cobalt)
             .textFieldStyle(.plain)
