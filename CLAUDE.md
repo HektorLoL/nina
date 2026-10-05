@@ -931,7 +931,8 @@ from commit d26a730 on 2026-09-29 (`age-signal` v1, `nina-chat` v18,
 `nina-maintenance` v10, `delete-account` v7, `premium-subscription-sync` v9,
 `app-store-server-notifications` v9), from a clean `git archive` export
 because iCloud leaves ignored "… 2" copies of source files in the working tree
-(§12). Before that, `nina-maintenance` was redeployed on 2026-09-23 with the
+(§12). `age-signal` v2 (2026-10-04, commit c724166, same clean-export route)
+carries the chain-signature fix below. Before that, `nina-maintenance` was redeployed on 2026-09-23 with the
 GPT-6 Luna switch, and `nina-chat` v14 (2026-09-28) carried the bounded body
 reader and v12 (2026-09-26) the spoken-dates fix, commit 84ef7c9.
 Until 2026-09-23 both still ran the 2026-06-15 build, so check `list_edge_functions` dates against
