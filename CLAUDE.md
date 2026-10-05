@@ -1984,13 +1984,19 @@ the project, not bugs to fix unprompted.
   fails if any foreign key in `public` or `private` lacks a leading index. It
   went through the Supabase MCP `apply_migration`, its version row was set to
   `202610050002` (§12), and the same canary query read 0 on production.
-- **Migration `202610050004` (Premium chat limit by the day) is in the repo
-  and not yet in production.** It copies `begin_nina_chat_run` from
+- **Migration `202610050004` (Premium chat limit by the day) is applied to
+  production (2026-10-05).** It copies `begin_nina_chat_run` from
   `202609290006` with one change: a covered adult's claim is 50 per 86,400
-  seconds instead of 30 per 3,600. Apply it with the build whose copy says "50
-  por dia" (build 13): until then build 12 still tells a Premium adult "30
-  mensagens por hora" while the server keeps the hourly limit, and after it,
-  build 12's line is wrong until people update.
+  seconds instead of 30 per 3,600. Production's function body matched the
+  local pre-change body by MD5 before the apply and the post-change body
+  after it; grants read back authenticated only. It went through the Supabase
+  MCP `apply_migration` and its version row was set to `202610050004` (§12).
+  It went live before the push that publishes "50 por dia" on `/suporte/` and
+  the landing, so the site never promised more than the server keeps. Build
+  12 still says "30 mensagens por hora" in the chat's ceiling notice and the
+  paywall until people update to build 13. It is live while `202610050003`
+  is not, so a `supabase db push` before that one is applied needs
+  `--include-all`.
 - **Migration `202610050003` (owner title and handover) is in the repo and
   not yet in production.** It adds `private.family_ownership_offers` and the
   offer, accept and withdraw RPCs (the authenticated function grant map
