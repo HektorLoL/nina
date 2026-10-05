@@ -433,8 +433,9 @@ the welcome and Ajustes lose surfaces earlier passes had added.
   code steps) and the Google row are gone, and so is the fade that waited for
   Google's availability check: the button is there from the first frame. The
   welcome is 9 authored words, 20 with the legal line.
-- **The error line stays** inside the action group, in ink, for an Apple failure
-  or an unreachable backend.
+- **The error line stays** inside the action group for an Apple failure or an
+  unreachable backend; since 2026-10-04 it is red with its glyph
+  (`NinaErrorNote`), never terracotta.
 - **Ajustes loses "Email de acesso" / "Adicionar email".** The account row still
   shows the address Apple shared, and the profile's Email field stays read-only
   with the "Apple" note. Nothing links or changes a sign-in email.

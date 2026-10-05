@@ -238,10 +238,7 @@ struct HomeSetupView: View {
     }
 
     private func errorLine(_ message: String) -> some View {
-        Text(message)
-            .ninaText(.caption, NinaTheme.ink, weight: .semibold)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
+        NinaErrorNote(text: message, alignment: .center)
             .frame(maxWidth: .infinity)
     }
 

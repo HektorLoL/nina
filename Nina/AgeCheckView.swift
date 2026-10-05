@@ -189,9 +189,7 @@ struct AgeMajorityView: View {
                     }
 
                     if let message = store.syncErrorMessage {
-                        Text(message)
-                            .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                            .fixedSize(horizontal: false, vertical: true)
+                        NinaErrorNote(text: message)
                     }
 
                     NinaButton(title: "Aceitar", fillsWidth: true, isPending: store.isSyncingHome) {

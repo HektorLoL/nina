@@ -79,11 +79,8 @@ struct LoginView: View {
             #endif
 
             if let errorMessage = authSession.errorMessage {
-                // A failed sign-in is not lateness, so it never takes terracotta.
-                Text(errorMessage)
-                    .ninaText(.meta, NinaTheme.ink, weight: .medium)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                // A failed sign-in is an error, so it is red with its glyph and never terracotta.
+                NinaErrorNote(text: errorMessage, alignment: .center)
                     .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("login-error")
             }

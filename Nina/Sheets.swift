@@ -1198,12 +1198,21 @@ struct AccountDeletionView: View {
         }
     }
 
-    // A failure is not lateness, so it is grout and ink, never terracotta.
+    // A failure is red with its glyph, never terracotta; cancelling Apple's sheet was the person's own choice, so it stays grout and ink.
     private func deletionFailureNote(_ failure: AccountDeletionFailure) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(Self.line(for: failure))
-                .ninaText(.label, NinaTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
+        let isOwnChoice = failure == .appleCancelled
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if !isOwnChoice {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(NinaTheme.alert)
+                        .accessibilityHidden(true)
+                }
+                Text(Self.line(for: failure))
+                    .ninaText(.label, isOwnChoice ? NinaTheme.ink : NinaTheme.alertInk, weight: isOwnChoice ? .regular : .medium)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if authSession.offersDeletionByMail {
                 Text(Self.mailWayOut(for: failure))
@@ -1228,7 +1237,7 @@ struct AccountDeletionView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+        .ninaCard(fill: isOwnChoice ? NinaTheme.grout : NinaTheme.alertWash, stroke: .clear)
     }
 
     private var deletionMail: URL {
