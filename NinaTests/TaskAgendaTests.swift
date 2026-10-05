@@ -331,6 +331,29 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertEqual(HouseSearch.shoppingItems([soap, bread], query: "caixas").map(\.id), [soap.id])
     }
 
+    func testSearchFindsAMemoryByItsTitleOrItsDetail() {
+        func memory(_ title: String, _ body: String) -> NinaMemory {
+            NinaMemory(
+                id: UUID(),
+                familyID: UUID(),
+                ownerUserID: nil,
+                title: title,
+                body: body,
+                visibility: .shared,
+                confidence: 1,
+                createdAt: .distantPast,
+                updatedAt: .distantPast
+            )
+        }
+        let allergy = memory("Alergia do Pedro", "Não pode amendoim")
+        let wifi = memory("Senha do portão", "Código na gaveta da cozinha")
+
+        XCTAssertEqual(HouseSearch.memories([allergy, wifi], query: "alergia").map(\.id), [allergy.id])
+        XCTAssertEqual(HouseSearch.memories([allergy, wifi], query: "COZINHA").map(\.id), [wifi.id])
+        XCTAssertEqual(HouseSearch.memories([allergy, wifi], query: "portao").map(\.id), [wifi.id])
+        XCTAssertTrue(HouseSearch.memories([allergy, wifi], query: " ").isEmpty)
+    }
+
     func testFinishingARepeatingTaskForTodayOffersAnUndoThatPutsTheOccurrenceBack() throws {
         try withIsolatedStore { store in
             var daily = task(dueAt: now.addingTimeInterval(2 * 60 * 60))

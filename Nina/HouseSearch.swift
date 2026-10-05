@@ -16,6 +16,10 @@ enum HouseSearch {
         items.filter { matches($0.title, query: query) || matches($0.amount, query: query) }
     }
 
+    static func memories(_ memories: [NinaMemory], query: String) -> [NinaMemory] {
+        memories.filter { matches($0.title, query: query) || matches($0.body, query: query) }
+    }
+
     // A proposal that repeats something still open is flagged, never blocked: the person decides if it is a second one.
     static func openTwin(
         of payload: NinaProposalPayload,

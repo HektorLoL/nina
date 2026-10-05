@@ -386,6 +386,18 @@ struct MemoriesView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
+    @State private var query = ""
+
+    static let searchThreshold = 6
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var visibleMemories: [NinaMemory] {
+        trimmedQuery.isEmpty ? store.ninaMemories : HouseSearch.memories(store.ninaMemories, query: trimmedQuery)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -419,7 +431,17 @@ struct MemoriesView: View {
                             }
                             Spacer(minLength: 12)
                         } else {
-                            ForEach(store.ninaMemories) { memory in
+                            if store.ninaMemories.count >= Self.searchThreshold {
+                                searchField
+                            }
+                            if visibleMemories.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Nada com esse nome.").ninaText(.title)
+                                    Text("Tenta outra palavra.").ninaText(.label, NinaTheme.muted)
+                                }
+                                .padding(.top, 8)
+                            }
+                            ForEach(visibleMemories) { memory in
                                 MemoryCard(memory: memory)
                             }
                         }
@@ -436,6 +458,35 @@ struct MemoriesView: View {
         .ninaScreenBackground()
     }
 
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(NinaTheme.muted)
+            TextField("Procurar nas memórias", text: $query)
+                .ninaText(.label, NinaTheme.ink, weight: .medium)
+                .submitLabel(.search)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            if !query.isEmpty {
+                Button {
+                    Haptics.selection()
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundStyle(NinaTheme.faint)
+                        .frame(width: 32, height: 40)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Limpar busca")
+            }
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, query.isEmpty ? 12 : 4)
+        .frame(height: 40)
+        .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
+    }
 }
 
 // Memories are the one object the app calls unrecoverable once shared, so the
