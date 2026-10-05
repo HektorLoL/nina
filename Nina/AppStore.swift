@@ -262,6 +262,7 @@ final class AppStore {
     var householdPremium: HouseholdPremium = .inactive
     var ninaThread: NinaThread?
     var ninaMemories: [NinaMemory]
+    private var seenInsightRevision = 0
     var isNinaResponding = false
     var ninaConnectionNotice: String?
     var taskEditConflict: TaskEditConflict?
@@ -323,6 +324,23 @@ final class AppStore {
 
     var pendingJoinRequestCount: Int {
         canManageFamily ? joinRequests.count : 0
+    }
+
+    // The weekly portrait is written while nobody is looking, so Casa marks a new one until it is seen.
+    var hasUnseenInsight: Bool {
+        _ = seenInsightRevision
+        guard !isUsingLocalContext, hasActiveHome, let newest = insights.first else { return false }
+        return defaults.string(forKey: Self.seenInsightKey(for: familyGroup.id)) != newest.id.uuidString
+    }
+
+    func markInsightsSeen() {
+        guard hasUnseenInsight, let newest = insights.first else { return }
+        defaults.set(newest.id.uuidString, forKey: Self.seenInsightKey(for: familyGroup.id))
+        seenInsightRevision &+= 1
+    }
+
+    static func seenInsightKey(for familyID: UUID) -> String {
+        "nina.seenInsight.\(familyID.uuidString)"
     }
 
     // Nina proposes and a person decides, so a card still waiting is shown outside the chat too.

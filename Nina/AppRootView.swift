@@ -444,6 +444,12 @@ struct AppRootView: View {
             travel(to: .tasks)
         }
         .onAppear(perform: followReminder)
+        .onChange(of: selectedTab, initial: true) { _, tab in
+            if tab == .house { store.markInsightsSeen() }
+        }
+        .onChange(of: store.insights.first?.id) { _, _ in
+            if selectedTab == .house { store.markInsightsSeen() }
+        }
         .onChange(of: TaskNotificationRoute.shared.pending) { _, _ in
             followReminder()
         }
@@ -1010,7 +1016,7 @@ private struct BottomTabBar: View {
 
     private func showsDot(on tab: AppTab) -> Bool {
         switch tab {
-        case .house: store.pendingJoinRequestCount > 0
+        case .house: store.pendingJoinRequestCount > 0 || (tab != selectedTab && store.hasUnseenInsight)
         case .nina: tab != selectedTab && store.waitingProposalCount > 0
         case .today, .tasks: false
         }
@@ -1019,7 +1025,10 @@ private struct BottomTabBar: View {
     private func dotValue(for tab: AppTab) -> String {
         guard showsDot(on: tab) else { return "" }
         switch tab {
-        case .house: return "\(store.pendingJoinRequestCount) pedindo para entrar"
+        case .house:
+            return store.pendingJoinRequestCount > 0
+                ? "\(store.pendingJoinRequestCount) pedindo para entrar"
+                : "Resumo semanal novo"
         case .nina: return ProposalBacklog.line(count: store.waitingProposalCount)
         case .today, .tasks: return ""
         }

@@ -151,6 +151,55 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testANewWeeklySummaryMarksCasaUntilItIsSeenAndStaysSeenOnTheNextLaunch() async throws {
+        let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-app-store-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let user = makeUser()
+        let adult = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let insight = HouseholdInsight(
+            title: "Carga da semana",
+            message: "A casa dividiu bem as tarefas.",
+            metric: "",
+            symbolName: "chart.bar",
+            tone: .mint
+        )
+        let state = makeRemoteState(members: [adult], insights: [insight])
+        func launch() async -> AppStore {
+            let store = AppStore(
+                defaults: defaults,
+                privateDataStore: ProtectedLocalDataStore(directoryURL: directory),
+                remoteHomeBackend: RecordingHomeBackend(state: state),
+                ninaEngine: MockNinaEngine(),
+                notificationScheduler: NoopHomeNotificationScheduler()
+            )
+            await store.activateHomeContext(for: user)
+            return store
+        }
+
+        let first = await launch()
+        XCTAssertTrue(first.hasUnseenInsight)
+        first.markInsightsSeen()
+        XCTAssertFalse(first.hasUnseenInsight)
+
+        let second = await launch()
+        XCTAssertFalse(second.hasUnseenInsight)
+    }
+
+    @MainActor
     func testExplicitUserCleanupWorksAfterActiveContextIsGone() async throws {
         let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -4063,6 +4112,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         shoppingItems: [ShoppingItem] = [],
         members: [HouseholdMember] = [],
         messages: [ChatMessage] = [],
+        insights: [HouseholdInsight] = [],
         aiConsent: NinaAIConsent = .withheld,
         viewerAge: AgeStatus = .testTrustedAdult
     ) -> RemoteHomeState {
@@ -4074,7 +4124,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
                 taskSections: taskSections,
                 tasks: tasks,
                 shoppingItems: shoppingItems,
-                insights: []
+                insights: insights
             ),
             aiConsent: aiConsent,
             viewerAge: viewerAge
