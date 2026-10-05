@@ -110,6 +110,7 @@ struct TodayView: View {
         }
         .ninaScreenBackground()
         .ninaStatusBarMask()
+        .presentsAnnouncements()
     }
 
     private var header: some View {

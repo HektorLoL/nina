@@ -570,6 +570,15 @@ struct SettingsSheet: View {
 
             NinaDivider()
 
+            NavigationLink {
+                AnnouncementsScreen()
+            } label: {
+                SettingsLinkRow(title: "Novidades", systemName: "sparkles")
+            }
+            .buttonStyle(.plain)
+
+            NinaDivider()
+
             Button {
                 Haptics.selection()
                 openURL(NinaLegalLinks.termsOfUse)
