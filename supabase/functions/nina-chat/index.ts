@@ -44,6 +44,11 @@ import { fillMissingDueAt, ninaLocalNow } from "../_shared/nina-due-date.ts";
 import { houseWorkloadKey, summarizeWorkload } from "../_shared/nina-workload.ts";
 import { minimizeMembersForModel } from "../_shared/nina-member-context.ts";
 import { isRosterEntry, Pseudonymizer } from "../_shared/nina-pseudonyms.ts";
+import {
+  matchesSearch,
+  normalizedSearch,
+  searchCandidateLimit,
+} from "../_shared/nina-search.ts";
 
 type NinaChatStart = {
   idempotent: boolean;
@@ -278,22 +283,6 @@ async function moderateOutput(
   );
 }
 
-function normalizedSearch(value: unknown): string {
-  return typeof value === "string" ? value.trim().slice(0, 120) : "";
-}
-
-function matchesSearch(
-  row: Record<string, unknown>,
-  query: string,
-  keys: string[],
-): boolean {
-  if (!query) return true;
-  const normalizedQuery = query.toLocaleLowerCase("pt-BR");
-  return keys.some((key) =>
-    String(row[key] ?? "").toLocaleLowerCase("pt-BR").includes(normalizedQuery)
-  );
-}
-
 function minorOwnerFilter(names: Pseudonymizer): string | null {
   const excluded = [...names.excludedOwnerIDs].filter((id) =>
     /^[0-9a-f-]{36}$/i.test(id)
@@ -330,7 +319,8 @@ async function runReadOnlyTool(
           "id,title,subtitle,owner_member_id,owner_label,due_label,due_at,category_id,priority,recurrence_rule,snoozed_until,is_done",
         )
         .eq("family_id", familyID)
-        .limit(50);
+        .order("due_at", { ascending: true, nullsFirst: false })
+        .limit(searchCandidateLimit);
       const ownerFilter = minorOwnerFilter(names);
       if (ownerFilter) request = request.or(ownerFilter);
       if (args.include_completed !== true) request = request.eq("is_done", false);
@@ -351,7 +341,8 @@ async function runReadOnlyTool(
         .from("shopping_items")
         .select("id,title,amount,owner_member_id,owner_label,is_checked")
         .eq("family_id", familyID)
-        .limit(50);
+        .order("created_at", { ascending: false })
+        .limit(searchCandidateLimit);
       const ownerFilter = minorOwnerFilter(names);
       if (ownerFilter) request = request.or(ownerFilter);
       if (args.include_checked !== true) request = request.eq("is_checked", false);
@@ -374,7 +365,8 @@ async function runReadOnlyTool(
         .eq("family_id", familyID)
         .eq("status", "confirmed")
         .or(`owner_user_id.eq.${userID},visibility.eq.shared`)
-        .limit(50);
+        .order("updated_at", { ascending: false })
+        .limit(searchCandidateLimit);
       const memories = (data ?? [])
         .filter((row) => matchesSearch(row, query, ["title", "body"]))
         .slice(0, 12);
