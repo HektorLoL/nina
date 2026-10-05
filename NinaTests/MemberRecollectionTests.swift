@@ -37,6 +37,15 @@ final class MemberRecollectionTests: XCTestCase {
         members = [heitor, pedro, thor, nina]
     }
 
+    func testAPetsAgeReadsInYearsThenMonthsAndNeverForAFutureDate() {
+        XCTAssertEqual(PetAge.label(birthDate: date(2023, 6, 1, 10, 0), now: now, calendar: calendar), "3 anos")
+        XCTAssertEqual(PetAge.label(birthDate: date(2025, 9, 1, 10, 0), now: now, calendar: calendar), "1 ano")
+        XCTAssertEqual(PetAge.label(birthDate: date(2026, 1, 20, 10, 0), now: now, calendar: calendar), "8 meses")
+        XCTAssertEqual(PetAge.label(birthDate: date(2026, 8, 20, 10, 0), now: now, calendar: calendar), "1 mês")
+        XCTAssertEqual(PetAge.label(birthDate: date(2026, 9, 20, 10, 0), now: now, calendar: calendar), "Menos de 1 mês")
+        XCTAssertNil(PetAge.label(birthDate: date(2026, 12, 1, 10, 0), now: now, calendar: calendar))
+    }
+
     override func tearDown() {
         calendar = nil
         now = nil

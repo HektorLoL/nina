@@ -66,6 +66,11 @@ struct MemberDetailView: View {
                                 NinaDivider(inset: 0)
                                 row("Bicho", [member.petSpecies, member.petBreed].filter { !$0.isEmpty }.joined(separator: " · "))
                             }
+                            if member.role == .pet, let birthDate = member.birthDate,
+                               let age = PetAge.label(birthDate: birthDate) {
+                                NinaDivider(inset: 0)
+                                row("Idade", age)
+                            }
                         }
                     }
 
@@ -158,5 +163,18 @@ struct MemberDetailView: View {
             Spacer(minLength: 0)
         }
         .frame(minHeight: 46)
+    }
+}
+
+// Only a pet has a birth date in Nina; a person's age is a server-held band and never a date.
+enum PetAge {
+    static func label(birthDate: Date, now: Date = .now, calendar: Calendar = .current) -> String? {
+        guard birthDate <= now else { return nil }
+        let parts = calendar.dateComponents([.year, .month], from: birthDate, to: now)
+        let years = parts.year ?? 0
+        let months = parts.month ?? 0
+        if years >= 1 { return years == 1 ? "1 ano" : "\(years) anos" }
+        if months >= 1 { return months == 1 ? "1 mês" : "\(months) meses" }
+        return "Menos de 1 mês"
     }
 }
