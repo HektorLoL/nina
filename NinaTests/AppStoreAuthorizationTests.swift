@@ -1352,6 +1352,46 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testTwoClashesFromOneActionAreShownOneAfterTheOtherAndNeitherIsLost() async {
+        let user = makeUser()
+        func task(_ title: String, version: Int, id: UUID = UUID()) -> TaskItem {
+            TaskItem(
+                id: id,
+                title: title,
+                subtitle: "",
+                owner: "Home",
+                dueLabel: "Today",
+                category: .home,
+                isDone: false,
+                createdBy: "Manual",
+                version: version
+            )
+        }
+        let first = task("Lavar a louça", version: 1)
+        let second = task("Regar as plantas", version: 1)
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(tasks: [first, second]),
+            conflictingTasks: [
+                first.id: task("Lavar a louça hoje", version: 2, id: first.id),
+                second.id: task("Regar só a samambaia", version: 2, id: second.id),
+            ]
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        store.reassignTasks([first.id, second.id], to: nil)
+        await store.waitForPendingRemoteMutations()
+
+        let shownFirst = store.taskEditConflict?.id
+        store.acceptRemoteTaskConflict()
+        let shownSecond = store.taskEditConflict?.id
+        store.acceptRemoteTaskConflict()
+
+        XCTAssertEqual(Set([shownFirst, shownSecond].compactMap { $0 }), [first.id, second.id])
+        XCTAssertNil(store.taskEditConflict)
+    }
+
+    @MainActor
     func testStaleEditorVersionShowsConflictWithoutWriting() async {
         let user = makeUser()
         let taskID = UUID()
@@ -4652,6 +4692,7 @@ private actor DelayedNotificationScheduler: HomeNotificationScheduling {
 private actor RecordingHomeBackend: RemoteHomeBackend {
     private var state: RemoteHomeState
     private let conflictingTask: TaskItem?
+    private let conflictingTasks: [UUID: TaskItem]
     private var mutations: [RecordedHomeMutation] = []
     private var taskUpdates: [RecordedTaskUpdate] = []
     private var realtimeContinuation: AsyncStream<HomeRealtimeEvent>.Continuation?
@@ -4682,9 +4723,14 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         return state.viewerAge
     }
 
-    init(state: RemoteHomeState, conflictingTask: TaskItem? = nil) {
+    init(
+        state: RemoteHomeState,
+        conflictingTask: TaskItem? = nil,
+        conflictingTasks: [UUID: TaskItem] = [:]
+    ) {
         self.state = state
         self.conflictingTask = conflictingTask
+        self.conflictingTasks = conflictingTasks
     }
 
     func recordedMutations() -> [RecordedHomeMutation] {
@@ -4795,6 +4841,9 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         taskUpdates.append(
             RecordedTaskUpdate(id: task.id, isDone: task.isDone, expectedVersion: expectedVersion)
         )
+        if let conflict = conflictingTasks[task.id] {
+            return .conflict(current: conflict)
+        }
         if let conflictingTask {
             return .conflict(current: conflictingTask)
         }

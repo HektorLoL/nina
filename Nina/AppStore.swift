@@ -266,6 +266,9 @@ final class AppStore {
     var isNinaResponding = false
     var ninaConnectionNotice: String?
     var taskEditConflict: TaskEditConflict?
+    // One action can meet several clashes; each waits its turn and none is replaced unseen.
+    @ObservationIgnored private var queuedTaskEditConflicts: [TaskEditConflict] = []
+    @ObservationIgnored private var lastFailureHapticAt = Date.distantPast
     // Only the hold or a change of account closes a child's list; losing the home for a moment never does.
     var childDayPresentation: ChildDayPresentation?
     var aiMemoryConsent: AIMemoryConsentRecord?
@@ -630,6 +633,7 @@ final class AppStore {
         let contextToken = currentHomeContextToken
         loadAIMemoryConsent(for: user?.id)
         taskEditConflict = nil
+        queuedTaskEditConflicts = []
         syncErrorMessage = nil
         inviteStatus = nil
         pendingJoinRequest = nil
@@ -2448,6 +2452,7 @@ final class AppStore {
         isNinaResponding = false
         ninaConnectionNotice = nil
         taskEditConflict = nil
+        queuedTaskEditConflicts = []
         isSyncingHome = false
         syncErrorMessage = nil
         aiMemoryConsent = nil
@@ -2618,10 +2623,7 @@ final class AppStore {
         }
 
         if let expectedVersion, expectedVersion != currentTask.version {
-            taskEditConflict = TaskEditConflict(
-                localTask: proposedTask,
-                remoteTask: currentTask
-            )
+            presentTaskEditConflict(TaskEditConflict(localTask: proposedTask, remoteTask: currentTask))
             return
         }
 
@@ -2905,12 +2907,25 @@ final class AppStore {
 
     func keepLocalTaskConflict() {
         guard let conflict = taskEditConflict else { return }
-        taskEditConflict = nil
+        showNextTaskEditConflict()
         submitTaskUpdate(conflict.localTask, basedOn: conflict.remoteTask)
     }
 
     func acceptRemoteTaskConflict() {
-        taskEditConflict = nil
+        showNextTaskEditConflict()
+    }
+
+    private func presentTaskEditConflict(_ conflict: TaskEditConflict) {
+        if taskEditConflict == nil || taskEditConflict?.id == conflict.id {
+            taskEditConflict = conflict
+        } else {
+            queuedTaskEditConflicts.removeAll { $0.id == conflict.id }
+            queuedTaskEditConflicts.append(conflict)
+        }
+    }
+
+    private func showNextTaskEditConflict() {
+        taskEditConflict = queuedTaskEditConflicts.isEmpty ? nil : queuedTaskEditConflicts.removeFirst()
     }
 
     func addShoppingItem(title: String, amount: String, owner: String, ownerMemberID: UUID? = nil) {
@@ -3078,7 +3093,9 @@ final class AppStore {
                       self.isCurrentHomeContext(contextToken),
                       self.activeHomeUserID == userID else { return }
                 self.syncErrorMessage = errorMessage
-                if signalsFailure {
+                // A run of writes that fail together buzzes once, not once per write.
+                if signalsFailure, Date().timeIntervalSince(self.lastFailureHapticAt) > 1 {
+                    self.lastFailureHapticAt = Date()
                     Haptics.error()
                 }
             }
@@ -3146,9 +3163,8 @@ final class AppStore {
             guard tasks[index].version <= optimisticTask.version else { return }
             tasks[index] = remoteTask
             if audience == .adult {
-                taskEditConflict = TaskEditConflict(
-                    localTask: optimisticTask,
-                    remoteTask: remoteTask
+                presentTaskEditConflict(
+                    TaskEditConflict(localTask: optimisticTask, remoteTask: remoteTask)
                 )
             }
         }

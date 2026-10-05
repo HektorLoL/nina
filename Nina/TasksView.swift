@@ -84,14 +84,17 @@ struct TasksView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 4)
-                    .padding(.bottom, isSelecting ? 176 : 104)
+                    .padding(.bottom, isSelecting ? 16 : 104)
                     .frame(minHeight: showsZeroState ? proxy.size.height : nil, alignment: .top)
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if isSelecting {
+                        selectionBar
+                    }
                 }
             }
 
-            if isSelecting {
-                selectionBar
-            } else if filter != .shopping {
+            if !isSelecting, filter != .shopping {
                 fab
             }
         }
@@ -101,7 +104,8 @@ struct TasksView: View {
             endSelection()
             filter = .unowned
         }
-        .onChange(of: store.tasks.map(\.id)) { _, ids in
+        // Only a task still drawn can stay chosen, so an action never reaches one that left the list.
+        .onChange(of: selectableTasks.map(\.id)) { _, ids in
             selection.formIntersection(ids)
         }
         .alert(bulkDeleteTitle, isPresented: $isConfirmingBulkDelete) {
@@ -216,15 +220,24 @@ struct TasksView: View {
         }
     }
 
-    private var handOverChoices: [HouseholdMember] {
-        store.familyGroup.members.filter { $0.role == .adult }
+    private var handOverChoices: [TaskOwnerChoice] {
+        let adultIDs = Set(store.familyGroup.members.filter { $0.role == .adult }.map(\.id))
+        return TaskOwnerChoice.options(
+            members: store.familyGroup.members,
+            selectedName: HouseholdWorkload.sharedOwnerLabel,
+            selectedMemberID: nil
+        )
+        .filter { $0.memberID.map(adultIDs.contains) ?? false }
     }
 
     private var selectionBar: some View {
-        HStack(spacing: 10) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 10))
+        return layout {
             NinaButton(
                 title: "Feitas",
-                systemName: "checkmark",
+                systemName: dynamicTypeSize.isAccessibilitySize ? nil : "checkmark",
                 fillsWidth: true,
                 isEnabled: !selection.isEmpty
             ) {
@@ -234,10 +247,13 @@ struct TasksView: View {
             }
 
             Menu {
-                ForEach(handOverChoices) { member in
-                    Button(member.id == store.currentFamilyMember?.id ? "Comigo" : member.name.firstWord) {
+                ForEach(handOverChoices) { choice in
+                    Button(choice.memberID == store.currentFamilyMember?.id ? "Comigo" : choice.label) {
                         Haptics.success()
-                        store.reassignTasks(selection, to: member)
+                        store.reassignTasks(
+                            selection,
+                            to: store.familyGroup.members.first { $0.id == choice.memberID }
+                        )
                         endSelection()
                     }
                 }
@@ -247,7 +263,12 @@ struct TasksView: View {
                     endSelection()
                 }
             } label: {
-                NinaButtonFace(title: "Passar", kind: .outline, systemName: "person.2", fillsWidth: true)
+                NinaButtonFace(
+                    title: "Passar",
+                    kind: .outline,
+                    systemName: dynamicTypeSize.isAccessibilitySize ? nil : "person.2",
+                    fillsWidth: true
+                )
             }
             .buttonStyle(.plain)
             .disabled(selection.isEmpty)
@@ -260,7 +281,8 @@ struct TasksView: View {
                 Image(systemName: "trash")
                     .font(.system(size: 18, weight: .regular))
                     .foregroundStyle(NinaTheme.ink)
-                    .frame(width: 48, height: 48)
+                    .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
+                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 48, height: 48)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Apagar")
@@ -269,15 +291,17 @@ struct TasksView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
-        .padding(.bottom, 12)
+        .padding(.bottom, 12 + Self.tabBarClearance)
         .background(alignment: .top) {
             NinaTheme.ground
                 .overlay(alignment: .top) {
                     Rectangle().fill(NinaTheme.line).frame(height: 1)
                 }
         }
-        .padding(.bottom, 84)
     }
+
+    // The tab bar is drawn over the bottom of every tab, so the bar starts above it.
+    private static let tabBarClearance: CGFloat = 56
 
     private var screenTitle: String {
         switch filter {
