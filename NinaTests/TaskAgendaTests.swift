@@ -233,6 +233,27 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertNil(store.undoableCompletionID)
     }
 
+    func testSearchFindsATaskTypedWithoutAccentsOrCapitals() {
+        var medicine = task(dueAt: nil)
+        medicine.title = "Remédio do Pedro"
+        var bill = task(dueAt: nil)
+        bill.title = "Pagar a conta de luz"
+        bill.subtitle = "Vence na sexta"
+
+        XCTAssertEqual(HouseSearch.tasks([medicine, bill], query: "remedio").map(\.id), [medicine.id])
+        XCTAssertEqual(HouseSearch.tasks([medicine, bill], query: "  SEXTA ").map(\.id), [bill.id])
+        XCTAssertTrue(HouseSearch.tasks([medicine, bill], query: "   ").isEmpty)
+    }
+
+    func testSearchAlsoFindsWhatIsOnTheShoppingList() {
+        let soap = ShoppingItem(title: "Sabão em pó", amount: "2 caixas", owner: "Casa", isChecked: false)
+        let bread = ShoppingItem(title: "Pão", amount: "", owner: "Casa", isChecked: true)
+
+        XCTAssertEqual(HouseSearch.shoppingItems([soap, bread], query: "sabao").map(\.id), [soap.id])
+        XCTAssertEqual(HouseSearch.shoppingItems([soap, bread], query: "pao").map(\.id), [bread.id])
+        XCTAssertEqual(HouseSearch.shoppingItems([soap, bread], query: "caixas").map(\.id), [soap.id])
+    }
+
     func testFinishingARepeatingTaskForTodayOffersAnUndoThatPutsTheOccurrenceBack() throws {
         try withIsolatedStore { store in
             var daily = task(dueAt: now.addingTimeInterval(2 * 60 * 60))

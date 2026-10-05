@@ -463,7 +463,7 @@ struct TasksView: View {
 
             if searchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
                 Spacer()
-            } else if searchResults.isEmpty {
+            } else if searchResults.isEmpty && shoppingResults.isEmpty {
                 // No create button: someone who searched does not want to invent
                 // the thing, they want to find it.
                 VStack(alignment: .leading, spacing: 10) {
@@ -487,10 +487,20 @@ struct TasksView: View {
                 Spacer()
             } else {
                 ScrollView {
-                    VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(searchResults) { task in
                             TaskRowView(task: task)
                             NinaDivider(inset: 36)
+                        }
+
+                        if !shoppingResults.isEmpty {
+                            Eyebrow(text: "Compras · \(shoppingResults.count)")
+                                .padding(.top, searchResults.isEmpty ? 0 : 22)
+                                .padding(.bottom, 4)
+                            ForEach(shoppingResults) { item in
+                                shoppingRow(item)
+                                NinaDivider(inset: 36)
+                            }
                         }
                     }
                     .padding(.horizontal, 20)
@@ -503,12 +513,11 @@ struct TasksView: View {
     }
 
     private var searchResults: [TaskItem] {
-        let query = searchQuery.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return [] }
-        return store.tasks.filter { task in
-            task.title.localizedCaseInsensitiveContains(query)
-                || task.subtitle.localizedCaseInsensitiveContains(query)
-        }
+        HouseSearch.tasks(store.tasks, query: searchQuery)
+    }
+
+    private var shoppingResults: [ShoppingItem] {
+        HouseSearch.shoppingItems(store.shoppingItems, query: searchQuery)
     }
 
     private var fab: some View {

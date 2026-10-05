@@ -67,6 +67,7 @@
 		B00000000000000000000046 /* MinorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000045 /* MinorViews.swift */; };
 		B00000000000000000000047 /* GuardianViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000046 /* GuardianViews.swift */; };
 		B00000000000000000000048 /* NinaRating.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000047 /* NinaRating.swift */; };
+		B00000000000000000000103 /* HouseSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000103 /* HouseSearch.swift */; };
 		B00000000000000000000102 /* KidsMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000102 /* KidsMode.swift */; };
 		B00000000000000000000101 /* AnnouncementsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000101 /* AnnouncementsView.swift */; };
 		B00000000000000000000100 /* SupportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000100 /* SupportView.swift */; };
@@ -154,6 +155,7 @@
 		F00000000000000000000045 /* MinorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinorViews.swift; sourceTree = "<group>"; };
 		F00000000000000000000046 /* GuardianViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuardianViews.swift; sourceTree = "<group>"; };
 		F00000000000000000000047 /* NinaRating.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NinaRating.swift; sourceTree = "<group>"; };
+		F00000000000000000000103 /* HouseSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseSearch.swift; sourceTree = "<group>"; };
 		F00000000000000000000102 /* KidsMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KidsMode.swift; sourceTree = "<group>"; };
 		F00000000000000000000101 /* AnnouncementsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnouncementsView.swift; sourceTree = "<group>"; };
 		F00000000000000000000100 /* SupportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportView.swift; sourceTree = "<group>"; };
@@ -240,6 +242,7 @@
 				F00000000000000000000045 /* MinorViews.swift */,
 				F00000000000000000000046 /* GuardianViews.swift */,
 				F00000000000000000000047 /* NinaRating.swift */,
+				F00000000000000000000103 /* HouseSearch.swift */,
 				F00000000000000000000102 /* KidsMode.swift */,
 				F00000000000000000000101 /* AnnouncementsView.swift */,
 				F00000000000000000000100 /* SupportView.swift */,
@@ -446,6 +449,7 @@
 				B00000000000000000000046 /* MinorViews.swift in Sources */,
 				B00000000000000000000047 /* GuardianViews.swift in Sources */,
 				B00000000000000000000048 /* NinaRating.swift in Sources */,
+				B00000000000000000000103 /* HouseSearch.swift in Sources */,
 				B00000000000000000000102 /* KidsMode.swift in Sources */,
 				B00000000000000000000101 /* AnnouncementsView.swift in Sources */,
 				B00000000000000000000100 /* SupportView.swift in Sources */,
