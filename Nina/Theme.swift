@@ -28,6 +28,20 @@ enum NinaTheme {
 
     static let shadow = Color(hex: 0x131A24).opacity(0.06)
 
+    // Kids mode is the one surface that spends colour on category: a young child reads a colour before a word.
+    enum Kids {
+        static let sun = Color(hex: 0xFFC93C)
+        static let sunWash = Color(hex: 0xFFF4D6)
+        static let coral = Color(hex: 0xE5484D)
+        static let leaf = Color(hex: 0x1F9D55)
+        static let sky = Color(hex: 0x0B84D8)
+        static let grape = Color(hex: 0x7C5CE0)
+        static let tangerine = Color(hex: 0xE8590C)
+        static let bubble = Color(hex: 0xD6336C)
+
+        static let confetti: [Color] = [sun, coral, leaf, sky, grape, tangerine, bubble]
+    }
+
     // The one regulated exception to the palette: the Ministry of Justice fixes these colours, not the glaze.
     static func classInd(_ code: String) -> Color {
         switch code {
@@ -62,6 +76,7 @@ extension Color {
 // number. Anything monolinear is interface and stays on the system face.
 enum NinaText {
     case compose
+    case kids
     case display
     case screen
     case zero
@@ -84,6 +99,7 @@ enum NinaText {
     fileprivate var size: CGFloat {
         switch self {
         case .compose: 27
+        case .kids: 21
         case .display: 34
         case .screen: 31
         case .zero: 29
@@ -101,6 +117,7 @@ enum NinaText {
     fileprivate var leading: CGFloat {
         switch self {
         case .compose: 34
+        case .kids: 27
         case .display: 40
         case .screen: 37
         case .zero: 36
@@ -119,6 +136,7 @@ enum NinaText {
         switch self {
         case .display, .screen, .zero: -0.5
         case .compose: -0.4
+        case .kids: -0.2
         case .title, .section: -0.2
         case .eyebrow: 1.1
         default: -0.1
@@ -132,6 +150,7 @@ enum NinaText {
         switch self {
         case .display: .largeTitle
         case .compose: .title
+        case .kids: .title2
         case .screen, .zero: .title
         case .title: .title2
         case .section: .title3
@@ -146,6 +165,7 @@ enum NinaText {
         switch self {
         case .display: .largeTitle
         case .compose: .title1
+        case .kids: .title2
         case .screen, .zero: .title1
         case .title: .title2
         case .section: .title3

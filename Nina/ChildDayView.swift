@@ -193,7 +193,11 @@ struct ChildDayView: View {
                             } else {
                                 VStack(spacing: 12) {
                                     ForEach(rows) { row in
-                                        ChildDayCard(row: row) { tap(row) }
+                                        if child?.role == .child {
+                                            KidsTaskCard(row: row) { tap(row) }
+                                        } else {
+                                            ChildDayCard(row: row) { tap(row) }
+                                        }
                                     }
                                 }
 

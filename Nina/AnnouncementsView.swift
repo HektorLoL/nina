@@ -47,9 +47,9 @@ struct NinaAnnouncementBoard: Hashable {
             ),
             NinaAnnouncement(
                 title: "Modo criança",
-                detail: "Uma tela mais simples e colorida para os pequenos.",
+                detail: "Tarefas grandes e coloridas para quem tem menos de 12.",
                 systemName: "figure.and.child.holdinghands",
-                stage: .comingSoon
+                stage: .live
             ),
             NinaAnnouncement(
                 title: "Foto vira tarefa",

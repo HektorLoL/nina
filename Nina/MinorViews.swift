@@ -197,10 +197,16 @@ struct MinorHomeView: View {
 
     let home: MinorHome
 
+    @AppStorage(KidsMode.overrideKey) private var kidsModeOverride = ""
+
     @State private var session: ChildDaySession?
     @State private var isShowingSettings = false
     @State private var upcomingMarks: [TaskItem.ID: ChildDayMark] = [:]
     @State private var upcomingChangedAt: [TaskItem.ID: Date] = [:]
+
+    private var isKidsMode: Bool {
+        KidsMode.isOn(band: store.viewerAge.band, override: kidsModeOverride)
+    }
 
     private var owner: HouseholdMember {
         home.ownerMember
@@ -220,70 +226,94 @@ struct MinorHomeView: View {
             MinorHeader(isShowingSettings: $isShowingSettings)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Suas tarefas").ninaText(.screen)
-                        if !home.viewer.guardianNames.isEmpty {
-                            Text("Responsável: \(home.viewer.guardianList)")
-                                .ninaText(.label, NinaTheme.muted)
-                        }
-                        if let error = store.syncErrorMessage {
-                            Text(error)
-                                .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .padding(.top, 4)
-                        }
-                    }
-
-                    if todayRows.isEmpty && upcoming.isEmpty {
-                        ZeroState(
-                            headline: "Nada para hoje.",
-                            body_: "Quando combinarem uma tarefa, ela aparece aqui."
-                        )
-                        .padding(.top, 24)
-                    } else {
-                        section("Hoje") {
-                            if todayRows.isEmpty {
-                                Text("Nada para hoje.")
+                if isKidsMode {
+                    KidsHomeContent(
+                        firstName: home.viewer.firstName,
+                        syncError: store.syncErrorMessage,
+                        todayRows: todayRows,
+                        upcoming: upcoming.map { task in
+                            KidsUpcomingItem(
+                                id: task.id,
+                                title: ChildDay.title(of: task),
+                                time: task.displayDate(relativeTo: now).map { AppStore.taskDueLabel(for: $0, relativeTo: now) },
+                                symbolName: task.category.symbolName,
+                                isDone: task.isDone,
+                                canToggle: task.recurrence == .none
+                                    && (!task.isDone || upcomingMarks[task.id] != nil)
+                            )
+                        },
+                        onTapToday: tap,
+                        onTapUpcoming: tapUpcoming
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 40)
+                } else {
+                    VStack(alignment: .leading, spacing: 22) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Suas tarefas").ninaText(.screen)
+                            if !home.viewer.guardianNames.isEmpty {
+                                Text("Responsável: \(home.viewer.guardianList)")
                                     .ninaText(.label, NinaTheme.muted)
-                                    .frame(minHeight: 44, alignment: .leading)
-                            } else {
-                                ForEach(todayRows) { row in
-                                    MinorTaskRow(
-                                        title: row.title,
-                                        time: row.time,
-                                        symbolName: row.symbolName,
-                                        isDone: row.isDone
-                                    ) {
-                                        tap(row.id)
-                                    }
-                                    NinaDivider(inset: 52)
-                                }
+                            }
+                            if let error = store.syncErrorMessage {
+                                Text(error)
+                                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.top, 4)
                             }
                         }
 
-                        if !upcoming.isEmpty {
-                            section("Próximos dias") {
-                                ForEach(upcoming) { task in
-                                    MinorTaskRow(
-                                        title: ChildDay.title(of: task),
-                                        time: task.displayDate(relativeTo: now).map { AppStore.taskDueLabel(for: $0, relativeTo: now) },
-                                        symbolName: task.category.symbolName,
-                                        isDone: task.isDone,
-                                        canToggle: task.recurrence == .none
-                                            && (!task.isDone || upcomingMarks[task.id] != nil)
-                                    ) {
-                                        tapUpcoming(task.id)
+                        if todayRows.isEmpty && upcoming.isEmpty {
+                            ZeroState(
+                                headline: "Nada para hoje.",
+                                body_: "Quando combinarem uma tarefa, ela aparece aqui."
+                            )
+                            .padding(.top, 24)
+                        } else {
+                            section("Hoje") {
+                                if todayRows.isEmpty {
+                                    Text("Nada para hoje.")
+                                        .ninaText(.label, NinaTheme.muted)
+                                        .frame(minHeight: 44, alignment: .leading)
+                                } else {
+                                    ForEach(todayRows) { row in
+                                        MinorTaskRow(
+                                            title: row.title,
+                                            time: row.time,
+                                            symbolName: row.symbolName,
+                                            isDone: row.isDone
+                                        ) {
+                                            tap(row.id)
+                                        }
+                                        NinaDivider(inset: 52)
                                     }
-                                    NinaDivider(inset: 52)
+                                }
+                            }
+
+                            if !upcoming.isEmpty {
+                                section("Próximos dias") {
+                                    ForEach(upcoming) { task in
+                                        MinorTaskRow(
+                                            title: ChildDay.title(of: task),
+                                            time: task.displayDate(relativeTo: now).map { AppStore.taskDueLabel(for: $0, relativeTo: now) },
+                                            symbolName: task.category.symbolName,
+                                            isDone: task.isDone,
+                                            canToggle: task.recurrence == .none
+                                                && (!task.isDone || upcomingMarks[task.id] != nil)
+                                        ) {
+                                            tapUpcoming(task.id)
+                                        }
+                                        NinaDivider(inset: 52)
+                                    }
                                 }
                             }
                         }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 40)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 40)
             }
             .refreshable {
                 await store.refreshMinorHome()
@@ -697,10 +727,22 @@ struct MinorSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
+    @AppStorage(KidsMode.overrideKey) private var kidsModeOverride = ""
+
     @State private var isConfirmingSignOut = false
 
     private var home: MinorHome? {
         store.minorHome
+    }
+
+    private var kidsModeBinding: Binding<Bool> {
+        Binding(
+            get: { KidsMode.isOn(band: store.viewerAge.band, override: kidsModeOverride) },
+            set: { isOn in
+                Haptics.selection()
+                kidsModeOverride = (isOn ? KidsMode.Override.on : .off).rawValue
+            }
+        )
     }
 
     private var guardian: String? {
@@ -725,6 +767,14 @@ struct MinorSettingsView: View {
                             NinaDivider()
                         }
                         if home != nil {
+                            NinaRow(title: "Modo criança") {
+                                CategoryGlyph(systemName: "star", size: 18, tint: NinaTheme.ink)
+                            } trailing: {
+                                Toggle("Modo criança", isOn: kidsModeBinding)
+                                    .labelsHidden()
+                                    .tint(NinaTheme.Kids.leaf)
+                            }
+                            NinaDivider()
                             valueRow("Tempo hoje", usageValue, systemName: "clock")
                             NinaDivider()
                             valueRow(

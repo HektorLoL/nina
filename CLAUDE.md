@@ -273,6 +273,13 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   proof stays open for a profile that no longer exists. Withdrawing a minor's
   health consent deletes that minor's health reminders (their titles alone
   reveal health), behind a confirm alert.
+- **Kids mode is presentation only.** `KidsMode.isOn` turns on for the
+  `under_12` band or an explicit "Modo criança" switch in a minor's Ajustes
+  (stored as a UI preference, `nina.kidsMode.override`). It reads the same
+  `get_minor_home_view` rows and writes through the same
+  `set_minor_task_done`; it adds no field, no request and no capability, and
+  its strings follow the minor voice (no "eu", no emoji). It is the one
+  surface where category gets a colour (`NinaTheme.Kids`).
 - **Guardians supervise; nothing pushes toward weaker settings.** Quiet hours
   are forced on for a minor's device (21:00–07:00 by default), there are no
   follow-up nudges, the notification body is the neutral "{título} · {hora}",
