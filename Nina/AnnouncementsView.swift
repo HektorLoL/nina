@@ -31,24 +31,24 @@ struct NinaAnnouncementBoard: Hashable {
     }
 
     static let current = NinaAnnouncementBoard(
-        id: "2026-10",
+        id: "2026-10-05",
         items: [
             NinaAnnouncement(
-                title: "Dia da criança em imagem",
-                detail: "Compartilhe a lista de hoje como imagem ou PDF.",
-                systemName: "photo.on.rectangle",
+                title: "Feito pelo aviso",
+                detail: "Segure o lembrete para marcar como feita ou adiar.",
+                systemName: "bell.badge",
                 stage: .live
             ),
             NinaAnnouncement(
-                title: "Dúvidas e suporte",
-                detail: "Respostas rápidas e o email do suporte, em Ajustes.",
-                systemName: "questionmark.circle",
+                title: "Busca sem acento",
+                detail: "Ache tarefas, compras e memórias do jeito que digitar.",
+                systemName: "magnifyingglass",
                 stage: .live
             ),
             NinaAnnouncement(
-                title: "Modo criança",
-                detail: "Tarefas grandes e coloridas para quem tem menos de 12.",
-                systemName: "figure.and.child.holdinghands",
+                title: "Sair da casa",
+                detail: "Quem não é dono pode sair pelos Ajustes.",
+                systemName: "rectangle.portrait.and.arrow.right",
                 stage: .live
             ),
             NinaAnnouncement(
