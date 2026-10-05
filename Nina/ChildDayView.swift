@@ -171,11 +171,17 @@ struct ChildDayView: View {
                                 }
 
                                 if isAllDone {
-                                    ZeroState(
-                                        headline: "Tudo feito por hoje.",
-                                        body_: "Pode devolver o celular.",
-                                        presence: .stored
-                                    )
+                                    Group {
+                                        if child?.role == .child {
+                                            KidsCelebration(line: "Pode devolver o celular.")
+                                        } else {
+                                            ZeroState(
+                                                headline: "Tudo feito por hoje.",
+                                                body_: "Pode devolver o celular.",
+                                                presence: .stored
+                                            )
+                                        }
+                                    }
                                     .padding(.top, 16)
                                     .transition(reduceMotion ? .identity : .opacity)
                                     .id(Self.allDoneID)

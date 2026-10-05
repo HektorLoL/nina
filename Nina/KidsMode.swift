@@ -321,7 +321,9 @@ private struct KidsStars: View {
     }
 }
 
-private struct KidsCelebration: View {
+struct KidsCelebration: View {
+    var line = "Muito bem."
+
     var body: some View {
         VStack(spacing: 12) {
             KidsShapes(isCelebrating: true)
@@ -330,7 +332,7 @@ private struct KidsCelebration: View {
             Text("Tudo feito por hoje.")
                 .ninaText(.zero)
                 .multilineTextAlignment(.center)
-            Text("Muito bem.")
+            Text(line)
                 .ninaText(.label, NinaTheme.muted)
         }
         .frame(maxWidth: .infinity)
