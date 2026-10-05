@@ -2040,7 +2040,9 @@ the project, not bugs to fix unprompted.
   writes to a temp directory, so `evals/latest-report.json` still describes the
   27-case fixture. The weekly insight on `gpt-6-luna` at low effort was 6/6
   schema-valid with no blame, intent or health language, at about US$0.00016
-  per household against US$0.0085 on `gpt-5.5`.
+  per household against US$0.0085 on `gpt-5.5`. A local run on 2026-10-05 with
+  the search and semente fixes (committed, not yet deployed) scored 37 of 38,
+  `passed: true`, every gate at 1.0, 0 leaks and 0 unconfirmed mutations.
 - **Production Auth is Apple only since 2026-09-26.** Heitor turned the Email
   provider and custom SMTP off in the dashboard; `/auth/v1/settings` reports
   `apple:true` and every other door false, and `deployment.sign-in-providers`
