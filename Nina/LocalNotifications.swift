@@ -224,35 +224,39 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         }
         let quietHours = viewer.minorPolicy.map { QuietHoursConfiguration(minorPolicy: $0, calendar: calendar) }
             ?? QuietHoursConfiguration(defaults: defaults, calendar: calendar)
-        var alerts: [ScheduledNotification] = []
+        var nextAlerts: [ScheduledNotification] = []
+        var laterAlerts: [ScheduledNotification] = []
         var nudges: [ScheduledNotification] = []
 
         for task in tasks where !task.isDone && isForViewer(task, viewer: viewer) {
             let moments = reminderMoments(task, after: now, calendar: calendar)
 
-            for moment in moments {
+            for (index, moment) in moments.enumerated() {
                 let isMinor = viewer.minorPolicy != nil
-                alerts.append(
-                    ScheduledNotification(
-                        identifier: taskIdentifier(
-                            task.id,
-                            familyID: familyID,
-                            deliveryDate: moment.alertDate
-                        ),
-                        taskID: task.id,
-                        title: isMinor ? "" : task.title,
-                        body: isMinor
-                            ? minorNotificationBody(task, dueMoment: moment.dueMoment, calendar: calendar)
-                            : taskNotificationBody(task),
-                        deliveryDate: moment.alertDate,
-                        isSilent: quietHours.contains(moment.alertDate),
-                        kind: .alert,
-                        actions: isMinor
-                            ? nil
-                            : ReminderActionSet(task, offersSnooze: moment.alertDate >= moment.dueMoment),
-                        dueMoment: moment.dueMoment
-                    )
+                let alert = ScheduledNotification(
+                    identifier: taskIdentifier(
+                        task.id,
+                        familyID: familyID,
+                        deliveryDate: moment.alertDate
+                    ),
+                    taskID: task.id,
+                    title: isMinor ? "" : task.title,
+                    body: isMinor
+                        ? minorNotificationBody(task, dueMoment: moment.dueMoment, calendar: calendar)
+                        : taskNotificationBody(task),
+                    deliveryDate: moment.alertDate,
+                    isSilent: quietHours.contains(moment.alertDate),
+                    kind: .alert,
+                    actions: isMinor
+                        ? nil
+                        : ReminderActionSet(task, offersSnooze: moment.alertDate >= moment.dueMoment),
+                    dueMoment: moment.dueMoment
                 )
+                if index == 0 {
+                    nextAlerts.append(alert)
+                } else {
+                    laterAlerts.append(alert)
+                }
             }
 
             // A minor's phone never repeats itself: no follow-up nudge, ever.
@@ -282,11 +286,17 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
             )
         }
 
-        // A nudge repeats something the phone already showed, so it may only spend budget that no
-        // first alert claimed.
-        let deliveredAlerts = alerts
+        // Every task's next alert is booked before any task's later repeats, so a house full of
+        // daily chores can never leave a one-off task without its reminder.
+        let guaranteedAlerts = nextAlerts
             .sorted { $0.deliveryDate < $1.deliveryDate }
             .prefix(pendingRequestLimit)
+        let repeatAlerts = laterAlerts
+            .sorted { $0.deliveryDate < $1.deliveryDate }
+            .prefix(pendingRequestLimit - guaranteedAlerts.count)
+        let deliveredAlerts = Array(guaranteedAlerts) + Array(repeatAlerts)
+        // A nudge repeats something the phone already showed, so it may only spend budget that no
+        // alert claimed.
         let deliveredNudges = nudges
             .sorted { $0.deliveryDate < $1.deliveryDate }
             .prefix(pendingRequestLimit - deliveredAlerts.count)

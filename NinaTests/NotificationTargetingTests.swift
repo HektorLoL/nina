@@ -416,6 +416,26 @@ final class NotificationTargetingTests: XCTestCase {
         XCTAssertTrue(plan([task]).isEmpty)
     }
 
+    func testEveryOpenTaskKeepsItsNextReminderWhenDailyRepeatsFillTheBudget() {
+        let dailies = (11...16).map { hour in
+            var chore = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: hour, minute: 0))
+            chore.recurrence = .daily
+            return chore
+        }
+        let dentist = homeTask(dueAt: date(year: 2026, month: 8, day: 19, hour: 18, minute: 0))
+
+        let planned = plan(dailies + [dentist])
+
+        XCTAssertEqual(planned.count, LocalHomeNotificationScheduler.pendingRequestLimit)
+        XCTAssertTrue(
+            planned.contains { $0.taskID == dentist.id },
+            "Six daily chores 12 deep used to fill all 60 requests and leave the dentist with none."
+        )
+        for chore in dailies {
+            XCTAssertTrue(planned.contains { $0.taskID == chore.id })
+        }
+    }
+
     func testAFirstAlertIsNeverEvictedByAnotherTasksFollowUp() {
         var urgent = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: 11, minute: 0))
         urgent.priority = .urgent

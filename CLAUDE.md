@@ -1493,9 +1493,11 @@ them for the next sign-in. A minor's usage ledger and the last age reading
 stay, so signing out and in never resets a daily limit or re-runs the age step,
 and the tutorial flag stays. Account deletion still clears everything.
 
-**Notification scheduling is capped at 60 requests globally**, sorted by soonest
-delivery, with recurring tasks expanded 12 occurrences deep. A busy home silently
-loses the tail. **First alerts and follow-up nudges are budgeted separately**:
+**Notification scheduling is capped at 60 requests globally**, with recurring
+tasks expanded 12 occurrences deep. Since 2026-10-05 every task's next alert is
+booked first and later repeats fill what is left by soonest delivery, so daily
+chores can no longer push a one-off task out; a home with more than 60 open
+dated tasks still loses the latest ones. **First alerts and follow-up nudges are budgeted separately**:
 alerts fill the 60 first, nudges take only the remainder, so a repeat of
 something the phone already showed can never evict the one time another task is
 announced. One nudge per task, not per occurrence, and a task whose first alert
