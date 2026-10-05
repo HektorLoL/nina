@@ -893,7 +893,10 @@ top of a state that already reads still, and Reduce Motion removes all four
 (a row then completes at once).
 
 **Accessibility:** decorative overlays are `.allowsHitTesting(false)` +
-`.accessibilityHidden(true)`. `reduceMotion` must *disable* ambient animation,
+`.accessibilityHidden(true)`. Since 2026-10-05 `CategoryGlyph` is silent unless
+given `label:`, `.screen`/`.display` text, `Eyebrow` and `SheetHeader` carry
+the header trait, `NinaErrorNote`, the undo toast and Nina's reply announce
+themselves, and form fields take their visible title as their name. `reduceMotion` must *disable* ambient animation,
 not shorten it. Icon-only buttons need an explicit label. `HouseView` collapses
 its grid when `dynamicTypeSize.isAccessibilitySize`. Type is clamped at
 `accessibility3` (`NinaApp`, raised from `accessibility1` on 2026-09-09), which
