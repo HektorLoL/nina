@@ -1,0 +1,65 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Brand from "../components/Brand.astro";
+import Glyph from "../components/Glyph.astro";
+import { supportEmail, supportMailto, supportTopics } from "../support";
+
+const updatedAt = "4 de outubro de 2026";
+---
+
+<BaseLayout
+  title="Dúvidas e suporte — Nina"
+  description="Respostas sobre a Nina: tarefas, sementes, avisos, a casa, o Premium, a privacidade e a conta. E o email do suporte."
+  canonical="/suporte/"
+>
+  <header class="site-header legal-header is-scrolled">
+    <div class="header-inner page-shell">
+      <Brand />
+      <nav class="desktop-nav" aria-label="Navegação principal">
+        <a href="/">Início</a>
+        <a href="/familias/">Famílias</a>
+        <a href="/privacidade/">Privacidade</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="conteudo" class="policy-page page-shell">
+    <section class="policy-hero">
+      <p class="eyebrow">Suporte</p>
+      <h1>Dúvidas e suporte</h1>
+      <p>As mesmas respostas que estão no app, em Ajustes.</p>
+      <span>Atualizada em {updatedAt}</span>
+    </section>
+
+    {
+      supportTopics.map((topic) => (
+        <section class="support-topic" aria-label={topic.title}>
+          <h2>{topic.title}</h2>
+          <div class="faq-list">
+            {topic.questions.map((item) => (
+              <details>
+                <summary>
+                  {item.question}
+                  <Glyph name="plus" size={17} />
+                </summary>
+                <p>{item.answer}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+      ))
+    }
+
+    <section class="policy-content support-contact" aria-labelledby="support-contact-title">
+      <h2 id="support-contact-title">Ainda com dúvida?</h2>
+      <p>
+        Escreva para <a href={supportMailto()}>{supportEmail}</a>. Uma pessoa lê e responde por
+        email. Não mande senhas nem dados de documentos.
+      </p>
+      <p>
+        Denúncias sobre crianças e adolescentes têm canal próprio: <a href="/denuncia/">como
+        tratamos denúncias</a>.
+      </p>
+    </section>
+  </main>
+</BaseLayout>

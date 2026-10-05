@@ -1,6 +1,6 @@
 # Nina: rubric for cutting on-screen text
 
-Last updated: 2026-09-29
+Last updated: 2026-10-04
 
 This rubric applies to every screen of the iOS app. A screen passes when it meets every rule in §1 and every rule in its surface section (§2), and when none of the text listed in §3 has been lost. The rules come from Mobbin research on about 90 iOS screens across six surfaces. The strongest references are cited inline.
 
@@ -236,7 +236,8 @@ Evidence: 9 reference settings roots show about 77 rows, and none of them has a 
   - `Nome da casa   ‹name› ›`
   - `Convidar alguém   5 vagas ›` (when full: "Casa cheia", disabled and dimmed)
   - A member instead sees `Seu acesso   Participante`.
-- **Ajuda group:** `Rever o tutorial` · `Falar com o suporte ↗` · `Termos de uso ↗`
+- **Ajuda group:** `Rever o tutorial` · `Dúvidas e suporte ›` · `Termos de uso ↗` · `Denunciar um problema ›`
+  - "Dúvidas e suporte" (2026-10-04) pushes a FAQ grouped under three eyebrows, each answer behind its question (G8: the screen the action opens), and ends with one card: "Ainda com dúvida?", the address, and the cobalt "Escrever para o suporte" (mail with the app and iOS versions, nothing from the house). The website's `/suporte/` shows the same answers (`web/src/support.ts`, held equal by `web/tests/support.test.ts`).
 - `Sair da conta`
 - `Apagar conta` (in ink)
 - Footer: `Nina 1.0 (4)`

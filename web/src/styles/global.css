@@ -2099,6 +2099,25 @@ details p {
   line-height: 1.5;
 }
 
+.support-topic {
+  max-width: 820px;
+  margin-bottom: 32px;
+}
+
+.support-topic h2 {
+  margin-bottom: 12px;
+  font-family: var(--ui);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.support-contact {
+  max-width: 820px;
+}
+
 .policy-content {
   border-radius: var(--radius-sheet);
   padding: clamp(24px, 5vw, 54px);

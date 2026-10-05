@@ -1083,6 +1083,12 @@ CI's `npm audit --audit-level=high`. Every deviation from the Paper boards is in
   `/familias/` is the App Store Age Suitability URL and `/denuncia/` the
   published report procedure (ECA Digital arts. 16 and 29–33); neither page
   may state a capability the server does not enforce.
+- **The FAQ couples web to app.** `/suporte/` (the App Store Support URL)
+  renders `web/src/support.ts`, and `web/tests/support.test.ts` fails unless it
+  equals `SupportContent.topics` in `Nina/SupportView.swift`, the screen behind
+  Ajustes › "Dúvidas e suporte". Change an answer in both, in one commit, and
+  keep every answer true of what the server enforces (the quota, the people
+  limit, the retention line).
 - Two pinned constants couple web to database: `waitlistConsentVersion` and
   `waitlistHealthSchemaVersion` in `web/src/waitlist.ts`. A waitlist migration
   that bumps the RPC's `schema_version` turns `/api/health` red and blocks the

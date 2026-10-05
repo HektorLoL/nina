@@ -48,7 +48,7 @@ struct SheetHeader: View {
     }
 }
 
-private struct BackHeader: View {
+struct BackHeader: View {
     var onBack: () -> Void
 
     var body: some View {
@@ -561,15 +561,10 @@ struct SettingsSheet: View {
 
             NinaDivider()
 
-            Button {
-                Haptics.selection()
-                openURL(NinaLegalLinks.support)
+            NavigationLink {
+                SupportView()
             } label: {
-                SettingsLinkRow(
-                    title: "Falar com o suporte",
-                    systemName: "envelope.open",
-                    destination: .external
-                )
+                SettingsLinkRow(title: "Dúvidas e suporte", systemName: "questionmark.circle")
             }
             .buttonStyle(.plain)
 

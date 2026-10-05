@@ -67,8 +67,10 @@
 		B00000000000000000000046 /* MinorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000045 /* MinorViews.swift */; };
 		B00000000000000000000047 /* GuardianViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000046 /* GuardianViews.swift */; };
 		B00000000000000000000048 /* NinaRating.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000047 /* NinaRating.swift */; };
+		B00000000000000000000100 /* SupportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000000000000000000100 /* SupportView.swift */; };
 		D0000000000000000000000E /* AgeAssuranceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000000000000000000000D /* AgeAssuranceTests.swift */; };
 		D0000000000000000000000F /* GuardianApprovalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000000000000000000000E /* GuardianApprovalTests.swift */; };
+		D00000000000000000000100 /* SupportContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000000000000000000100 /* SupportContentTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -148,8 +150,10 @@
 		F00000000000000000000045 /* MinorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinorViews.swift; sourceTree = "<group>"; };
 		F00000000000000000000046 /* GuardianViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuardianViews.swift; sourceTree = "<group>"; };
 		F00000000000000000000047 /* NinaRating.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NinaRating.swift; sourceTree = "<group>"; };
+		F00000000000000000000100 /* SupportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportView.swift; sourceTree = "<group>"; };
 		E0000000000000000000000D /* AgeAssuranceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeAssuranceTests.swift; sourceTree = "<group>"; };
 		E0000000000000000000000E /* GuardianApprovalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuardianApprovalTests.swift; sourceTree = "<group>"; };
+		E00000000000000000000100 /* SupportContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportContentTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -228,6 +232,7 @@
 				F00000000000000000000045 /* MinorViews.swift */,
 				F00000000000000000000046 /* GuardianViews.swift */,
 				F00000000000000000000047 /* NinaRating.swift */,
+				F00000000000000000000100 /* SupportView.swift */,
 				F00000000000000000000018 /* Nina.xcconfig */,
 				F00000000000000000000019 /* SupabaseSecrets.xcconfig.example */,
 				F00000000000000000000032 /* Nina.storekit */,
@@ -265,6 +270,7 @@
 				E0000000000000000000000C /* MemberRecollectionTests.swift */,
 				E0000000000000000000000D /* AgeAssuranceTests.swift */,
 				E0000000000000000000000E /* GuardianApprovalTests.swift */,
+				E00000000000000000000100 /* SupportContentTests.swift */,
 			);
 			path = NinaTests;
 			sourceTree = "<group>";
@@ -428,6 +434,7 @@
 				B00000000000000000000046 /* MinorViews.swift in Sources */,
 				B00000000000000000000047 /* GuardianViews.swift in Sources */,
 				B00000000000000000000048 /* NinaRating.swift in Sources */,
+				B00000000000000000000100 /* SupportView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -449,6 +456,7 @@
 				D0000000000000000000000D /* MemberRecollectionTests.swift in Sources */,
 				D0000000000000000000000E /* AgeAssuranceTests.swift in Sources */,
 				D0000000000000000000000F /* GuardianApprovalTests.swift in Sources */,
+				D00000000000000000000100 /* SupportContentTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
