@@ -271,6 +271,9 @@ struct HouseView: View {
 
             ForEach(store.insights) { insight in
                 VStack(alignment: .leading, spacing: 6) {
+                    if let weekLabel = insight.weekLabel {
+                        Text(weekLabel).ninaText(.meta, NinaTheme.muted)
+                    }
                     Text(insight.title).ninaText(.section)
                     Text(insight.message)
                         .ninaText(.label, NinaTheme.muted)

@@ -1696,6 +1696,27 @@ struct HouseholdInsight: Identifiable, Codable, Hashable {
     var metric: String
     var symbolName: String
     var tone: MemberTone
+    var periodStart: Date? = nil
+
+    // The week is the São Paulo date the server computed, so it never drifts with the phone's zone.
+    static func periodStart(fromServerDate value: String?) -> Date? {
+        guard let value else { return nil }
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "America/Sao_Paulo")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: String(value.prefix(10)))
+    }
+
+    var weekLabel: String? {
+        guard let periodStart else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.timeZone = TimeZone(identifier: "America/Sao_Paulo")
+        formatter.dateFormat = "d 'de' MMMM"
+        return "Semana de \(formatter.string(from: periodStart))"
+    }
 }
 
 struct HouseholdPremium: Decodable, Hashable {

@@ -1528,9 +1528,10 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         try await perform(operation: "household_insights.select") {
             try await client
                 .from("household_insights")
-                .select("id,title,message,metric,symbol_name,tone")
+                .select("id,title,message,metric,symbol_name,tone,period_start")
                 .eq("family_id", value: familyID)
                 .order("created_at", ascending: false)
+                .limit(8)
                 .execute()
                 .value
         }
@@ -2660,6 +2661,7 @@ private struct HouseholdInsightRow: Decodable {
     var metric: String
     var symbolName: String
     var tone: String
+    var periodStart: String?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -2668,6 +2670,7 @@ private struct HouseholdInsightRow: Decodable {
         case metric
         case symbolName = "symbol_name"
         case tone
+        case periodStart = "period_start"
     }
 
     var domainInsight: HouseholdInsight {
@@ -2677,7 +2680,8 @@ private struct HouseholdInsightRow: Decodable {
             message: message,
             metric: metric,
             symbolName: symbolName,
-            tone: MemberTone(rawValue: tone) ?? .mint
+            tone: MemberTone(rawValue: tone) ?? .mint,
+            periodStart: HouseholdInsight.periodStart(fromServerDate: periodStart)
         )
     }
 }

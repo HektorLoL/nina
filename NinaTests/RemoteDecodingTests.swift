@@ -110,6 +110,32 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertNotNil(home.taskItems.first?.dueAt)
     }
 
+    func testAWeeklyInsightNamesItsWeekFromTheServersSaoPauloDate() throws {
+        let start = try XCTUnwrap(HouseholdInsight.periodStart(fromServerDate: "2026-09-28"))
+        let insight = HouseholdInsight(
+            title: "Semana mais leve",
+            message: "A casa fechou mais do que abriu.",
+            metric: "",
+            symbolName: "calendar",
+            tone: .mint,
+            periodStart: start
+        )
+
+        XCTAssertEqual(insight.weekLabel, "Semana de 28 de setembro")
+        XCTAssertEqual(HouseholdInsight.periodStart(fromServerDate: "2026-09-28T00:00:00+00:00"), start)
+        XCTAssertNil(HouseholdInsight.periodStart(fromServerDate: nil))
+        XCTAssertNil(HouseholdInsight(title: "", message: "", metric: "", symbolName: "", tone: .mint).weekLabel)
+    }
+
+    func testACachedInsightWrittenBeforeTheWeekExistedStillDecodes() throws {
+        let cached = Data(#"{"id":"2F1B0C7E-2A6B-4C55-9E0D-3C1A2B3C4D5E","title":"Resumo","message":"Ok","metric":"","symbolName":"calendar","tone":"mint"}"#.utf8)
+
+        let insight = try JSONDecoder().decode(HouseholdInsight.self, from: cached)
+
+        XCTAssertEqual(insight.title, "Resumo")
+        XCTAssertNil(insight.periodStart)
+    }
+
     func testServerAttachmentMetadataDecodesWithoutAnIdentifierOrCamelCaseKeys() throws {
         let attachments = try JSONDecoder().decode(
             [ChatAttachment].self,
