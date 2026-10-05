@@ -19,6 +19,9 @@ struct NinaApp: App {
         OperationalDiagnostics.shared.start()
         #if canImport(UserNotifications)
         UNUserNotificationCenter.current().delegate = NinaNotificationDelegate.shared
+        UNUserNotificationCenter.current().setNotificationCategories(
+            LocalHomeNotificationScheduler.reminderCategories
+        )
         #endif
 
         let diagnostics = BackendDiagnosticsStore(environment: BackendServices.environment)

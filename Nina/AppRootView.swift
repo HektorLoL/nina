@@ -443,22 +443,36 @@ struct AppRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
             travel(to: .tasks)
         }
-        .onAppear(perform: openTaskFromNotification)
-        .onChange(of: TaskNotificationRoute.shared.pendingTaskID) { _, _ in
-            openTaskFromNotification()
+        .onAppear(perform: followReminder)
+        .onChange(of: TaskNotificationRoute.shared.pending) { _, _ in
+            followReminder()
         }
     }
 
     // A reminder's tap lands on its task in Hoje; a task that is gone by then opens nothing.
-    private func openTaskFromNotification() {
-        guard let taskID = TaskNotificationRoute.shared.pendingTaskID else { return }
-        TaskNotificationRoute.shared.pendingTaskID = nil
-        guard store.tasks.contains(where: { $0.id == taskID }) else { return }
+    // A finished task stays on Hoje under the undo toast; anything else shows the task itself.
+    private func followReminder() {
+        guard let route = TaskNotificationRoute.shared.pending else { return }
+        TaskNotificationRoute.shared.pending = nil
+        guard let task = store.tasks.first(where: { $0.id == route.taskID }) else { return }
         dismissKeyboard()
         selectedTab = .today
         let router = tabRouter.router(for: .today)
         router.presentedSheet = nil
-        router.path = [.task(taskID)]
+        switch route.action {
+        case .complete where route.completes(task):
+            router.path = []
+            store.toggleTask(task)
+            Haptics.success()
+        case .snooze:
+            if let target = route.snoozeTarget(for: task, now: .now) {
+                store.snoozeTask(task.id, until: target)
+                Haptics.success()
+            }
+            router.path = [.task(task.id)]
+        case .open, .complete:
+            router.path = [.task(task.id)]
+        }
     }
 
     @ViewBuilder

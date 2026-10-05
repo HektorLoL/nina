@@ -236,23 +236,104 @@ final class NotificationTargetingTests: XCTestCase {
         }
     }
 
-    func testAReminderCarriesOnlyItsTaskIdentifierSoATapCanOpenTheTask() throws {
-        var task = homeTask(
-            owner: "Ana",
-            dueAt: date(year: 2026, month: 8, day: 8, hour: 18, minute: 0)
-        )
+    func testAReminderCarriesOnlyItsTaskIdentifierAndDueInstantSoATapCanOpenTheTask() throws {
+        let dueAt = date(year: 2026, month: 8, day: 8, hour: 18, minute: 0)
+        var task = homeTask(owner: "Ana", dueAt: dueAt)
         task.subtitle = "Vencimento salvo a partir do boleto"
 
         let planned = try XCTUnwrap(plan([task]).first)
         let request = try XCTUnwrap(LocalHomeNotificationScheduler.request(planned, calendar: calendar))
 
         XCTAssertEqual(planned.taskID, task.id)
-        XCTAssertEqual(request.content.userInfo.count, 1)
+        XCTAssertEqual(request.content.userInfo.count, 2)
         XCTAssertEqual(
             request.content.userInfo[LocalHomeNotificationScheduler.taskIDKey] as? String,
             task.id.uuidString
         )
+        XCTAssertEqual(
+            request.content.userInfo[LocalHomeNotificationScheduler.dueInstantKey] as? Double,
+            dueAt.timeIntervalSince1970
+        )
         XCTAssertFalse(request.content.body.contains("boleto"))
+    }
+
+    func testAnAdultsReminderOffersAdiarOnlyWhenItFiresAtOrAfterTheDueHour() throws {
+        var onTime = homeTask(owner: "Ana", dueAt: date(year: 2026, month: 8, day: 8, hour: 18, minute: 0))
+        onTime.priority = .urgent
+        var early = homeTask(owner: "Ana", dueAt: date(year: 2026, month: 8, day: 9, hour: 9, minute: 0))
+        early.reminderLead = .oneHour
+        var daily = homeTask(owner: "Ana", dueAt: date(year: 2026, month: 8, day: 8, hour: 21, minute: 0))
+        daily.recurrence = .daily
+
+        let planned = plan([onTime, early, daily])
+
+        let onTimeAlert = try XCTUnwrap(planned.first { $0.taskID == onTime.id && $0.kind == .alert })
+        let followUp = try XCTUnwrap(planned.first { $0.taskID == onTime.id && $0.kind == .nudge })
+        let earlyAlert = try XCTUnwrap(planned.first { $0.taskID == early.id })
+        let dailyAlert = try XCTUnwrap(planned.first { $0.taskID == daily.id })
+        XCTAssertEqual(onTimeAlert.actions, .completeOrSnooze)
+        XCTAssertEqual(followUp.actions, .completeOrSnooze)
+        XCTAssertEqual(earlyAlert.actions, .complete)
+        XCTAssertEqual(dailyAlert.actions, .finishTodayOrSnooze)
+        XCTAssertEqual(onTimeAlert.actions?.completionTitle, onTime.completionActionTitle)
+        XCTAssertEqual(dailyAlert.actions?.completionTitle, daily.completionActionTitle)
+
+        let request = try XCTUnwrap(LocalHomeNotificationScheduler.request(earlyAlert, calendar: calendar))
+        XCTAssertEqual(request.content.categoryIdentifier, ReminderActionSet.complete.rawValue)
+    }
+
+    func testEveryReminderButtonOpensTheAppSoNothingChangesOnALockedPhone() {
+        let categories = LocalHomeNotificationScheduler.reminderCategories
+
+        XCTAssertEqual(Set(categories.map(\.identifier)), Set(ReminderActionSet.allCases.map(\.rawValue)))
+        for category in categories {
+            XCTAssertFalse(category.actions.isEmpty)
+            for action in category.actions {
+                XCTAssertTrue(action.options.contains(.foreground), action.identifier)
+                XCTAssertFalse(action.options.contains(.destructive), action.identifier)
+            }
+        }
+        let snoozeTitles = categories.flatMap(\.actions)
+            .filter { $0.identifier == LocalHomeNotificationScheduler.snoozeActionIdentifier }
+            .map(\.title)
+        XCTAssertEqual(Set(snoozeTitles), ["Adiar 1 hora"])
+    }
+
+    func testFinishingFromAReminderNeverSkipsTheNextOccurrenceOfARepeatingTask() {
+        let announced = date(year: 2026, month: 8, day: 8, hour: 21, minute: 0)
+        var daily = homeTask(dueAt: announced)
+        daily.recurrence = .daily
+        let route = ReminderRoute(taskID: daily.id, action: .complete, dueMoment: announced)
+
+        XCTAssertTrue(route.completes(daily))
+
+        var alreadyRolled = daily
+        alreadyRolled.dueAt = date(year: 2026, month: 8, day: 9, hour: 21, minute: 0)
+        XCTAssertFalse(route.completes(alreadyRolled))
+
+        var missedEarlier = daily
+        missedEarlier.dueAt = date(year: 2026, month: 8, day: 6, hour: 21, minute: 0)
+        XCTAssertTrue(route.completes(missedEarlier))
+
+        var oneOff = homeTask(dueAt: announced)
+        XCTAssertTrue(route.completes(oneOff))
+        oneOff.isDone = true
+        XCTAssertFalse(route.completes(oneOff))
+    }
+
+    func testAdiarFromAReminderNeverPullsATaskEarlierThanItsCard() {
+        let route = ReminderRoute(taskID: UUID(), action: .snooze, dueMoment: nil)
+        let dueNow = homeTask(dueAt: now)
+        let dueTomorrow = homeTask(dueAt: date(year: 2026, month: 8, day: 9, hour: 9, minute: 0))
+        var done = homeTask(dueAt: now)
+        done.isDone = true
+
+        XCTAssertEqual(
+            route.snoozeTarget(for: dueNow, now: now, calendar: calendar),
+            now.addingTimeInterval(60 * 60)
+        )
+        XCTAssertNil(route.snoozeTarget(for: dueTomorrow, now: now, calendar: calendar))
+        XCTAssertNil(route.snoozeTarget(for: done, now: now, calendar: calendar))
     }
 
     func testAReminderIsPinnedToTheInstantTheCardShowsSoATripNeverMovesIt() throws {
@@ -372,6 +453,7 @@ final class NotificationTargetingTests: XCTestCase {
         XCTAssertTrue(planned.allSatisfy { $0.kind == .alert })
         XCTAssertEqual(planned.map(\.body), ["Regar as plantas · 15:00", "Guardar a mochila · 22:15"])
         XCTAssertTrue(planned.allSatisfy { $0.title.isEmpty })
+        XCTAssertTrue(planned.allSatisfy { $0.actions == nil }, "A minor's reminder carries no buttons.")
         XCTAssertFalse(planned.contains { $0.body.contains("Ficou com você") || $0.body.contains("dono") })
         XCTAssertEqual(planned.map(\.isSilent), [false, true])
 

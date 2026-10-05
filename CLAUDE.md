@@ -1506,10 +1506,17 @@ and `interruptionLevel = .passive`, delivery time unchanged, because the app mus
 never show one time and deliver another. Since 2026-10-05 every
 `UNCalendarNotificationTrigger` carries the calendar's time zone, so an alert
 fires at the instant the card shows even after a trip, and its only `userInfo`
-is `task_id` (`LocalHomeNotificationScheduler.taskIDKey`): `NinaNotificationDelegate`
-shows a reminder that fires while the app is open and routes a tap through
-`TaskNotificationRoute` to that task in Hoje (a task gone by then opens nothing).
-Still no category or actions. **The body never contains `task.subtitle`** —
+is `task_id` and `due_at` (the occurrence's instant, as seconds):
+`NinaNotificationDelegate` shows a reminder that fires while the app is open and
+routes a tap through `TaskNotificationRoute` to that task in Hoje (a task gone
+by then opens nothing). An adult's reminder carries buttons (`ReminderActionSet`):
+"Marcar como feita" or "Feita por hoje", plus "Adiar 1 hora" only when it fires
+at or after the due hour. **Every button opens the app first** (`.foreground`),
+so nothing is written from a locked phone or in the background, where the home
+context may not be loaded; a completion lands on Hoje under the undo toast.
+`ReminderRoute.completes` never rolls a repeating task past the occurrence the
+reminder announced, and `snoozeTarget` never pulls a task earlier than its card.
+A minor's reminder carries no buttons. **The body never contains `task.subtitle`** —
 it used to, which put a photographed boleto's reading on the lock screen verbatim.
 Nina speaks a sentence and names only who is holding the task;
 `NotificationTargetingTests.testTheTaskDetailNeverReachesTheLockScreen` fails if

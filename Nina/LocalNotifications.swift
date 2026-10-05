@@ -91,7 +91,41 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
 
     static let pendingRequestLimit = 60
     static let taskIDKey = "task_id"
+    static let dueInstantKey = "due_at"
+    static let completeActionIdentifier = "nina.reminder.action.complete"
+    static let snoozeActionIdentifier = "nina.reminder.action.snooze"
     static let missedReminderNudgeDelay: TimeInterval = 60 * 60
+
+    // Every button opens the app first, so the person sees the change and can undo it; a locked
+    // phone never writes to the house.
+    static var reminderCategories: Set<UNNotificationCategory> {
+        Set(ReminderActionSet.allCases.map { set in
+            var actions = [
+                UNNotificationAction(
+                    identifier: completeActionIdentifier,
+                    title: set.completionTitle,
+                    options: [.foreground],
+                    icon: UNNotificationActionIcon(systemImageName: "checkmark")
+                )
+            ]
+            if set.offersSnooze {
+                actions.append(
+                    UNNotificationAction(
+                        identifier: snoozeActionIdentifier,
+                        title: "Adiar 1 hora",
+                        options: [.foreground],
+                        icon: UNNotificationActionIcon(systemImageName: "clock")
+                    )
+                )
+            }
+            return UNNotificationCategory(
+                identifier: set.rawValue,
+                actions: actions,
+                intentIdentifiers: [],
+                options: []
+            )
+        })
+    }
 
     static func settingsSummary(defaults: UserDefaults = .standard) -> String {
         let alertsEnabled = defaults.object(forKey: notificationsEnabledKey) as? Bool ?? true
@@ -199,7 +233,11 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
                             : taskNotificationBody(task),
                         deliveryDate: moment.alertDate,
                         isSilent: quietHours.contains(moment.alertDate),
-                        kind: .alert
+                        kind: .alert,
+                        actions: isMinor
+                            ? nil
+                            : ReminderActionSet(task, offersSnooze: moment.alertDate >= moment.dueMoment),
+                        dueMoment: moment.dueMoment
                     )
                 )
             }
@@ -224,7 +262,9 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
                     body: nudgeNotificationBody(task),
                     deliveryDate: nudgeDate,
                     isSilent: quietHours.contains(nudgeDate),
-                    kind: .nudge
+                    kind: .nudge,
+                    actions: ReminderActionSet(task, offersSnooze: true),
+                    dueMoment: dueMoment
                 )
             )
         }
@@ -299,8 +339,16 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         let content = UNMutableNotificationContent()
         content.title = scheduled.title
         content.body = scheduled.body
-        // Only the task's identifier rides along, so a tap can open it; nothing readable is added.
-        content.userInfo = [taskIDKey: scheduled.taskID.uuidString]
+        // Only the task's identifier and the instant it was due ride along, so a tap can open it
+        // and a button can act on that occurrence; nothing readable is added.
+        var userInfo: [String: Any] = [taskIDKey: scheduled.taskID.uuidString]
+        if let dueMoment = scheduled.dueMoment {
+            userInfo[dueInstantKey] = dueMoment.timeIntervalSince1970
+        }
+        content.userInfo = userInfo
+        if let actions = scheduled.actions {
+            content.categoryIdentifier = actions.rawValue
+        }
         // Quiet hours silences the alert instead of moving it: the app must never show one time
         // and deliver another.
         content.sound = scheduled.isSilent ? nil : .default
@@ -408,6 +456,37 @@ struct ScheduledNotification: Hashable {
     var deliveryDate: Date
     var isSilent: Bool
     var kind: HomeNotificationKind
+    var actions: ReminderActionSet? = nil
+    var dueMoment: Date? = nil
+}
+
+// A snooze is offered only when the reminder fires at or after the due hour: an hour after an
+// early reminder would still be before the task, and Adiar never moves a task earlier.
+enum ReminderActionSet: String, CaseIterable, Hashable {
+    case complete = "nina.reminder.complete"
+    case completeOrSnooze = "nina.reminder.complete-snooze"
+    case finishToday = "nina.reminder.today"
+    case finishTodayOrSnooze = "nina.reminder.today-snooze"
+
+    init(_ task: TaskItem, offersSnooze: Bool) {
+        switch (task.recurrence == .none, offersSnooze) {
+        case (true, false): self = .complete
+        case (true, true): self = .completeOrSnooze
+        case (false, false): self = .finishToday
+        case (false, true): self = .finishTodayOrSnooze
+        }
+    }
+
+    var offersSnooze: Bool {
+        self == .completeOrSnooze || self == .finishTodayOrSnooze
+    }
+
+    var completionTitle: String {
+        switch self {
+        case .complete, .completeOrSnooze: "Marcar como feita"
+        case .finishToday, .finishTodayOrSnooze: "Feita por hoje"
+        }
+    }
 }
 
 private struct ReminderMoment {
@@ -465,11 +544,24 @@ final class NinaNotificationDelegate: NSObject, UNUserNotificationCenterDelegate
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
-              let raw = response.notification.request.content.userInfo[LocalHomeNotificationScheduler.taskIDKey] as? String,
+        let action: ReminderRoute.Action
+        switch response.actionIdentifier {
+        case UNNotificationDefaultActionIdentifier: action = .open
+        case LocalHomeNotificationScheduler.completeActionIdentifier: action = .complete
+        case LocalHomeNotificationScheduler.snoozeActionIdentifier: action = .snooze
+        default: return
+        }
+        let userInfo = response.notification.request.content.userInfo
+        guard let raw = userInfo[LocalHomeNotificationScheduler.taskIDKey] as? String,
               let taskID = UUID(uuidString: raw) else { return }
+        let dueMoment = (userInfo[LocalHomeNotificationScheduler.dueInstantKey] as? Double)
+            .map(Date.init(timeIntervalSince1970:))
         await MainActor.run {
-            TaskNotificationRoute.shared.pendingTaskID = taskID
+            TaskNotificationRoute.shared.pending = ReminderRoute(
+                taskID: taskID,
+                action: action,
+                dueMoment: dueMoment
+            )
         }
     }
 }
@@ -482,5 +574,37 @@ typealias LocalHomeNotificationScheduler = NoopHomeNotificationScheduler
 final class TaskNotificationRoute {
     static let shared = TaskNotificationRoute()
 
-    var pendingTaskID: UUID?
+    var pending: ReminderRoute?
+}
+
+struct ReminderRoute: Equatable {
+    enum Action: Equatable {
+        case open
+        case complete
+        case snooze
+    }
+
+    static let snoozeInterval: TimeInterval = 60 * 60
+
+    var taskID: UUID
+    var action: Action
+    var dueMoment: Date?
+
+    // A repeating task closes only the occurrence this reminder announced: if the house already
+    // moved past it, a second roll would silently skip the next one.
+    func completes(_ task: TaskItem) -> Bool {
+        guard !task.isDone else { return false }
+        guard task.recurrence != .none, let dueMoment, let dueAt = task.dueAt else { return true }
+        return dueAt <= dueMoment.addingTimeInterval(1)
+    }
+
+    // A snooze never pulls a task earlier than the date its card already shows.
+    func snoozeTarget(for task: TaskItem, now: Date, calendar: Calendar = .current) -> Date? {
+        guard !task.isDone else { return nil }
+        let target = now.addingTimeInterval(Self.snoozeInterval)
+        if let shown = task.displayDate(relativeTo: now, calendar: calendar), shown > target {
+            return nil
+        }
+        return target
+    }
 }
