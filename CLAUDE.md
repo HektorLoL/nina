@@ -563,12 +563,13 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
 - **Misconfiguration fails closed, never guesses.** No production fallback
   endpoint or key, anywhere.
 - **A child's list carries a task's title, hour and category glyph, nothing
-  else.** The child's full-screen list, the printed page and the shared text are
-  all built from `ChildDayRow`, which has no field for the task's detail line,
-  so a photographed boleto's reading can never reach a child, a printer or a
-  WhatsApp chat. Locked by
+  else.** The child's full-screen list, the printed page and the shared picture
+  and PDF are all built from `ChildDayRow`, which has no field for the task's
+  detail line, so a photographed boleto's reading can never reach a child, a
+  printer or a WhatsApp chat. Locked by
   `ChildDayTests.testARowCarriesTheTitleTheHourAndTheGlyphAndNothingElse` and
-  `…testNothingFromATasksDetailReachesTheListThePrintoutOrTheSharedText`.
+  `…testNothingFromATasksDetailReachesTheListThePrintoutOrTheSharedPicture`,
+  which reads the picture's words back off a PDF of the same view.
 
 ### Monetization
 

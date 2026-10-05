@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct ChildTodaySection: View {
     @Environment(AppStore.self) private var store
@@ -84,10 +85,21 @@ struct ChildTodaySection: View {
     }
 
     private func shareControl(name: String, dateLine: String, rows: [ChildDayRow]) -> some View {
-        ShareLink(
-            item: ChildDay.shareText(name: name, dateLine: dateLine, rows: rows),
-            subject: Text(ChildDay.heading(name: name, dateLine: dateLine))
-        ) {
+        let heading = ChildDay.heading(name: name, dateLine: dateLine)
+        return Menu {
+            ShareLink(
+                item: ChildDayImageExport(name: name, dateLine: dateLine, rows: rows),
+                preview: SharePreview(heading)
+            ) {
+                Label("Imagem", systemImage: "photo")
+            }
+            ShareLink(
+                item: ChildDayPDFExport(name: name, dateLine: dateLine, rows: rows),
+                preview: SharePreview(heading)
+            ) {
+                Label("PDF", systemImage: "doc.richtext")
+            }
+        } label: {
             NinaButtonFace(
                 title: "Compartilhar",
                 kind: .outline,
@@ -96,6 +108,7 @@ struct ChildTodaySection: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Compartilhar")
     }
 }
 
@@ -505,5 +518,236 @@ private struct ChildDayPrintPage: View {
         Rectangle()
             .fill(NinaTheme.control)
             .frame(height: 0.75)
+    }
+}
+
+@MainActor
+enum ChildDaySharing {
+    static let imageScale: CGFloat = 3
+
+    static func imageData(name: String, dateLine: String, rows: [ChildDayRow]) -> Data? {
+        guard !rows.isEmpty else { return nil }
+        let renderer = ImageRenderer(
+            content: ChildDayShareCard(name: name, dateLine: dateLine, rows: rows)
+        )
+        renderer.scale = imageScale
+        renderer.isOpaque = true
+        return renderer.uiImage?.pngData()
+    }
+
+    static func fileName(name: String, dateLine: String, fileExtension: String) -> String {
+        let heading = ChildDay.heading(name: name, dateLine: dateLine)
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        return "\(heading).\(fileExtension)"
+    }
+
+    // One export at a time stays on disk: each share clears the folder before writing.
+    static func write(_ data: Data, named fileName: String) throws -> URL {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ChildDayShare", isDirectory: true)
+        try? FileManager.default.removeItem(at: folder)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent(fileName)
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        return url
+    }
+}
+
+enum ChildDayShareError: Error {
+    case nothingToShare
+}
+
+struct ChildDayImageExport: Transferable {
+    let name: String
+    let dateLine: String
+    let rows: [ChildDayRow]
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .png) { export in
+            let url = try await MainActor.run {
+                guard let data = ChildDaySharing.imageData(
+                    name: export.name,
+                    dateLine: export.dateLine,
+                    rows: export.rows
+                ) else { throw ChildDayShareError.nothingToShare }
+                return try ChildDaySharing.write(
+                    data,
+                    named: ChildDaySharing.fileName(name: export.name, dateLine: export.dateLine, fileExtension: "png")
+                )
+            }
+            return SentTransferredFile(url)
+        }
+    }
+}
+
+struct ChildDayPDFExport: Transferable {
+    let name: String
+    let dateLine: String
+    let rows: [ChildDayRow]
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .pdf) { export in
+            let url = try await MainActor.run {
+                guard let data = ChildDayPrinting.document(
+                    name: export.name,
+                    dateLine: export.dateLine,
+                    rows: export.rows
+                ) else { throw ChildDayShareError.nothingToShare }
+                return try ChildDaySharing.write(
+                    data,
+                    named: ChildDaySharing.fileName(name: export.name, dateLine: export.dateLine, fileExtension: "pdf")
+                )
+            }
+            return SentTransferredFile(url)
+        }
+    }
+}
+
+// A picture has no Dynamic Type either: it is drawn once at a fixed size and read on someone else's screen.
+struct ChildDayShareCard: View {
+    static let width: CGFloat = 390
+
+    let name: String
+    let dateLine: String
+    let rows: [ChildDayRow]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            AzulejoBand(tileSize: 44)
+                .frame(height: 44)
+                .clipped()
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(NinaTheme.line).frame(height: 1)
+                }
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(dateLine.uppercased(with: Locale(identifier: "pt_BR")))
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(1.1)
+                    .foregroundStyle(NinaTheme.faint)
+
+                Text(name)
+                    .font(.custom("Fraunces", fixedSize: 40))
+                    .tracking(-0.5)
+                    .foregroundStyle(NinaTheme.ink)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                    .padding(.top, 4)
+
+                VStack(spacing: 10) {
+                    ForEach(rows) { row in
+                        rowView(row)
+                    }
+                }
+                .padding(.top, 22)
+
+                Spacer(minLength: 28)
+
+                NinaMark(size: 24)
+            }
+            .padding(.horizontal, 26)
+            .padding(.top, 24)
+            .padding(.bottom, 22)
+        }
+        .frame(width: Self.width)
+        .frame(minHeight: Self.width * 1.25, alignment: .top)
+        .background(NinaTheme.ground)
+    }
+
+    private func rowView(_ row: ChildDayRow) -> some View {
+        HStack(spacing: 14) {
+            Circle()
+                .strokeBorder(NinaTheme.ink, lineWidth: 1.5)
+                .frame(width: 24, height: 24)
+
+            Text(row.title)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(NinaTheme.ink)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let time = row.time {
+                Text(time)
+                    .font(.system(size: 15, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(NinaTheme.muted)
+            }
+
+            Image(systemName: row.symbolName)
+                .font(.system(size: 16))
+                .foregroundStyle(NinaTheme.cobalt)
+                .frame(width: 22)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 58)
+        .background(
+            NinaTheme.ground,
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(NinaTheme.line, lineWidth: 1)
+        )
+    }
+}
+
+private struct AzulejoBand: View {
+    let tileSize: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                ForEach(0 ..< Int((proxy.size.width / tileSize).rounded(.up)), id: \.self) { _ in
+                    ZStack {
+                        Rectangle()
+                            .fill(NinaTheme.ground)
+                        Rectangle()
+                            .strokeBorder(NinaTheme.line, lineWidth: 0.5)
+                        AzulejoMotif()
+                            .stroke(NinaTheme.cobalt, lineWidth: 1.4)
+                        Circle()
+                            .fill(NinaTheme.cobalt)
+                            .frame(width: tileSize * 0.12, height: tileSize * 0.12)
+                    }
+                    .frame(width: tileSize, height: tileSize)
+                }
+            }
+        }
+    }
+}
+
+private struct AzulejoMotif: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let radius = rect.width * 0.3
+        let corners = [
+            (CGPoint(x: rect.minX, y: rect.minY), 0.0),
+            (CGPoint(x: rect.maxX, y: rect.minY), 90.0),
+            (CGPoint(x: rect.maxX, y: rect.maxY), 180.0),
+            (CGPoint(x: rect.minX, y: rect.maxY), 270.0),
+        ]
+        for (corner, start) in corners {
+            path.move(to: CGPoint(
+                x: corner.x + radius * cos(start * .pi / 180),
+                y: corner.y + radius * sin(start * .pi / 180)
+            ))
+            path.addArc(
+                center: corner,
+                radius: radius,
+                startAngle: .degrees(start),
+                endAngle: .degrees(start + 90),
+                clockwise: false
+            )
+        }
+        let reach = rect.width * 0.26
+        path.move(to: CGPoint(x: rect.midX, y: rect.midY - reach))
+        path.addLine(to: CGPoint(x: rect.midX + reach, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.midY + reach))
+        path.addLine(to: CGPoint(x: rect.midX - reach, y: rect.midY))
+        path.closeSubpath()
+        return path
     }
 }

@@ -1,5 +1,7 @@
 import CoreGraphics
 import PDFKit
+import SwiftUI
+import UIKit
 import XCTest
 @testable import Nina
 
@@ -192,8 +194,8 @@ final class ChildDayTests: XCTestCase {
             ChildDay.heading(name: eduarda, dateLine: dateLine)
         )
         XCTAssertNotEqual(
-            ChildDay.shareText(name: clara, dateLine: dateLine, rows: []),
-            ChildDay.shareText(name: eduarda, dateLine: dateLine, rows: [])
+            ChildDaySharing.fileName(name: clara, dateLine: dateLine, fileExtension: "png"),
+            ChildDaySharing.fileName(name: eduarda, dateLine: dateLine, fileExtension: "png")
         )
     }
 
@@ -509,28 +511,45 @@ final class ChildDayTests: XCTestCase {
         XCTAssertEqual(row.symbolName, "backpack")
     }
 
-    func testTheSharedTextNamesTheChildAndTheDayAndListsTitlesAndHours() {
+    func testTheSharedPictureNamesTheChildAndTheDayAndListsTitlesAndHours() throws {
         let day = Array(orderedDay().prefix(3))
         let rows = ChildDay.rows(
             for: ChildDay.tasks(for: pedro, in: day, members: members, now: now, calendar: calendar),
             now: now,
             calendar: calendar
         )
+        let dateLine = ChildDay.dateLine(for: now, calendar: calendar)
 
-        let text = ChildDay.shareText(
-            name: ChildDay.displayName(for: pedro, among: members),
-            dateLine: ChildDay.dateLine(for: now, calendar: calendar),
-            rows: rows
-        )
+        let drawn = try sharedPictureText(name: "Pedro", dateLine: dateLine, rows: rows)
 
+        XCTAssertTrue(drawn.contains("Pedro"))
+        XCTAssertTrue(drawn.contains("SEXTA-FEIRA, 25 DE SETEMBRO"))
+        for expected in ["Guardar os brinquedos", "Escovar os dentes", "07:00", "Dever de casa", "16:00"] {
+            XCTAssertTrue(drawn.contains(expected), "The picture lost \(expected)")
+        }
         XCTAssertEqual(
-            text,
-            "Pedro · sexta-feira, 25 de setembro\n\n○ Guardar os brinquedos\n○ Escovar os dentes · 07:00\n○ Dever de casa · 16:00"
+            ChildDaySharing.fileName(name: "Pedro", dateLine: dateLine, fileExtension: "pdf"),
+            "Pedro · sexta-feira, 25 de setembro.pdf"
         )
-        XCTAssertFalse(text.unicodeScalars.contains { $0.properties.isEmojiPresentation })
     }
 
-    func testNothingFromATasksDetailReachesTheListThePrintoutOrTheSharedText() throws {
+    func testTheSharedPictureIsAPortraitPngThatGrowsWithTheList() throws {
+        let dateLine = ChildDay.dateLine(for: now, calendar: calendar)
+
+        let short = try XCTUnwrap(
+            UIImage(data: XCTUnwrap(ChildDaySharing.imageData(name: "Pedro", dateLine: dateLine, rows: numberedRows(3))))
+        )
+        let long = try XCTUnwrap(
+            UIImage(data: XCTUnwrap(ChildDaySharing.imageData(name: "Pedro", dateLine: dateLine, rows: numberedRows(14))))
+        )
+
+        XCTAssertEqual(short.size.width * short.scale, 1170, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(short.size.height, short.size.width * 1.25)
+        XCTAssertGreaterThan(long.size.height, short.size.height)
+        XCTAssertNil(ChildDaySharing.imageData(name: "Pedro", dateLine: dateLine, rows: []))
+    }
+
+    func testNothingFromATasksDetailReachesTheListThePrintoutOrTheSharedPicture() throws {
         let reading = "Linha digitável 34191.79001 01043.510047 91020.150008 5 92920026000"
         let day = orderedDay().map { task -> TaskItem in
             var withReading = task
@@ -542,17 +561,18 @@ final class ChildDayTests: XCTestCase {
         let session = ChildDaySession(child: pedro, tasks: day, members: members, now: now, calendar: calendar)
         let sessionRows = session.rows(child: pedro, tasks: day, members: members, now: now, calendar: calendar)
         let dateLine = ChildDay.dateLine(for: now, calendar: calendar)
-        let text = ChildDay.shareText(name: "Pedro", dateLine: dateLine, rows: rows)
         let pdf = try XCTUnwrap(ChildDayPrinting.document(name: "Pedro", dateLine: dateLine, rows: rows))
         let printed = try XCTUnwrap(PDFDocument(data: pdf)?.string)
+        let pictured = try sharedPictureText(name: "Pedro", dateLine: dateLine, rows: rows)
 
-        XCTAssertFalse(text.contains("34191"))
-        XCTAssertFalse(text.contains("Linha digitável"))
         for title in listed.map(\.title) {
             XCTAssertTrue(printed.contains(title), "The printout lost \(title)")
+            XCTAssertTrue(pictured.contains(title), "The picture lost \(title)")
         }
-        XCTAssertFalse(printed.contains("34191"))
-        XCTAssertFalse(printed.contains("Linha digitável"))
+        for drawn in [printed, pictured] {
+            XCTAssertFalse(drawn.contains("34191"))
+            XCTAssertFalse(drawn.contains("Linha digitável"))
+        }
         for row in rows + sessionRows {
             XCTAssertFalse(row.title.contains("34191"))
             XCTAssertFalse(row.title.contains("Linha digitável"))
@@ -584,6 +604,27 @@ final class ChildDayTests: XCTestCase {
         XCTAssertEqual(mediaBox.width, 595.28, accuracy: 0.01)
         XCTAssertEqual(mediaBox.height, 841.89, accuracy: 0.01)
         XCTAssertNil(ChildDayPrinting.document(name: "Pedro", dateLine: dateLine, rows: []))
+    }
+
+    // The picture is the same view the PNG draws, laid onto a PDF page so its words can be read back.
+    private func sharedPictureText(name: String, dateLine: String, rows: [ChildDayRow]) throws -> String {
+        let renderer = ImageRenderer(content: ChildDayShareCard(name: name, dateLine: dateLine, rows: rows))
+        let data = NSMutableData()
+        var failure: Error?
+        renderer.render { size, draw in
+            var box = CGRect(origin: .zero, size: size)
+            guard let consumer = CGDataConsumer(data: data as CFMutableData),
+                  let context = CGContext(consumer: consumer, mediaBox: &box, nil) else {
+                failure = ChildDayShareError.nothingToShare
+                return
+            }
+            context.beginPDFPage(nil)
+            draw(context)
+            context.endPDFPage()
+            context.closePDF()
+        }
+        if let failure { throw failure }
+        return try XCTUnwrap(PDFDocument(data: data as Data)?.string)
     }
 
     private func child(_ name: String) -> HouseholdMember {

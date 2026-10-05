@@ -146,13 +146,6 @@ enum ChildDay {
         name.isEmpty ? dateLine : "\(name) · \(dateLine)"
     }
 
-    static func shareText(name: String, dateLine: String, rows: [ChildDayRow]) -> String {
-        let lines = rows.map { row in
-            row.time.map { "○ \(row.title) · \($0)" } ?? "○ \(row.title)"
-        }
-        return ([heading(name: name, dateLine: dateLine), ""] + lines).joined(separator: "\n")
-    }
-
     static func pages(_ rows: [ChildDayRow], perPage: Int = rowsPerPrintedPage) -> [[ChildDayRow]] {
         guard perPage > 0 else { return [] }
         return stride(from: 0, to: rows.count, by: perPage).map {
