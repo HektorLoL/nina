@@ -1828,6 +1828,13 @@ the project, not bugs to fix unprompted.
   `families` evaluates its policies without a permission error, and both
   function grant maps in `rls_policies.test.sql` (47 `authenticated`, 27
   `service_role`) equal production's.
+- **Migration `202610050001` (`leave_family`) is applied to production
+  (2026-10-05).** Additive: one SECURITY DEFINER function, executable by
+  `authenticated` alone (read back after the apply: anon and service_role
+  false). It went through the Supabase MCP `apply_migration`, and its
+  `schema_migrations` row was set to `202610050001` (§12). The authenticated
+  function grant map is now 48 names. The "Sair da casa" row that calls it
+  reaches people with the first build after 11.
 - **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
   `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
   compares them) and Terms §4 reads the same constant. Apple's questionnaire
