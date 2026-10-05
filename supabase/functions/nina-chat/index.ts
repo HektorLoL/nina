@@ -376,7 +376,7 @@ async function runReadOnlyTool(
       const [taskResult, memberResult] = await Promise.all([
         client
           .from("tasks")
-          .select("owner_member_id,owner_label,is_done,priority")
+          .select("owner_member_id,owner_label,is_done,priority,task_kind")
           .eq("family_id", familyID),
         client
           .from("family_members")

@@ -164,6 +164,30 @@ Deno.test("urgent counts only open work and completed work never counts as open"
   assertEquals(summary["Marina"], { open: 2, completed: 1, urgent: 1 });
 });
 
+Deno.test("a semente never counts as work someone is carrying", () => {
+  const summary = summarizeWorkload(
+    [
+      {
+        owner_member_id: marinaMotherID,
+        owner_label: "Marina",
+        is_done: false,
+        priority: "normal",
+        task_kind: "seed",
+      },
+      {
+        owner_member_id: marinaMotherID,
+        owner_label: "Marina",
+        is_done: false,
+        priority: "normal",
+        task_kind: "task",
+      },
+    ],
+    [marinaMother],
+  );
+
+  assertEquals(summary["Marina"], { open: 1, completed: 0, urgent: 0 });
+});
+
 Deno.test("the assistant never receives a workload bucket", () => {
   const displayNames = workloadDisplayNames([marinaMother, nina]);
 
@@ -176,7 +200,7 @@ Deno.test("the chat tool reads the owner pointer and resolves names from the hou
 
   assertStringIncludes(
     tool,
-    "select(\"owner_member_id,owner_label,is_done,priority\")",
+    "select(\"owner_member_id,owner_label,is_done,priority,task_kind\")",
   );
   assertStringIncludes(
     tool,

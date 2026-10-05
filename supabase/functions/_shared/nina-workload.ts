@@ -5,6 +5,7 @@ export type WorkloadTaskRow = {
   owner_label?: string | null;
   is_done?: boolean | null;
   priority?: string | null;
+  task_kind?: string | null;
 };
 
 export type WorkloadMemberRow = {
@@ -82,6 +83,9 @@ export function summarizeWorkload(
   const summary: Record<string, WorkloadBucket> = {};
 
   for (const task of tasks) {
+    // A semente is an intention allowed to have no date; it is never work
+    // someone is carrying, so it never weighs on a person's bucket.
+    if (task.task_kind === "seed") continue;
     const memberID = trimmedField(task.owner_member_id);
     const resolved = memberID ? displayNames.get(memberID) : undefined;
     // Work whose owner no longer resolves keeps its own label rather than
