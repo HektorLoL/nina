@@ -1517,8 +1517,12 @@ at or after the due hour. **Every button opens the app first** (`.foreground`),
 so nothing is written from a locked phone or in the background, where the home
 context may not be loaded; a completion lands on Hoje under the undo toast.
 `ReminderRoute.completes` never rolls a repeating task past the occurrence the
-reminder announced, and `snoozeTarget` never pulls a task earlier than its card.
-A minor's reminder carries no buttons. **The body never contains `task.subtitle`** —
+reminder announced, `toggleTask(_:through:)` closes that occurrence even when an
+earlier one was missed, and `snoozeTarget` never pulls a task earlier than its
+card. A minor's reminder carries no buttons. While a child's list covers the
+screen, an adult's reminder goes silently to Notification Center and any button
+pressed waits until the hold ends, so nothing changes in the house from a
+child's hands. **The body never contains `task.subtitle`** —
 it used to, which put a photographed boleto's reading on the lock screen verbatim.
 Nina speaks a sentence and names only who is holding the task;
 `NotificationTargetingTests.testTheTaskDetailNeverReachesTheLockScreen` fails if

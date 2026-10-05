@@ -182,17 +182,16 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         }
     }
 
+    // The editor's warning reads the same next alert the scheduler would book, or none at all.
     static func ringsSilently(
-        dueAt: Date,
-        lead: TaskReminderLead,
+        _ task: TaskItem,
         now: Date = Date(),
         defaults: UserDefaults = .standard,
         calendar: Calendar = .current
     ) -> Bool {
-        guard defaults.object(forKey: notificationsEnabledKey) as? Bool ?? true else { return false }
-        let leadDate = dueAt.addingTimeInterval(-TimeInterval(lead.minutes * 60))
-        let alertDate = leadDate > now ? leadDate : dueAt
-        return QuietHoursConfiguration(defaults: defaults, calendar: calendar).contains(alertDate)
+        guard defaults.object(forKey: notificationsEnabledKey) as? Bool ?? true,
+              let next = reminderMoments(task, after: now, calendar: calendar).first else { return false }
+        return QuietHoursConfiguration(defaults: defaults, calendar: calendar).contains(next.alertDate)
     }
 
     // Another adult's chore must never buzz this phone, and must never evict this phone's own
@@ -320,7 +319,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         .compactMap { Self.request($0, calendar: calendar) }
     }
 
-    private static func reminderMoments(
+    static func reminderMoments(
         _ task: TaskItem,
         after now: Date,
         calendar: Calendar
@@ -512,7 +511,7 @@ enum ReminderActionSet: String, CaseIterable, Hashable {
     }
 }
 
-private struct ReminderMoment {
+struct ReminderMoment {
     var dueMoment: Date
     var alertDate: Date
 }
@@ -560,7 +559,8 @@ final class NinaNotificationDelegate: NSObject, UNUserNotificationCenterDelegate
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+        let isChildListShowing = await MainActor.run { TaskNotificationRoute.shared.isChildListShowing }
+        return isChildListShowing ? [.list] : [.banner, .list, .sound]
     }
 
     func userNotificationCenter(
@@ -598,6 +598,7 @@ final class TaskNotificationRoute {
     static let shared = TaskNotificationRoute()
 
     var pending: ReminderRoute?
+    var isChildListShowing = false
 }
 
 struct ReminderRoute: Equatable {

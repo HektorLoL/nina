@@ -2440,7 +2440,8 @@ struct TaskEditorSheet: View {
                 owner: owner,
                 ownerMemberID: ownerMemberID,
                 dueAt: dueDate,
-                lead: reminderLead
+                lead: reminderLead,
+                recurrence: recurrence
             ) {
                 Label("No horário de silêncio, o aviso chega sem som.", systemImage: "moon")
                     .ninaText(.caption, NinaTheme.muted)

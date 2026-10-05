@@ -204,10 +204,16 @@ final class NotificationTargetingTests: XCTestCase {
         let earlyMedicine = date(year: 2026, month: 8, day: 9, hour: 6, minute: 30)
         let breakfast = date(year: 2026, month: 8, day: 9, hour: 8, minute: 0)
 
-        func silent(_ dueAt: Date, _ lead: TaskReminderLead) -> Bool {
-            LocalHomeNotificationScheduler.ringsSilently(
-                dueAt: dueAt,
-                lead: lead,
+        func silent(
+            _ dueAt: Date,
+            _ lead: TaskReminderLead,
+            _ recurrence: TaskRecurrence = .none
+        ) -> Bool {
+            var probe = homeTask(dueAt: dueAt)
+            probe.reminderLead = lead
+            probe.recurrence = recurrence
+            return LocalHomeNotificationScheduler.ringsSilently(
+                probe,
                 now: now,
                 defaults: defaults,
                 calendar: calendar
@@ -217,6 +223,14 @@ final class NotificationTargetingTests: XCTestCase {
         XCTAssertTrue(silent(earlyMedicine, .atTime))
         XCTAssertFalse(silent(breakfast, .oneHour), "Quiet hours end at 07:00, so a 07:00 alert rings.")
         XCTAssertTrue(silent(breakfast, .twoHours))
+
+        let lastNight = date(year: 2026, month: 8, day: 7, hour: 23, minute: 0)
+        XCTAssertFalse(silent(lastNight, .atTime), "A past one-off books no reminder, silent or not.")
+        let missedDaily = date(year: 2026, month: 8, day: 7, hour: 7, minute: 30)
+        XCTAssertTrue(
+            silent(missedDaily, .oneHour, .daily),
+            "A missed daily 07:30 still books tomorrow's 06:30 alert, inside quiet hours."
+        )
 
         defaults.set(false, forKey: LocalHomeNotificationScheduler.quietHoursEnabledKey)
         XCTAssertFalse(silent(earlyMedicine, .atTime))

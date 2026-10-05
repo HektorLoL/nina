@@ -281,7 +281,6 @@ struct TodayView: View {
         .padding(.top, 6)
     }
 
-    // A row that leaves or arrives slides, so a finished task is seen going instead of vanishing.
     private func rows(_ tasks: [TaskItem]) -> some View {
         VStack(spacing: 0) {
             ForEach(tasks) { task in

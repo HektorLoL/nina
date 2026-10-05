@@ -453,12 +453,18 @@ struct AppRootView: View {
         .onChange(of: TaskNotificationRoute.shared.pending) { _, _ in
             followReminder()
         }
+        // While a child holds the phone, an adult's reminder neither shows nor acts; it waits for the hold.
+        .onChange(of: store.childDayPresentation == nil, initial: true) { _, isClear in
+            TaskNotificationRoute.shared.isChildListShowing = !isClear
+            if isClear { followReminder() }
+        }
     }
 
     // A reminder's tap lands on its task in Hoje; a task that is gone by then opens nothing.
     // A finished task stays on Hoje under the undo toast; anything else shows the task itself.
     private func followReminder() {
-        guard let route = TaskNotificationRoute.shared.pending else { return }
+        guard store.childDayPresentation == nil,
+              let route = TaskNotificationRoute.shared.pending else { return }
         TaskNotificationRoute.shared.pending = nil
         guard let task = store.tasks.first(where: { $0.id == route.taskID }) else { return }
         dismissKeyboard()
@@ -468,7 +474,7 @@ struct AppRootView: View {
         switch route.action {
         case .complete where route.completes(task):
             router.path = []
-            store.toggleTask(task)
+            store.toggleTask(task, through: route.dueMoment)
             Haptics.success()
         case .snooze:
             if let target = route.snoozeTarget(for: task, now: .now) {

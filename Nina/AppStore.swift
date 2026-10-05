@@ -2659,13 +2659,14 @@ final class AppStore {
         return category
     }
 
-    func toggleTask(_ task: TaskItem) {
+    // A reminder's button closes the occurrence it announced, even when an earlier one was missed.
+    func toggleTask(_ task: TaskItem, through announced: Date? = nil) {
         guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
         let currentTask = tasks[index]
         var proposedTask = currentTask
 
         if !currentTask.isDone, currentTask.recurrence != .none {
-            let anchor = max(currentTask.dueAt ?? .now, .now).addingTimeInterval(1)
+            let anchor = max(currentTask.dueAt ?? .now, .now, announced ?? .distantPast).addingTimeInterval(1)
             guard let nextDate = currentTask.scheduledOccurrence(after: anchor) else { return }
             proposedTask.dueAt = nextDate
             proposedTask.dueLabel = Self.taskDueLabel(for: nextDate)
@@ -2813,6 +2814,7 @@ final class AppStore {
         ownerMemberID: UUID?,
         dueAt: Date,
         lead: TaskReminderLead,
+        recurrence: TaskRecurrence,
         now: Date = .now
     ) -> Bool {
         guard notificationAuthorizationStatus.canSchedule, homeAccessState != .minorMember else { return false }
@@ -2827,16 +2829,13 @@ final class AppStore {
             createdBy: ""
         )
         probe.ownerMemberID = ownerMemberID
+        probe.recurrence = recurrence
+        probe.reminderLead = lead
         guard LocalHomeNotificationScheduler.isForViewer(
             probe,
             viewer: HomeNotificationViewer(member: currentFamilyMember)
         ) else { return false }
-        return LocalHomeNotificationScheduler.ringsSilently(
-            dueAt: dueAt,
-            lead: lead,
-            now: now,
-            defaults: defaults
-        )
+        return LocalHomeNotificationScheduler.ringsSilently(probe, now: now, defaults: defaults)
     }
 
     func synchronizeLocalNotifications() {

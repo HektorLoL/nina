@@ -376,6 +376,27 @@ final class TaskAgendaTests: XCTestCase {
         }
     }
 
+    func testFinishingFromAnEarlyReminderClosesTheAnnouncedOccurrenceEvenAfterAMissedOne() throws {
+        try withIsolatedStore { store in
+            let calendar = Calendar.current
+            let announced = try XCTUnwrap(
+                calendar.dateInterval(of: .minute, for: Date().addingTimeInterval(30 * 60))?.start
+            )
+            var daily = task(dueAt: try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: announced)))
+            daily.recurrence = .daily
+            store.tasks = [daily]
+
+            store.toggleTask(daily, through: announced)
+
+            let rolled = try XCTUnwrap(store.tasks.first { $0.id == daily.id })
+            XCTAssertEqual(
+                rolled.dueAt,
+                calendar.date(byAdding: .day, value: 1, to: announced),
+                "Yesterday's missed turn must not absorb the tap meant for today's."
+            )
+        }
+    }
+
     func testAnUndoNeverMovesARepeatingTaskThatChangedSinceItWasFinished() throws {
         try withIsolatedStore { store in
             var daily = task(dueAt: now.addingTimeInterval(2 * 60 * 60))
