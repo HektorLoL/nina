@@ -22,6 +22,10 @@ struct NinaMark: View {
     var tint: Color = NinaTheme.cobalt
     var label: String?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hasSettled = false
+    @State private var isBreathing = false
+
     // Below this the cup is unresolvable and the disc ships alone. Its own
     // ancestor is the degradation path, so nothing ever looks broken.
     private static let retirementFloor: CGFloat = 18
@@ -52,10 +56,21 @@ struct NinaMark: View {
     private var discCenterY: CGFloat {
         let m = metrics
         switch presence {
-        case .rest, .stored, .unavailable, .reading: return m.restY
+        case .rest, .unavailable, .reading: return m.restY
+        case .stored: return arrives && !hasSettled ? m.restY - (10.2 / 64) : m.restY
         case .listening: return m.restY - (2.2 / 64)
         case .waiting: return m.restY - (10.2 / 64)
         }
+    }
+
+    // Something put away arrives from above and settles: the drop is movement on top of the stored position, never instead of it.
+    private var arrives: Bool {
+        presence == .stored && !reduceMotion && size >= Self.retirementFloor
+    }
+
+    private var readingWidth: CGFloat {
+        guard presence == .reading, !reduceMotion else { return 1.29 }
+        return isBreathing ? 1.45 : 1.15
     }
 
     private var discTint: Color {
@@ -84,6 +99,19 @@ struct NinaMark: View {
             }
         }
         .frame(width: size, height: size)
+        .animation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.7), value: presence)
+        .onAppear {
+            if arrives, !hasSettled {
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.5).delay(0.25)) {
+                    hasSettled = true
+                }
+            }
+            if presence == .reading, !reduceMotion {
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                    isBreathing = true
+                }
+            }
+        }
         .accessibilityHidden(label == nil)
         .accessibilityLabel(label ?? "")
     }
@@ -112,7 +140,7 @@ struct NinaMark: View {
         if presence == .reading {
             Capsule()
                 .fill(discTint)
-                .frame(width: d * 1.29, height: d)
+                .frame(width: d * readingWidth, height: d)
                 .position(x: size / 2, y: discCenterY * size)
         } else {
             Circle()

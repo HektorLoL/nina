@@ -790,6 +790,14 @@ store, not the view) · `lightImpact()` = open a sheet or press a chip ·
 never on the confirm itself. Completing a task fires `success()` but
 un-completing fires `selection()` — copy that asymmetry.
 
+**Motion follows the same asymmetry** (2026-10-04): a checkbox pops only when
+it closes something; a tapped task row keeps its tick for 380 ms before the
+store toggles it, and re-reads the live task first so it never reopens what
+someone else closed meanwhile; the `.reading` mark's capsule breathes; a
+`.stored` mark's disc drops into the cup on appear. Every one is movement on
+top of a state that already reads still, and Reduce Motion removes all four
+(a row then completes at once).
+
 **Accessibility:** decorative overlays are `.allowsHitTesting(false)` +
 `.accessibilityHidden(true)`. `reduceMotion` must *disable* ambient animation,
 not shorten it. Icon-only buttons need an explicit label. `HouseView` collapses

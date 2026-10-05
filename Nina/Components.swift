@@ -67,6 +67,9 @@ struct NinaCheckbox: View {
     var isSquare: Bool = false
     var size: CGFloat = 24
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pop: CGFloat = 1
+
     private var stroke: Color {
         isOverdue ? NinaTheme.terracotta : NinaTheme.control
     }
@@ -90,9 +93,20 @@ struct NinaCheckbox: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: size * 0.46, weight: .bold))
                     .foregroundStyle(NinaTheme.ground)
+                    .transition(reduceMotion ? .identity : .scale(scale: 0.3).combined(with: .opacity))
             }
         }
         .frame(width: size, height: size)
+        .scaleEffect(pop)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: isOn)
+        // Only closing something pops; reopening it stays quiet, like its haptic.
+        .onChange(of: isOn) { wasOn, nowOn in
+            guard nowOn, !wasOn, !reduceMotion else { return }
+            pop = 1.16
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.45)) {
+                pop = 1
+            }
+        }
     }
 }
 

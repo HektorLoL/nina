@@ -393,8 +393,11 @@ struct TaskRowView: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var isShowingQuickActions = false
     @State private var didLongPress = false
+    @State private var isSettling = false
 
     private var isOverdue: Bool { task.isOverdue() }
 
@@ -458,6 +461,18 @@ struct TaskRowView: View {
         }
     }
 
+    // The tick shows before the row leaves, and a task someone else closed meanwhile is never reopened by it.
+    private func complete(_ id: TaskItem.ID) {
+        isSettling = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(380))
+            if let live = store.tasks.first(where: { $0.id == id }), !live.isDone {
+                store.toggleTask(live)
+            }
+            isSettling = false
+        }
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Button {
@@ -467,10 +482,16 @@ struct TaskRowView: View {
                     router.presentedSheet = .plantSeed(task.id)
                     return
                 }
-                task.isDone ? Haptics.selection() : Haptics.success()
-                store.toggleTask(task)
+                guard !isSettling else { return }
+                if task.isDone || reduceMotion {
+                    task.isDone ? Haptics.selection() : Haptics.success()
+                    store.toggleTask(task)
+                    return
+                }
+                Haptics.success()
+                complete(task.id)
             } label: {
-                NinaCheckbox(isOn: task.isDone, isOverdue: isOverdue)
+                NinaCheckbox(isOn: task.isDone || isSettling, isOverdue: isOverdue && !isSettling)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(task.kind == .seed && !task.isDone ? "Plantar" : task.completionActionTitle)
