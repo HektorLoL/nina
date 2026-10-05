@@ -1522,6 +1522,20 @@ private struct NinaProposalCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if proposal.state == .pending, hasOpenTwin {
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 11, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text("Já existe na casa.")
+                        .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                }
+                .foregroundStyle(NinaTheme.ink)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(NinaTheme.grout, in: Capsule())
+            }
+
             extractedReadings
 
             if isEditing && proposal.state == .pending {
@@ -1587,6 +1601,15 @@ private struct NinaProposalCard: View {
 
     private var isSeed: Bool {
         proposal.kind == .seed
+    }
+
+    private var hasOpenTwin: Bool {
+        HouseSearch.openTwin(
+            of: confirmationPayload,
+            kind: proposal.kind,
+            tasks: store.tasks,
+            shoppingItems: store.shoppingItems
+        )
     }
 
     // One line under the title, and what the house will carry outranks why Nina proposed it.

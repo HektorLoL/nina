@@ -263,6 +263,32 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertEqual(ordered.map(\.title), ["Urgente", "Primeira", "Segunda"])
     }
 
+    func testAProposalThatRepeatsSomethingStillOpenIsFlaggedAndADoneOneIsNot() {
+        var gas = task(dueAt: nil)
+        gas.title = "Comprar gás"
+        var oldBill = task(dueAt: nil)
+        oldBill.title = "Pagar a luz"
+        oldBill.isDone = true
+        let milk = ShoppingItem(title: "Leite", amount: "", owner: "Casa", isChecked: false)
+
+        XCTAssertTrue(HouseSearch.openTwin(
+            of: NinaProposalPayload(title: "comprar GAS", detail: ""),
+            kind: .task, tasks: [gas, oldBill], shoppingItems: [milk]
+        ))
+        XCTAssertFalse(HouseSearch.openTwin(
+            of: NinaProposalPayload(title: "Pagar a luz", detail: ""),
+            kind: .reminder, tasks: [gas, oldBill], shoppingItems: [milk]
+        ))
+        XCTAssertTrue(HouseSearch.openTwin(
+            of: NinaProposalPayload(title: "leite", detail: ""),
+            kind: .shopping, tasks: [gas, oldBill], shoppingItems: [milk]
+        ))
+        XCTAssertFalse(HouseSearch.openTwin(
+            of: NinaProposalPayload(title: "Comprar gás", detail: ""),
+            kind: .memory, tasks: [gas, oldBill], shoppingItems: [milk]
+        ))
+    }
+
     func testSearchFindsATaskTypedWithoutAccentsOrCapitals() {
         var medicine = task(dueAt: nil)
         medicine.title = "Remédio do Pedro"

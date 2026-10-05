@@ -16,6 +16,25 @@ enum HouseSearch {
         items.filter { matches($0.title, query: query) || matches($0.amount, query: query) }
     }
 
+    // A proposal that repeats something still open is flagged, never blocked: the person decides if it is a second one.
+    static func openTwin(
+        of payload: NinaProposalPayload,
+        kind: NinaProposalKind,
+        tasks: [TaskItem],
+        shoppingItems: [ShoppingItem]
+    ) -> Bool {
+        let title = fold(payload.title)
+        guard !title.isEmpty else { return false }
+        switch kind {
+        case .shopping:
+            return shoppingItems.contains { !$0.isChecked && fold($0.title) == title }
+        case .memory:
+            return false
+        case .task, .reminder, .seed:
+            return tasks.contains { !$0.isDone && fold($0.title) == title }
+        }
+    }
+
     private static func fold(_ value: String) -> String {
         value
             .trimmingCharacters(in: .whitespacesAndNewlines)
