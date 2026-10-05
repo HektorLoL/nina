@@ -46,7 +46,7 @@ enum KidsMode {
     }
 
     static func progressLine(done: Int, total: Int) -> String {
-        "\(done) de \(total) feitas"
+        "\(done) de \(total) \(total == 1 ? "feita" : "feitas")"
     }
 
     static func greeting(firstName: String) -> String {

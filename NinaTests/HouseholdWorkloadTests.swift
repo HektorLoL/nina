@@ -69,7 +69,7 @@ final class HouseholdWorkloadTests: XCTestCase {
 
         XCTAssertTrue(snapshot.isConclusive)
         XCTAssertTrue(snapshot.isBalanced)
-        XCTAssertEqual(snapshot.headline, "A casa está parecida")
+        XCTAssertEqual(snapshot.headline, "Divisão parecida")
     }
 
     func testHouseOwnedTasksAreCountedAsSharedAndNeverAttributedToAPerson() {

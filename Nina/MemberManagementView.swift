@@ -84,9 +84,9 @@ struct MemberEditorSheet: View {
             }
             .presentationDragIndicator(.visible)
         }
-        .alert("Remover esta pessoa?", isPresented: $isShowingRemoveConfirmation) {
+        .alert("Tirar esta pessoa da casa?", isPresented: $isShowingRemoveConfirmation) {
             Button("Cancelar", role: .cancel) {}
-            Button("Remover", role: .destructive) {
+            Button("Tirar", role: .destructive) {
                 removeMember()
             }
         } message: {
@@ -361,7 +361,7 @@ struct MemberEditorSheet: View {
             }
 
             if let member, store.canRemoveFamilyMember(member) {
-                NinaButton(title: "Remover", kind: .quiet, isEnabled: !isSaving) {
+                NinaButton(title: "Tirar da casa", kind: .quiet, isEnabled: !isSaving) {
                     Haptics.warning()
                     isShowingRemoveConfirmation = true
                 }
@@ -870,8 +870,8 @@ struct FamilyAccessDecisionView: View {
 
     private var title: String {
         switch outcome {
-        case .declined: "Seu pedido não foi aprovado"
-        case .removed: "Você não está mais nessa casa"
+        case .declined: "Seu pedido não foi aprovado."
+        case .removed: "Você não está mais nessa casa."
         }
     }
 

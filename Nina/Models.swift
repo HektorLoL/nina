@@ -1931,7 +1931,7 @@ struct PremiumPlan: Hashable {
             status: "Assinatura",
             priceLabel: "R$ 24,90/mês",
             periodLabel: "1 mês",
-            renewalLabel: "Renovação automática pelo App Store",
+            renewalLabel: "Renovação automática pela App Store",
             heroTitle: "Premium para a casa toda",
             heroSubtitle: readsDocuments
                 ? "Leitura de documentos, resumo semanal e prioridade da Nina, para a casa toda."

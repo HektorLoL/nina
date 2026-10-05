@@ -33,6 +33,7 @@ final class KidsModeTests: XCTestCase {
         XCTAssertEqual(KidsMode.greeting(firstName: "Ana"), "Oi, Ana")
         XCTAssertEqual(KidsMode.greeting(firstName: "  "), "Oi")
         XCTAssertEqual(KidsMode.progressLine(done: 2, total: 5), "2 de 5 feitas")
+        XCTAssertEqual(KidsMode.progressLine(done: 1, total: 1), "1 de 1 feita")
         for text in [KidsMode.greeting(firstName: "Ana"), KidsMode.progressLine(done: 0, total: 1)] {
             XCTAssertFalse(text.contains("!"))
             XCTAssertFalse(text.lowercased().contains("eu "))

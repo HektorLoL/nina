@@ -1059,7 +1059,7 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não consegui guardar esse aviso como lido agora."
+                syncErrorMessage = "Não deu para marcar esse aviso como lido agora."
                 Haptics.error()
                 return false
             }

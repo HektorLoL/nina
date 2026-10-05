@@ -35,7 +35,7 @@ struct NinaAnnouncementBoard: Hashable {
         items: [
             NinaAnnouncement(
                 title: "Feito pelo aviso",
-                detail: "Segure o lembrete para marcar como feita ou adiar.",
+                detail: "Segure o lembrete para concluir ou adiar a tarefa.",
                 systemName: "bell.badge",
                 stage: .live
             ),

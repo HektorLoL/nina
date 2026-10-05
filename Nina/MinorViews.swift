@@ -674,7 +674,7 @@ private struct MinorAccessDecisionView: View {
             MinorHeader(isShowingSettings: $isShowingSettings)
             Spacer(minLength: 24)
             ZeroState(
-                headline: wasRemoved ? "Você saiu da casa." : "Seu pedido não foi aprovado",
+                headline: wasRemoved ? "Você saiu da casa." : "Seu pedido não foi aprovado.",
                 body_: wasRemoved ? "Sua conta é apagada em 30 dias." : "Peça o convite de novo para quem cuida de você.",
                 presence: .unavailable
             ) {

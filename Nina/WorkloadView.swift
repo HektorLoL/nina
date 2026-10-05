@@ -65,7 +65,7 @@ struct WorkloadView: View {
     private var headline: String {
         guard snapshot.isConclusive else { return snapshot.headline }
         return snapshot.isBalanced
-            ? "A casa está dividida parecida."
+            ? "A casa está dividida de forma parecida."
             : "A casa está pesando mais de um lado."
     }
 

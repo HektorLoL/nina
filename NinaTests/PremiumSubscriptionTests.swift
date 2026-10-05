@@ -222,7 +222,7 @@ final class PremiumSubscriptionTests: XCTestCase {
         XCTAssertTrue(disclosure.contains("Nina Premium"))
         XCTAssertTrue(disclosure.contains("1 mês"))
         XCTAssertTrue(disclosure.contains("R$ 24,90/mês"))
-        XCTAssertTrue(disclosure.contains("Renovação automática pelo App Store"))
+        XCTAssertTrue(disclosure.contains("Renovação automática pela App Store"))
     }
 
     func testThePaywallLinksToTheTermsAndPrivacyPagesNinaPublishesItself() {

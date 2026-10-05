@@ -163,7 +163,7 @@ enum HouseholdWorkload {
             isBalanced: isBalanced,
             leadName: lead.name,
             leadShare: leadShare,
-            headline: isBalanced ? "A casa está parecida" : "Pesando de um lado",
+            headline: isBalanced ? "Divisão parecida" : "Pesando de um lado",
             message: isBalanced ? "" : "\(lead.name) está com a parte mais pesada agora."
         )
     }

@@ -115,7 +115,9 @@ struct TasksView: View {
                 endSelection()
             }
         } message: {
-            Text("Some para toda a casa. Não dá para desfazer.")
+            Text(selection.count == 1
+                ? "Some para toda a casa. Não dá para desfazer."
+                : "Somem para toda a casa. Não dá para desfazer.")
         }
     }
 
@@ -457,7 +459,7 @@ struct TasksView: View {
                     Image(systemName: isShowingCompleted ? "chevron.down" : "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(NinaTheme.faint)
-                    Text("CONCLUÍDAS HOJE · \(completedToday.count)")
+                    Text("FEITAS HOJE · \(completedToday.count)")
                         .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
                     Spacer()
                 }

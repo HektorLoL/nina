@@ -1102,7 +1102,7 @@ struct AccountDeletionView: View {
 
     private var disappearingItems: [String] {
         if let wardName {
-            return ["A conta de \(wardName)", "O acesso de \(wardName) a \(store.familyGroup.name)"]
+            return ["A conta de \(wardName)", "O acesso de \(wardName) à casa"]
         }
         if store.homeAccessState == .minorMember {
             return ["Sua conta", "Seu acesso à casa"]
@@ -1116,7 +1116,7 @@ struct AccountDeletionView: View {
             "Seu perfil e sua foto"
         ]
         if store.hasActiveHome {
-            items.append("Seu acesso a \(store.familyGroup.name)")
+            items.append("Seu acesso à casa")
         }
         return items
     }
@@ -1982,7 +1982,7 @@ struct PremiumBenefitsSheet: View {
     }
 
     private var ceilingNote: some View {
-        Text("Teto da casa: 100 conversas por dia.")
+        Text("Teto da casa: 100 mensagens por dia.")
             .ninaText(.caption, NinaTheme.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -3446,7 +3446,7 @@ struct TaskQuickActionsSheet: View {
                 if task.kind == .task, !task.isDone {
                     NinaDivider(inset: 52)
 
-                    actionRow(title: "Empurrar pra amanhã", systemName: "clock") {
+                    actionRow(title: "Remarcar para amanhã", systemName: "clock") {
                         Haptics.success()
                         pushToTomorrow()
                         dismiss()
