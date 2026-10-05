@@ -1494,7 +1494,10 @@ membership never re-syncs notifications).
 cached house, the consent cache, the profile and the photo; the server holds
 them for the next sign-in. A minor's usage ledger and the last age reading
 stay, so signing out and in never resets a daily limit or re-runs the age step,
-and the tutorial flag stays. Account deletion still clears everything.
+and the tutorial flag stays. Account deletion still clears everything. The
+clearing first invalidates the context, so a late reply cannot write the house
+back, and it removes the reminders already shown; "Sair da casa" does the same
+for the house it leaves.
 
 **Notification scheduling is capped at 60 requests globally**, with recurring
 tasks expanded 12 occurrences deep. Since 2026-10-05 every task's next alert is
