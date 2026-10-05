@@ -2,16 +2,20 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(19);
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 values
   ('71000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'leave-owner@example.com', '{"full_name":"Leave Owner"}'::jsonb, now(), now()),
   ('71000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'leave-member@example.com', '{"full_name":"Leave Member"}'::jsonb, now(), now()),
   ('71000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'leave-guardian@example.com', '{"full_name":"Leave Guardian"}'::jsonb, now(), now()),
-  ('71000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'leave-outsider@example.com', '{"full_name":"Leave Outsider"}'::jsonb, now(), now());
+  ('71000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'leave-outsider@example.com', '{"full_name":"Leave Outsider"}'::jsonb, now(), now()),
+  ('71000000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'leave-teen@example.com', '{"full_name":"Leave Teen"}'::jsonb, now(), now());
 
--- Every fixture account is an Apple-confirmed adult.
+insert into private.account_age_status (user_id, status, minor_band, assurance, minor_since, recheck_after)
+values ('71000000-0000-0000-0000-000000000005', 'minor', '12_15', 'self_declared', now(), now() + interval '30 days');
+
+-- Every other fixture account is an Apple-confirmed adult.
 insert into private.account_age_status (user_id, status, assurance, recheck_after)
 select users.id, 'adult', 'confirmed', now() + interval '180 days'
 from auth.users as users
@@ -80,6 +84,37 @@ select throws_ok(
   'P0002',
   'family_not_found',
   'someone outside the house cannot leave it, nor learn that it exists'
+);
+
+set local request.jwt.claim.sub = '71000000-0000-0000-0000-000000000001';
+select set_config('test.leave_invite', public.get_current_home_context() #>> '{family,invite_code}', true);
+
+set local request.jwt.claim.sub = '71000000-0000-0000-0000-000000000005';
+select lives_ok(
+  $$select public.request_family_join(current_setting('test.leave_invite'))$$,
+  'a teen asks to join the house'
+);
+
+reset role;
+select set_config(
+  'test.leave_teen_request',
+  (select id::text from public.family_join_requests where requester_user_id = '71000000-0000-0000-0000-000000000005'),
+  true
+);
+set local role authenticated;
+
+set local request.jwt.claim.sub = '71000000-0000-0000-0000-000000000001';
+select lives_ok(
+  $$select public.approve_family_join_request(current_setting('test.leave_teen_request')::uuid, 'member', 'mae', '12_15', true, '2026-09-29')$$,
+  'the owner approves the teen as the teen''s guardian'
+);
+
+set local request.jwt.claim.sub = '71000000-0000-0000-0000-000000000005';
+select throws_ok(
+  $$select public.leave_family(current_setting('test.leave_family_id')::uuid)$$,
+  '42501',
+  'family_leave_denied',
+  'a teen never leaves the house on their own; only a guardian takes them out'
 );
 
 set local request.jwt.claim.sub = '71000000-0000-0000-0000-000000000001';

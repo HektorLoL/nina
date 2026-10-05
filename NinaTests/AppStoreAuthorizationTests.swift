@@ -325,6 +325,49 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testLeavingTakesTheHouseCopyAndItsShownRemindersOffThePhone() async throws {
+        let suiteName = "nina.tests.leave.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-leave-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
+        let user = makeUser()
+        let me = HouseholdMember(
+            userID: user.id,
+            name: "Membro",
+            relationship: "Irmão",
+            role: .adult,
+            permissionRole: .member,
+            tone: .sky,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let state = makeRemoteState(permissionRole: .member, members: [me])
+        let scheduler = DeliveredReminderRecorder()
+        let store = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: LeavingHomeBackend(state: state),
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: scheduler
+        )
+        await store.activateHomeContext(for: user)
+        let householdScope = PrivateLocalDataScope.household(for: user.id)
+        let snapshotKey = "nina.home.appData.\(user.id).\(state.familyGroup.id.uuidString)"
+        XCTAssertNotNil(try privateDataStore.data(forKey: snapshotKey, ownerScope: householdScope))
+
+        let left = await store.leaveFamily()
+
+        XCTAssertTrue(left)
+        XCTAssertNil(try privateDataStore.data(forKey: snapshotKey, ownerScope: householdScope))
+        XCTAssertEqual(scheduler.deliveredRemovals, 1)
+    }
+
+    @MainActor
     func testTheOwnerIsNeverOfferedToLeaveTheHouseItHolds() async {
         let user = makeUser()
         let me = HouseholdMember(
@@ -393,9 +436,13 @@ final class AppStoreAuthorizationTests: XCTestCase {
         let householdScope = PrivateLocalDataScope.household(for: user.id)
         let consentScope = PrivateLocalDataScope.aiConsent(for: user.id)
         let usageScope = PrivateLocalDataScope.minorUsage(for: user.id)
+        let ageScope = PrivateLocalDataScope.ageAssurance(for: user.id)
+        let tutorialKey = "nina.onboarding.completed.\(user.id)"
         try privateDataStore.set(Data("home".utf8), forKey: homeKey, ownerScope: householdScope)
         try privateDataStore.set(Data("consent".utf8), forKey: consentKey, ownerScope: consentScope)
         try privateDataStore.set(Data("minutes".utf8), forKey: "usage", ownerScope: usageScope)
+        try privateDataStore.set(Data("features".utf8), forKey: "age", ownerScope: ageScope)
+        defaults.set(true, forKey: tutorialKey)
         let store = AppStore(
             defaults: defaults,
             privateDataStore: privateDataStore,
@@ -409,6 +456,11 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertNil(try privateDataStore.data(forKey: homeKey, ownerScope: householdScope))
         XCTAssertNil(try privateDataStore.data(forKey: consentKey, ownerScope: consentScope))
         XCTAssertNotNil(try privateDataStore.data(forKey: "usage", ownerScope: usageScope))
+        XCTAssertNotNil(
+            try privateDataStore.data(forKey: "age", ownerScope: ageScope),
+            "The last age reading stays, so signing back in never re-runs the age step."
+        )
+        XCTAssertTrue(defaults.bool(forKey: tutorialKey))
     }
 
     @MainActor
@@ -5003,4 +5055,14 @@ private actor ControlledRefreshHomeBackend: RemoteHomeBackend {
     func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
+}
+
+private final class DeliveredReminderRecorder: HomeNotificationScheduling {
+    private(set) var deliveredRemovals = 0
+
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewer: HomeNotificationViewer) async {}
+
+    func removeDeliveredNotifications() {
+        deliveredRemovals += 1
+    }
 }

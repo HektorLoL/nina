@@ -1370,6 +1370,10 @@ final class AppStore {
 
         finishSyncingHome(ifCurrent: contextToken)
         guard isCurrentHomeContext(contextToken) else { return false }
+        if let activeHomeUserID {
+            clearCachedHome(for: activeHomeUserID)
+        }
+        notificationScheduler.removeDeliveredNotifications()
         await activateHomeContext(for: activeUser)
         return true
     }
@@ -2402,7 +2406,17 @@ final class AppStore {
     }
 
     // A minor's usage ledger and the last age reading stay, so signing out never resets a limit or the age step.
+    // Work still in flight for this account is invalidated first, so nothing it finishes can write the house back.
     func clearHouseholdCopy(for userID: String) {
+        if activeHomeUserID == userID {
+            homeContextGeneration &+= 1
+            remoteMutationTask?.cancel()
+            remoteMutationTask = nil
+            remoteMutationGeneration &+= 1
+            notificationSyncTask?.cancel()
+            notificationSyncTask = nil
+        }
+        notificationScheduler.removeDeliveredNotifications()
         clearCachedHome(for: userID)
         PrivateLocalDataAccess.removeAllData(
             forOwnerScope: PrivateLocalDataScope.aiConsent(for: userID),

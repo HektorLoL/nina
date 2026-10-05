@@ -64,9 +64,12 @@ protocol HomeNotificationScheduling {
     func authorizationStatus() async -> HomeNotificationAuthorizationStatus
     func requestAuthorization() async -> HomeNotificationAuthorizationStatus
     func synchronize(tasks: [TaskItem], familyID: UUID, viewer: HomeNotificationViewer) async
+    func removeDeliveredNotifications()
 }
 
 extension HomeNotificationScheduling {
+    func removeDeliveredNotifications() {}
+
     func authorizationStatus() async -> HomeNotificationAuthorizationStatus {
         .unavailable
     }
@@ -159,6 +162,11 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
 
         _ = try? await center.requestAuthorization(options: [.alert, .sound])
         return await authorizationStatus()
+    }
+
+    // A reminder already shown names the house's task; it leaves the phone with the house.
+    func removeDeliveredNotifications() {
+        center.removeAllDeliveredNotifications()
     }
 
     func synchronize(tasks: [TaskItem], familyID: UUID, viewer: HomeNotificationViewer) async {
