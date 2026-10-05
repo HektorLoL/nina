@@ -1293,6 +1293,7 @@ struct AccountDeletionView: View {
         KeychainAppAttestKeyStore().remove(for: userID)
         ageCheck.reset()
         try? PrivacyExportFileStore.removeAll()
+        OperationalDiagnostics.shared.removeArchives()
     }
 
     private func leaveAccountThatMayBeDeleted() {

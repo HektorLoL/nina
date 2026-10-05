@@ -88,6 +88,27 @@ final class OperationalDiagnostics: NSObject, MXMetricManagerSubscriber {
         }
     }
 
+    // Deleting an account leaves nothing of this install behind, performance archives included.
+    func removeArchives() {
+        archiveQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                let directory = try self.diagnosticsDirectory()
+                for url in try FileManager.default.contentsOfDirectory(
+                    at: directory,
+                    includingPropertiesForKeys: nil
+                ) {
+                    try FileManager.default.removeItem(at: url)
+                }
+                self.logger.info("operational_diagnostics event=archives_removed")
+            } catch {
+                self.logger.error(
+                    "operational_diagnostics event=archive_removal_failed error=\(String(describing: error), privacy: .private)"
+                )
+            }
+        }
+    }
+
     private func diagnosticsDirectory() throws -> URL {
         let baseDirectory = try FileManager.default.url(
             for: .applicationSupportDirectory,
