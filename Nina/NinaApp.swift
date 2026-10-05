@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
 
 @main
 struct NinaApp: App {
@@ -14,6 +17,9 @@ struct NinaApp: App {
     init() {
         try? PrivacyExportFileStore.removeAll()
         OperationalDiagnostics.shared.start()
+        #if canImport(UserNotifications)
+        UNUserNotificationCenter.current().delegate = NinaNotificationDelegate.shared
+        #endif
 
         let diagnostics = BackendDiagnosticsStore(environment: BackendServices.environment)
         _backendDiagnostics = State(initialValue: diagnostics)

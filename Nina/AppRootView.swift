@@ -438,6 +438,22 @@ struct AppRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
             travel(to: .tasks)
         }
+        .onAppear(perform: openTaskFromNotification)
+        .onChange(of: TaskNotificationRoute.shared.pendingTaskID) { _, _ in
+            openTaskFromNotification()
+        }
+    }
+
+    // A reminder's tap lands on its task in Hoje; a task that is gone by then opens nothing.
+    private func openTaskFromNotification() {
+        guard let taskID = TaskNotificationRoute.shared.pendingTaskID else { return }
+        TaskNotificationRoute.shared.pendingTaskID = nil
+        guard store.tasks.contains(where: { $0.id == taskID }) else { return }
+        dismissKeyboard()
+        selectedTab = .today
+        let router = tabRouter.router(for: .today)
+        router.presentedSheet = nil
+        router.path = [.task(taskID)]
     }
 
     @ViewBuilder

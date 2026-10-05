@@ -1,3 +1,4 @@
+import UserNotifications
 import XCTest
 @testable import Nina
 
@@ -235,6 +236,44 @@ final class NotificationTargetingTests: XCTestCase {
         }
     }
 
+    func testAReminderCarriesOnlyItsTaskIdentifierSoATapCanOpenTheTask() throws {
+        var task = homeTask(
+            owner: "Ana",
+            dueAt: date(year: 2026, month: 8, day: 8, hour: 18, minute: 0)
+        )
+        task.subtitle = "Vencimento salvo a partir do boleto"
+
+        let planned = try XCTUnwrap(plan([task]).first)
+        let request = try XCTUnwrap(LocalHomeNotificationScheduler.request(planned, calendar: calendar))
+
+        XCTAssertEqual(planned.taskID, task.id)
+        XCTAssertEqual(request.content.userInfo.count, 1)
+        XCTAssertEqual(
+            request.content.userInfo[LocalHomeNotificationScheduler.taskIDKey] as? String,
+            task.id.uuidString
+        )
+        XCTAssertFalse(request.content.body.contains("boleto"))
+    }
+
+    func testAReminderIsPinnedToTheInstantTheCardShowsSoATripNeverMovesIt() throws {
+        let deliveryDate = Date().addingTimeInterval(3 * 24 * 60 * 60).rounded(toMinute: calendar)
+        let planned = ScheduledNotification(
+            identifier: "nina.local.test",
+            taskID: UUID(),
+            title: "Levar o Pedro ao dentista",
+            body: "É a hora. Ficou com você.",
+            deliveryDate: deliveryDate,
+            isSilent: false,
+            kind: .alert
+        )
+
+        let request = try XCTUnwrap(LocalHomeNotificationScheduler.request(planned, calendar: calendar))
+        let trigger = try XCTUnwrap(request.trigger as? UNCalendarNotificationTrigger)
+
+        XCTAssertEqual(trigger.dateComponents.timeZone, calendar.timeZone)
+        XCTAssertEqual(trigger.nextTriggerDate(), deliveryDate)
+    }
+
     func testAHighPriorityTaskIsFollowedUpAndANormalOneIsNot() {
         var high = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: 18, minute: 0))
         high.priority = .high
@@ -397,5 +436,12 @@ final class NotificationTargetingTests: XCTestCase {
             isDone: false,
             createdBy: "Manual"
         )
+    }
+}
+
+private extension Date {
+    func rounded(toMinute calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: self)
+        return calendar.date(from: components) ?? self
     }
 }

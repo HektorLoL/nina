@@ -1496,10 +1496,13 @@ was dropped gets none. A `.high`/`.urgent` task therefore costs up to two
 requests — a household of mostly urgent tasks reaches the ceiling with roughly
 half as many. Quiet hours **silence** rather than move: `content.sound = nil`
 and `interruptionLevel = .passive`, delivery time unchanged, because the app must
-never show one time and deliver another. `UNCalendarNotificationTrigger` carries
-no timezone — travel silently reschedules everything to the same wall-clock time.
-Notifications carry no `userInfo`, category, or actions, and there is no
-`UNUserNotificationCenterDelegate`. **The body never contains `task.subtitle`** —
+never show one time and deliver another. Since 2026-10-05 every
+`UNCalendarNotificationTrigger` carries the calendar's time zone, so an alert
+fires at the instant the card shows even after a trip, and its only `userInfo`
+is `task_id` (`LocalHomeNotificationScheduler.taskIDKey`): `NinaNotificationDelegate`
+shows a reminder that fires while the app is open and routes a tap through
+`TaskNotificationRoute` to that task in Hoje (a task gone by then opens nothing).
+Still no category or actions. **The body never contains `task.subtitle`** —
 it used to, which put a photographed boleto's reading on the lock screen verbatim.
 Nina speaks a sentence and names only who is holding the task;
 `NotificationTargetingTests.testTheTaskDetailNeverReachesTheLockScreen` fails if

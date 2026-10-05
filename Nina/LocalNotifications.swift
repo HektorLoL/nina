@@ -90,6 +90,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
     static let defaultQuietHoursEndMinutes = 7 * 60
 
     static let pendingRequestLimit = 60
+    static let taskIDKey = "task_id"
     static let missedReminderNudgeDelay: TimeInterval = 60 * 60
 
     static func settingsSummary(defaults: UserDefaults = .standard) -> String {
@@ -121,7 +122,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         let currentStatus = await authorizationStatus()
         guard currentStatus == .notDetermined else { return currentStatus }
 
-        _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+        _ = try? await center.requestAuthorization(options: [.alert, .sound])
         return await authorizationStatus()
     }
 
@@ -191,6 +192,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
                             familyID: familyID,
                             deliveryDate: moment.alertDate
                         ),
+                        taskID: task.id,
                         title: isMinor ? "" : task.title,
                         body: isMinor
                             ? minorNotificationBody(task, dueMoment: moment.dueMoment, calendar: calendar)
@@ -217,6 +219,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
                         familyID: familyID,
                         deliveryDate: nudgeDate
                     ),
+                    taskID: task.id,
                     title: task.title,
                     body: nudgeNotificationBody(task),
                     deliveryDate: nudgeDate,
@@ -289,22 +292,26 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         )
     }
 
-    private static func request(
+    static func request(
         _ scheduled: ScheduledNotification,
         calendar: Calendar
     ) -> UNNotificationRequest? {
         let content = UNMutableNotificationContent()
         content.title = scheduled.title
         content.body = scheduled.body
+        // Only the task's identifier rides along, so a tap can open it; nothing readable is added.
+        content.userInfo = [taskIDKey: scheduled.taskID.uuidString]
         // Quiet hours silences the alert instead of moving it: the app must never show one time
         // and deliver another.
         content.sound = scheduled.isSilent ? nil : .default
         content.interruptionLevel = scheduled.isSilent ? .passive : .active
 
-        let components = calendar.dateComponents(
+        // The zone pins the trigger to the instant the card shows, so a trip never moves the alert.
+        var components = calendar.dateComponents(
             [.year, .month, .day, .hour, .minute],
             from: scheduled.deliveryDate
         )
+        components.timeZone = calendar.timeZone
         let trigger = UNCalendarNotificationTrigger(
             dateMatching: components,
             repeats: false
@@ -395,6 +402,7 @@ enum HomeNotificationKind: Hashable {
 
 struct ScheduledNotification: Hashable {
     var identifier: String
+    var taskID: UUID
     var title: String
     var body: String
     var deliveryDate: Date
@@ -442,6 +450,37 @@ private struct QuietHoursConfiguration {
         return scheduledMinutes >= startMinutes || scheduledMinutes < endMinutes
     }
 }
+// A reminder that fires while Nina is open is shown like any other, and a tap opens its task.
+final class NinaNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = NinaNotificationDelegate()
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .list, .sound]
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+              let raw = response.notification.request.content.userInfo[LocalHomeNotificationScheduler.taskIDKey] as? String,
+              let taskID = UUID(uuidString: raw) else { return }
+        await MainActor.run {
+            TaskNotificationRoute.shared.pendingTaskID = taskID
+        }
+    }
+}
 #else
 typealias LocalHomeNotificationScheduler = NoopHomeNotificationScheduler
 #endif
+
+@MainActor
+@Observable
+final class TaskNotificationRoute {
+    static let shared = TaskNotificationRoute()
+
+    var pendingTaskID: UUID?
+}
