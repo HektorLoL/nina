@@ -976,7 +976,7 @@ private struct BottomTabBar: View {
                                 .font(.system(size: 22, weight: .regular))
                                 .frame(height: 24)
 
-                            if tab == .house, store.pendingJoinRequestCount > 0 {
+                            if showsDot(on: tab) {
                                 Circle()
                                     .fill(NinaTheme.cobalt)
                                     .frame(width: 7, height: 7)
@@ -993,7 +993,7 @@ private struct BottomTabBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(tab.title)
-                .accessibilityValue(joinRequestValue(for: tab))
+                .accessibilityValue(dotValue(for: tab))
                 .accessibilityAddTraits(tab == selectedTab ? [.isSelected] : [])
             }
         }
@@ -1008,9 +1008,21 @@ private struct BottomTabBar: View {
         }
     }
 
-    private func joinRequestValue(for tab: AppTab) -> String {
-        guard tab == .house, store.pendingJoinRequestCount > 0 else { return "" }
-        return "\(store.pendingJoinRequestCount) pedindo para entrar"
+    private func showsDot(on tab: AppTab) -> Bool {
+        switch tab {
+        case .house: store.pendingJoinRequestCount > 0
+        case .nina: tab != selectedTab && store.waitingProposalCount > 0
+        case .today, .tasks: false
+        }
+    }
+
+    private func dotValue(for tab: AppTab) -> String {
+        guard showsDot(on: tab) else { return "" }
+        switch tab {
+        case .house: return "\(store.pendingJoinRequestCount) pedindo para entrar"
+        case .nina: return ProposalBacklog.line(count: store.waitingProposalCount)
+        case .today, .tasks: return ""
+        }
     }
 }
 

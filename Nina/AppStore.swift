@@ -325,6 +325,14 @@ final class AppStore {
         canManageFamily ? joinRequests.count : 0
     }
 
+    // Nina proposes and a person decides, so a card still waiting is shown outside the chat too.
+    var waitingProposalCount: Int {
+        guard canUseNinaAI else { return 0 }
+        return messages.reduce(0) { total, message in
+            total + message.proposals.count { $0.state == .pending }
+        }
+    }
+
     var canChangeFamilyPermissions: Bool {
         currentPermissionRole.canChangePermissions
     }

@@ -30,6 +30,16 @@ final class ProposalBacklogTests: XCTestCase {
         XCTAssertFalse(backlog.line.contains("!"))
     }
 
+    func testTheNinaTabCountsEveryCardStillWaitingForAPerson() {
+        let store = AppStore(remoteHomeBackend: nil, ninaEngine: MockNinaEngine())
+        store.messages = [reply(states: [.pending, .accepted]), reply(states: [.rejected]), reply(states: [.pending])]
+
+        XCTAssertEqual(store.waitingProposalCount, 2)
+
+        store.messages = [reply(states: [.accepted, .rejected])]
+        XCTAssertEqual(store.waitingProposalCount, 0)
+    }
+
     private func reply(states: [NinaProposalState]) -> ChatMessage {
         ChatMessage(
             sender: .nina,

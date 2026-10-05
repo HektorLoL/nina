@@ -2151,6 +2151,10 @@ struct ProposalBacklog: Equatable {
     }
 
     var line: String {
+        Self.line(count: count)
+    }
+
+    static func line(count: Int) -> String {
         count == 1 ? "1 proposta esperando" : "\(count) propostas esperando"
     }
 }
