@@ -95,6 +95,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
     static let completeActionIdentifier = "nina.reminder.action.complete"
     static let snoozeActionIdentifier = "nina.reminder.action.snooze"
     static let missedReminderNudgeDelay: TimeInterval = 60 * 60
+    static let horizonNoticeBody = "Abra a Nina para receber os próximos lembretes."
 
     // Every button opens the app first, so the person sees the change and can undo it; a locked
     // phone never writes to the house.
@@ -226,9 +227,13 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         var nextAlerts: [ScheduledNotification] = []
         var laterAlerts: [ScheduledNotification] = []
         var nudges: [ScheduledNotification] = []
+        var hasEndlessAlerts = false
 
         for task in tasks where !task.isDone && isForViewer(task, viewer: viewer) {
             let moments = reminderMoments(task, after: now, calendar: calendar)
+            if task.recurrence != .none, !moments.isEmpty {
+                hasEndlessAlerts = true
+            }
 
             for (index, moment) in moments.enumerated() {
                 let isMinor = viewer.minorPolicy != nil
@@ -285,22 +290,46 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
             )
         }
 
+        // Reminders the phone could not book never stop in silence: one notice follows the last
+        // booked alert and asks for the app, whose next sync books the ones after it.
+        let needsHorizonNotice = hasEndlessAlerts
+            || nextAlerts.count + laterAlerts.count > pendingRequestLimit
+        let alertBudget = pendingRequestLimit - (needsHorizonNotice ? 1 : 0)
+
         // Every task's next alert is booked before any task's later repeats, so a house full of
         // daily chores can never leave a one-off task without its reminder.
         let guaranteedAlerts = nextAlerts
             .sorted { $0.deliveryDate < $1.deliveryDate }
-            .prefix(pendingRequestLimit)
+            .prefix(alertBudget)
         let repeatAlerts = laterAlerts
             .sorted { $0.deliveryDate < $1.deliveryDate }
-            .prefix(pendingRequestLimit - guaranteedAlerts.count)
+            .prefix(alertBudget - guaranteedAlerts.count)
         let deliveredAlerts = Array(guaranteedAlerts) + Array(repeatAlerts)
+
+        var horizonNotice: [ScheduledNotification] = []
+        if needsHorizonNotice, let lastAlert = deliveredAlerts.map(\.deliveryDate).max() {
+            let noticeDate = lastAlert.addingTimeInterval(60)
+            horizonNotice.append(
+                ScheduledNotification(
+                    identifier: horizonIdentifier(familyID: familyID, deliveryDate: noticeDate),
+                    taskID: nil,
+                    title: "",
+                    body: horizonNoticeBody,
+                    deliveryDate: noticeDate,
+                    isSilent: quietHours.contains(noticeDate),
+                    kind: .horizon
+                )
+            )
+        }
+
         // A nudge repeats something the phone already showed, so it may only spend budget that no
         // alert claimed.
         let deliveredNudges = nudges
             .sorted { $0.deliveryDate < $1.deliveryDate }
-            .prefix(pendingRequestLimit - deliveredAlerts.count)
+            .prefix(pendingRequestLimit - deliveredAlerts.count - horizonNotice.count)
 
-        return (deliveredAlerts + deliveredNudges).sorted { $0.deliveryDate < $1.deliveryDate }
+        return (deliveredAlerts + deliveredNudges + horizonNotice)
+            .sorted { $0.deliveryDate < $1.deliveryDate }
     }
 
     private func notificationRequests(
@@ -363,7 +392,10 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         content.body = scheduled.body
         // Only the task's identifier and the instant it was due ride along, so a tap can open it
         // and a button can act on that occurrence; nothing readable is added.
-        var userInfo: [String: Any] = [taskIDKey: scheduled.taskID.uuidString]
+        var userInfo: [String: Any] = [:]
+        if let taskID = scheduled.taskID {
+            userInfo[taskIDKey] = taskID.uuidString
+        }
         if let dueMoment = scheduled.dueMoment {
             userInfo[dueInstantKey] = dueMoment.timeIntervalSince1970
         }
@@ -451,6 +483,11 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         return "nina.local.task.\(familyID.uuidString).\(id.uuidString).\(minute)"
     }
 
+    private static func horizonIdentifier(familyID: UUID, deliveryDate: Date) -> String {
+        let minute = Int(deliveryDate.timeIntervalSince1970 / 60)
+        return "nina.local.horizon.\(familyID.uuidString).\(minute)"
+    }
+
     private static func nudgeIdentifier(
         _ id: UUID,
         familyID: UUID,
@@ -468,11 +505,12 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
 enum HomeNotificationKind: Hashable {
     case alert
     case nudge
+    case horizon
 }
 
 struct ScheduledNotification: Hashable {
     var identifier: String
-    var taskID: UUID
+    var taskID: UUID?
     var title: String
     var body: String
     var deliveryDate: Date

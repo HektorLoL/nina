@@ -159,7 +159,7 @@ final class NotificationTargetingTests: XCTestCase {
         task.recurrence = .daily
         task.reminderLead = .thirtyMinutes
 
-        let planned = plan([task])
+        let planned = plan([task]).filter { $0.kind == .alert }
 
         XCTAssertEqual(planned.count, 12)
         XCTAssertEqual(
@@ -169,6 +169,52 @@ final class NotificationTargetingTests: XCTestCase {
         XCTAssertEqual(
             planned.dropFirst().first?.deliveryDate,
             date(year: 2026, month: 8, day: 9, hour: 20, minute: 30)
+        )
+    }
+
+    func testARepeatingTaskEndsItsBookedRemindersWithANoticeToOpenTheApp() throws {
+        var daily = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: 21, minute: 0))
+        daily.recurrence = .daily
+
+        let planned = plan([daily])
+        let notice = try XCTUnwrap(planned.last)
+        let lastAlert = try XCTUnwrap(planned.filter { $0.kind == .alert }.last)
+
+        XCTAssertEqual(planned.filter { $0.kind == .horizon }.count, 1)
+        XCTAssertEqual(notice.kind, .horizon)
+        XCTAssertEqual(notice.deliveryDate, lastAlert.deliveryDate.addingTimeInterval(60))
+        XCTAssertEqual(notice.body, "Abra a Nina para receber os próximos lembretes.")
+        XCTAssertNil(notice.actions)
+
+        let request = try XCTUnwrap(LocalHomeNotificationScheduler.request(notice, calendar: calendar))
+        XCTAssertTrue(request.content.userInfo.isEmpty, "The notice opens the app and names no task.")
+        XCTAssertEqual(request.content.categoryIdentifier, "")
+    }
+
+    func testOneOffTasksThatAllFitNeedNoNotice() {
+        let planned = plan([
+            homeTask(dueAt: date(year: 2026, month: 8, day: 9, hour: 9, minute: 0)),
+            homeTask(dueAt: date(year: 2026, month: 8, day: 20, hour: 9, minute: 0)),
+        ])
+
+        XCTAssertEqual(planned.count, 2)
+        XCTAssertFalse(planned.contains { $0.kind == .horizon })
+    }
+
+    func testABudgetFullOfOneOffTasksKeepsASlotForTheNotice() {
+        let firstOfMany = date(year: 2026, month: 8, day: 8, hour: 13, minute: 0)
+        let tasks = (0...60).map { index in
+            homeTask(dueAt: firstOfMany.addingTimeInterval(TimeInterval(index) * 3_600))
+        }
+
+        let planned = plan(tasks)
+
+        XCTAssertEqual(planned.count, LocalHomeNotificationScheduler.pendingRequestLimit)
+        XCTAssertEqual(planned.filter { $0.kind == .alert }.count, 59)
+        XCTAssertEqual(planned.last?.kind, .horizon)
+        XCTAssertEqual(
+            planned.last?.deliveryDate,
+            firstOfMany.addingTimeInterval(58 * 3_600 + 60)
         )
     }
 

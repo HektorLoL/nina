@@ -1497,7 +1497,11 @@ and the tutorial flag stays. Account deletion still clears everything.
 tasks expanded 12 occurrences deep. Since 2026-10-05 every task's next alert is
 booked first and later repeats fill what is left by soonest delivery, so daily
 chores can no longer push a one-off task out; a home with more than 60 open
-dated tasks still loses the latest ones. **First alerts and follow-up nudges are budgeted separately**:
+dated tasks still loses the latest ones. Booked reminders never end in silence:
+whenever a repeating task or the budget leaves alerts unbooked, one slot goes to
+a notice a minute after the last booked alert, "Abra a Nina para receber os
+próximos lembretes." (`HomeNotificationKind.horizon`, no task id, no buttons),
+because nothing re-arms the schedule without the app. **First alerts and follow-up nudges are budgeted separately**:
 alerts fill the 60 first, nudges take only the remainder, so a repeat of
 something the phone already showed can never evict the one time another task is
 announced. One nudge per task, not per occurrence, and a task whose first alert
