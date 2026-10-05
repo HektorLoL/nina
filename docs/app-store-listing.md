@@ -1,6 +1,6 @@
 # App Store listing — draft for version 1.0
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 The text to paste into App Store Connect for the first submission. It is a
 draft: Heitor decides the name (open item "decide the store name") and approves
@@ -47,8 +47,9 @@ indexes the name and subtitle, so the keywords below never repeat "rotina",
 > PARA A CASA TODA
 > • Até 8 pessoas na mesma casa, entre adultos, crianças e pets. A Nina não ocupa vaga.
 > • Cada tarefa tem dono, data e categoria. Tarefa sem dono fica com a casa.
-> • Lembretes na hora certa, e silêncio à noite quando você quiser.
+> • Lembretes na hora certa, e silêncio à noite quando você quiser. Do próprio aviso, marque como feita ou adie uma hora.
 > • Lista de compras da casa: digite o item, aperte enter, e o próximo já pode vir.
+> • Várias tarefas de uma vez: marque como feitas, passe para alguém ou apague.
 > • Sementes: vontades sem data, que nunca viram atraso.
 >
 > UM RETRATO PARA CONVERSAR, NÃO PARA COBRAR
@@ -69,7 +70,7 @@ indexes the name and subtitle, so the keywords below never repeat "rotina",
 > NINA PREMIUM
 > Uma assinatura vale para a casa toda:
 > • Até 30 mensagens por hora para cada adulto. Sem o Premium, são 10 por dia.
-> • O resumo semanal da casa.
+> • O resumo semanal da casa, quando dois adultos conversam com a Nina.
 >
 > Nina Premium mensal: R$ 24,90 por mês. Nina Premium anual: R$ 249,90 por ano. A assinatura renova sozinha pelo App Store e pode ser cancelada a qualquer momento nos Ajustes do iPhone, até 24 horas antes da renovação. Apagar a conta da Nina não cancela a assinatura.
 >
@@ -80,6 +81,9 @@ Re-check before pasting:
 
 - The quotas (30 per hour, 10 per day) are `begin_nina_chat_run` in
   `202609290006_ai_gates.sql`; the support FAQ says the same.
+- The weekly summary needs at least two adults with a live AI consent and a
+  week with some movement (`get_nina_weekly_candidates`), which the Premium
+  line says; the in-app FAQ says the same.
 - Photo and document reading are off at launch (`NINA_ATTACHMENTS_ENABLED =
   NO`), so the description never sells them.
 - The prices are the App Store Connect prices for Brazil; Apple shows the
