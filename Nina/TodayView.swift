@@ -33,6 +33,7 @@ struct TodayView: View {
 
     @State private var filter: TodayFilter = .all
     @State private var isOverdueCollapsed = false
+    @State private var isTomorrowExpanded = false
     @State private var isConfirmingReschedule = false
 
     private var now: Date { .now }
@@ -207,6 +208,9 @@ struct TodayView: View {
             if !dueToday.isEmpty {
                 rows(dueToday)
             }
+            if !tomorrow.isEmpty {
+                tomorrowSection
+            }
         } else if filtered.isEmpty {
             // A filter that finds nothing never offers to create.
             Text(filter.emptyLine)
@@ -337,6 +341,46 @@ struct TodayView: View {
             }
         }
         .centeredBelowHeader(minimumGap: 40)
+    }
+
+    // Tomorrow is a glance, folded until asked for, so today's list stays the screen.
+    private var tomorrow: [TaskItem] {
+        let calendar = Calendar.current
+        guard let tomorrowDate = calendar.date(byAdding: .day, value: 1, to: now) else { return [] }
+        let todayIDs = Set(agenda.map(\.id))
+        let upcoming = store.tasks.filter { task in
+            guard task.kind == .task, !task.isDone, !todayIDs.contains(task.id),
+                  let date = task.displayDate(relativeTo: now) else { return false }
+            return calendar.isDate(date, inSameDayAs: tomorrowDate)
+        }
+        return TaskListOrder.sorted(upcoming, now: now)
+    }
+
+    private var tomorrowSection: some View {
+        VStack(spacing: 0) {
+            Button {
+                Haptics.selection()
+                isTomorrowExpanded.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isTomorrowExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(NinaTheme.faint)
+                    Text("AMANHÃ · \(tomorrow.count)")
+                        .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+                    Spacer()
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(isTomorrowExpanded ? "aberta" : "recolhida")
+
+            if isTomorrowExpanded {
+                rows(tomorrow)
+            }
+        }
+        .padding(.top, 14)
     }
 
     // What the day being clear does not mean: that nothing is coming.

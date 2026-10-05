@@ -296,6 +296,7 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
 |---|---|
 | Hoje, first day | "A casa começa vazia." + "Conta pra Nina o que está pesando." + quiet "Conversar com a Nina", with the + visible. Delete "Escrever sem a Nina". |
 | Hoje, day cleared | "Acabou o dia da casa." + "Pode largar o celular." The next-up eyebrow changes from "Amanhã cedo" to "Próxima". |
+| Hoje, tomorrow (2026-10-05) | Under today's list, a folded group "AMANHÃ · N" with a chevron, closed by default, listing tomorrow's open tasks in `TaskListOrder`. It never shows when the day is cleared, where "Próxima" already points ahead. |
 | Filter empty | "Nada com você." · "Tudo tem dono." · "Nenhuma semente." · "Nada em aberto." |
 | Overdue | Header "ATRASADAS · N", action "Remarcar". Alert: title "Remarcar para amanhã, 09:00?", message "Nada é apagado.", button "Remarcar". |
 | Tarefas, first use | "Nada combinado ainda." + "Conta pra Nina. Ela propõe, você confirma." + one button. The + is visible. |
