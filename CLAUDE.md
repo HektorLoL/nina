@@ -109,7 +109,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 26.4+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (51 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (52 files) |
 | Server logic | 6 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -143,12 +143,30 @@ product regression, not a refactor.
   own row to `permission_role='owner'`. Migration `202606100004` revoked the
   table privilege so the policy can never be reached. This is the single most
   important invariant in the schema.
-- **Only an `owner` changes permission roles**, and `owner` can be neither
-  granted nor revoked via any RPC. An `admin` may not modify another
-  owner/admin. Nobody removes themselves, the owner, or the assistant row; an
-  adult who is not the owner leaves through `leave_family` instead (since
-  2026-10-05), which runs a removal's guardian cleanup and records no access
-  decision, and the owner cannot leave without a successor.
+- **Only an `owner` changes permission roles**, and `owner` moves only one
+  way: the owner offers it and the receiver accepts (since 2026-10-05).
+  `offer_family_ownership` takes any claimed member the list shows as an adult
+  and reads nobody's age; `accept_family_ownership_offer` reads only the
+  caller's own (`require_adult_account`, the same bar
+  `prepare_account_deletion` sets for a successor), makes the former owner an
+  admin and moves `families.created_by`; `cancel_family_ownership_offer` is
+  the owner's withdrawal and the receiver's refusal. So neither answer tells
+  anyone about another person's age, and nobody becomes owner without saying
+  yes. One offer per house lives in `private.family_ownership_offers`, void
+  after seven days or once its owner no longer holds the house, and reaches
+  the app as `ownership_offer` in the adult home context; offers and
+  withdrawals bump `families.updated_at` so realtime carries them. No RPC
+  grants or revokes `owner` otherwise. The app offers it as "Passar a casa" in
+  the member editor, behind the person's name typed and an ink button, and the
+  receiver answers on a card at the top of Casa. An `admin` may not modify
+  another owner/admin.
+  Nobody removes themselves, the owner, or the assistant row; an adult who is
+  not the owner leaves through `leave_family` instead (since 2026-10-05),
+  which runs a removal's guardian cleanup and records no access decision, and
+  the owner cannot leave until someone accepts the house. The owner's
+  title is "Titular" (since 2026-10-05; "Responsável" also named a child's
+  guardian), and `create_family` no longer writes the masculine `'Criador'` as
+  the creator's relationship.
 - **A claimed member's `household_role` is derived from age, never chosen by a
   client** (since 2026-09-29; it used to be forced to `'adult'`). The trigger
   `family_members_enforce_age` sets it from `private.effective_age`: adult →
@@ -939,9 +957,11 @@ un-completing fires `selection()` — copy that asymmetry.
 it closes something; a tapped task row keeps its tick for 380 ms before the
 store toggles it, and re-reads the live task first so it never reopens what
 someone else closed meanwhile; the `.reading` mark's capsule breathes; a
-`.stored` mark's disc drops into the cup on appear. Every one is movement on
-top of a state that already reads still, and Reduce Motion removes all four
-(a row then completes at once).
+`.stored` mark's disc drops into the cup on appear; the Nina tab draws the
+mark instead of a symbol, and its disc lifts and falls back into the cup each
+time a task closes on this phone (`AppStore.completionPulse`, `NinaMark.hops`).
+Every one is movement on top of a state that already reads still, and Reduce
+Motion removes all five (a row then completes at once).
 
 **Accessibility:** decorative overlays are `.allowsHitTesting(false)` +
 `.accessibilityHidden(true)`. Since 2026-10-05 `CategoryGlyph` is silent unless
@@ -975,7 +995,7 @@ is longer than a word budget, the legal text wins.
 
 ## 6. Database
 
-51 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+52 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order. The eight
 `202609290001`–`…0008` files (age assurance, minors and guardianship, adult-only
 RLS, join and house rules, the minor home view, the AI gates, the insight and
@@ -1961,6 +1981,14 @@ the project, not bugs to fix unprompted.
   fails if any foreign key in `public` or `private` lacks a leading index. It
   went through the Supabase MCP `apply_migration`, its version row was set to
   `202610050002` (§12), and the same canary query read 0 on production.
+- **Migration `202610050003` (owner title and handover) is in the repo and
+  not yet in production.** It adds `private.family_ownership_offers` and the
+  offer, accept and withdraw RPCs (the authenticated function grant map
+  becomes 51 names), adds `ownership_offer` to `get_current_home_context`
+  (copied verbatim from `202609290005` otherwise), and clears the `'Criador'`
+  relationship. It is additive, so applying it before the build that offers
+  "Passar a casa" is safe; until it is applied, that button fails with "Não
+  deu para passar a casa agora."
 - **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
   `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
   compares them) and Terms §4 reads the same constant. Apple's questionnaire
@@ -1972,8 +2000,8 @@ the project, not bugs to fix unprompted.
   Federal intake for the child-safety hold and the OpenAI sub-processor link
   are UNVERIFIED and must be read from their official sources before release.
   The App Store name "Nina: sua amiga da casa" still says "amiga", which the
-  voice rule for surfaces a minor can see (§2) no longer allows; renaming the
-  listing is Heitor's call.
+  voice rule for surfaces a minor can see (§2) no longer allows; Heitor chose
+  "Nina: rotina da casa" on 2026-10-05 and renames it in App Store Connect.
 - **D3 is measured on TestFlight, not decided.** Only Apple-confirmed adults
   (or operator-marked accounts) chat, buy Premium, create a child profile or
   approve a minor. `private.age_assurance_distribution()` shows how Brazilian

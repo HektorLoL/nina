@@ -3,8 +3,8 @@
 Last updated: 2026-10-05
 
 The text to paste into App Store Connect for the first submission. It is a
-draft: Heitor decides the name (open item "decide the store name") and approves
-every line before it is pasted. Each claim below is true of the build and the
+draft: Heitor approves every line before it is pasted. The name was decided on
+2026-10-05. Each claim below is true of the build and the
 server as of this date; re-check the marked ones before submitting.
 
 The App Store page is visible to every age, so it follows the voice rule for
@@ -16,7 +16,7 @@ crianças" anywhere in the metadata (runbook §6.3).
 
 | Field | Value | Limit |
 |---|---|---|
-| Name | **Decision needed.** Today "Nina: sua amiga da casa" (23). Proposed: "Nina: rotina da casa" (20) | 30 |
+| Name | Nina: rotina da casa (20). Decided 2026-10-05; App Store Connect still shows "Nina: sua amiga da casa" until Heitor renames it there | 30 |
 | Subtitle | Tarefas, lembretes e compras (28) | 30 |
 | Primary category | Produtividade | |
 | Secondary category | Estilo de vida | |
@@ -26,7 +26,7 @@ crianças" anywhere in the metadata (runbook §6.3).
 | Age Suitability URL | https://ninai.app/familias/ | |
 | Copyright | 2026 Heitor Castello Gomes França | |
 
-Why the proposed name: it drops "amiga", which the app no longer says anywhere
+Why this name: it drops "amiga", which the app no longer says anywhere
 a child can see, and it repeats the login's own line, "A rotina da casa,
 dividida." The subtitle then carries the three nouns people search for. Apple
 indexes the name and subtitle, so the keywords below never repeat "rotina",

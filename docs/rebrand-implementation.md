@@ -615,6 +615,29 @@ adult. No board draws this; nothing new is drawn.
   (`MinorNoHomeView`), prefilled with Apple's given name when there is one, and
   still editable.
 
+## 6l. Owner title, handing over, and the Nina tab (2026-10-05)
+
+No board draws any of these; each reuses a part the app already has.
+
+- **The Nina tab draws the mark.** The bar's first item was the `bubble.left`
+  symbol; it is now `NinaMark` at 24pt (the small master), ink when selected
+  and muted otherwise, like the other three symbols. Its disc lifts and falls
+  back into the cup when a task closes on this phone, a position and never an
+  expression, and Reduce Motion keeps it still. The large-content viewer still
+  shows `bubble.left`, because it needs a symbol.
+- **"Titular" names the owner.** The crown's spoken label, the permission line
+  and the access value read "Titular" where they read "Responsável", which a
+  guardian sheet also uses for a child's parent.
+- **"Passar a casa" sits under Permissão.** In the member editor of another
+  adult with an account, the owner sees a quiet "Passar a casa"; it opens the
+  deletion's own typed gate in place: one muted line, "Escreva {nome} para
+  confirmar", and the ink button, with a quiet "Cancelar". It sends an offer;
+  the editor then reads "Esperando {nome} aceitar a casa." over a quiet
+  "Desfazer pedido". The receiver answers on a card at the top of Casa
+  ("Aceitar", cobalt, and "Recusar", outline, like a join request), and the
+  Casa tab carries a dot until they do. Ajustes shows the owner a "Sair da
+  casa" row that only explains the order: pass the house, then leave.
+
 ## 7. Verified
 
 - `xcodebuild build` — succeeds.
