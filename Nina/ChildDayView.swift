@@ -110,35 +110,6 @@ struct ChildTodaySection: View {
     }
 }
 
-// Side by side only when every label fits at an equal width, so no label ever wraps mid-word.
-private struct EqualWidthRow: Layout {
-    var spacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard !subviews.isEmpty else { return .zero }
-        let gaps = spacing * CGFloat(subviews.count - 1)
-        let widest = subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
-        let width = proposal.width ?? widest * CGFloat(subviews.count) + gaps
-        let column = max((width - gaps) / CGFloat(subviews.count), 0)
-        let height = subviews
-            .map { $0.sizeThatFits(ProposedViewSize(width: column, height: nil)).height }
-            .max() ?? 0
-        return CGSize(width: width, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard !subviews.isEmpty else { return }
-        let gaps = spacing * CGFloat(subviews.count - 1)
-        let column = max((bounds.width - gaps) / CGFloat(subviews.count), 0)
-        for (index, subview) in subviews.enumerated() {
-            subview.place(
-                at: CGPoint(x: bounds.minX + CGFloat(index) * (column + spacing), y: bounds.minY),
-                proposal: ProposedViewSize(width: column, height: bounds.height)
-            )
-        }
-    }
-}
-
 // Leaving takes a held press, never a tap: the phone is in a child's hands.
 struct ChildDayView: View {
     private static let allDoneID = "allDone"

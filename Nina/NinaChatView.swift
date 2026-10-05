@@ -2023,21 +2023,27 @@ private struct SuggestionMiniCard: View {
 
             // Three exits, never two: disagreement is a first-class button, and a
             // card you can only accept or inspect is a card you cannot refuse.
-            HStack(spacing: 10) {
-                NinaButton(title: "Ver detalhes", kind: .outline, fillsWidth: true) {
-                    Haptics.lightImpact()
-                    router.presentedSheet = .suggestion(suggestion)
-                }
-
-                NinaButton(title: "Não", kind: .outline, fillsWidth: true) {
-                    Haptics.selection()
-                    isRefused = true
-                }
+            ViewThatFits(in: .horizontal) {
+                EqualWidthRow(spacing: 10) { secondaryActions }
+                VStack(spacing: 10) { secondaryActions }
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .ninaCard()
+    }
+
+    @ViewBuilder
+    private var secondaryActions: some View {
+        NinaButton(title: "Ver detalhes", kind: .outline, fillsWidth: true) {
+            Haptics.lightImpact()
+            router.presentedSheet = .suggestion(suggestion)
+        }
+
+        NinaButton(title: "Não", kind: .outline, fillsWidth: true) {
+            Haptics.selection()
+            isRefused = true
+        }
     }
 }
 
