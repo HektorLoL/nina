@@ -199,6 +199,33 @@ final class NotificationTargetingTests: XCTestCase {
         XCTAssertEqual(planned.first?.isSilent, true)
     }
 
+    func testTheEditorKnowsWhenAReminderWillRingWithoutSound() {
+        defaults.set(true, forKey: LocalHomeNotificationScheduler.quietHoursEnabledKey)
+        let earlyMedicine = date(year: 2026, month: 8, day: 9, hour: 6, minute: 30)
+        let breakfast = date(year: 2026, month: 8, day: 9, hour: 8, minute: 0)
+
+        func silent(_ dueAt: Date, _ lead: TaskReminderLead) -> Bool {
+            LocalHomeNotificationScheduler.ringsSilently(
+                dueAt: dueAt,
+                lead: lead,
+                now: now,
+                defaults: defaults,
+                calendar: calendar
+            )
+        }
+
+        XCTAssertTrue(silent(earlyMedicine, .atTime))
+        XCTAssertFalse(silent(breakfast, .oneHour), "Quiet hours end at 07:00, so a 07:00 alert rings.")
+        XCTAssertTrue(silent(breakfast, .twoHours))
+
+        defaults.set(false, forKey: LocalHomeNotificationScheduler.quietHoursEnabledKey)
+        XCTAssertFalse(silent(earlyMedicine, .atTime))
+
+        defaults.set(true, forKey: LocalHomeNotificationScheduler.quietHoursEnabledKey)
+        defaults.set(false, forKey: LocalHomeNotificationScheduler.notificationsEnabledKey)
+        XCTAssertFalse(silent(earlyMedicine, .atTime), "A phone with alerts off rings nothing to warn about.")
+    }
+
     func testAnUrgentTaskIsFollowedUpAnHourAfterItWasDue() {
         var task = homeTask(
             owner: "Ana",

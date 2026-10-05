@@ -2436,6 +2436,18 @@ struct TaskEditorSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
+            } else if !isSeed, store.reminderRingsSilently(
+                owner: owner,
+                ownerMemberID: ownerMemberID,
+                dueAt: dueDate,
+                lead: reminderLead
+            ) {
+                Label("No horário de silêncio, o aviso chega sem som.", systemImage: "moon")
+                    .ninaText(.caption, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
             }
 
             HStack(spacing: 12) {

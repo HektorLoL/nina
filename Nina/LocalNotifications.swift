@@ -182,6 +182,19 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         }
     }
 
+    static func ringsSilently(
+        dueAt: Date,
+        lead: TaskReminderLead,
+        now: Date = Date(),
+        defaults: UserDefaults = .standard,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard defaults.object(forKey: notificationsEnabledKey) as? Bool ?? true else { return false }
+        let leadDate = dueAt.addingTimeInterval(-TimeInterval(lead.minutes * 60))
+        let alertDate = leadDate > now ? leadDate : dueAt
+        return QuietHoursConfiguration(defaults: defaults, calendar: calendar).contains(alertDate)
+    }
+
     // Another adult's chore must never buzz this phone, and must never evict this phone's own
     // reminders from the 60-request tail.
     static func isForViewer(_ task: TaskItem, viewer: HomeNotificationViewer) -> Bool {

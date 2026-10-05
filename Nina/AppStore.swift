@@ -2781,6 +2781,38 @@ final class AppStore {
         return false
     }
 
+    // Quiet hours keep a reminder's time and take its sound, so the editor says so before saving.
+    func reminderRingsSilently(
+        owner: String,
+        ownerMemberID: UUID?,
+        dueAt: Date,
+        lead: TaskReminderLead,
+        now: Date = .now
+    ) -> Bool {
+        guard notificationAuthorizationStatus.canSchedule, homeAccessState != .minorMember else { return false }
+        var probe = TaskItem(
+            title: "",
+            subtitle: "",
+            owner: owner,
+            dueLabel: "",
+            dueAt: dueAt,
+            category: .home,
+            isDone: false,
+            createdBy: ""
+        )
+        probe.ownerMemberID = ownerMemberID
+        guard LocalHomeNotificationScheduler.isForViewer(
+            probe,
+            viewer: HomeNotificationViewer(member: currentFamilyMember)
+        ) else { return false }
+        return LocalHomeNotificationScheduler.ringsSilently(
+            dueAt: dueAt,
+            lead: lead,
+            now: now,
+            defaults: defaults
+        )
+    }
+
     func synchronizeLocalNotifications() {
         // A membership the server could not confirm is not a lost one: the alerts
         // already on the phone stay until a verified answer replaces them.
