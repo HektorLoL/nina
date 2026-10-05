@@ -168,6 +168,12 @@ struct NinaChatView: View {
                             .id("nina-typing")
                     }
                 }
+                // Focus stays in the composer, so Nina's answer is spoken the moment it lands.
+                .onChange(of: store.isNinaResponding) { wasResponding, isResponding in
+                    guard wasResponding, !isResponding,
+                          let reply = store.messages.last, reply.sender == .nina else { return }
+                    AccessibilityNotification.Announcement("Nina: \(reply.text)").post()
+                }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
                 .padding(.bottom, 18)
@@ -399,6 +405,7 @@ struct AIMemoryConsentCard: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(NinaTheme.ink)
                 .frame(width: 16, height: 18)
+                .accessibilityHidden(true)
 
             Text(text)
                 .ninaText(.caption, NinaTheme.ink)
@@ -1894,7 +1901,7 @@ private struct NinaProposalCard: View {
                 NinaButton(title: "Não", kind: .quiet, fillsWidth: true) {
                     resolve(decision: .reject)
                 }
-                .frame(height: 50)
+                .frame(minHeight: 50)
             }
         }
     }

@@ -15,7 +15,9 @@ struct SheetHeader: View {
 
     var body: some View {
         ZStack {
-            Text(eyebrow).ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+            Text(eyebrow)
+                .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+                .accessibilityAddTraits(.isHeader)
 
             HStack {
                 if alignsCloseTrailing {
@@ -213,6 +215,7 @@ private struct SettingsLinkRow: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(NinaTheme.faint)
+                        .accessibilityHidden(true)
                 case .external:
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 12, weight: .semibold))
@@ -369,6 +372,7 @@ struct SettingsSheet: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(NinaTheme.faint)
+                            .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
                 }
@@ -1935,7 +1939,8 @@ struct PremiumBenefitsSheet: View {
                     .frame(width: 76)
             }
             .padding(.horizontal, 14)
-            .frame(height: 38)
+            .frame(minHeight: 38)
+            .accessibilityHidden(true)
 
             NinaDivider(inset: 0)
 
@@ -1963,6 +1968,10 @@ struct PremiumBenefitsSheet: View {
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 52)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "\(title): grátis, \(free ?? "não incluído"); Premium, \(premium ?? "incluído")"
+        )
     }
 
     @ViewBuilder
@@ -2164,6 +2173,7 @@ struct TaskEditorSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var mode: TaskEditorMode
     var initialKind: TaskKind = .task
@@ -2499,6 +2509,8 @@ struct TaskEditorSheet: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Dono")
+                .accessibilityValue(isOwnerAssigned ? selectedOwnerLabel : "Sem dono")
 
                 Button {
                     Haptics.lightImpact()
@@ -2507,6 +2519,8 @@ struct TaskEditorSheet: View {
                     EditorChip(systemName: category.symbolName, text: category.title, isSet: true)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Categoria")
+                .accessibilityValue(category.title)
 
                 if !isSeed {
                     Menu {
@@ -2588,6 +2602,8 @@ struct TaskEditorSheet: View {
                 EditorChip(systemName: "calendar", text: Self.dateLabel(for: dueDate), isSet: true)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Quando")
+            .accessibilityValue(Self.dateLabel(for: dueDate))
         }
     }
 
@@ -2639,7 +2655,7 @@ struct TaskEditorSheet: View {
                     Button {
                         Haptics.lightImpact()
                         newCategoryTitle = ""
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86)) {
                             isCreatingCategory = true
                         }
                     } label: {
@@ -2678,7 +2694,7 @@ struct TaskEditorSheet: View {
 
                     Button {
                         Haptics.selection()
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86)) {
                             isCreatingCategory = false
                         }
                         newCategoryTitle = ""
@@ -2716,21 +2732,23 @@ struct TaskEditorSheet: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(NinaTheme.ink)
+                    .accessibilityHidden(true)
             }
         }
         .padding(.horizontal, 20)
         .frame(minHeight: 48)
         .contentShape(Rectangle())
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func togglePanel(_ panel: TaskEditorPanel) {
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86)) {
             activePanel = activePanel == panel ? nil : panel
         }
     }
 
     private func closePanel() {
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86)) {
             activePanel = nil
             isCreatingCategory = false
         }
@@ -3140,6 +3158,12 @@ struct ShoppingEditorSheet: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Quem compra")
+                    .accessibilityValue(
+                        ownerMemberID == nil
+                            ? "Sem dono"
+                            : (ownerOptions.first(where: isSelectedOwner)?.label ?? owner)
+                    )
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 2)

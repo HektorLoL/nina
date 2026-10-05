@@ -530,10 +530,13 @@ private struct MinorNoHomeView: View {
 
     private func field<Field: View>(label: String, @ViewBuilder content: () -> Field) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).ninaText(.meta, NinaTheme.muted)
+            Text(label)
+                .ninaText(.meta, NinaTheme.muted)
+                .accessibilityHidden(true)
             content()
                 .ninaText(.body, NinaTheme.ink)
                 .tint(NinaTheme.cobalt)
+                .accessibilityLabel(label)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
@@ -853,6 +856,7 @@ struct MinorSettingsView: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(NinaTheme.faint)
+                    .accessibilityHidden(true)
             }
             .contentShape(Rectangle())
         }

@@ -96,6 +96,7 @@ struct HouseView: View {
                         subtitle: memberSubtitle(member)
                     ) {
                         MemberAvatar(initials: member.name.ninaInitials, tone: member.tone)
+                            .accessibilityHidden(true)
                     } trailing: {
                         if member.permissionRole == .owner {
                             Image(systemName: "crown.fill")
@@ -187,6 +188,7 @@ struct HouseView: View {
         Image(systemName: "chevron.right")
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(NinaTheme.faint)
+            .accessibilityHidden(true)
     }
 
     private var renewInviteRow: some View {
@@ -484,7 +486,8 @@ struct MemoriesView: View {
         }
         .padding(.leading, 12)
         .padding(.trailing, query.isEmpty ? 12 : 4)
-        .frame(height: 40)
+        .padding(.vertical, 6)
+        .frame(minHeight: 40)
         .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
     }
 }

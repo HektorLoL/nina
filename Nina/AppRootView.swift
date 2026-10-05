@@ -354,7 +354,7 @@ struct AppRootView: View {
         switch entryPhase {
         case .signedOut:
             LoginView()
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         case .ageCheck:
             AgeCheckView()
                 .transition(.opacity)
@@ -369,25 +369,25 @@ struct AppRootView: View {
                 .transition(.opacity)
         case .tutorial:
             OnboardingTutorialView()
-                .transition(.opacity.combined(with: .scale(scale: 1.01)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 1.01)))
         case .homeLoading:
             AppWaitingScreen()
                 .transition(.opacity)
         case .invite:
             InviteAcceptanceView()
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         case .pendingApproval:
             PendingHomeApprovalView()
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         case .accessDecision:
             FamilyAccessDecisionView()
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         case .homeSetup:
             HomeSetupView()
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         case .homeUnavailable:
             HomeAccessUnavailableView()
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         case .app:
             appShell
                 .transition(.opacity)
@@ -415,7 +415,7 @@ struct AppRootView: View {
                let task = store.tasks.first(where: { $0.id == id }) {
                 UndoCompletionToast(title: task.title)
                     .padding(.bottom, tabRouter.router(for: selectedTab).path.isEmpty ? 164 : 16)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
                     .zIndex(2)
             }
 
@@ -424,7 +424,7 @@ struct AppRootView: View {
             if let message = store.syncErrorMessage {
                 SyncErrorToast(message: message)
                     .padding(.bottom, syncErrorToastBottomPadding)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
                     .zIndex(3)
             }
 
@@ -888,6 +888,9 @@ private struct UndoCompletionToast: View {
         .frame(minHeight: 50)
         .background(NinaTheme.ink, in: Capsule())
         .padding(.horizontal, 20)
+        .onAppear {
+            AccessibilityNotification.Announcement("\(title). Desfazer disponível.").post()
+        }
     }
 }
 
@@ -1006,6 +1009,10 @@ private struct BottomTabBar: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(tab.title)
                 .accessibilityValue(dotValue(for: tab))
+                .accessibilityShowsLargeContentViewer {
+                    Image(systemName: tab.systemImage)
+                    Text(tab.title)
+                }
                 .accessibilityAddTraits(tab == selectedTab ? [.isSelected] : [])
             }
         }

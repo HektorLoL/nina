@@ -645,7 +645,8 @@ struct TasksView: View {
                         .textInputAutocapitalization(.never)
                 }
                 .padding(.horizontal, 12)
-                .frame(height: 40)
+                .padding(.vertical, 6)
+                .frame(minHeight: 40)
                 .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
 
                 Button {

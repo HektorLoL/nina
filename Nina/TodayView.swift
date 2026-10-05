@@ -563,7 +563,9 @@ struct TaskRowView: View {
                 NinaCheckbox(isOn: task.isDone || isSettling, isOverdue: isOverdue && !isSettling)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(task.kind == .seed && !task.isDone ? "Plantar" : task.completionActionTitle)
+            .accessibilityLabel(
+                "\(task.kind == .seed && !task.isDone ? "Plantar" : task.completionActionTitle): \(task.title)"
+            )
 
             Button {
                 // The long press fires first and the tap follows on lift, so

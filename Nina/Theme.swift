@@ -214,6 +214,7 @@ private struct NinaTextModifier: ViewModifier {
             .lineSpacing(style.leading - style.size)
             .foregroundStyle(color)
             .textCase(style == .eyebrow ? .uppercase : nil)
+            .accessibilityAddTraits(style == .screen || style == .display ? .isHeader : [])
     }
 }
 

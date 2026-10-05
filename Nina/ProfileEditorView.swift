@@ -300,6 +300,7 @@ struct ProfileEditorView: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(NinaTheme.muted)
+                            .accessibilityHidden(true)
                     }
                 }
                 .contentShape(Rectangle())
@@ -485,10 +486,13 @@ private struct ProfileField<Field: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).ninaText(.meta, NinaTheme.muted)
+            Text(label)
+                .ninaText(.meta, NinaTheme.muted)
+                .accessibilityHidden(true)
             field
                 .ninaText(.body, NinaTheme.ink)
                 .tint(NinaTheme.cobalt)
+                .accessibilityLabel(label)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)

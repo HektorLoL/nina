@@ -7,7 +7,9 @@ struct Eyebrow: View {
     var text: String
 
     var body: some View {
-        Text(text).ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+        Text(text)
+            .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -18,22 +20,27 @@ struct PremiumBadge: View {
         Text("Premium")
             .ninaText(.eyebrow, NinaTheme.cobalt, weight: .bold)
             .padding(.horizontal, 10)
-            .frame(height: 24)
+            .padding(.vertical, 4)
+            .frame(minHeight: 24)
             .background(NinaTheme.cobaltWash, in: Capsule())
             .accessibilityLabel("Premium ativo na casa")
     }
 }
 
+// A glyph decorates the words beside it; VoiceOver hears it only when it is given its own name.
 struct CategoryGlyph: View {
     var systemName: String
     var size: CGFloat = 20
     var tint: Color = NinaTheme.ink
+    var label: String? = nil
 
     var body: some View {
         Image(systemName: systemName)
             .font(.system(size: size, weight: .regular))
             .foregroundStyle(tint)
             .frame(width: size + 4, height: size + 4)
+            .accessibilityLabel(label ?? "")
+            .accessibilityHidden(label == nil)
     }
 }
 
@@ -174,6 +181,12 @@ struct NinaErrorNote: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Erro: \(text)")
+        .onAppear {
+            AccessibilityNotification.Announcement("Erro: \(text)").post()
+        }
+        .onChange(of: text) { _, newText in
+            AccessibilityNotification.Announcement("Erro: \(newText)").post()
+        }
     }
 }
 

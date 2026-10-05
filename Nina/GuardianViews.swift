@@ -210,10 +210,13 @@ struct GuardianApprovalSheet: View {
                     if showsNicknames {
                         VStack(alignment: .leading, spacing: 6) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Apelidos").ninaText(.meta, NinaTheme.muted)
+                                Text("Apelidos")
+                                    .ninaText(.meta, NinaTheme.muted)
+                                    .accessibilityHidden(true)
                                 TextField("Pedrinho, Pê", text: $form.nicknamesText)
                                     .ninaText(.body, NinaTheme.ink)
                                     .tint(NinaTheme.cobalt)
+                                    .accessibilityLabel("Apelidos")
                                     .textInputAutocapitalization(.words)
                                     .autocorrectionDisabled()
                             }
@@ -734,6 +737,7 @@ struct MinorSupervisionSection: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(NinaTheme.faint)
+                    .accessibilityHidden(true)
             }
         }
         .frame(minHeight: 52)

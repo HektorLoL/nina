@@ -569,6 +569,7 @@ struct PendingJoinRequestCard: View {
                 subtitle: request.createdAt.formatted(.relative(presentation: .named))
             ) {
                 MemberAvatar(initials: request.requesterName.ninaInitials, tone: .mint)
+                    .accessibilityHidden(true)
             } trailing: {
                 EmptyView()
             }
@@ -908,8 +909,7 @@ struct MemberPermissionBadge: View {
 
     var body: some View {
         if member.role != .assistant, effectivePermissionRole == .owner {
-            CategoryGlyph(systemName: "crown.fill", size: 14, tint: NinaTheme.ink)
-                .accessibilityLabel("Responsável pela casa")
+            CategoryGlyph(systemName: "crown.fill", size: 14, tint: NinaTheme.ink, label: "Responsável pela casa")
         }
     }
 
@@ -927,10 +927,13 @@ private struct MemberField_<Field: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).ninaText(.meta, NinaTheme.muted)
+            Text(title)
+                .ninaText(.meta, NinaTheme.muted)
+                .accessibilityHidden(true)
             field
                 .ninaText(.body, NinaTheme.ink)
                 .tint(NinaTheme.cobalt)
+                .accessibilityLabel(title)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)

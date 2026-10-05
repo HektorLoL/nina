@@ -259,7 +259,7 @@ struct OnboardingTutorialView: View {
                     NinaButton(title: "Não", kind: .quiet, fillsWidth: true) {
                         ignoreProposal()
                     }
-                    .frame(height: 50)
+                    .frame(minHeight: 50)
                 }
             }
             .padding(16)

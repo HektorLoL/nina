@@ -322,12 +322,15 @@ struct HomeSetupField<Field: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).ninaText(.meta, NinaTheme.muted)
+            Text(title)
+                .ninaText(.meta, NinaTheme.muted)
+                .accessibilityHidden(true)
 
             field
                 .ninaText(.body, NinaTheme.ink)
                 .textFieldStyle(.plain)
                 .lineLimit(1)
+                .accessibilityLabel(title)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
