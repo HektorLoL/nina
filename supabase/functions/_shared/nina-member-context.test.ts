@@ -65,6 +65,35 @@ Deno.test("pets and the assistant row pass through untouched", () => {
   assertEquals(minimizeMembersForModel(rows), rows);
 });
 
+Deno.test("a pet's species and breed reach Nina, and nobody else carries pet columns", () => {
+  const [pet, person] = minimizeMembersForModel([
+    {
+      name: "Thor",
+      household_role: "pet",
+      pet_species: "Cachorro",
+      pet_breed: "Vira-lata",
+    },
+    { ...adult, pet_species: "", pet_breed: "" },
+  ]);
+
+  assertEquals(pet.pet_species, "Cachorro");
+  assertEquals(pet.pet_breed, "Vira-lata");
+  assertFalse("pet_species" in person);
+  assertFalse("pet_breed" in person);
+  assertEquals(person.memory_note, adult.memory_note);
+});
+
+Deno.test("the chat reads a pet's species and breed with the household", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../nina-chat/index.ts", import.meta.url),
+  );
+
+  assertStringIncludes(
+    source,
+    'select("id,name,relationship,household_role,memory_note,pet_species,pet_breed")',
+  );
+});
+
 Deno.test("a row with no household role is left alone rather than guessed at", () => {
   const rows: HouseholdMemberRow[] = [{ name: "?", memory_note: "kept" }];
 

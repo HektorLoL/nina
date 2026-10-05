@@ -3,6 +3,8 @@ export interface HouseholdMemberRow {
   relationship?: string | null;
   household_role?: string | null;
   memory_note?: string | null;
+  pet_species?: string | null;
+  pet_breed?: string | null;
 }
 
 // A child's or teen's memory note never crosses the border: it is free text
@@ -11,10 +13,15 @@ export function minimizeMembersForModel<T extends HouseholdMemberRow>(
   rows: readonly T[],
 ): T[] {
   return rows.map((row) => {
-    if (row.household_role !== "child" && row.household_role !== "teen") {
-      return { ...row };
+    const retained: Partial<HouseholdMemberRow> = { ...row };
+    // Species and breed describe an animal; on anyone else they are empty columns and stay home.
+    if (row.household_role !== "pet") {
+      delete retained.pet_species;
+      delete retained.pet_breed;
     }
-    const { memory_note: _withheld, ...retained } = row;
-    return retained as T;
+    if (row.household_role === "child" || row.household_role === "teen") {
+      delete retained.memory_note;
+    }
+    return retained as unknown as T;
   });
 }

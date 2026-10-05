@@ -667,7 +667,7 @@ Deno.serve(async (request: Request) => {
         .maybeSingle(),
       userClient
         .from("family_members")
-        .select("id,name,relationship,household_role,memory_note")
+        .select("id,name,relationship,household_role,memory_note,pet_species,pet_breed")
         .eq("family_id", body.family_id)
         .limit(12),
       userClient.rpc("get_current_nina_state", {
