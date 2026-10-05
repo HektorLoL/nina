@@ -25,6 +25,7 @@ struct TasksView: View {
     @Environment(RouterPath.self) private var router
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var filter: TaskListFilter = .all
     @State private var searchQuery = ""
@@ -240,13 +241,17 @@ struct TasksView: View {
 
             if !isCollapsed {
                 ForEach(items) { task in
-                    TaskRowView(task: task)
-                    if task.id != items.last?.id {
-                        NinaDivider(inset: 36)
+                    VStack(spacing: 0) {
+                        TaskRowView(task: task)
+                        if task.id != items.last?.id {
+                            NinaDivider(inset: 36)
+                        }
                     }
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .leading)))
                 }
             }
         }
+        .animation(reduceMotion ? nil : .snappy(duration: 0.3), value: items.map(\.id))
     }
 
     private var completedSection: some View {
