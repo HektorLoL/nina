@@ -109,7 +109,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 26.4+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (49 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (51 files) |
 | Server logic | 6 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -924,7 +924,7 @@ is longer than a word budget, the legal text wins.
 
 ## 6. Database
 
-49 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+51 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order. The eight
 `202609290001`–`…0008` files (age assurance, minors and guardianship, adult-only
 RLS, join and house rules, the minor home view, the AI gates, the insight and
@@ -1864,6 +1864,12 @@ the project, not bugs to fix unprompted.
   `schema_migrations` row was set to `202610050001` (§12). The authenticated
   function grant map is now 48 names. The "Sair da casa" row that calls it
   reaches people with the first build after 11.
+- **Migration `202610050002` (foreign-key indexes) is committed and tested,
+  not applied.** It indexes the 33 foreign keys the production advisor listed
+  and fixes `set_updated_at`'s search path; `foreign_key_indexes.test.sql`
+  fails if any foreign key in `public` or `private` lacks a leading index. It
+  waits for Heitor's go, then goes through the Supabase MCP `apply_migration`
+  with its version row repaired (§12), like `202610050001`.
 - **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
   `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
   compares them) and Terms §4 reads the same constant. Apple's questionnaire
