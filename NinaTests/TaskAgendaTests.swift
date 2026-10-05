@@ -233,6 +233,36 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertNil(store.undoableCompletionID)
     }
 
+    func testAGroupListsWhatIsLateFirstThenTheSoonestAndUndatedLast() {
+        var undated = task(dueAt: nil)
+        undated.title = "Um dia, pintar a sala"
+        var later = task(dueAt: now.addingTimeInterval(3 * 24 * 60 * 60))
+        later.title = "Levar o carro na revisão"
+        var late = task(dueAt: now.addingTimeInterval(-2 * 24 * 60 * 60))
+        late.title = "Pagar a conta de luz"
+        var soon = task(dueAt: now.addingTimeInterval(2 * 60 * 60))
+        soon.title = "Buscar o Pedro"
+
+        let ordered = TaskListOrder.sorted([undated, later, late, soon], now: now, calendar: calendar)
+
+        XCTAssertEqual(ordered.map(\.title), [late.title, soon.title, later.title, undated.title])
+    }
+
+    func testUrgencyBreaksATieAndOtherwiseTheListKeepsItsOrder() {
+        let moment = now.addingTimeInterval(60 * 60)
+        var first = task(dueAt: moment)
+        first.title = "Primeira"
+        var urgent = task(dueAt: moment)
+        urgent.title = "Urgente"
+        urgent.priority = .urgent
+        var second = task(dueAt: moment)
+        second.title = "Segunda"
+
+        let ordered = TaskListOrder.sorted([first, urgent, second], now: now, calendar: calendar)
+
+        XCTAssertEqual(ordered.map(\.title), ["Urgente", "Primeira", "Segunda"])
+    }
+
     func testSearchFindsATaskTypedWithoutAccentsOrCapitals() {
         var medicine = task(dueAt: nil)
         medicine.title = "Remédio do Pedro"

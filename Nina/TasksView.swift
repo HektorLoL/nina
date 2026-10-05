@@ -212,7 +212,9 @@ struct TasksView: View {
             }
             buckets[key]?.1.append(task)
         }
-        return order.compactMap { buckets[$0] }
+        return order.compactMap { bucket in
+            buckets[bucket].map { ($0.0, TaskListOrder.sorted($0.1)) }
+        }
     }
 
     private func categorySection(_ category: TaskCategory, _ items: [TaskItem]) -> some View {
@@ -606,5 +608,37 @@ private struct ShoppingQuickAdd: View {
         store.addShoppingItem(title: trimmed, amount: "", owner: "")
         draft = ""
         isFocused = true
+    }
+}
+
+// Inside a group the next thing to do comes first: late, then soonest, then undated, and urgency breaks a tie.
+enum TaskListOrder {
+    static func sorted(_ tasks: [TaskItem], now: Date = .now, calendar: Calendar = .current) -> [TaskItem] {
+        tasks.enumerated()
+            .sorted { lhs, rhs in
+                let left = lhs.element.displayDate(relativeTo: now, calendar: calendar)
+                let right = rhs.element.displayDate(relativeTo: now, calendar: calendar)
+                switch (left, right) {
+                case let (left?, right?) where left != right:
+                    return left < right
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                default:
+                    let leftRank = rank(lhs.element.priority)
+                    let rightRank = rank(rhs.element.priority)
+                    return leftRank != rightRank ? leftRank > rightRank : lhs.offset < rhs.offset
+                }
+            }
+            .map(\.element)
+    }
+
+    private static func rank(_ priority: TaskPriority) -> Int {
+        switch priority {
+        case .urgent: 2
+        case .high: 1
+        case .normal: 0
+        }
     }
 }
