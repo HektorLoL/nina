@@ -161,6 +161,8 @@ struct NinaErrorNote: View {
     var text: String
     var style: Style = .line
     var alignment: TextAlignment = .leading
+    // The sync toast already speaks the store's error; a note repeating it stays quiet.
+    var announces: Bool = true
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -184,9 +186,11 @@ struct NinaErrorNote: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Erro: \(text)")
         .onAppear {
+            guard announces else { return }
             AccessibilityNotification.Announcement("Erro: \(text)").post()
         }
         .onChange(of: text) { _, newText in
+            guard announces else { return }
             AccessibilityNotification.Announcement("Erro: \(newText)").post()
         }
     }

@@ -891,6 +891,9 @@ private struct UndoCompletionToast: View {
         .onAppear {
             AccessibilityNotification.Announcement("\(title). Desfazer disponível.").post()
         }
+        .onChange(of: title) { _, newTitle in
+            AccessibilityNotification.Announcement("\(newTitle). Desfazer disponível.").post()
+        }
     }
 }
 

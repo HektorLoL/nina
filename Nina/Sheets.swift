@@ -865,7 +865,7 @@ private struct PrivacyAndDataView: View {
                     }
 
                     if let error = store.syncErrorMessage {
-                        NinaErrorNote(text: error, style: .card)
+                        NinaErrorNote(text: error, style: .card, announces: false)
                     }
 
                     dataRows
@@ -1832,6 +1832,7 @@ struct PremiumBenefitsSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
     }
@@ -3374,7 +3375,7 @@ struct InviteFamilySheet: View {
                 }
 
                 if renewFailed, let message = store.syncErrorMessage {
-                    NinaErrorNote(text: message)
+                    NinaErrorNote(text: message, announces: false)
                 }
             }
         }

@@ -75,9 +75,6 @@ struct ChildTodaySection: View {
                 let jobName = ChildDay.heading(name: name, dateLine: dateLine)
                 let didPresent = document.map { ChildDayPrinting.present($0, jobName: jobName) } ?? false
                 didFailToPrint = !didPresent
-                if !didPresent {
-                    AccessibilityNotification.Announcement("Não deu para imprimir agora.").post()
-                }
             }
         }
     }

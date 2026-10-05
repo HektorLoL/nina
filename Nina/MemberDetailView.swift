@@ -166,7 +166,7 @@ struct MemberDetailView: View {
             Text(value).ninaText(.label)
             Spacer(minLength: 0)
         }
-        .frame(minHeight: 46)
+        .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
     }
 }
 

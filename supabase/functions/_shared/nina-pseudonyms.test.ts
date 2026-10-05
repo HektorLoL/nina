@@ -185,6 +185,34 @@ Deno.test("the family name never reaches the model", () => {
   assertFalse(foldText(JSON.stringify(sent)).includes("castello"));
 });
 
+Deno.test("a pet reaches the model with its species and breed, and a person never carries them", () => {
+  const names = pseudonymizer();
+  const context = names.memberContext([
+    {
+      id: "99999999-0000-4000-8000-000000000001",
+      name: "Thor",
+      relationship: "Cachorro",
+      household_role: "pet",
+      pet_species: "Cachorro",
+      pet_breed: "Vira-lata",
+    },
+    {
+      id: requesterID,
+      name: "Marina Castello",
+      relationship: "Mãe",
+      household_role: "adult",
+      memory_note: "Cuida da agenda.",
+      pet_species: "",
+      pet_breed: "",
+    },
+  ]);
+
+  assertEquals(context[0].pet_species, "Cachorro");
+  assertEquals(context[0].pet_breed, "Vira-lata");
+  assertFalse("pet_species" in context[1]);
+  assertFalse("pet_breed" in context[1]);
+});
+
 Deno.test("an adult without live consent is aliased", () => {
   const names = pseudonymizer();
   const context = names.memberContext([

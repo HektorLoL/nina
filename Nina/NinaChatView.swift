@@ -356,7 +356,7 @@ struct AIMemoryConsentCard: View {
             }
 
             if let error = store.syncErrorMessage {
-                NinaErrorNote(text: error, style: .card)
+                NinaErrorNote(text: error, style: .card, announces: false)
             }
 
             Text("Sem aceitar, tudo o mais continua funcionando: tarefas, compras, casa. Só a conversa fica desligada.")
@@ -1244,7 +1244,7 @@ private struct ReportReplySheet: View {
                         FlowChips(reasons: NinaReplyReportReason.allCases, selection: $reason)
 
                         if let error = store.syncErrorMessage {
-                            NinaErrorNote(text: error)
+                            NinaErrorNote(text: error, announces: false)
                         }
 
                         NinaButton(
@@ -1574,9 +1574,9 @@ private struct NinaProposalCard: View {
                 CategoryGlyph(
                     systemName: confirmationPayload.category.symbolName,
                     size: 18,
-                    tint: NinaTheme.ink
+                    tint: NinaTheme.ink,
+                    label: confirmationPayload.category.title
                 )
-                .accessibilityLabel(confirmationPayload.category.title)
             }
 
             objectTitle

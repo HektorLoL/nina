@@ -16,6 +16,8 @@ export type ModelMemberRow = {
   relationship?: string | null;
   household_role?: string | null;
   memory_note?: string | null;
+  pet_species?: string | null;
+  pet_breed?: string | null;
 };
 
 export const familyAlias = "Casa";
@@ -491,6 +493,10 @@ export class Pseudonymizer {
       };
       if (row.household_role !== "child" && row.household_role !== "teen") {
         retained.memory_note = row.memory_note ?? "";
+      }
+      if (row.household_role === "pet") {
+        retained.pet_species = row.pet_species ?? "";
+        retained.pet_breed = row.pet_breed ?? "";
       }
       return this.deep(retained);
     });

@@ -369,7 +369,7 @@ struct MemberEditorSheet: View {
             }
 
             if let error = store.syncErrorMessage {
-                NinaErrorNote(text: error, style: .card)
+                NinaErrorNote(text: error, style: .card, announces: false)
             }
         }
         .padding(.top, 4)

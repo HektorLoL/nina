@@ -221,9 +221,9 @@ struct OnboardingTutorialView: View {
                         CategoryGlyph(
                             systemName: reading.category.symbolName,
                             size: 18,
-                            tint: NinaTheme.ink
+                            tint: NinaTheme.ink,
+                            label: reading.category.title
                         )
-                        .accessibilityLabel(reading.category.title)
 
                         Text(reading.title)
                             .ninaText(.body, NinaTheme.ink, weight: .semibold)

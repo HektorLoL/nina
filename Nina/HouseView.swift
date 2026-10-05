@@ -245,6 +245,7 @@ struct HouseView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityRemoveTraits(.isHeader)
     }
 
     private var dormantPortrait: some View {
