@@ -173,19 +173,30 @@ product regression, not a refactor.
   code, no magic link, no Google, no password: `AuthClient` has one sign-in
   method, `signInWithApple`, and the welcome shows one door over the legal
   line and the rating mark: the black system "Continuar com a Apple", whose
-  request carries `requestedScopes = []` for every account (decided 2026-10-04,
-  build 11), so Apple shares no name and no email; the age step runs after
-  sign-in. A build-11 account has no email. An earlier account keeps the one
+  request carries `requestedScopes = [.fullName]` for every account (decided
+  2026-10-05, build 12; build 11 asked for no scope), so Apple may share a name
+  and is never asked for an email; the age step runs after sign-in. App Review
+  Guideline 4.0 refuses an app that asks for a name after Sign in with Apple
+  when Apple could have shared it, which is why the scope is back, for every
+  age alike. Of the name only `PersonNameComponents.givenName`, trimmed, is
+  kept (`ProfileNaming.givenName`; never the family name, a middle name or a
+  nickname): `AppleSignInCredential` has no other name field. The sign-in
+  sends no name at all: `ensure_current_profile` still gets a null
+  `display_name_hint`, nothing writes any part of the name to Auth user
+  metadata or a log, and the given name reaches the server only as a name the
+  person is saved with (next bullet). Apple sends the name only on an
+  account's first authorization, and the person may blank it in Apple's sheet. An
+  account made since build 11 has no email. An earlier account keeps the one
   Apple shared then (a private relay address when the person hid theirs), shown
   read-only in Ajustes and the profile only when present (`AuthUser.shownEmail`);
-  nothing links or changes a sign-in email. A no-scope identity token carries no
-  email claim, so production Auth must keep Apple's "Allow users without an
-  email" (`email_optional`) on or GoTrue refuses every new account;
-  `/auth/v1/settings` does not report it, so it is a runbook §2 step, not a
-  preflight check (`supabase/config.toml` sets it for the local stack). The only
-  other door, `DebugAuthAccount` (teste1/teste2@ninai.test, local home, no
-  backend), exists only under `#if DEBUG`, and `artifact.debug-sign-in` fails
-  the release preflight if its addresses reach the bundle. Production Auth must
+  nothing links or changes a sign-in email. An identity token without the email
+  scope carries no email claim, so production Auth must keep Apple's "Allow
+  users without an email" (`email_optional`) on or GoTrue refuses every new
+  account; `/auth/v1/settings` does not report it, so it is a runbook §2 step,
+  not a preflight check (`supabase/config.toml` sets it for the local stack).
+  The only other door, `DebugAuthAccount` (teste1/teste2@ninai.test, local
+  home, no backend), exists only under `#if DEBUG`, and `artifact.debug-sign-in`
+  fails the release preflight if its addresses reach the bundle. Production Auth must
   answer `/auth/v1/settings` with Apple on and Email, Google, passkeys and every
   other provider off; `deployment.sign-in-providers` fails the online preflight
   otherwise. On the client, `repository.apple-only-sign-in` fails the repository
@@ -193,22 +204,59 @@ product regression, not a refactor.
   OAuth or non-Apple ID-token sign-in or changes a sign-in email (pinned by
   `"the shipped app signs in with Apple and calls no other sign-in door"`),
   `repository.apple-sign-in-scopes` fails it if any of them assigns a scope
-  other than `[]` (pinned by `"the shipped app asks Apple for no name and no
-  email"`), and `AuthSessionTests.testNoSignInLineNamesAnotherDoor` keeps every
-  sign-in error line from naming an email, a code or Google.
+  list other than `[]` (the deletion reauthorization asks for none) or
+  `[.fullName]`, adds to one, or names the email scope, or unless every scope
+  list `LoginView.swift` assigns is exactly `[.fullName]` (pinned by `"the
+  shipped app asks Apple for the name alone and never the email"`; `"Apple's
+  given name reaches neither Auth nor the profile at sign-in"` pins the null
+  hint); `AuthSessionTests.testTheSignInAsksAppleForTheNameAloneAndNeverTheEmail`
+  reads the configured requests, and
+  `AuthSessionTests.testNoSignInLineNamesAnotherDoor` keeps every sign-in error
+  line from naming an email, a code or Google.
 - **A house member is named by the person, never by the server's placeholder.**
-  A build-11 account reaches its profile as `auth_user_display_name`'s fallback
-  `'Família'`, and `create_family` and `request_family_join` copy the profile
-  name into the frozen `family_members.name`, the approver's card and the model
-  roster (where it would alias the common word "família"). So `HomeSetupView`
-  and `InviteAcceptanceView` show "Seu primeiro nome" whenever
-  `ProfileNaming.needsName` reads `'Família'`, `'Você'` or an empty name, and
-  push it through `ProfileStore.chooseDisplayName` (a narrow `profiles` update
-  of `display_name` and `display_name_source = 'user'`) before the RPC; the
-  phone counts it as chosen only after the server holds it. Minors are still
-  named beside the invite (`MinorNoHomeView`, server `needs_name`), unchanged,
-  and the field lives only on adult screens. Locked by
-  `AuthSessionTests.testAChosenNameCountsOnlyOnceTheServerHoldsIt`,
+  `create_family` and `request_family_join` copy the profile name into the
+  frozen `family_members.name`, the approver's card and the model roster
+  (where `'Família'` would alias the common word "família"). Every account made
+  since build 11 reaches its profile as `auth_user_display_name`'s `'Família'`,
+  and a name the sign-in passed as an auth-owned hint would not survive anyway:
+  `get_current_home_context` runs `ensure_current_profile(null)` on each load
+  and re-derives every `display_name_source = 'auth'` row. So the sign-in
+  sends no hint, and nothing about the person reaches the server before the
+  age is known. Apple's given name waits on the phone instead
+  (`AuthSessionStore.sharedGivenName`, a `SharedAppleName` in
+  `ProtectedLocalDataStore` under `PrivateLocalDataScope.sharedAppleName`).
+  It is held before the token exchange, keyed by Apple's user id, so a sign-in
+  that fails after Apple's sheet keeps it for the retry or the restored
+  session (Apple shares the name only once); it binds to the account that
+  signs in with that Apple ID only while the server's answer is a placeholder
+  (a name the person chose earlier outranks it), survives a relaunch, and is
+  removed when the person is named, on sign-out and on deletion. The Apple ID
+  match is the guard: one Apple ID's name never names another account.
+  `HomeSetupView` and `InviteAcceptanceView` save it through
+  `ProfileStore.chooseDisplayName` (a narrow `profiles` update of
+  `display_name` and `display_name_source = 'user'`) before the RPC, with no
+  field on screen (`ProfileNaming.nameToSave`), and never over a different name
+  the person chose in Perfil since; the tutorial greets the person by it. "Seu
+  primeiro nome" shows only as the fallback when Apple gave no given name and
+  `ProfileNaming.needsName` reads `'Família'`, `'Você'` or an empty name
+  (`ProfileNaming.asksForName`). The phone counts a name as chosen only after
+  the server holds it. A minor, or anyone whose age Apple has not shared, still
+  confirms a first name beside the invite (`MinorNoHomeView`, server
+  `needs_name`), and Apple's given name only fills that field; when that screen
+  appears the phone drops its stored copy (`keepSharedGivenNameOffDevice`), so a
+  minor's given name reaches the server only as the name they confirm and
+  stays on the device only in memory. An unknown-age adult who relaunches
+  before sharing the age therefore types the name at house setup.
+  `ChosenNameField` lives only on adult screens. Locked by
+  `AuthSessionTests.testOnlyTheGivenNameAppleSharesIsKeptAndItIsTheOnlyNameTheServerReceives`,
+  `…testABlankOrMissingAppleNameLeavesTheTypedField`,
+  `…testAnAdultWhoSharedTheirNameIsNeverAskedAndItIsSavedBeforeTheHouseCopiesIt`,
+  `…testApplesSharedNameSurvivesARelaunchUntilThePersonIsNamed`,
+  `…testAFailedSignInKeepsApplesNameForTheRetryOfTheSameAppleIDOnly`,
+  `…testAMinorsFieldIsFilledFromApplesNameButNoCopyOfItStaysOnTheDevice`,
+  `…testANameThePersonAlreadyChoseOutranksTheOneAppleSharesAgain`,
+  `…testANameChosenInPerfilAfterApplesIsNeverOverwrittenWhenTheHouseIsSetUp`,
+  `…testAChosenNameCountsOnlyOnceTheServerHoldsIt`,
   `…testANewAppleAccountIsAskedForItsNameAndANamedOrDebugAccountIsNot`, the
   pgTAP "a house created after the person chose a name names its owner with it"
   and the Deno "the app reads the server's fallback name as no name".
@@ -550,9 +598,10 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   from installed binaries.
 - **Sensitive local data never goes in `UserDefaults`.** Household snapshot,
   profile + photo, AI consent, pending invite, a minor's usage ledger
-  (`PrivateLocalDataScope.minorUsage`) and the last regulatory-feature set the
-  age check saw (`.ageAssurance`) → `PrivateLocalDataAccess` →
-  `ProtectedLocalDataStore`: SHA256-opaque filenames,
+  (`PrivateLocalDataScope.minorUsage`), the last regulatory-feature set the
+  age check saw (`.ageAssurance`) and the given name Apple shared until the
+  person is named (`.sharedAppleName`) → `PrivateLocalDataAccess` or the store
+  itself → `ProtectedLocalDataStore`: SHA256-opaque filenames,
   `completeUntilFirstUserAuthentication`, `isExcludedFromBackup`, 32 MB cap.
   Legacy defaults are removed *only after* the protected write succeeds.
 - **Account deletion order is photos → `prepare_account_deletion` → Auth user**,
@@ -720,8 +769,10 @@ minor check, because a failed verification leaves age unknown and must not
 show a minor screen. `ageCheck` appears only when the server holds no age row
 for the account, on `recheck_after`, or when `requiredRegulatoryFeatures`
 changes; Apple errors are never recorded as an answer. Sign in with Apple asks
-for no scope, so nothing about the person is decided before sign-in: the age
-range is read afterwards by `ageCheck`, the first screen a new account sees.
+every account the same, for the name alone, so nothing about the person is
+decided before sign-in: the age range is read afterwards by `ageCheck`, the
+first screen a new account sees, and an adult who shared a given name reaches
+house setup with no name field (§4, "A house member is named by the person").
 Locked by
 `AppStoreAuthorizationTests.testTheAgeStepComesBeforeTheInviteAndTheTutorial`,
 `…testAMinorAccountLandsOnItsOwnTasksAndNeverOnTheFourTabs`,
@@ -1684,17 +1735,27 @@ hidden "Continuar com o Google" row that appears if Google is ever enabled, so
 keep Google off; `deployment.sign-in-providers` fails the online preflight if
 it is on. The local stack keeps `[auth.email]` because the AI eval signs in
 through an admin magic link. Since build 11 Apple's provider must also have
-"Allow users without an email" (`email_optional`) on: the sign-in asks Apple
-for no scope, so a new Apple ID's identity token carries no email, and with the
-switch off GoTrue refuses the account and every new person reads "Não foi
-possível entrar agora. Tente de novo." `supabase/config.toml` covers only the
-local stack; production is the dashboard (runbook §2).
+"Allow users without an email" (`email_optional`) on: the sign-in never asks
+Apple for the email (build 12 asks for the name alone), so a new Apple ID's
+identity token carries no
+email, and with the switch off GoTrue refuses the account and every new person
+reads "Não foi possível entrar agora. Tente de novo." `supabase/config.toml`
+covers only the local stack; production is the dashboard (runbook §2).
 
 **'Família' is the server's word for no name yet.** `auth_user_display_name`
 falls back to `'Família'` when an account has no metadata name and no email,
-which is every build-11 account, and `ProfileNaming` reads that word (with
-"Você" and an empty name) as a name nobody chose. Change both together; the
-Deno "the app reads the server's fallback name as no name" pins them. An adult
+which is every account made since build 11 until the person is named, and
+`ProfileNaming` reads that word (with "Você" and an empty name) as a name
+nobody chose. Change both together; the Deno "the app reads the server's
+fallback name as no name" pins them. A `display_name_hint` would not change
+this for long: a hinted name is auth-owned, so the next
+`ensure_current_profile(null)` turns it back into `'Família'`, and only
+`chooseDisplayName` (source `'user'`) makes a name stick, which is why the
+sign-in sends none. The same re-derivation keeps the full name for an account
+made with builds up to 10: those builds wrote the formatted full name Apple
+shared to `display_name` and `full_name` in Auth user metadata, so its
+auth-owned profile name, and the `family_members.name` a house copied from it,
+is the full name until the person renames in Perfil. An adult
 who already sits in a house as "Família" (a pre-build-11 account whose welcome
 reading was unavailable) keeps that frozen `family_members.name` until a rename
 in Perfil reaches the profile; the house row itself never follows.
@@ -1828,24 +1889,51 @@ the project, not bugs to fix unprompted.
   sign-in, an adult types a first name where the house first needs it), the
   rating mark only on the welcome and the startup screen, a centred wait with a
   round disc, and typed account-deletion failures with a mail way-out.
-  `CURRENT_PROJECT_VERSION` is 11. Release blockers before the build reaches
-  anyone: turn on Apple's "Allow users without an email" in production Auth
-  (§12), then prove the no-scope sign-in with a brand-new Apple ID (or one that
-  removed Nina under Sign in with Apple) on a device, landing on "Antes, sua
-  faixa de idade.", because every new account now takes that path; and Heitor
-  accepts handling a deletion request mailed to privacidade@ninai.app
-  (`docs/production-launch-runbook.md` §2, "Deletion requests by mail"), where
-  the mail's reference only finds the account and the sender proves control by
-  typing a mailed one-time code as their Perfil name. App
-  Review Guideline 4.0 has refused apps that ask for a name after Sign in with
-  Apple; the field sits only in house creation and joining, and the review
-  notes must say Nina asks Apple for nothing because minors use it and the age
-  is known only after sign-in. If Review still refuses, the create path can
-  accept an unnamed owner. The "Não deu para apagar a conta agora" Heitor saw on
-  build 10 came from the pre-release delete-account v6, which accepted only
-  `{"confirmation":"delete"}` and refused the Apple-code body with 400
-  `confirmation_required`; v7 (2026-09-29, the HEAD contract) accepts all three
-  bodies, so one real deletion against v7 on a device closes it.
+  `CURRENT_PROJECT_VERSION` was 11. Heitor turned on Apple's "Allow users without
+  an email" in production Auth on 2026-10-05 (§12); still prove the no-scope
+  sign-in with a brand-new
+  Apple ID (or one that removed Nina under Sign in with Apple) on a device,
+  landing on "Antes, sua faixa de idade.", because every new account now takes
+  that path; and Heitor accepts handling a deletion request mailed to
+  privacidade@ninai.app (`docs/production-launch-runbook.md` §2, "Deletion
+  requests by mail"), where the mail's reference only finds the account and the
+  sender proves control by typing a mailed one-time code as their Perfil name.
+  App Review Guideline 4.0 has refused apps that ask for a name after Sign in
+  with Apple, and build 11's typed field for every new adult was exactly that;
+  build 12 answers it (next entry). The "Não deu para apagar a conta agora"
+  Heitor saw on build 10 came from the pre-release delete-account v6, which
+  accepted only `{"confirmation":"delete"}` and refused the Apple-code body with
+  400 `confirmation_required`; v7 (2026-09-29, the HEAD contract) accepts all
+  three bodies, so one real deletion against v7 on a device closes it.
+- **Build 12 (2026-10-05) asks Apple for the name alone.** Heitor's decision,
+  for the Guideline 4.0 risk above: `requestedScopes = [.fullName]` for every
+  account, never `.email`; only the given name is kept, on the phone until the
+  person is named, and saved as the person's chosen name before the house
+  copies it, so an adult who shares a name never sees "Seu primeiro nome"; the
+  typed field stays only as the fallback when Apple gives no given name (a
+  later authorization, or a name blanked in Apple's sheet). Heitor's brief said
+  to send the given name as `ensure_current_profile`'s `display_name_hint`; a
+  review found that the hint wrote a minor's name to `profiles` and the
+  protected profile cache before the age was known, while
+  `get_current_home_context` re-derived it to `'Família'` on the next load
+  anyway, so the sign-in sends no hint and the name waits on the device (§4,
+  "A house member is named by the person"). A minor, or anyone whose age Apple
+  has not shared, still confirms a first name beside the invite, prefilled with
+  Apple's given name, and no family name is stored for any account made since.
+  Accounts made before build 11 keep what builds ≤10 wrote when Apple shared
+  it: the full name in Auth user metadata (`full_name` and `display_name` in
+  `raw_user_meta_data`), which is also their profile name and the name their
+  house copied (§12, "'Família' is the server's word"), and the email; nothing
+  rewrites or removes those. `CURRENT_PROJECT_VERSION` is 12. The App Review
+  notes carry the Sign in with Apple paragraph in
+  `docs/production-launch-runbook.md` §6 word for word. The email switch is on
+  in production Auth since 2026-10-05 (Heitor, §12); the release blockers left
+  are on a device: a brand-new Apple ID (or one that removed Nina under Sign in with
+  Apple) that shares its name reaches house setup with no name field, also
+  after closing the app between Apple's sheet and the house, and the house
+  names it by the given name alone; one that blanks the name sees the field.
+  Build 10 asks adults for the email; the website privacy page names the
+  builds, so it stays true while build 10 is still installed.
 - **Migration `202609290009` is applied to production (2026-09-30).** It
   revokes `can_manage_family`, `is_family_member` and `is_family_creator` from
   every API role and makes `shares_family_with` answer only about the caller.

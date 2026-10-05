@@ -25,7 +25,8 @@ sends a document, do not keep it: answer, then delete the email's attachment.
   for a minor, the guardian exercises the right (art. 18 §3).
 
 **Find the account by its reference.** A mail from the app carries it. Since
-build 11 Sign in with Apple shares no email and a minor's profile email was
+build 11 Sign in with Apple never asks for the email (build 12 asks only for
+the name) and a minor's profile email was
 always null, so an address finds only an adult account created before build 11;
 for a mail typed by hand, ask for the reference shown in the app's own mail, or
 for that older address, and nothing else:

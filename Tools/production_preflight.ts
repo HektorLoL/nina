@@ -102,11 +102,40 @@ export function retentionClaimOffenders(
   return offenders;
 }
 
-// Sign in with Apple asks no account for a name or an email, so any scope
-// assignment other than the empty list is a request for personal data.
+// Sign in with Apple asks every account for the name alone, of which the app
+// keeps only the given name, and never for the email; a request needs no
+// scope at all otherwise. Any other scope list, an indirect one included, or
+// any mention of the email scope is a request for data Nina does not keep.
 export function appleScopeRequests(source: string): string[] {
-  return [...source.matchAll(/requestedScopes\s*=(?!=)(?!\s*\[\s*\])[^\n]*/g)]
+  const allowedList =
+    /^\[\s*(?:(?:ASAuthorization\.Scope)?\.fullName\s*,?\s*)?\]$/;
+  const assignments = [
+    ...source.matchAll(/requestedScopes[!?]?\s*=(?!=)\s*([^\n]*)/g),
+  ]
+    .filter((match) => !allowedList.test(match[1].trim()))
     .map((match) => match[0].trim());
+  const additions = [
+    ...source.matchAll(
+      /requestedScopes[!?]?\s*(?:\+=|\.(?:append|insert)\s*\()[^\n]*/g,
+    ),
+  ].map((match) => match[0].trim());
+  const emailScopes = [
+    ...source.matchAll(
+      /\bScope\.email\b|\[ASAuthorization\.Scope\][^\n]*\.email\b[^\n]*/g,
+    ),
+  ].map((match) => match[0].trim());
+  return [...assignments, ...additions, ...emailScopes];
+}
+
+// Every scope list the welcome assigns is the name alone, so no sign-in asks for less or more.
+export function asksAppleForTheNameAlone(loginSource: string): boolean {
+  const lists = [
+    ...loginSource.matchAll(/requestedScopes[!?]?\s*=(?!=)\s*([^\n]*)/g),
+  ].map((match) => match[1].trim());
+  return lists.length > 0 &&
+    lists.every((list) =>
+      /^\[\s*(?:ASAuthorization\.Scope)?\.fullName\s*\]$/.test(list)
+    );
 }
 
 const ratingMarkScreens = ["Nina/LoginView.swift", "Nina/AppRootView.swift"];
@@ -1094,6 +1123,7 @@ export async function repositoryChecks(
   const secretBearingFiles: string[] = [];
   const nonAppleSignInFiles: string[] = [];
   const appleScopeFiles: string[] = [];
+  let loginAsksForTheNameAlone = false;
   const claimSources: Array<{ path: string; text: string }> = [];
   for (const path of files) {
     try {
@@ -1115,6 +1145,9 @@ export async function repositoryChecks(
         appleScopeRequests(source).length > 0
       ) {
         appleScopeFiles.push(path);
+      }
+      if (path === "Nina/LoginView.swift") {
+        loginAsksForTheNameAlone = asksAppleForTheNameAlone(source);
       }
     } catch {
       // Binary, removed, or unreadable tracked files are covered by path checks.
@@ -1234,10 +1267,15 @@ export async function repositoryChecks(
     ),
     check(
       "repository.apple-sign-in-scopes",
-      appleScopeFiles.length === 0,
-      "Sign in with Apple asks for no name and no email.",
-      `Sign in with Apple requests no scope; remove it from: ${
-        appleScopeFiles.join(", ")
+      appleScopeFiles.length === 0 && loginAsksForTheNameAlone,
+      "Sign in with Apple asks for the name alone and never the email.",
+      `Sign in with Apple requests exactly [.fullName] in Nina/LoginView.swift and never the email scope; fix: ${
+        [
+          ...appleScopeFiles,
+          ...(loginAsksForTheNameAlone
+            ? []
+            : ["Nina/LoginView.swift (not exactly [.fullName])"]),
+        ].join(", ")
       }`,
     ),
     check(

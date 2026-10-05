@@ -450,7 +450,7 @@ private struct MinorNoHomeView: View {
         store.viewerAge.status == .unknown
     }
 
-    // Apple gives no name to a minor or an unknown age, so a name that came from the sign-in is a placeholder.
+    // A minor confirms the name even when Apple shared one; its given name only fills the field.
     private var needsName: Bool {
         guard let user = authSession.currentUser else { return false }
         if store.viewerAge.needsName { return true }
@@ -529,6 +529,12 @@ private struct MinorNoHomeView: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .minorSettingsSheet(isPresented: $isShowingSettings)
+        .onAppear {
+            if firstName.isEmpty, let sharedGivenName = authSession.sharedGivenName {
+                firstName = sharedGivenName
+            }
+            authSession.keepSharedGivenNameOffDevice()
+        }
     }
 
     private func field<Field: View>(label: String, @ViewBuilder content: () -> Field) -> some View {
@@ -570,6 +576,8 @@ private struct MinorNoHomeView: View {
                     Haptics.error()
                     return
                 }
+                guard authSession.currentUser?.id == user.id else { return }
+                authSession.noteChosenDisplayName(typedName)
             }
             if await store.joinHome(with: inviteCode, member: user) {
                 Haptics.success()

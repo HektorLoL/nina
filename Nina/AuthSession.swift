@@ -66,7 +66,7 @@ struct AuthUser: Codable, Hashable, Identifiable {
         provider == .apple || linkedProviders.contains(.apple)
     }
 
-    // An account made with no Apple scope has no email, and no row stands in for one.
+    // No build since 11 asks Apple for an email, so a newer account has none, and no row stands in for one.
     var shownEmail: String? {
         guard let trimmed = email?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty else { return nil }
@@ -134,6 +134,27 @@ extension AuthUser {
 struct AppleSignInCredential: Sendable {
     var identityToken: String
     var rawNonce: String
+    private(set) var appleUserID: String?
+    private(set) var givenName: String?
+
+    init(
+        identityToken: String,
+        rawNonce: String,
+        appleUserID: String? = nil,
+        sharedName: PersonNameComponents? = nil
+    ) {
+        self.identityToken = identityToken
+        self.rawNonce = rawNonce
+        self.appleUserID = appleUserID
+        self.givenName = ProfileNaming.givenName(from: sharedName)
+    }
+}
+
+// Apple shares a name once per Apple ID, so its given name waits on this device, never on a server.
+struct SharedAppleName: Codable, Equatable {
+    var appleUserID: String?
+    var givenName: String
+    var userID: String?
 }
 
 enum AppleSignInNonce {
@@ -232,9 +253,7 @@ final class AppleDeletionReauthorizer: AppleReauthorizing {
     @MainActor
     func freshAuthorizationCode() async -> AppleReauthorizationOutcome {
         guard session == nil, let anchor = Self.keyWindow() else { return .failed }
-        let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = []
-        let controller = ASAuthorizationController(authorizationRequests: [request])
+        let controller = ASAuthorizationController(authorizationRequests: [Self.makeRequest()])
         self.controller = controller
         let outcome = await withCheckedContinuation { continuation in
             let session = AppleReauthorizationSession(anchor: anchor, continuation: continuation)
@@ -246,6 +265,12 @@ final class AppleDeletionReauthorizer: AppleReauthorizing {
         session = nil
         self.controller = nil
         return outcome
+    }
+
+    static func makeRequest() -> ASAuthorizationAppleIDRequest {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = []
+        return request
     }
 
     @MainActor
@@ -333,6 +358,7 @@ final class AuthSessionStore {
     var currentUser: AuthUser?
     // Set only by a sign-in made on the welcome screen, whose footnote states the Terms; a restore never sets it.
     private(set) var interactiveSignInUserID: String?
+    private var sharedAppleName: SharedAppleName?
     var isSigningIn = false
     var isDeletingAccount = false
     var errorMessage: String?
@@ -346,10 +372,23 @@ final class AuthSessionStore {
         currentUser != nil
     }
 
-    @ObservationIgnored private var authClient: any AuthClient
+    var sharedGivenName: String? {
+        guard let sharedAppleName, let userID = currentUser?.id,
+              sharedAppleName.userID == userID else { return nil }
+        return sharedAppleName.givenName
+    }
 
-    init(authClient: any AuthClient = MockAuthClient()) {
+    @ObservationIgnored private var authClient: any AuthClient
+    @ObservationIgnored private let sharedNameStore: (any PrivateLocalDataStoring)?
+    private static let sharedNameKey = "nina.auth.sharedAppleName"
+
+    init(
+        authClient: any AuthClient = MockAuthClient(),
+        sharedNameStore: (any PrivateLocalDataStoring)? = nil
+    ) {
         self.authClient = authClient
+        self.sharedNameStore = sharedNameStore
+        sharedAppleName = Self.loadSharedName(from: sharedNameStore)
     }
 
     func restoreSession() async {
@@ -363,25 +402,33 @@ final class AuthSessionStore {
         switch await authClient.restoreSession() {
         case .unavailable:
             currentUser = nil
+            forgetSharedNameOfEndedSession()
             isBackendAvailable = false
             errorMessage = AuthFlowError.configurationMissing.userMessage
         case .signedOut:
             currentUser = nil
+            forgetSharedNameOfEndedSession()
             isBackendAvailable = true
         case .unreachable(let offlineUser):
             // A transport failure never signs anyone out; the home context decides access.
             if currentUser == nil {
+                adoptSharedName(for: offlineUser, signingInAs: nil)
                 currentUser = offlineUser
             }
             isBackendAvailable = true
         case .signedIn(let user):
+            adoptSharedName(for: user, signingInAs: nil)
             currentUser = user
             isBackendAvailable = true
         }
     }
 
+    // Held before the exchange: Apple never shares the name again, so a failed sign-in must not lose it.
     func signInWithApple(credential: AppleSignInCredential) async {
-        await performSignIn {
+        if !isSigningIn, let givenName = credential.givenName {
+            holdSharedName(SharedAppleName(appleUserID: credential.appleUserID, givenName: givenName))
+        }
+        await performSignIn(appleUserID: credential.appleUserID) {
             try await authClient.signInWithApple(credential: credential)
         }
     }
@@ -411,6 +458,13 @@ final class AuthSessionStore {
 
     func noteChosenDisplayName(_ name: String) {
         currentUser?.displayName = name
+        forgetSharedName()
+    }
+
+    // A minor's or an unknown age's given name only fills their own field, so no copy of it stays on the device.
+    func keepSharedGivenNameOffDevice() {
+        guard sharedAppleName != nil else { return }
+        removeStoredSharedName()
     }
 
     // App Store 5.1.1(v): a refusal, an ended session or a second failure in a row always leaves a way out.
@@ -536,7 +590,10 @@ final class AuthSessionStore {
         }
     }
 
-    private func performSignIn(_ operation: () async throws -> AuthUser) async {
+    private func performSignIn(
+        appleUserID: String?,
+        _ operation: () async throws -> AuthUser
+    ) async {
         guard !isSigningIn else { return }
 
         isSigningIn = true
@@ -546,6 +603,7 @@ final class AuthSessionStore {
         do {
             let user = try await operation()
             interactiveSignInUserID = user.id
+            adoptSharedName(for: user, signingInAs: appleUserID)
             currentUser = user
             isBackendAvailable = true
             Haptics.success()
@@ -591,9 +649,50 @@ final class AuthSessionStore {
     private func clearSessionState() {
         currentUser = nil
         interactiveSignInUserID = nil
+        forgetSharedName()
         deletionFailure = nil
         failedDeletionAttempts = 0
         ownDeletionMayHaveRun = false
+    }
+
+    // Apple's name serves only the Apple ID that shared it, and only while its account has no name of its own.
+    private func adoptSharedName(for user: AuthUser, signingInAs appleUserID: String?) {
+        guard var shared = sharedAppleName else { return }
+        let isSameAccount = shared.userID.map { $0 == user.id }
+            ?? (shared.appleUserID == (appleUserID ?? user.appleSubject))
+        guard isSameAccount, !user.isDebugAccount, ProfileNaming.isPlaceholder(user.displayName) else {
+            forgetSharedName()
+            return
+        }
+        shared.userID = user.id
+        holdSharedName(shared)
+    }
+
+    private func forgetSharedNameOfEndedSession() {
+        guard sharedAppleName?.userID != nil else { return }
+        forgetSharedName()
+    }
+
+    private func holdSharedName(_ shared: SharedAppleName) {
+        guard shared != sharedAppleName else { return }
+        sharedAppleName = shared
+        guard let sharedNameStore, let data = try? JSONEncoder().encode(shared) else { return }
+        try? sharedNameStore.set(data, forKey: Self.sharedNameKey, ownerScope: PrivateLocalDataScope.sharedAppleName)
+    }
+
+    private func forgetSharedName() {
+        sharedAppleName = nil
+        removeStoredSharedName()
+    }
+
+    private func removeStoredSharedName() {
+        try? sharedNameStore?.removeData(forKey: Self.sharedNameKey, ownerScope: PrivateLocalDataScope.sharedAppleName)
+    }
+
+    private static func loadSharedName(from store: (any PrivateLocalDataStoring)?) -> SharedAppleName? {
+        guard let data = try? store?.data(forKey: sharedNameKey, ownerScope: PrivateLocalDataScope.sharedAppleName)
+        else { return nil }
+        return try? JSONDecoder().decode(SharedAppleName.self, from: data)
     }
 }
 

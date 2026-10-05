@@ -162,16 +162,18 @@ turned on, so keep Google off. Turning Email off most likely does not end
 sessions that were already signed in by code; they last until that person signs
 out.
 
-**Allow users without an email (before build 11 reaches anyone).** In the same
-Apple provider settings, turn on "Allow users without an email". Since build 11
-the sign-in asks Apple for no scope, so a new Apple ID's identity token carries
-no email claim; with the switch off GoTrue refuses the account as an
-unverified email, and every new person reads "Não foi possível entrar agora.
-Tente de novo." It is backward-compatible with build 10, whose minor, unknown
-and unreadable sign-ins already asked for no scope. `/auth/v1/settings` does
-not report the switch, so no preflight can prove it; prove it on a device
+**Allow users without an email (on since 2026-10-05).** In the same Apple
+provider settings, "Allow users without an email" is on; Heitor turned it on
+on 2026-10-05, before build 11 reached anyone. Since
+build 11 the sign-in never asks Apple for the email (build 12 asks for the name
+alone), so a new Apple ID's identity
+token carries no email claim; with the switch off GoTrue refuses the account
+as an unverified email, and every new person reads "Não foi possível entrar
+agora. Tente de novo." It is backward-compatible with build 10, whose minor,
+unknown and unreadable sign-ins already asked for no scope. `/auth/v1/settings`
+does not report the switch, so no preflight can prove it; prove it on a device
 instead: sign in with a brand-new Apple ID (or one that removed Nina under
-Settings › Apple Account › Sign in with Apple) on build 11 and land on "Antes,
+Settings › Apple Account › Sign in with Apple) on build 12 and land on "Antes,
 sua faixa de idade.". `supabase/config.toml` sets `email_optional = true` for
 the local stack only.
 
@@ -182,8 +184,8 @@ cancelled Apple sheet counts), offers "Para apagar mesmo assim, escreva para
 privacidade@ninai.app." The mail carries the subject "Apagar minha conta" and
 "Referência: ‹auth user id›", or, for a guardian, "Apagar a conta de um menor"
 with "Referência: ‹ward's `family_members.id`›" and "Responsável: ‹the
-guardian's own auth user id›". Build-11 accounts and minors have no email, so
-the reference is how the account is found. **The reference proves nothing**:
+guardian's own auth user id›". Accounts made since build 11 and minors have no
+email, so the reference is how the account is found. **The reference proves nothing**:
 every adult of a house can read every member's `user_id` and member id, and an
 owner or admin also sees the ids on join requests, so a mail carrying only a
 reference may come from someone else in the house. A deletion cannot be undone,
@@ -396,10 +398,16 @@ schema every adult would see the minor screen.
   conversar com a Nina" stays grey until the separate "Envio para fora do
   Brasil" box is ticked. Until two adults of a house accept again, that house
   gets no weekly insight.
-- **One Apple button, and Apple asks nothing** (build 11). The welcome shows only
-  "Continuar com a Apple"; Apple's sheet asks for no name and no email, the
-  age step comes right after it, and an adult types a first name when creating
-  or joining a house. A declared (not Apple-confirmed) adult keeps
+- **One Apple button, and Apple asks only for the name** (build 12; build 11
+  asked for nothing). The welcome shows only "Continuar com a Apple"; Apple's
+  sheet offers to share the name and never asks for the email, and the age step
+  comes right after it. Nina keeps the first name alone, on the phone until the
+  person is named; the sign-in sends no name to the server. An adult who shared
+  a name goes straight to creating or joining a house and is named by it there;
+  only one who blanked it, or whose Apple ID already authorized Nina, types a
+  first name there. A minor, or anyone whose age Apple has not shared, confirms
+  a first name beside the invite, prefilled with Apple's. A declared
+  (not Apple-confirmed) adult keeps
   the house but sees "A conversa pede idade confirmada." instead of the chat,
   and no paywall.
 - **Children's profiles need a guardian.** An existing child profile reads "Sem
@@ -597,10 +605,13 @@ Run the release candidate through TestFlight on at least one current iPhone and
 one supported older device. Exercise:
 
 - first launch, Apple sign-in with a brand-new Apple ID (no email reaches Nina:
-  the Ajustes account row is the name alone, and "Seu primeiro nome" appears
-  when creating or joining a house) and with a pre-build-11 account (keeps its
-  email, including one hidden behind Apple's private relay), sign-out, and
-  session restoration;
+  the Ajustes account row is the name alone; with the name shared, creating or
+  joining a house shows no name field, also after force-quitting the app
+  between Apple's sheet and the house, and the member reads the first name
+  only, never the family name; with the name blanked in Apple's sheet, "Seu
+  primeiro nome" appears there) and with a pre-build-11 account (keeps its email,
+  including one hidden behind Apple's private relay), sign-out, and session
+  restoration;
 - home creation, invitation acceptance/revocation/expiry, and member removal;
 - task/reminder recurrence, notifications, offline edits, and conflict repair;
 - Nina consent, attachments, proposal confirmation, privacy export, history
@@ -622,8 +633,9 @@ one supported older device. Exercise:
   nor App Attest): Apple's age-assurance sandbox on iOS 26.4+ (Settings ›
   Developer › Sandbox Apple Account › Manage › Age Assurance) for every case;
   real Brazilian accounts — an Apple-confirmed adult, a self-declared adult, a
-  16–17 and a 13–15 Family Sharing child, an under-13; Sign in with Apple with no
-  scopes for a minor; whether a recheck shows Apple's sheet; a decline and a
+  16–17 and a 13–15 Family Sharing child, an under-13; Sign in with Apple for a
+  minor (Apple's given name only prefills "Seu primeiro nome" beside the
+  invite); whether a recheck shows Apple's sheet; a decline and a
   later share; a guardian approval, supervision change and guardian deletion end
   to end; the minor's daily limit; a notification on a minor's phone ("‹título›
   · ‹hora›", silent at night);
@@ -682,6 +694,23 @@ answers, the rationale per item and the review note are in
    chat (D1) and change `NinaRating.currentCode`, `web/src/rating.ts` and the
    Terms together; `repository.rating-constant-consistency` fails until they
    agree.
+
+   The notes also carry this paragraph about Sign in with Apple, word for word
+   (Guideline 4.0 has refused apps that ask for a name after Sign in with Apple;
+   decided 2026-10-05, build 12):
+
+   > Sign in with Apple is the only way in. Nina requests only the full-name
+   > scope and never the email scope, and keeps only the first (given) name
+   > Apple shares; it never stores the family name, and it never asks for an
+   > email address, so an account created with this version holds none. The
+   > first name is what the other members of the household see. An adult is
+   > asked to type a first name only when Apple shared none (the person chose
+   > not to share it, or the Apple ID had already signed in to Nina, since
+   > Apple shares the name only on the first sign-in), and only when creating
+   > or joining a household. A person under 18, or anyone whose age Apple has
+   > not shared (Nina treats that account as a minor's until it does), confirms
+   > a first name, filled in from Apple's when shared, only when asking a
+   > guardian to let them join a household.
 2. **Age Suitability URL:** `https://ninai.app/familias/`. Made for Kids: No.
    Override to a higher rating: none — the Terms set no minimum age.
 3. **Metadata:** no "para crianças" in the name, subtitle, icon, screenshots or

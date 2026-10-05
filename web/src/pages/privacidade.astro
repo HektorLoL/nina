@@ -4,7 +4,7 @@ import Brand from "../components/Brand.astro";
 import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
 
-const updatedAt = "29 de setembro de 2026";
+const updatedAt = "5 de outubro de 2026";
 const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
 const reportMailto = `mailto:${legalIdentity.reportContactEmail}`;
 const dpoMailto = legalIdentity.dpoContactEmail
@@ -99,9 +99,18 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
 
       <h2>2. Dados que a Nina trata</h2>
       <p>
-        Tratamos dados de conta, como o identificador de login da Apple, o email que a Apple
-        compartilha quando você entra (um endereço privado de retransmissão, se você escolher
-        ocultar o seu) e o nome de perfil; dados da casa, como nome da casa, participantes,
+        Tratamos dados de conta, como o identificador de login da Apple e o nome de perfil. Esse
+        nome é um primeiro nome: o que a Apple compartilha na primeira vez que você entra, se você
+        escolher compartilhar, ou o que você digita, se a Apple não compartilhar nenhum. Do nome
+        que a Apple compartilha, a Nina guarda só o primeiro nome, nunca o sobrenome, e ele só sai
+        do seu iPhone quando vira o seu nome numa casa. Quem tem menos de 18 anos, ou ainda não
+        compartilhou a faixa de idade, confirma o primeiro nome ao pedir para entrar numa casa. Um
+        adulto pode mudar o nome no perfil. Desde a versão de teste 1.0 (11), a Nina não pede seu
+        email à Apple. Uma conta criada com uma versão de teste até a 1.0 (10) guarda o email que
+        a Apple compartilhou na época (um endereço privado de retransmissão, se você escolheu
+        ocultar o seu) e, se a Apple compartilhou seu nome então, o nome completo: ele fica no
+        registro de login e é o seu nome de perfil, e o nome com que você aparece na casa, até
+        você mudá-lo no perfil. Tratamos também dados da casa, como nome da casa, participantes,
         papéis, convites e permissões; conteúdo criado pelos usuários, como tarefas, lembretes,
         listas de compras, mensagens, anexos, documentos, fotos, memórias confirmadas e insights;
         preferências de uso e consentimento; email, nome opcional, idioma e origem do formulário

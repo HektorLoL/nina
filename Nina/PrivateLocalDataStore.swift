@@ -39,6 +39,7 @@ enum PrivateLocalDataScope {
     }
 
     static let pendingInvite = "pending-invite"
+    static let sharedAppleName = "shared-apple-name"
 }
 
 enum PrivateLocalDataStoreError: Error, Equatable {

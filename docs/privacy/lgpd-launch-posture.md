@@ -33,10 +33,23 @@ Official references:
 Nina processes:
 
 - Account data: Supabase Auth ID, Apple identity provider metadata, display
-  name (the first name the person types), and, only for an account created
-  before build 11, the email Apple shared at sign-in (a private-relay address
-  when the person hid theirs). Since build 11 Sign in with Apple asks no
-  account for a name or an email.
+  name, and, only for an account created before build 11, the email Apple
+  shared at sign-in (a private-relay address when the person hid theirs). Since
+  build 12 Sign in with Apple asks every account for the name and none for the
+  email; Nina keeps only the given name, never the family name, a middle name
+  or a nickname, and writes no part of the name to Auth metadata or a log. The
+  sign-in sends no name to the server: the given name waits on the device,
+  in protected storage, until the person is named. An adult's display name is
+  that given name, saved when they create or join a house, or, when Apple
+  shares none (it shares a name only on an account's first authorization, and
+  the person may blank it), the first name they type there. A minor, or an
+  account whose age Apple has not shared, always confirms a first name where
+  they ask to join, prefilled with Apple's given name when there is one, and
+  the device deletes its stored copy once that screen appears. Accounts created
+  with builds up to 10 still hold the formatted full name Apple shared then in
+  their Auth metadata, and the server derives their profile name from it, so
+  their display name, and the member name a house copied, is that full name
+  until they rename in Perfil.
 - Age data: one row per account with status (`adult`, `minor`, `unknown`), the
   minor band (`under_12`, `12_15`, `16_17`), the assurance method
   (`confirmed`, `self_declared`, `guardian_declared`, `operator`, `none`), a
@@ -222,7 +235,7 @@ Recommended request handling:
 - A deletion request mailed from the app's way-out (a refusal, or a second
   failure in a row, on "Apagar conta") carries only references: "Referência:
   ‹auth user id›", or a ward's member id plus "Responsável: ‹guardian's auth
-  user id›". Build-11 accounts and minors have no email, so the reference is how
+  user id›". Accounts made since build 11 and minors have no email, so the reference is how
   the account is found, and it proves nothing: other adults of the house can
   read it. There is no sender address to check either. Follow
   `docs/production-launch-runbook.md` §2, "Deletion requests by mail": the

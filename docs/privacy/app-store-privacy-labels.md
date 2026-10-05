@@ -1,6 +1,6 @@
 # App Store Privacy Labels - Nina
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 Use this as the App Store Connect privacy questionnaire source of truth for the current codebase. Re-check it before every submission because labels must match the shipped binary, backend functions, SDKs, and website data collection.
 
@@ -38,7 +38,8 @@ submission and record the answer here.
 
 | Apple Category | Nina Data | Purposes | Notes |
 | --- | --- | --- | --- |
-| Contact Info | Email address (accounts created before build 11 only), display name | App Functionality, Account Management | Since build 11 Sign in with Apple asks no account for a name or an email, so a new account carries no email; the display name is the first name the person types when creating or joining a house, editable in Perfil. An account created before build 11 keeps the email Apple shared then, which may be a private-relay address; it identifies the account and is shown read-only in the app only when present, and it is never a way to sign in. Keep the Email Address label while those accounts hold one. A minor's profile email is forced to null on the server. |
+| Contact Info: Name | Display name: a first name for accounts created since build 11; the full name Apple shared for accounts created with builds up to 10 | App Functionality, Account Management | Since build 12 Sign in with Apple asks every account for the name (`requestedScopes = [.fullName]`) and never for the email. Nina keeps only the given name Apple shares, trimmed, and never the family name, a middle name or a nickname. The sign-in sends no part of the name to the server: the given name waits on the device (protected storage, excluded from backup) until the person is named. An adult who shared it is saved with it, with no field on screen, when creating or joining a house; Apple shares a name only on an account's first authorization and the person may blank it, so when Apple gives none the adult types a first name there. A minor, or anyone whose age Apple has not shared, always confirms a first name beside the invite, prefilled with Apple's given name when there is one, so for those accounts the person is the source; the device keeps no copy once that screen appears. An adult can change the name in Perfil; a minor's screens offer no name editor. Accounts created with builds up to 10 also hold, in the Auth account's metadata, the formatted full name Apple shared then, and their profile name, and the member name any house they created or joined copied, is that full name until the person renames in Perfil; nothing rewrites the metadata. |
+| Contact Info: Email Address | Email address (accounts created before build 11 only) | App Functionality, Account Management | No build since 11 asks Apple for the email, so a new account carries none. An account created before build 11 keeps the email Apple shared then, which may be a private-relay address; it identifies the account and is shown read-only in the app only when present, and it is never a way to sign in. Keep the Email Address label while those accounts hold one. A minor's profile email is forced to null on the server. |
 | User Content | Chat messages, tasks, reminders, shopping items, household members, profile photo, confirmed memories, reports on a Nina reply (reason code and message reference) | App Functionality | This is the core household data. Photo and PDF reading stay off at launch (`NINA_ATTACHMENTS_ENABLED = NO`). A message held for child-safety review is sealed server-side and reachable by no client role. |
 | Sensitive Info | Health hints, medication/school/child routine details, emotional pattern notes when users enter them; health reminders of a child or teen when a guardian gave the separate health consent | App Functionality | The app does not require these fields, but adults can enter them in messages and memories. Use the conservative label. |
 | Identifiers | Supabase Auth user ID, the Apple account identifier Supabase Auth keeps for the linked identity, family ID, invite tokens | App Functionality, Account Management | Used for login, authorization, sync, and household isolation. |
@@ -60,7 +61,10 @@ off-device collection for App Store privacy-label purposes.
 
 Household activity, profile metadata/photo, AI consent, pending-invite caches,
 and a minor's running usage counter also remain on device for offline
-operation. They use opaque filenames, iOS file protection, per-entry limits, and
+operation, and the given name Apple shared at sign-in waits there, with Apple's
+user identifier for that app, until the person is named (removed then, on
+sign-out, on account deletion, and as soon as a minor's or unknown age's screen
+appears). They use opaque filenames, iOS file protection, per-entry limits, and
 backup exclusion. The App Attest key identifier lives in the Keychain
 (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`), never in `UserDefaults`.
 This local-only storage does not change the collection answers above;
@@ -139,7 +143,7 @@ minor account left without a house for 30 days is deleted by
 `nina-maintenance` through the same photos, preparation and Auth order.
 
 After server deletion succeeds, the app clears account-scoped household,
-profile/photo, consent, onboarding, pending-invite, and temporary-export data
+profile/photo, consent, onboarding, pending-invite, Apple's shared given name, and temporary-export data
 using the account ID captured before Auth state is removed. In-flight local
 home/profile loads are invalidated so a late response cannot recreate erased
 cache files.

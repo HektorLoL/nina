@@ -468,7 +468,8 @@ its strings are in `docs/text-rubric.md` §3, most of them Law-text-gated.
   that read Apple's age range before the black Apple button, which asked for
   name and email only for an adult reading. That cobalt age step was removed on
   2026-10-04 (build 11, §6j): the age is read after Sign in with Apple, which
-  now asks for no scope, so rubric L4 is back to no cobalt on the welcome. The
+  asked for no scope in build 11 and asks every account for the name alone
+  since build 12 (§6k), so rubric L4 is back to no cobalt on the welcome. The
   legal line gains the protected "Menores de 18 anos entram
   numa casa com aprovação de um responsável.", so the welcome is 29 authored
   words, one over the budget; the legal text wins.
@@ -544,7 +545,8 @@ draws them; they reuse existing parts.
 
 - **Apple first, one button.** The welcome is the brand block, the black system
   "Continuar com a Apple" (52pt, field radius, `requestedScopes = []` for every
-  account), the legal footnote and the rating mark. There is no cobalt control
+  account in build 11; `[.fullName]` since build 12, §6k), the legal footnote
+  and the rating mark. There is no cobalt control
   on it. The age step ("Antes, sua faixa de idade.") is now the first screen a
   new account sees after Apple's sheet, so it gained the quiet "Sair da conta"
   and "Apagar conta" at its foot, under every phase but the wait, as the
@@ -592,6 +594,26 @@ draws them; they reuse existing parts.
   leaves a way out (App Store 5.1.1(v)). "A conta pode já ter sido apagada."
   pairs "Para confirmar, escreva…" with a quiet "Sair" instead. The ink button sizes with `minHeight` now, so "Apagar a conta de
   ‹nome›" no longer clips at accessibility sizes.
+
+## 6k. Build 12 (2026-10-05)
+
+App Review Guideline 4.0 refuses an app that asks for a name after Sign in with
+Apple when Apple could have shared it, and build 11's field asked every new
+adult. No board draws this; nothing new is drawn.
+
+- **Apple's sheet offers the name.** The welcome's request asks every account
+  for `[.fullName]` and never the email, so Apple's own sheet shows the name
+  row; Nina keeps only its given name. The welcome itself is unchanged.
+- **The name field is the fallback.** An adult who shared a name reaches "Toda
+  casa começa com um nome." or "Entrar numa casa." with no "Seu primeiro nome"
+  field, and "Nome da casa" or "Link ou código" submits straight to the action;
+  the given name, which waits on the phone from Apple's sheet until then, is
+  saved before the house is touched, behind the same "Criando" / "Enviando"
+  title, and the tutorial greets the person by it. The field, its copy and its
+  disabled button are exactly build 11's when Apple gave no given name.
+- **A minor's field is filled in.** "Seu primeiro nome" beside the invite stays
+  (`MinorNoHomeView`), prefilled with Apple's given name when there is one, and
+  still editable.
 
 ## 7. Verified
 

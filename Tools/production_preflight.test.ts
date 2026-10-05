@@ -2,6 +2,7 @@ import { assert, assertEquals, assertFalse, assertThrows } from "@std/assert";
 import {
   ageAssuranceEntitlementsPresent,
   appleScopeRequests,
+  asksAppleForTheNameAlone,
   containsDebugSignIn,
   deploymentChecks,
   deploymentTargetsAtLeast,
@@ -294,25 +295,57 @@ Deno.test("the shipped app signs in with Apple and calls no other sign-in door",
   assert(sources[0].includes("provider: .apple"));
 });
 
-Deno.test("the shipped app asks Apple for no name and no email", async () => {
+Deno.test("the shipped app asks Apple for the name alone and never the email", async () => {
   const paths = [
     "../Nina/LoginView.swift",
     "../Nina/AuthSession.swift",
     "../Nina/SupabaseAuthClient.swift",
+    "../Nina/ProfileStore.swift",
   ];
-  const [login, session, client] = await Promise.all(
+  const [login, session, client, profileStore] = await Promise.all(
     paths.map((path) => Deno.readTextFile(new URL(path, import.meta.url))),
   );
 
-  for (const source of [login, session, client]) {
+  for (const source of [login, session, client, profileStore]) {
     assertEquals(appleScopeRequests(source), []);
   }
-  assert(login.includes("requestedScopes = []"));
+  assert(asksAppleForTheNameAlone(login));
+  assert(login.includes("request.requestedScopes = [.fullName]"));
+  assert(session.includes("request.requestedScopes = []"));
+  assert(profileStore.includes("sharedName?.givenName?"));
+  for (const source of [login, session, client, profileStore]) {
+    for (
+      const part of [
+        ".familyName",
+        ".middleName",
+        ".nickname",
+        "PersonNameComponentsFormatter",
+      ]
+    ) {
+      assertFalse(source.includes(part), part);
+    }
+  }
   assertFalse(client.includes("update_user_metadata"));
+  assertFalse(client.includes("UserAttributes("));
   assertFalse(client.includes('"full_name": .string('));
+  assertFalse(client.includes('"display_name": .string('));
 });
 
-Deno.test("a name or email scope request reads as asking Apple for data", () => {
+Deno.test("Apple's given name reaches neither Auth nor the profile at sign-in", async () => {
+  const client = await Deno.readTextFile(
+    new URL("../Nina/SupabaseAuthClient.swift", import.meta.url),
+  );
+
+  assertFalse(client.includes("givenName"));
+  assertFalse(client.includes("fullName"));
+  assertEquals(
+    [...client.matchAll(/ensureProfile\(displayNameHint: ([^)]*)\)/g)]
+      .map((match) => match[1]),
+    ["nil", "nil", "String?"],
+  );
+});
+
+Deno.test("an email scope or any scope list but the name reads as asking Apple for data", () => {
   assertEquals(
     appleScopeRequests("request.requestedScopes = [.fullName, .email]"),
     ["requestedScopes = [.fullName, .email]"],
@@ -322,14 +355,70 @@ Deno.test("a name or email scope request reads as asking Apple for data", () => 
     ["requestedScopes = [.email]"],
   );
   assertEquals(
+    appleScopeRequests("request.requestedScopes = [.email, .fullName]"),
+    ["requestedScopes = [.email, .fullName]"],
+  );
+  assertEquals(
     appleScopeRequests(
       "request.requestedScopes = Self.requestedScopes(for: reading)",
     ),
     ["requestedScopes = Self.requestedScopes(for: reading)"],
   );
+  assertEquals(
+    appleScopeRequests("request.requestedScopes?.append(.email)"),
+    ["requestedScopes?.append(.email)"],
+  );
+  assertEquals(
+    appleScopeRequests("request.requestedScopes! += [.email]"),
+    ["requestedScopes! += [.email]"],
+  );
+  assertEquals(
+    appleScopeRequests("request.requestedScopes += [.email]"),
+    ["requestedScopes += [.email]"],
+  );
+  assertEquals(
+    appleScopeRequests("let scope = ASAuthorization.Scope.email"),
+    ["Scope.email"],
+  );
+  assertEquals(
+    appleScopeRequests(
+      "let scopes: [ASAuthorization.Scope] = [.fullName, .email]",
+    ),
+    ["[ASAuthorization.Scope] = [.fullName, .email]"],
+  );
+  assertEquals(appleScopeRequests("request.requestedScopes = [.fullName]"), []);
+  assertEquals(
+    appleScopeRequests("request.requestedScopes = [ .fullName ]"),
+    [],
+  );
+  assertEquals(
+    appleScopeRequests(
+      "request.requestedScopes = [ASAuthorization.Scope.fullName]",
+    ),
+    [],
+  );
   assertEquals(appleScopeRequests("request.requestedScopes = []"), []);
   assertEquals(appleScopeRequests("request.requestedScopes = [ ]"), []);
   assertEquals(appleScopeRequests("request.requestedScopes=[]"), []);
+  assertEquals(appleScopeRequests('case .email: "Email"'), []);
+  assertEquals(appleScopeRequests("provider: .email,"), []);
+
+  assert(asksAppleForTheNameAlone("request.requestedScopes = [.fullName]"));
+  assert(
+    asksAppleForTheNameAlone(
+      "request.requestedScopes = [ASAuthorization.Scope.fullName]",
+    ),
+  );
+  assertFalse(asksAppleForTheNameAlone("request.requestedScopes = []"));
+  assertFalse(asksAppleForTheNameAlone("let scopes = [.fullName]"));
+  assertFalse(
+    asksAppleForTheNameAlone("request.requestedScopes = [.fullName, .email]"),
+  );
+  assertFalse(
+    asksAppleForTheNameAlone(
+      "request.requestedScopes = [.fullName]\nrequest.requestedScopes = []",
+    ),
+  );
 });
 
 Deno.test("the app reads the server's fallback name as no name", async () => {

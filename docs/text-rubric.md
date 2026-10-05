@@ -120,7 +120,7 @@ These count authored words only, as defined in §0 step 4.
 │              Nina              │  .ninaText(.display), centered
 │   A rotina da casa, dividida.  │  .ninaText(.label, muted), centered
 │ (flexible spacer, min 32)      │
-│ [    Continuar com a Apple   ] │  the system button, black, 52pt, no scope
+│ [    Continuar com a Apple   ] │  the system button, black, 52pt, [.fullName]
 │        error line (if any)     │  .meta, ink, centered, 12pt gap
 │ Ao continuar, você aceita os   │  .meta muted, centered, 14pt below
 │ Termos e a Política de Priv.   │  links tinted
@@ -159,7 +159,7 @@ The two equal spacers center the brand block in the space above the actions. On 
 - **L3.** The tagline is one line of 6 words or fewer.
   - The login screen never explains how the product works. That is the tutorial's job.
   - Only 4 of 16 references add a second line, and none explains the product.
-- **L4.** One door, one button (build 11, 2026-10-04): the black system "Continuar com a Apple" (52pt), which asks Apple for no name and no email; the age range is read after sign-in by the age step (M2). There is no cobalt control on the welcome. No other door; email, code and Google sign-in were removed on 2026-09-26.
+- **L4.** One door, one button (build 11, 2026-10-04): the black system "Continuar com a Apple" (52pt), which asks Apple for the name alone and never the email (build 12, 2026-10-05; build 11 asked for neither), so Apple's own sheet carries the name row and the welcome adds no word about it; the age range is read after sign-in by the age step (M2). There is no cobalt control on the welcome. No other door; email, code and Google sign-in were removed on 2026-09-26.
   - Word count: Apple's system label is not counted, because the system draws it (§0 step 4 counts what the app writes). The welcome is 6 authored words without the legal line and 29 with it.
   - A Debug build adds one quiet row, "Teste 1 · Teste 2", under the Apple button for the local test accounts. It is compiled out of Release, so no budget here counts it.
 - **L5.** Retired 2026-09-26: there is no email sheet.
@@ -191,7 +191,7 @@ The two equal spacers center the brand block in the space above the actions. On 
 - **O5. One skip per screen**: "Pular" at the top right ("Fechar" on replay).
 - **O6. The closing screen** has a headline of 5 words or fewer, one line of 8 words or fewer, and one button. No recap of what the user just did.
 - **O7. Option labels are 5 words or fewer.** No placeholder option ("É outra coisa") unless tapping it opens a field. Counter-example: [MacroFactor](https://mobbin.com/screens/d0e155ed-6da1-4e5f-a03a-675b24be45c9), with 12–15 words per option.
-- **O8. An adult with no chosen name types it where the house first needs it** (build 11): "Seu primeiro nome" with the placeholder "Como a casa chama você" (the minor path's words), under "Nome da casa" when creating, under "Link ou código" when joining, and above "Pedir para entrar" on the invite. No helper line, no separate screen. The create or join button stays disabled until it holds a name; a failed save reads "Não deu para salvar seu nome. Tente de novo." Sign in with Apple asks for no name, so the server's placeholder "Família" would otherwise become the member's name.
+- **O8. An adult Apple gave no first name types it where the house first needs it** (build 11; a fallback since build 12): "Seu primeiro nome" with the placeholder "Como a casa chama você" (the minor path's words), under "Nome da casa" when creating, under "Link ou código" when joining, and above "Pedir para entrar" on the invite. No helper line, no separate screen. The create or join button stays disabled until it holds a name; a failed save reads "Não deu para salvar seu nome. Tente de novo." Since build 12 Sign in with Apple asks for the name, and an adult who shared a given name never sees the field (App Review 4.0 refuses asking for a name Apple could have shared); it shows only when Apple gave none, since the server's placeholder "Família" would otherwise become the member's name.
 
 **Target strings**
 

@@ -415,6 +415,33 @@ enum ProfileNaming {
         guard let user, !user.isDebugAccount else { return false }
         return isPlaceholder(knownName ?? user.displayName)
     }
+
+    // Only Apple's given name is ever kept: never the family name, a middle name or a nickname.
+    static func givenName(from sharedName: PersonNameComponents?) -> String? {
+        guard let given = sharedName?.givenName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !isPlaceholder(given) else { return nil }
+        return given
+    }
+
+    // The typed field is only the fallback for an account Apple gave no given name.
+    static func asksForName(user: AuthUser?, knownName: String?, sharedGivenName: String?) -> Bool {
+        sharedGivenName == nil && needsName(user: user, knownName: knownName)
+    }
+
+    // Apple's given name is saved as chosen before the house copies the profile name, never over one chosen since.
+    static func nameToSave(
+        user: AuthUser?,
+        knownName: String?,
+        sharedGivenName: String?,
+        typed: String
+    ) -> String? {
+        let unnamed = needsName(user: user, knownName: knownName)
+        if let sharedGivenName, unnamed || (knownName ?? user?.displayName) == sharedGivenName {
+            return sharedGivenName
+        }
+        guard unnamed else { return nil }
+        return typed.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 @MainActor

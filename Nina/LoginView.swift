@@ -1,12 +1,18 @@
 import AuthenticationServices
 import SwiftUI
 
-// Every age sees this screen: it names no friend and asks Apple for nothing beyond the sign-in.
+// Every age sees this screen: it names no friend and asks Apple for the name alone, never the email.
 struct LoginView: View {
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(InviteLinkStore.self) private var inviteLinkStore
 
     @State private var appleRawNonce: String?
+
+    // Every account is asked the same: App Review 4.0 refuses asking later for a name Apple could share.
+    static func configureAppleRequest(_ request: ASAuthorizationAppleIDRequest, rawNonce: String) {
+        request.requestedScopes = [.fullName]
+        request.nonce = AppleSignInNonce.sha256(rawNonce)
+    }
 
     private var isInvited: Bool {
         inviteLinkStore.pendingCode != nil
@@ -58,8 +64,7 @@ struct LoginView: View {
                 do {
                     let rawNonce = try AppleSignInNonce.make()
                     appleRawNonce = rawNonce
-                    request.requestedScopes = []
-                    request.nonce = AppleSignInNonce.sha256(rawNonce)
+                    Self.configureAppleRequest(request, rawNonce: rawNonce)
                 } catch {
                     appleRawNonce = nil
                     authSession.report(.unavailable)
@@ -147,10 +152,14 @@ struct LoginView: View {
                 return
             }
 
+            let appleCredential = AppleSignInCredential(
+                identityToken: identityToken,
+                rawNonce: rawNonce,
+                appleUserID: credential.user,
+                sharedName: credential.fullName
+            )
             Task {
-                await authSession.signInWithApple(
-                    credential: AppleSignInCredential(identityToken: identityToken, rawNonce: rawNonce)
-                )
+                await authSession.signInWithApple(credential: appleCredential)
                 appleRawNonce = nil
             }
         }

@@ -96,12 +96,16 @@ struct InviteAcceptanceView: View {
     @State private var firstName = ""
     @FocusState private var isNameFocused: Bool
 
+    private var knownName: String? {
+        authSession.currentUser.flatMap { profileStore.profiles[$0.id]?.displayName }
+    }
+
     // The approver's card and the member row carry this name, so a placeholder must never reach them.
     private var needsName: Bool {
-        let user = authSession.currentUser
-        return ProfileNaming.needsName(
-            user: user,
-            knownName: user.flatMap { profileStore.profiles[$0.id]?.displayName }
+        ProfileNaming.asksForName(
+            user: authSession.currentUser,
+            knownName: knownName,
+            sharedGivenName: authSession.sharedGivenName
         )
     }
 
@@ -261,12 +265,13 @@ struct InviteAcceptanceView: View {
         errorMessage = nil
 
         Task {
-            if needsName {
-                let name = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard let user = authSession.currentUser else {
-                    isJoining = false
-                    return
-                }
+            if let user = authSession.currentUser,
+               let name = ProfileNaming.nameToSave(
+                   user: user,
+                   knownName: knownName,
+                   sharedGivenName: authSession.sharedGivenName,
+                   typed: firstName
+               ) {
                 let saved = await profileStore.chooseDisplayName(name, for: user)
                 guard authSession.currentUser?.id == user.id else {
                     isJoining = false

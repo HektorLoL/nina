@@ -473,7 +473,7 @@ select is(
 
 reset role;
 
--- Since build 11 Sign in with Apple asks for no scope, so a new account carries no name and no email.
+-- No build since 11 writes a name or an email to Auth, so a new account reads as the placeholder until the person chooses one.
 select ok(
   (
     select display_name = 'Família'

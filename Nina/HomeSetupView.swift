@@ -29,12 +29,16 @@ struct HomeSetupView: View {
         case firstName
     }
 
+    private var knownName: String? {
+        authSession.currentUser.flatMap { profileStore.profiles[$0.id]?.displayName }
+    }
+
     // The house copies this name into the member row it creates, so a placeholder must never reach it.
     private var needsName: Bool {
-        let user = authSession.currentUser
-        return ProfileNaming.needsName(
-            user: user,
-            knownName: user.flatMap { profileStore.profiles[$0.id]?.displayName }
+        ProfileNaming.asksForName(
+            user: authSession.currentUser,
+            knownName: knownName,
+            sharedGivenName: authSession.sharedGivenName
         )
     }
 
@@ -276,11 +280,15 @@ struct HomeSetupView: View {
     }
 
     private func saveChosenNameIfNeeded() async -> Bool {
-        guard needsName else { return true }
         guard let user = authSession.currentUser else { return false }
+        guard let name = ProfileNaming.nameToSave(
+            user: user,
+            knownName: knownName,
+            sharedGivenName: authSession.sharedGivenName,
+            typed: firstName
+        ) else { return true }
         isSavingName = true
         defer { isSavingName = false }
-        let name = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
         let saved = await profileStore.chooseDisplayName(name, for: user)
         guard authSession.currentUser?.id == user.id else { return false }
         guard saved else {

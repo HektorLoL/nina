@@ -34,7 +34,8 @@ struct NinaApp: App {
         )
         _authSession = State(
             initialValue: AuthSessionStore(
-                authClient: BackendServices.makeAuthClient(diagnostics: diagnostics)
+                authClient: BackendServices.makeAuthClient(diagnostics: diagnostics),
+                sharedNameStore: ProtectedLocalDataStore.shared
             )
         )
         _profileStore = State(

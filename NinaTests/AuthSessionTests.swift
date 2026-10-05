@@ -452,6 +452,373 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertNil(store.interactiveSignInUserID)
     }
 
+    @MainActor
+    func testTheSignInAsksAppleForTheNameAloneAndNeverTheEmail() {
+        let signIn = ASAuthorizationAppleIDProvider().createRequest()
+        LoginView.configureAppleRequest(signIn, rawNonce: "nina")
+
+        XCTAssertEqual(signIn.requestedScopes, [.fullName])
+        XCTAssertFalse(signIn.requestedScopes?.contains(.email) ?? true)
+        XCTAssertEqual(signIn.nonce, AppleSignInNonce.sha256("nina"))
+
+        let deletion = AppleDeletionReauthorizer.makeRequest()
+        XCTAssertEqual(deletion.requestedScopes ?? [], [])
+    }
+
+    @MainActor
+    func testOnlyTheGivenNameAppleSharesIsKeptAndItIsTheOnlyNameTheServerReceives() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AuthSessionTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let deviceStore = ProtectedLocalDataStore(directoryURL: directory)
+        let shared = PersonNameComponents(
+            namePrefix: "Dra.",
+            givenName: "  Ana  ",
+            middleName: "Beatriz",
+            familyName: "Souza",
+            nameSuffix: "Neta",
+            nickname: "Aninha"
+        )
+        let credential = AppleSignInCredential(
+            identityToken: "token",
+            rawNonce: "nonce",
+            appleUserID: "apple-sub",
+            sharedName: shared
+        )
+        let otherParts = ["Dra", "Beatriz", "Souza", "Neta", "Aninha"]
+
+        XCTAssertEqual(credential.givenName, "Ana")
+        XCTAssertEqual(
+            Set(Mirror(reflecting: credential).children.compactMap(\.label)),
+            ["identityToken", "rawNonce", "appleUserID", "givenName"]
+        )
+
+        let client = AuthClientSpy()
+        let session = AuthSessionStore(authClient: client, sharedNameStore: deviceStore)
+        await session.signInWithApple(credential: credential)
+        let user = try XCTUnwrap(session.currentUser)
+        XCTAssertEqual(user.displayName, "Família")
+        XCTAssertEqual(session.sharedGivenName, "Ana")
+
+        let held = try XCTUnwrap(
+            deviceStore.data(forKey: "nina.auth.sharedAppleName", ownerScope: PrivateLocalDataScope.sharedAppleName)
+        )
+        let heldText = try XCTUnwrap(String(data: held, encoding: .utf8))
+        XCTAssertTrue(heldText.contains("Ana"))
+        for part in otherParts {
+            XCTAssertFalse(heldText.contains(part), part)
+        }
+
+        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let backend = ChosenNameBackendSpy()
+        let profileStore = ProfileStore(
+            defaults: defaults,
+            privateDataStore: ProtectedLocalDataStore(directoryURL: directory.appendingPathComponent("profiles")),
+            remoteProfileBackend: backend
+        )
+        let name = try XCTUnwrap(
+            ProfileNaming.nameToSave(
+                user: user,
+                knownName: "Família",
+                sharedGivenName: session.sharedGivenName,
+                typed: ""
+            )
+        )
+        let saved = await profileStore.chooseDisplayName(name, for: user)
+        XCTAssertTrue(saved)
+        session.noteChosenDisplayName(name)
+
+        let names = await backend.savedNames()
+        XCTAssertEqual(names, ["Ana"])
+        XCTAssertEqual(session.currentUser?.displayName, "Ana")
+        XCTAssertNil(session.sharedGivenName)
+        XCTAssertNil(
+            try deviceStore.data(forKey: "nina.auth.sharedAppleName", ownerScope: PrivateLocalDataScope.sharedAppleName)
+        )
+    }
+
+    @MainActor
+    func testABlankOrMissingAppleNameLeavesTheTypedField() async {
+        let unnamed: [PersonNameComponents?] = [
+            nil,
+            PersonNameComponents(),
+            PersonNameComponents(givenName: "   "),
+            PersonNameComponents(givenName: "Família"),
+            PersonNameComponents(familyName: "Souza", nickname: "Aninha")
+        ]
+
+        for shared in unnamed {
+            let store = AuthSessionStore(authClient: AuthClientSpy())
+            let credential = AppleSignInCredential(
+                identityToken: "token",
+                rawNonce: "nonce",
+                appleUserID: "apple-sub",
+                sharedName: shared
+            )
+            XCTAssertNil(credential.givenName)
+
+            await store.signInWithApple(credential: credential)
+
+            let user = store.currentUser
+            XCTAssertEqual(user?.displayName, "Família")
+            XCTAssertNil(store.sharedGivenName)
+            XCTAssertTrue(ProfileNaming.asksForName(user: user, knownName: nil, sharedGivenName: store.sharedGivenName))
+            XCTAssertEqual(
+                ProfileNaming.nameToSave(user: user, knownName: nil, sharedGivenName: nil, typed: "  Bia "),
+                "Bia"
+            )
+        }
+    }
+
+    @MainActor
+    func testAnAdultWhoSharedTheirNameIsNeverAskedAndItIsSavedBeforeTheHouseCopiesIt() async {
+        let store = AuthSessionStore(authClient: AuthClientSpy())
+
+        await store.signInWithApple(
+            credential: AppleSignInCredential(
+                identityToken: "token",
+                rawNonce: "nonce",
+                appleUserID: "apple-sub",
+                sharedName: PersonNameComponents(givenName: "Ana", familyName: "Souza")
+            )
+        )
+
+        let user = store.currentUser
+        XCTAssertEqual(user?.displayName, "Família")
+        XCTAssertEqual(store.sharedGivenName, "Ana")
+        for knownName in [nil, "Família", "Ana"] as [String?] {
+            XCTAssertFalse(ProfileNaming.asksForName(user: user, knownName: knownName, sharedGivenName: store.sharedGivenName))
+            XCTAssertEqual(
+                ProfileNaming.nameToSave(user: user, knownName: knownName, sharedGivenName: store.sharedGivenName, typed: ""),
+                "Ana"
+            )
+        }
+
+        store.noteChosenDisplayName("Ana")
+        XCTAssertNil(store.sharedGivenName)
+        XCTAssertNil(ProfileNaming.nameToSave(user: store.currentUser, knownName: "Ana", sharedGivenName: nil, typed: ""))
+    }
+
+    @MainActor
+    func testANameThePersonAlreadyChoseOutranksTheOneAppleSharesAgain() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AuthSessionTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let deviceStore = ProtectedLocalDataStore(directoryURL: directory)
+        let client = AuthClientSpy()
+        client.serverChosenName = "Mãe"
+        let store = AuthSessionStore(authClient: client, sharedNameStore: deviceStore)
+
+        await store.signInWithApple(
+            credential: AppleSignInCredential(
+                identityToken: "token",
+                rawNonce: "nonce",
+                appleUserID: "apple-sub",
+                sharedName: PersonNameComponents(givenName: "Ana")
+            )
+        )
+
+        XCTAssertEqual(store.currentUser?.displayName, "Mãe")
+        XCTAssertNil(store.sharedGivenName)
+        XCTAssertNil(ProfileNaming.nameToSave(user: store.currentUser, knownName: "Mãe", sharedGivenName: nil, typed: ""))
+        XCTAssertNil(
+            try deviceStore.data(forKey: "nina.auth.sharedAppleName", ownerScope: PrivateLocalDataScope.sharedAppleName)
+        )
+    }
+
+    @MainActor
+    func testANameChosenInPerfilAfterApplesIsNeverOverwrittenWhenTheHouseIsSetUp() async {
+        let store = AuthSessionStore(authClient: AuthClientSpy())
+        await store.signInWithApple(
+            credential: AppleSignInCredential(
+                identityToken: "token",
+                rawNonce: "nonce",
+                appleUserID: "apple-sub",
+                sharedName: PersonNameComponents(givenName: "Ana")
+            )
+        )
+        let user = store.currentUser
+        XCTAssertEqual(store.sharedGivenName, "Ana")
+
+        XCTAssertFalse(ProfileNaming.asksForName(user: user, knownName: "Aninha", sharedGivenName: store.sharedGivenName))
+        XCTAssertNil(
+            ProfileNaming.nameToSave(user: user, knownName: "Aninha", sharedGivenName: store.sharedGivenName, typed: "")
+        )
+    }
+
+    @MainActor
+    func testApplesSharedNameSurvivesARelaunchUntilThePersonIsNamed() async {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AuthSessionTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let deviceStore = ProtectedLocalDataStore(directoryURL: directory)
+        let unnamed = AuthUser(id: "apple-user", displayName: "Família", email: nil, provider: .apple)
+
+        let first = AuthSessionStore(authClient: AuthClientSpy(), sharedNameStore: deviceStore)
+        await first.signInWithApple(
+            credential: AppleSignInCredential(
+                identityToken: "token",
+                rawNonce: "nonce",
+                appleUserID: "apple-sub",
+                sharedName: PersonNameComponents(givenName: "Ana")
+            )
+        )
+        XCTAssertEqual(first.sharedGivenName, "Ana")
+
+        let relaunched = AuthSessionStore(
+            authClient: AuthClientSpy(restoration: .signedIn(unnamed)),
+            sharedNameStore: deviceStore
+        )
+        XCTAssertNil(relaunched.sharedGivenName)
+        await relaunched.restoreSession()
+        XCTAssertEqual(relaunched.sharedGivenName, "Ana")
+
+        let offline = AuthSessionStore(
+            authClient: AuthClientSpy(
+                restoration: .unreachable(AuthUser(id: "apple-user", displayName: "Você", email: nil, provider: .apple))
+            ),
+            sharedNameStore: deviceStore
+        )
+        await offline.restoreSession()
+        XCTAssertEqual(offline.sharedGivenName, "Ana")
+
+        relaunched.noteChosenDisplayName("Ana")
+        let named = AuthSessionStore(
+            authClient: AuthClientSpy(restoration: .signedIn(unnamed)),
+            sharedNameStore: deviceStore
+        )
+        await named.restoreSession()
+        XCTAssertNil(named.sharedGivenName)
+    }
+
+    @MainActor
+    func testAFailedSignInKeepsApplesNameForTheRetryOfTheSameAppleIDOnly() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AuthSessionTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let deviceStore = ProtectedLocalDataStore(directoryURL: directory)
+
+        func failedFirstAttempt() async -> AuthClientSpy {
+            let client = AuthClientSpy()
+            client.appleSignInError = URLError(.timedOut)
+            let store = AuthSessionStore(authClient: client, sharedNameStore: deviceStore)
+            await store.signInWithApple(
+                credential: AppleSignInCredential(
+                    identityToken: "token",
+                    rawNonce: "nonce",
+                    appleUserID: "apple-sub",
+                    sharedName: PersonNameComponents(givenName: "Ana")
+                )
+            )
+            XCTAssertNil(store.currentUser)
+            XCTAssertNil(store.sharedGivenName)
+            client.appleSignInError = nil
+            return client
+        }
+
+        let retry = await failedFirstAttempt()
+        let retrying = AuthSessionStore(authClient: retry, sharedNameStore: deviceStore)
+        await retrying.signInWithApple(
+            credential: AppleSignInCredential(identityToken: "token", rawNonce: "nonce", appleUserID: "apple-sub")
+        )
+        XCTAssertEqual(retrying.sharedGivenName, "Ana")
+        await retrying.signOut()
+
+        _ = await failedFirstAttempt()
+        let restored = AuthSessionStore(
+            authClient: AuthClientSpy(
+                restoration: .signedIn(
+                    AuthUser(
+                        id: "apple-user",
+                        displayName: "Família",
+                        email: nil,
+                        provider: .apple,
+                        appleSubject: "apple-sub"
+                    )
+                )
+            ),
+            sharedNameStore: deviceStore
+        )
+        await restored.restoreSession()
+        XCTAssertEqual(restored.sharedGivenName, "Ana")
+        await restored.signOut()
+
+        let other = await failedFirstAttempt()
+        let otherAppleID = AuthSessionStore(authClient: other, sharedNameStore: deviceStore)
+        await otherAppleID.signInWithApple(
+            credential: AppleSignInCredential(identityToken: "token", rawNonce: "nonce", appleUserID: "another-sub")
+        )
+        let otherUser = try XCTUnwrap(otherAppleID.currentUser)
+        XCTAssertNil(otherAppleID.sharedGivenName)
+        let again = AuthSessionStore(
+            authClient: AuthClientSpy(restoration: .signedIn(otherUser)),
+            sharedNameStore: deviceStore
+        )
+        await again.restoreSession()
+        XCTAssertNil(again.sharedGivenName)
+    }
+
+    @MainActor
+    func testAMinorsFieldIsFilledFromApplesNameButNoCopyOfItStaysOnTheDevice() async {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AuthSessionTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let deviceStore = ProtectedLocalDataStore(directoryURL: directory)
+        let store = AuthSessionStore(authClient: AuthClientSpy(), sharedNameStore: deviceStore)
+        await store.signInWithApple(
+            credential: AppleSignInCredential(
+                identityToken: "token",
+                rawNonce: "nonce",
+                appleUserID: "apple-sub",
+                sharedName: PersonNameComponents(givenName: "Bia", familyName: "Souza")
+            )
+        )
+
+        store.keepSharedGivenNameOffDevice()
+
+        XCTAssertEqual(store.sharedGivenName, "Bia")
+        XCTAssertNil(
+            try? deviceStore.data(forKey: "nina.auth.sharedAppleName", ownerScope: PrivateLocalDataScope.sharedAppleName)
+        )
+        let relaunched = AuthSessionStore(
+            authClient: AuthClientSpy(
+                restoration: .signedIn(AuthUser(id: "apple-user", displayName: "Família", email: nil, provider: .apple))
+            ),
+            sharedNameStore: deviceStore
+        )
+        await relaunched.restoreSession()
+        XCTAssertNil(relaunched.sharedGivenName)
+    }
+
+    @MainActor
+    func testApplesSharedNameIsForgottenWhenThePersonSignsOut() async {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AuthSessionTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let deviceStore = ProtectedLocalDataStore(directoryURL: directory)
+        let store = AuthSessionStore(authClient: AuthClientSpy(), sharedNameStore: deviceStore)
+        await store.signInWithApple(
+            credential: AppleSignInCredential(
+                identityToken: "token",
+                rawNonce: "nonce",
+                appleUserID: "apple-sub",
+                sharedName: PersonNameComponents(givenName: "Ana")
+            )
+        )
+        XCTAssertEqual(store.sharedGivenName, "Ana")
+
+        await store.signOut()
+
+        XCTAssertNil(store.sharedGivenName)
+        store.currentUser = AuthUser(id: "apple-user", displayName: "Família", email: nil, provider: .apple)
+        XCTAssertNil(store.sharedGivenName)
+        XCTAssertNil(
+            try? deviceStore.data(forKey: "nina.auth.sharedAppleName", ownerScope: PrivateLocalDataScope.sharedAppleName)
+        )
+    }
+
     func testAnAccountWithoutAnEmailShowsNoEmail() {
         func user(_ email: String?) -> AuthUser {
             AuthUser(id: "account", displayName: "Ana", email: email, provider: .apple)
@@ -895,6 +1262,7 @@ private final class AuthClientSpy: AuthClient, @unchecked Sendable {
     var restoration: AuthSessionRestoration
     var lastAppleCredential: AppleSignInCredential?
     var appleSignInError: Error?
+    var serverChosenName: String?
     var deleteAccountCallCount = 0
     var deletionRequests: [DeleteAccountRequest] = []
     var deletionError: Error?
@@ -917,7 +1285,7 @@ private final class AuthClientSpy: AuthClient, @unchecked Sendable {
         }
         return AuthUser(
             id: "apple-user",
-            displayName: "Apple User",
+            displayName: serverChosenName ?? "Família",
             email: nil,
             provider: .apple
         )

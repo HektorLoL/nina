@@ -1,6 +1,6 @@
 # Record of Processing Operations - Nina
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 LGPD art. 37 asks the controller and each processor to keep a record of the
 processing operations they carry out, especially those based on legitimate
@@ -54,14 +54,27 @@ processors and transfers, retention, and the controls that hold it in place.
 - **Purpose:** create and keep an account, sign in, authorize every request.
 - **Subjects:** every person who signs in, adults and minors.
 - **Data:** Supabase Auth user id, the Apple subject identifier Supabase keeps
-  for the linked identity, display name (typed by the person), and, only for an
-  account created before build 11, the email Apple shared then (possibly a
-  private-relay address). Since build 11 Sign in with Apple asks no account for
-  a name or an email.
-- **Source:** Sign in with Apple.
+  for the linked identity, display name, and, only for an account created
+  before build 11, the email Apple shared then (possibly a private-relay
+  address). Since build 12 Sign in with Apple asks every account for the name
+  and none for the email; only the given name is kept, never the family name,
+  a middle name or a nickname, and it waits on the device until the person is
+  named. An adult's display name is that given name, or the first name they
+  type when Apple shares none; a minor, or an account whose age Apple has not
+  shared, always confirms a first name where they ask to join, prefilled with
+  Apple's given name when there is one. Accounts created with builds up to 10
+  still hold the formatted full name Apple shared then in their Auth metadata,
+  and their display name, and the member name a house copied, is that full name
+  until they rename in Perfil.
+- **Source:** Sign in with Apple; for an adult whom Apple gave no name, and for
+  every minor or account of unknown age, the person.
 - **Basis:** contract execution (art. 7 V); for a minor, the guardian's consent
   (art. 14 §1) once a guardian approves them.
-- **Stored:** Supabase Auth on the server; the session in the device Keychain.
+- **Stored:** Supabase Auth on the server; the session in the device Keychain;
+  the given name Apple shared, with Apple's user identifier for Nina, in the
+  device's protected storage until the person is named (deleted then, on
+  sign-out, on account deletion, and when a minor's or unknown age's screen
+  appears).
 - **Access:** the person; the server functions.
 - **Processors:** Supabase; Apple (identity provider).
 - **Retention:** until the account is deleted. Deleting the account also asks

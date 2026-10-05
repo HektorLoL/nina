@@ -1,6 +1,6 @@
 # Age Rating (Classificação Indicativa) - Nina
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 Nina aims for an all-ages rating: "Livre" in Brazil, AL on Apple's Brazil
 self-rating. That is a target, not a guarantee: Apple computes the App Store
@@ -115,7 +115,14 @@ Attest and Declared Age Range do not run on the Simulator or on a reviewer's
 device in the expected way. Sign in with Apple is the only sign-in, so there is
 no password to hand the reviewer, and the "Test accounts" line above has no
 working form yet: how the reviewer reaches the adult features is question 4 of
-`docs/production-launch-runbook.md` §6, open until App Review answers it.
+`docs/production-launch-runbook.md` §6, open until App Review answers it. The
+notes also carry that section's Sign in with Apple paragraph, word for word
+(build 12): Nina asks Apple for the name alone, keeps only the first name and
+never asks for the email, so an adult sees a name field only when Apple shared
+no first name (Guideline 4.0). A person under 18, or anyone whose age Apple
+has not shared (Nina treats that account as a minor's until it does, and the
+reviewer starts there), confirms a first name, filled in from Apple's when
+shared, where they ask to join a household; the paragraph says so.
 
 ## 5. Metadata
 
