@@ -242,7 +242,7 @@ private struct HomeMembershipLoad {
 @MainActor
 @Observable
 final class AppStore {
-    static let maxFamilyPeople = 8
+    nonisolated static let maxFamilyPeople = 8
     static let houseTasksSectionID = TaskSectionDefaults.houseTasksID
 
     var familyGroup: FamilyGroup

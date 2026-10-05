@@ -882,7 +882,7 @@ private struct ChatInputBar: View {
 
     // Decoding, resizing and re-encoding an 1800px photo is tens of milliseconds
     // of CPU. On the main actor that is a visible stall while the composer is open.
-    private static func normalizedImageData(_ data: Data) throws -> (full: Data, thumbnail: Data?) {
+    nonisolated private static func normalizedImageData(_ data: Data) throws -> (full: Data, thumbnail: Data?) {
         #if canImport(UIKit)
         guard let sourceImage = UIImage(data: data) else {
             throw ChatAttachmentLoadError.unreadable
