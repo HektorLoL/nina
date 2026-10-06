@@ -18,7 +18,7 @@ in the metadata (runbook §6.3).
 
 | Field | Value | Limit |
 |---|---|---|
-| Name | Nina: rotina da casa (20). Decided 2026-10-05; App Store Connect still shows "Nina: sua amiga da casa" until Heitor renames it there | 30 |
+| Name | Nina: rotina da casa (20). Renamed in App Store Connect on 2026-10-05 | 30 |
 | Subtitle | Tarefas, lembretes e compras (28) | 30 |
 | Primary category | Produtividade | |
 | Secondary category | Estilo de vida | |

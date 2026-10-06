@@ -714,9 +714,8 @@ answers, the rationale per item and the review note are in
 2. **Age Suitability URL:** `https://ninai.app/familias/`. Made for Kids: No.
    Override to a higher rating: none — the Terms set no minimum age.
 3. **Metadata:** no "para crianças" in the name, subtitle, icon, screenshots or
-   description, and screenshots that suit every age. Rename the listing to
-   "Nina: rotina da casa" in App Store Connect (decided 2026-10-05); the old
-   name said "amiga".
+   description, and screenshots that suit every age. The listing is "Nina:
+   rotina da casa" since 2026-10-05; the old name said "amiga".
 4. **ClassInd (MJSP):** self-classify against Portaria 1.048 and the Guia
    Prático, map each feature to its tendency and the on-by-default attenuator,
    and file the voluntary análise prévia (Portaria art. 46) as soon as build 10

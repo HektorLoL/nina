@@ -1994,17 +1994,20 @@ the project, not bugs to fix unprompted.
   It went live before the push that publishes "50 por dia" on `/suporte/` and
   the landing, so the site never promised more than the server keeps. Build
   12 still says "30 mensagens por hora" in the chat's ceiling notice and the
-  paywall until people update to build 13. It is live while `202610050003`
-  is not, so a `supabase db push` before that one is applied needs
-  `--include-all`.
-- **Migration `202610050003` (owner title and handover) is in the repo and
-  not yet in production.** It adds `private.family_ownership_offers` and the
-  offer, accept and withdraw RPCs (the authenticated function grant map
-  becomes 51 names), adds `ownership_offer` to `get_current_home_context`
-  (copied verbatim from `202609290005` otherwise), and clears the `'Criador'`
-  relationship. It is additive, so applying it before the build that offers
-  "Passar a casa" is safe; until it is applied, that button fails with "Não
-  deu para passar a casa agora."
+  paywall until people update to build 13.
+- **Migration `202610050003` (owner title and handover) is applied to
+  production (2026-10-05, Heitor's "go database").** It adds
+  `private.family_ownership_offers` and the offer, accept and withdraw RPCs,
+  adds `ownership_offer` to `get_current_home_context` (copied verbatim from
+  `202609290005` otherwise), and clears the `'Criador'` relationship.
+  Production's `get_current_home_context` and `create_family(text, text)`
+  bodies matched the pre-change bodies by MD5 before the apply, and all seven
+  new or redefined bodies matched the local ones after it; the read-back
+  showed 0 `'Criador'` rows, the offers table with RLS on and no API grant,
+  51 functions `authenticated` executes (the grant map in
+  `rls_policies.test.sql`), 0 unindexed foreign keys, and the version row set
+  to `202610050003` (§12). Build 12 ignores the new key; "Passar a casa"
+  reaches people with build 13.
 - **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
   `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
   compares them) and Terms §4 reads the same constant. Apple's questionnaire
@@ -2016,8 +2019,9 @@ the project, not bugs to fix unprompted.
   Federal intake for the child-safety hold and the OpenAI sub-processor link
   are UNVERIFIED and must be read from their official sources before release.
   The App Store name "Nina: sua amiga da casa" still says "amiga", which the
-  voice rule for surfaces a minor can see (§2) no longer allows; Heitor chose
-  "Nina: rotina da casa" on 2026-10-05 and renames it in App Store Connect.
+  voice rule for surfaces a minor can see (§2) no longer allows; Heitor
+  renamed the listing "Nina: rotina da casa" in App Store Connect on
+  2026-10-05.
 - **D3 is measured on TestFlight, not decided.** Only Apple-confirmed adults
   (or operator-marked accounts) chat, buy Premium, create a child profile or
   approve a minor. `private.age_assurance_distribution()` shows how Brazilian
@@ -2129,7 +2133,7 @@ the project, not bugs to fix unprompted.
   it only if engaged (`docs/production-launch-runbook.md` §7).
 - **The App Store Connect record exists since 2026-09-03**: Apple ID
   `6808423946`, listed as "Nina: sua amiga da casa" because the bare name was
-  taken. The number is public (it is the `apps.apple.com/br/app/id…` path) and
+  taken, and renamed "Nina: rotina da casa" on 2026-10-05. The number is public (it is the `apps.apple.com/br/app/id…` path) and
   sits in both `.example` inventories. Both subscriptions (Brazil only, Family
   Sharing on) and a sandbox tester exist since 2026-09-04; the server-notification
   URL is `https://apemftmlsjocvifbptum.supabase.co/functions/v1/app-store-server-notifications`
