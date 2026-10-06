@@ -1899,8 +1899,10 @@ the project, not bugs to fix unprompted.
   six functions deployed, `legacy_profile_deadline` set to 2026-10-29, and the
   online preflight with the build-10 archive left only the expected
   `deployment.legal-launch-identity` failure. No tester account was marked with
-  `operator_set_age_status`, so the first readings of
-  `private.age_assurance_distribution()` show how real iPhones come back. Build
+  `operator_set_age_status` until 2026-10-06, when Heitor's own account (a
+  self-declared adult after build 11's age step) was marked `testflight` so
+  he can chat; every other reading in `private.age_assurance_distribution()`
+  shows how a real iPhone came back. Build
   10 reaches the external group only after Beta App Review. Still open on a device, since
   the Simulator runs neither: an Apple-confirmed adult, a self-declared adult, a
   16–17 and a 13–15 Family Sharing child, an under-13, Sign in with Apple with no
