@@ -1924,10 +1924,13 @@ the project, not bugs to fix unprompted.
   App Review Guideline 4.0 has refused apps that ask for a name after Sign in
   with Apple, and build 11's typed field for every new adult was exactly that;
   build 12 answers it (next entry). The "Não deu para apagar a conta agora"
-  Heitor saw on build 10 came from the pre-release delete-account v6, which
-  accepted only `{"confirmation":"delete"}` and refused the Apple-code body with
-  400 `confirmation_required`; v7 (2026-09-29, the HEAD contract) accepts all
-  three bodies, so one real deletion against v7 on a device closes it.
+  Heitor saw on build 10 came from the pre-release delete-account (deployment
+  version 3 in the function logs; three build-10 attempts on 2026-09-29
+  between 10:58 and 16:51 UTC), which accepted only `{"confirmation":"delete"}`
+  and refused the Apple-code body with 400 `confirmation_required`; v7
+  (2026-09-29 19:30 UTC, the HEAD contract) accepts all three bodies. The logs
+  read on 2026-10-06 show no app request to v7 yet, so one real deletion
+  against v7 on a device still closes it.
 - **Build 12 (2026-10-05) asks Apple for the name alone.** Heitor's decision,
   for the Guideline 4.0 risk above: `requestedScopes = [.fullName]` for every
   account, never `.email`; only the given name is kept, on the phone until the
