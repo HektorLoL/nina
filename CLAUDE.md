@@ -2131,8 +2131,9 @@ the project, not bugs to fix unprompted.
   Email Routing rule to the encarregado's own mailbox, which forwards a copy to
   Heitor: a rule takes exactly one destination and one action, so a second
   inbox needs forwarding at the mailbox or an Email Worker. The new company
-  starts outside the Simples Nacional; the option must be requested within 60
-  days of opening. Heitor approves the child/sensitive-data wording, each
+  starts outside the Simples Nacional; its option was approved on 2026-10-07
+  with effect from 2027-01-01, so it stays a normal company with no sales
+  until then. Heitor approves the child/sensitive-data wording, each
   Law-text-gated line cites its article in
   `docs/privacy/avaliacao-impacto-criancas.md` §9, and Brazilian counsel reviews
   it only if engaged (`docs/production-launch-runbook.md` §7).
