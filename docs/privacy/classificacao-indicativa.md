@@ -261,3 +261,14 @@ risk D3 accepted; it goes back to Heitor too, with ClassInd's written answer.
 - The análise prévia protocol number and outcome.
 - The ClassInd registration of representative details.
 - The rating Apple shows after submission, and any MJSP assignment.
+
+Written so far:
+
+- 2026-10-14: the written question to ClassInd is drafted (three questions:
+  purchases under D.5.1, a self-declared adult age under E.1.10, and whether
+  the análise prévia or Apple's questionnaire is the route; it also gives the
+  art. 56 representative details). The channel is
+  classificacaoindicativa@mj.gov.br, listed on the ClassInd page, the gov.br
+  service page and the Guia's "Contatos úteis" (p. 134). The letter names the
+  company and its CNPJ, so it lives outside this public repository, in
+  Heitor's notes. Not sent yet.
