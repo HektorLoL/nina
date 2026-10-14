@@ -473,6 +473,11 @@ Expect `{confirmed,operator,self_declared}`, then `true` and `false`. A
 `false` in `may_use_ai` means the update did not land or that account has
 active parental controls.
 
+Ran on 2026-10-14, right after the push that published the pages: the row read
+`{confirmed,operator,self_declared}`, and Heitor's self-declared account read
+`may_use_ai` true, `premium_buyer_is_eligible` true and `is_trusted_adult`
+false.
+
 **What testers now see.** A self-declared adult who refreshes the house (pull
 or return to the app) gets the consent card where "A conversa pede idade
 confirmada." was, chats once they accept the notice and its transfer box, sees

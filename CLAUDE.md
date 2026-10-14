@@ -2113,12 +2113,14 @@ the project, not bugs to fix unprompted.
   Account (checked 2026-10-14). The legal reading (verified age only for
   prohibited content and goods; the ANPD/MJSP/Secom FAQ of 2026-07-30) and the
   cost are in `docs/privacy/lgpd-launch-posture.md`, "Decision D3". Production
-  needs one operator statement,
-  `update private.age_policy set trusted_assurances = '{confirmed,operator,self_declared}' where singleton;`,
-  with its read-back in `docs/production-launch-runbook.md`; it goes out with
-  the site that says so (Terms §4, privacy §3A and §5, `/familias/`,
-  `/suporte/`). Once it runs, rewrite this entry as applied, with the date and
-  the read-back. The policy needs no migration and no build: the app reads
+  ran the operator statement
+  `update private.age_policy set trusted_assurances = '{confirmed,operator,self_declared}' where singleton;`
+  on 2026-10-14, right after the push that published Terms §4, privacy §3A
+  and §5, `/familias/` and `/suporte/` (the live pages read "Atualizados em 14
+  de outubro de 2026" and `data-legal-launch="ready"`). Read-back: the row
+  holds `{confirmed,operator,self_declared}`, and Heitor's self-declared
+  account reads `may_use_ai` true, `premium_buyer_is_eligible` true and
+  `is_trusted_adult` false. The policy needs no migration and no build: the app reads
   `may_use_ai` and `may_buy_premium` from the server. The next build carries
   the new FAQ answer ("Quem pode conversar com a Nina?") and the
   parental-controls gates (§4); until people update, build 12's FAQ still asks
