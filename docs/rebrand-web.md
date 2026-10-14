@@ -1,6 +1,6 @@
 # Nina web — the azulejo pass
 
-Last updated: 2026-09-29
+Last updated: 2026-10-14
 
 The site was rebuilt onto the azulejo system on 2026-08-14, three days after the
 iOS app. Sources: the `Advertisement` page of the Paper file (`A1` hero, `A2`
@@ -8,11 +8,12 @@ sinal de sobrecarga, `A3` documentos e privacidade), `docs/rebrand-azulejo.md`,
 and the palette and geometry the app actually ships in `Nina/Theme.swift` and
 `Nina/NinaMark.swift`.
 
-**The brief was to keep the old structure and replace the aesthetic.** The
-section sequence is unchanged — header, hero with a phone and three loose notes,
-three steps, product with a three-phone gallery, the workload section, privacy
-beside FAQ, closing CTA, footer, waitlist dialog. Every one of those is still
-there, in that order. What changed is what they are made of.
+**The brief was to keep the old structure and replace the aesthetic.** In the
+2026-08-14 pass the section sequence was unchanged — header, hero with a phone
+and three loose notes, three steps, product with a three-phone gallery, the
+workload section, privacy beside FAQ, closing CTA, footer, waitlist dialog. That
+sentence is now historical: the build 13 truth pass (§6c) replaced the notes, the
+steps and the gallery and added two sections.
 
 ---
 
@@ -274,19 +275,132 @@ palette, with no inline script or style.
 - **Long links wrap.** `.policy-content a` gets `overflow-wrap: anywhere`: the
   sub-processor URL scrolled the privacy page sideways at 375px.
 
+## 6c. Build 13 truth pass (2026-10-14)
+
+A round to make ninai.app true to TestFlight build 13 before Heitor's pictures
+for a full redesign arrive. Nothing here is a new identity; it is the same
+azulejo system, with every example now read from the app.
+
+- **The hero printed its confirmed line before anyone confirmed.**
+  `.phone-stored { display: none }` sat above `.phone-waiting { display: flex }`
+  at the same specificity, so the later rule won: measured at 390×844 on the
+  2026-10-14 build, "Você confirmou. Está na casa agora." was `display: flex` at
+  rest. The confirmed line is now its own `.proposal-resolved`, `display: none`
+  unless `[data-ritual].is-confirmed`, and `web/tests/landing.test.ts` reads the
+  stylesheet to keep it that way. The card is the app's own face —
+  "Ainda não existe", the category glyph, one meta line (calendar, person),
+  "Criar tarefa" / "Corrigir" / "Não", the disclaimer and "Você confirmou." in
+  moss — and both "esperando" lines, the "Na casa agora" chip, the three loose
+  notes and the false "todo mês" are gone. The phone draws the app's tab bar.
+- **Focus no longer drops to `body` after a confirm.** "Criar tarefa" lives in
+  the row `.is-confirmed` hides, so `home.js` moves focus to "Ver de novo" and
+  back to "Criar tarefa" on replay. Its accessible name starts with the words
+  it shows ("Criar tarefa: Assinar a autorização, de exemplo"), so a Voice
+  Control user who says "Criar tarefa" reaches it (WCAG 2.5.3).
+- **The phone and its caption share one centre line at every width.**
+  `figure.phone` had kept the browser's `margin: 1em 40px`, so on the two-column
+  hero the phone sat 40 px right of its own caption; the margin is now 0 and the
+  pair is centred in the 500 px column, as it already was below 1080 px.
+- **Your message sits on your side of the hero.** `.phone-screen p { margin: 0 }`
+  at (0,1,1) outranked `.bubble-you { margin-left: auto }` and the disclaimer's
+  inset at (0,1,0), so the hero drew the visitor's message on Nina's side
+  (computed `margin-left: 0` at 1280×800 and 390×844), against the app's
+  trailing bubble and the site's own Nina tray. The reset is
+  `:where(.phone-screen) p` now, so a component's own margin always wins.
+- **The card's two honesty lines keep a floor.** With the phone capped at
+  320 px, "Ainda não existe" drew at 8.1 px and "A Nina pode ler errado. Nada
+  entra sem você confirmar." at 9.6 px, and the disclaimer is said nowhere else
+  on the page. They now floor at 10 and 11 px; the disclaimer's inset is the
+  card's 1.76em of screen type written in `cqw`, so it stays flush with the card
+  at the larger size.
+- **The headline reads as two sentences.** Astro's compression dropped the
+  whitespace between the two `.hero-line` spans, so copy, reader mode and search
+  got "cabeça.Ela"; an explicit `{" "}` keeps the space, and a test pins it.
+- **Side by side, the trays start level.** A stop whose extra line wraps pushed
+  its tray 20–24 px below its neighbour's. Each `.tour-stop` now spans four rows
+  of a `subgrid`, so heading, lines and tray share rows across a pair, and each
+  tray keeps its own height (`align-self: start`). Below 721 px the stops are
+  plain blocks again.
+- **The ritual is 2.6 s.** The first beat moved from 420 ms to 100 ms and the
+  whole sequence was compressed rather than shifted, with `@keyframes
+  nina-ritual` re-keyed to the new length so the disc still reads and lands with
+  the bubbles. Reduced motion is unchanged.
+- **Example trays replaced the three steps and the two-phone gallery.** "Como
+  funciona" walks the four tabs with the tour's lines and its `TourTray`: a grout
+  tray, a faint "EXEMPLO", a stroked card, the tour cast (Dani, Cris, Lia,
+  Paçoca) and rows drawn like `TourTaskRow`, at interface size so they read at
+  any width. Each tray is `role="img"` with a description built from the same
+  data in the format of `OnboardingTour.exampleDescription`. The trays do not
+  animate. The old gallery promised features the app does not have (prioridades,
+  a plan that adjusts itself, Hoje count tiles, "Concluídas hoje").
+- **Where the site departs from the tour.** "Pagar a luz" is late at
+  "Hoje, 08:00": in the tour it falls due yesterday at 18:00, which the app
+  writes as a calendar date ("13 out., 18:00") because `taskDueLabel` has no
+  "Ontem", and a calendar date on a marketing page goes stale. "Vacina" is
+  tomorrow, not two days out, for the same reason. "Dar água para o Paçoca" in the
+  child's day and both Nina bubbles exist only on the site; the hero's message is
+  `TourSample.message` with "sexta" changed to "amanhã". No example carries a
+  date that can age, and a test fails on one.
+- **Avatars use the app's MemberTone tints** (ink, `#5C6675`, `#B4BDC9`), the
+  tour cast's own, rather than one grout disc; people differ by weight of ink,
+  never by hue. `--tint-mist` is the one new token.
+- **The workload portrait now uses the app's wording and its real gate**:
+  "6 tarefas abertas com dono, entre 2 pessoas", with Dani heavier, Cris light and
+  "Sem dono" light (5, 1 and 1 open tasks, an average of 3, which the app would
+  draw exactly so). Where the axis cannot fit three equal thirds, each row says
+  its band, as `TourHouseExample` does.
+- **Two new sections, Crianças and Preço.** Crianças states what the server
+  enforces for minors and links `/familias/`; the nav says "Crianças"
+  (`#criancas`) so it never shares a name with the footer's "Famílias". Preço
+  carries the prices `Nina/Nina.storekit` sells, the house ceiling the app
+  prints, "até 24 horas antes da renovação" and a link to the Terms.
+- **Type and colour.** Every eyebrow is faint; the cobalt slogans are gone, and
+  cobalt is left for the primary action, the mark, the bands and text links.
+  Landing sections share one H2 size (`.section h2`); the policy pages, the
+  dialog and the invite keep their own.
+- **The App Store switch.** `StoreAction.astro` renders "Entrar na lista" until
+  `PUBLIC_NINA_APP_STORE_ID` is real, then the badge; the waitlist dialog is not
+  rendered after launch, and `BaseLayout` emits the Smart App Banner only then.
+  The availability line says "Ainda em teste, fora da App Store." until then.
+- **Share images.** `/images/og/nina.png` and `/images/og/nina-convite.png`
+  (1200×630, about 25 KB each, Fraunces), with `og:image:alt`, size and type.
+  `/images/og/*` carries the same cross-origin CORP exception as
+  `/images/email/*`.
+- **The footer names the controller** by name and CNPJ only
+  (`controllerLine`); the address stays in the Terms and the privacy policy.
+- **Caching.** `/_assets/*` (hashed by Astro) is immutable for a year and
+  `/fonts/*` is cached for 30 days. `/scripts/*` is not hashed and keeps the
+  default.
+- **`/join/`** says once that Nina is "um programa de computador" (Decreto
+  12.880 art. 11 I) and no longer names "uma pessoa responsável" as the approver;
+  its scroll respects Reduce Motion.
+
 ## 7. Still open
 
-- **The three-step promise is written for the flag-on product.**
-  `NINA_AI_V2_ENABLED = NO` is the shipping default, so on the current build
-  every proposal is discarded before it reaches the UI and the hero's phone shows
-  something a user would not see. This is not new — the old page made the same
-  promise — and `docs/rebrand-azulejo.md` §5b already records that the
-  advertising is written for the flag-on product. It becomes a lie only if the
-  app ships with the flag off.
 - **`web/design-references/landing-implementation-*.png` are now historical.**
   They capture the pre-azulejo site. `landing-conversa-alivio.png` is kept and
   still valid: it is the emotional north star `CLAUDE.md` §2 cites, not a layout
   spec.
-- **Legal identity is a person's since 2026-09-26** (`CLAUDE.md` §13), so
-  `data-legal-status` reads `complete`; `data-legal-launch` stays `pending`
-  until the company, its address and a separate encarregado exist (D2).
+- **Legal identity is a company's since 2026-09-30** (`CLAUDE.md` §13), so both
+  legal pages read `data-legal-status="complete"` and
+  `data-legal-launch="ready"`. The values live only in the Cloudflare build
+  variables and `config/production.env`.
+- **Waiting for Heitor's pictures:** any new identity, hero art, photography,
+  real app screenshots, a section order beyond this pass, and motion for the
+  example trays.
+- **Waiting for Heitor's decisions:** kids mode drawn in its colours; Inter
+  (about 97 KB of woff2) or `system-ui`; the `/familias/` capability table; JSON-LD
+  (needs an exception to `CLAUDE.md` §8 first); Apple's official pt-BR badge at
+  launch; the footer address; testimonials only after real reviews.
+- **Cloudflare injects a script the CSP blocks.** On 2026-10-14 every HTML
+  response carried one inline loader for
+  `/cdn-cgi/challenge-platform/scripts/jsd/main.js` (JavaScript detections, Bot
+  Fight Mode), which `script-src 'self'` refuses. Turning it off is a dashboard
+  step. A local preview never shows it.
+- **`oi@ninai.app` routing is unverified.** `/suporte/` and the app's support
+  screen send people there; until Heitor confirms the Email Routing rule, the
+  footer "Contato" stays on the privacy address.
+- **`/suporte/` has gaps** that belong to whoever edits `SupportView.swift`:
+  "alguém da casa aprova" (it is the titular or an admin), no 60-alert ceiling,
+  no house ceiling of 100, and no entries for Passar a casa, Sair da casa, the
+  Apple sign-in or iOS 26.4.

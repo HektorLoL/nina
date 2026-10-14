@@ -36,6 +36,9 @@
   --on-ink-muted: #aeb8c9;
   --on-ink-faint: #7e90c4;
 
+  /* The app's lightest MemberTone tint, for a third person in an example. */
+  --tint-mist: #b4bdc9;
+
   --radius-chip: 999px;
   --radius-field: 14px;
   --radius-card: 20px;
@@ -169,19 +172,16 @@ h3 {
   border-color: transparent;
 }
 
-.eyebrow {
+/* An eyebrow is a faint label, never a cobalt slogan: cobalt stays with the commit. */
+.eyebrow,
+.eyebrow-faint {
   width: fit-content;
   margin: 0 0 18px;
-  color: var(--cobalt);
+  color: var(--faint);
   font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.eyebrow-faint {
-  color: var(--faint);
   letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .panel-ink .eyebrow {
@@ -371,9 +371,13 @@ a:focus-visible {
 .hero h1 {
   max-width: 12ch;
   margin-bottom: 24px;
-  font-size: clamp(2.6rem, 5.4vw, 4.4rem);
+  font-size: clamp(2.25rem, 5.4vw, 4.4rem);
   line-height: 1.04;
   letter-spacing: -0.03em;
+}
+
+.hero-line {
+  display: block;
 }
 
 .hero-lede {
@@ -384,8 +388,17 @@ a:focus-visible {
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  margin-bottom: 20px;
+  align-items: center;
+  gap: 10px 28px;
+  margin-bottom: 18px;
+}
+
+/* The way down the page is a link, so the hero spends one filled control. */
+.hero-more,
+.section-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .hero-footnote {
@@ -394,21 +407,28 @@ a:focus-visible {
   font-size: 0.9375rem;
 }
 
+.store-badge {
+  display: inline-flex;
+  border-radius: 12px;
+}
+
+.store-badge img {
+  display: block;
+}
+
 .hero-product {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 18px;
 }
 
-/* The product's whole claim, lifted out of the drawn screen where it renders at
-   7px, and set at interface size where a reader can actually have it. */
-/* The two captions share one grid cell so the block always reserves the taller
-   of them; swapping them must not shove the rest of the page down 44px. */
+/* The two captions share one grid cell, so swapping them never moves the page. */
 .phone-captions {
   display: grid;
   max-width: 320px;
+  text-align: center;
 }
 
 .phone-captions .phone-caption {
@@ -422,24 +442,16 @@ a:focus-visible {
   line-height: 1.45;
 }
 
-/* A phone is a drawing, not a screenshot: it stays crisp, it can be read at
-   this size, and it cannot go stale against the app it is quoting.
-
-   The frame is an iPhone 15 at its published dimensions — 71.6 x 147.6 mm, a
-   uniform 3.25 mm bezel, a 12.36 mm outer radius, a 55 pt display radius, and a
-   125 x 37.33 pt Dynamic Island sitting 11 pt below the top of the display.
-   Every value below is a percentage of those measurements, so the device keeps
-   its real proportions at whatever width it is drawn. */
+/* An iPhone 15 at its published dimensions; every value below is a share of the device. */
 .phone {
   position: relative;
   z-index: 2;
   width: 320px;
+  margin: 0;
   max-width: 100%;
   aspect-ratio: 71.6 / 147.6;
   border-radius: 17.263% / 8.374%;
   container-type: inline-size;
-  /* A brushed rail catches light at the two edges where it curves away, and is
-     flat and near-black across the face. A diagonal sweep would read as plastic. */
   background: linear-gradient(
     90deg,
     #39424f 0%,
@@ -451,8 +463,6 @@ a:focus-visible {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%);
 }
 
-/* The side rails. Three nubs on the left — action, volume up, volume down —
-   drawn as hard stops in one gradient, and the side button on the right. */
 .phone::before,
 .phone::after {
   content: "";
@@ -482,10 +492,8 @@ a:focus-visible {
   background: #39424f;
 }
 
+/* Type on the drawn screen is a share of the device, 17 pt on a 393 pt display, so it scales as a picture. */
 .phone-screen {
-  /* The 3.25 mm bezel is uniform, so it is set as a share of the device on both
-     axes rather than as padding, which would resolve against the phone's parent
-     and grow wider in a wider column. */
   position: absolute;
   inset: 0;
   width: 90.922%;
@@ -496,18 +504,19 @@ a:focus-visible {
   gap: 0.7em;
   overflow: hidden;
   border-radius: 13.994% / 6.456%;
-  /* The real safe areas: 59 pt of it above, 34 pt below. Padding percentages
-     resolve against width, so both are converted through the display's own
-     aspect ratio. */
   padding: 15.009% 5.4% 8.649%;
   background: var(--ground);
-  /* Everything on the screen is sized from here in `em`, and this is sized from
-     the device: 17 pt of body text on a 393 pt display, which is 3.933% of the
-     device's width. Absolute type on a fluid device is only ever right at the
-     one width it was tuned for — at any other size the content stops being a
-     screenshot and starts wrapping. */
   font-size: 3.933cqw;
   line-height: 1.4;
+  text-align: left;
+}
+
+.phone-screen > * {
+  flex-shrink: 0;
+}
+
+:where(.phone-screen) p {
+  margin: 0;
 }
 
 .phone-island {
@@ -540,6 +549,11 @@ a:focus-visible {
   color: var(--cobalt);
 }
 
+.phone-head .nina-mark {
+  width: 1.53em;
+  height: 1.53em;
+}
+
 .phone-head strong {
   font-family: var(--display);
   font-size: 1.294em;
@@ -562,12 +576,6 @@ a:focus-visible {
   background: var(--ink);
 }
 
-.bubble-nina {
-  margin-left: 1.76em;
-  border-top-left-radius: 0.24em;
-  background: var(--cobalt-wash);
-}
-
 .bubble-row {
   display: flex;
   align-items: flex-start;
@@ -575,8 +583,17 @@ a:focus-visible {
   color: var(--cobalt);
 }
 
-.bubble-row .bubble-nina {
-  margin-left: 0;
+.bubble-row .nina-mark {
+  flex: none;
+  width: 1.29em;
+  height: 1.29em;
+  margin-top: 0.2em;
+}
+
+.bubble-nina {
+  border-top-left-radius: 0.24em;
+  color: var(--ink);
+  background: var(--cobalt-wash);
 }
 
 .proposal {
@@ -586,60 +603,76 @@ a:focus-visible {
   border-radius: 1.06em;
 }
 
+.proposal-face {
+  display: grid;
+  gap: 0.47em;
+  padding: 0.82em 0.88em;
+  background: var(--ground);
+}
+
+/* "Ainda não existe" is the card's first word, set as the app's faint eyebrow with its plus. */
 .proposal-tag {
-  padding: 0.47em 0.76em;
-  color: var(--muted);
-  background: var(--grout);
-  font-size: 0.588em;
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  color: var(--faint);
+  font-size: max(10px, 0.647em);
   font-weight: 700;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
   text-transform: uppercase;
+}
+
+.proposal-tag svg {
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
 }
 
 .proposal-title {
   display: flex;
-  align-items: center;
-  gap: 0.53em;
-  padding: 0.65em 0.76em 0.47em;
+  align-items: flex-start;
+  gap: 0.59em;
   font-weight: 600;
+  line-height: 1.3;
 }
 
-.proposal-title i {
-  flex: 0 0 auto;
-  width: 1.294em;
-  height: 1.294em;
-  border: 0.1em solid var(--control);
-  border-radius: 50%;
+.proposal-title svg {
+  flex: none;
+  width: 1.06em;
+  height: 1.06em;
+  margin-top: 0.08em;
 }
 
-.proposal-row {
+.proposal-meta {
   display: flex;
-  gap: 0.47em;
-  padding: 0 0.76em 0.29em;
-  font-size: max(12px, 0.824em);
+  flex-wrap: wrap;
+  gap: 0.25em 0.82em;
+  font-size: 0.882em;
 }
 
-.proposal-row span {
-  flex: 0 0 3.6em;
+.proposal-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.proposal-meta svg {
+  flex: none;
+  width: 0.93em;
+  height: 0.93em;
   color: var(--muted);
-}
-
-.proposal-row strong {
-  font-weight: 500;
 }
 
 .proposal-actions {
   display: grid;
-  gap: 0.35em;
+  gap: 0.47em;
   border-top: 1px solid var(--line);
-  padding: 0.59em 0.76em 0.65em;
-  margin-top: 0.29em;
+  padding: 0.76em 0.88em 0.82em;
   background: var(--grout);
 }
 
-/* Drawn at the device's scale so the screen still reads as a screenshot, with
-   the hit area extended to a real target. The rows it reaches over are not
-   interactive, so nothing is stolen. */
+/* Drawn at the device's scale, with its type held at 13 px and its hit area extended to a real target. */
 .proposal-confirm {
   position: relative;
   display: flex;
@@ -648,11 +681,11 @@ a:focus-visible {
   width: 100%;
   height: 2.6em;
   border: 0;
-  border-radius: 0.65em;
+  border-radius: 0.82em;
   color: #fff;
   background: var(--cobalt);
   font-family: inherit;
-  font-size: max(12px, 0.824em);
+  font-size: max(13px, 0.882em);
   font-weight: 600;
   transition: background 160ms ease, transform 100ms var(--ease-out);
 }
@@ -660,7 +693,7 @@ a:focus-visible {
 .proposal-confirm::after {
   content: "";
   position: absolute;
-  inset: -9px -4px;
+  inset: -6px -4px;
 }
 
 .proposal-confirm:hover {
@@ -676,58 +709,80 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
-/* Moss touches the mark and this row for one reason only: a person confirmed
-   something. A visitor tapping this button is that person, which is why the
-   caption underneath says out loud that it was a rehearsal. */
-.proposal-stored {
-  display: none;
+.proposal-actions div {
+  display: flex;
+  gap: 0.41em;
+}
+
+.proposal-actions em {
+  flex: 1;
+  display: flex;
   align-items: center;
-  gap: 0.4em;
-  border-top: 1px solid var(--line);
-  padding: 0.65em 0.76em;
-  margin-top: 0.29em;
-  color: var(--moss);
-  background: var(--grout);
-  font-size: max(12px, 0.824em);
+  justify-content: center;
+  height: 2.2em;
+  border: 1px solid transparent;
+  border-radius: 0.82em;
+  color: var(--muted);
+  font-size: 0.882em;
+  font-style: normal;
   font-weight: 600;
 }
 
-.phone-stored {
+.proposal-actions em.is-outline {
+  border-color: var(--control);
+  color: var(--ink);
+  background: var(--ground);
+}
+
+/* Moss is spent here only after a visitor's own tap, which is the one confirmation on the page. */
+.proposal-resolved {
   display: none;
+  align-items: center;
+  gap: 0.47em;
+  border-top: 1px solid var(--line);
+  padding: 0.82em 0.88em;
+  color: var(--moss);
+  background: var(--grout);
+  font-size: 0.882em;
+  font-weight: 600;
+}
+
+.proposal-resolved svg {
+  flex: none;
+  width: 1em;
+  height: 1em;
+}
+
+/* The disclaimer keeps a readable floor and stays flush with the card, whose inset is 1.76em of screen type. */
+.proposal-disclaimer {
+  margin-left: calc(1.76 * 3.933cqw);
+  color: var(--muted);
+  font-size: max(11px, 0.765em);
+  line-height: 1.35;
 }
 
 .phone-caption-stored {
   visibility: hidden;
 }
 
-[data-ritual].is-confirmed .proposal-actions,
-[data-ritual].is-confirmed .phone-waiting:not(.phone-stored) {
+/* A confirmed card loses "Ainda não existe" and its buttons, as a resolved proposal does in the app. */
+[data-ritual].is-confirmed .proposal-tag,
+[data-ritual].is-confirmed .proposal-actions {
   display: none;
+}
+
+[data-ritual].is-confirmed .proposal-resolved {
+  display: flex;
 }
 
 [data-ritual].is-confirmed .phone-caption:not(.phone-caption-stored) {
   visibility: hidden;
 }
 
-[data-ritual].is-confirmed .proposal-stored {
-  display: flex;
-}
-
-[data-ritual].is-confirmed .phone-stored {
-  display: flex;
-  color: var(--moss);
-}
-
-[data-ritual].is-confirmed .phone-stored::before {
-  background: var(--moss);
-}
-
 [data-ritual].is-confirmed .phone-caption-stored {
   visibility: visible;
 }
 
-/* Guardado: the disc settles out of the waiting lift back to rest, and holds
-   moss for 600ms. It is the one state the page cannot reach on its own. */
 [data-ritual].is-confirmed .phone-head .nina-disc {
   transform: none;
   transition: transform 320ms var(--ease-out), fill 200ms ease;
@@ -735,6 +790,66 @@ a:focus-visible {
 
 [data-ritual].is-storing .phone-head .nina-disc {
   fill: var(--moss);
+}
+
+.phone-composer {
+  display: flex;
+  align-items: center;
+  gap: 0.53em;
+  margin-top: auto;
+}
+
+.phone-composer span {
+  flex: 1;
+  padding: 0.65em 0.82em;
+  border-radius: 1.2em;
+  color: var(--muted);
+  background: var(--grout);
+}
+
+.phone-composer i {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 2.24em;
+  height: 2.24em;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--cobalt);
+}
+
+.phone-composer svg {
+  width: 1em;
+  height: 1em;
+}
+
+/* The app's tab bar runs to the display's edges and keeps its labels above the home indicator. */
+.phone-tabbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 -5.4cqw -8.649cqw;
+  border-top: 1px solid var(--line);
+  padding: 0.6em 5.4cqw 8.649cqw;
+  color: var(--muted);
+  font-size: 0.765em;
+  line-height: 1.2;
+}
+
+.phone-tabbar span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.phone-tabbar svg {
+  width: 1.85em;
+  height: 1.85em;
+}
+
+.phone-tabbar .is-selected {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .text-button {
@@ -762,191 +877,38 @@ a:focus-visible {
   white-space: nowrap;
 }
 
-.proposal-actions div {
-  display: flex;
-  gap: 0.41em;
-}
-
-.proposal-actions em {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 2em;
-  border: 1px solid var(--line);
-  border-radius: 0.65em;
-  background: var(--ground);
-  font-size: max(12px, 0.765em);
-  font-style: normal;
-  font-weight: 500;
-}
-
-.proposal-actions em:last-child {
-  color: var(--muted);
-}
-
-.phone-waiting {
-  display: flex;
-  align-items: center;
-  gap: 0.41em;
-  margin-left: 1.76em;
-  color: var(--cobalt);
-  font-size: max(12px, 0.706em);
-  font-weight: 500;
-}
-
-.phone-waiting::before {
-  content: "";
-  width: 0.42em;
-  height: 0.42em;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.phone-composer {
-  display: flex;
-  align-items: center;
-  gap: 0.53em;
-  margin-top: auto;
-  padding-top: 0.59em;
-}
-
-.phone-composer span {
-  flex: 1;
-  padding: 0.65em 0.82em;
-  border-radius: 1.2em;
-  color: var(--muted);
-  background: var(--grout);
-}
-
-.phone-composer i {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 2.24em;
-  height: 2.24em;
-  border-radius: 50%;
-  color: #fff;
-  background: var(--cobalt);
-}
-
-/* The three loose notes that used to fly out of the phone survive the rebrand
-   as stroked tiles: same composition, no categorical colour. */
-.floating-note {
-  position: absolute;
-  z-index: 3;
-  width: 186px;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  padding: 14px;
-  background: var(--ground);
-  color: var(--muted);
-}
-
-.floating-note p {
-  margin: 0;
-  color: var(--ink);
-  font-size: 0.875rem;
-  line-height: 1.3;
-}
-
-.floating-note strong {
-  display: block;
-  margin-bottom: 5px;
-  color: var(--faint);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.note-one {
-  top: 26px;
-  right: 0;
-}
-
-.note-two {
-  top: 50%;
-  right: 16px;
-  transform: translateY(-50%);
-}
-
-.note-three {
-  right: 0;
-  bottom: 26px;
-}
-
 .section {
   margin-top: 28px;
   padding: clamp(34px, 4vw, 56px) clamp(24px, 3.6vw, 52px);
 }
 
-.section-heading.centered {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
+/* One heading size for every landing section, so no section shouts over the others. */
+.section h2 {
+  font-size: clamp(2rem, 3.4vw, 2.75rem);
+  text-wrap: balance;
 }
 
-.section-heading.centered .eyebrow {
-  margin-inline: auto;
+.section h3 {
+  font-size: 1.375rem;
+  line-height: 1.25;
+}
+
+.section-plain {
+  padding-inline: 0;
+}
+
+.section-heading {
+  max-width: 760px;
+  margin-bottom: 36px;
 }
 
 .section-heading h2 {
-  margin-bottom: 34px;
-}
-
-.steps-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 52px;
-}
-
-.step {
-  position: relative;
-  text-align: center;
-}
-
-.step-top {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  margin-bottom: 16px;
-  color: var(--ink);
-}
-
-.step-number {
-  font-family: var(--display);
-  font-size: 2.25rem;
-  line-height: 1;
-  color: var(--faint);
-}
-
-.step h3 {
-  margin-bottom: 8px;
-  font-size: 1.375rem;
-}
-
-.step p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9375rem;
-}
-
-.step-arrow {
-  position: absolute;
-  top: 14px;
-  right: -38px;
-  color: var(--line);
+  margin-bottom: 0;
 }
 
 .split {
   display: grid;
-  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   align-items: center;
   gap: clamp(28px, 4vw, 60px);
 }
@@ -955,8 +917,11 @@ a:focus-visible {
   min-width: 0;
 }
 
-/* Scoped to a class, never `.split p`: a descendant paragraph rule out-specifies
-   every class inside the drawn phone screens and silently resets their type. */
+.split-top {
+  align-items: start;
+}
+
+/* Scoped to a class, never `.split p`, which would out-specify every class on the drawn trays. */
 .split-lede {
   color: var(--muted);
   font-size: 1.0625rem;
@@ -983,12 +948,6 @@ a:focus-visible {
   color: var(--cobalt);
 }
 
-.check-list.compact {
-  gap: 9px;
-  margin-top: 18px;
-  font-size: 0.9375rem;
-}
-
 .panel-ink .check-list li svg {
   color: var(--on-ink-faint);
 }
@@ -998,253 +957,392 @@ a:focus-visible {
   font-weight: 600;
 }
 
-.privacy-policy-link {
-  display: inline-flex;
-  margin-top: 20px;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
+.section-link {
+  margin-top: 14px;
 }
 
-.phone-gallery {
-  position: relative;
+/* --- Como funciona: the tour's example trays, drawn at interface size ---- */
+
+.tour-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: stretch;
-  gap: 14px;
+  gap: 56px clamp(28px, 4vw, 64px);
 }
 
-.phone-gallery .phone {
-  width: 100%;
+.tour-stop {
+  display: grid;
+  grid-row: span 4;
+  grid-template-rows: subgrid;
+  row-gap: 0;
+  align-content: start;
+  min-width: 0;
 }
 
-.phone-gallery .phone-screen {
-  gap: 0.5em;
-}
-
-/* A real screen does not squash its own rows to fit; if something no longer
-   belongs on it, it comes off. The rows are paragraphs, so the UA bottom margin
-   has to go or the flex gap is not the spacing you are reading. */
-.phone-screen > * {
-  flex-shrink: 0;
-}
-
-.phone-screen p {
-  margin: 0;
-}
-
-.mini-title {
-  font-family: var(--display);
-  font-size: 1.588em;
-  letter-spacing: -0.02em;
-}
-
-.mini-eyebrow {
-  color: var(--faint);
-  font-size: max(12px, 0.706em);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.mini-row {
+.tour-stop h3 {
   display: flex;
   align-items: center;
-  gap: 0.41em;
-  padding: 0.35em 0;
-  border-bottom: 1px solid var(--line);
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
-.mini-row:last-child {
-  border-bottom: 0;
+.tour-stop-icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--ink);
 }
 
-.mini-row i {
-  flex: 0 0 auto;
-  width: 1.294em;
-  height: 1.294em;
-  border: 0.1em solid var(--control);
-  border-radius: 50%;
+.tour-stop-icon .nina-mark {
+  color: var(--cobalt);
 }
 
-.mini-row b {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.tour-line {
+  max-width: 34rem;
+  margin-bottom: 6px;
+  font-size: 1.0625rem;
 }
 
-.mini-row em {
-  flex: 0 0 auto;
+.tour-extra {
+  max-width: 34rem;
+  margin-bottom: 20px;
   color: var(--muted);
-  font-size: max(12px, 0.765em);
-  font-style: normal;
-  letter-spacing: 0;
+  font-size: 0.9375rem;
 }
 
-.mini-row.late em {
-  color: var(--terracotta);
-}
-
-/* Moss marks the one thing it is allowed to mark: something a person confirmed. */
-.mini-row.is-done i {
-  border-color: var(--moss);
-  background: var(--moss);
-}
-
-.mini-row.is-done b {
-  color: var(--muted);
-  text-decoration: line-through;
-}
-
-/* A semente shows "Plante depois" under its title, exactly where a task shows a
-   date — the app stacks them because a seed has no date to put on the right. */
-.mini-row.is-seed span {
-  flex: 1;
-  min-width: 0;
-}
-
-.mini-row.is-seed b,
-.mini-row.is-seed em {
-  display: block;
-}
-
-.mini-counts {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.35em;
-}
-
-.mini-counts div {
-  border-radius: 0.7em;
-  padding: 0.47em 0.53em;
+.tour-tray {
+  align-self: start;
+  width: 100%;
+  max-width: 440px;
+  border-radius: var(--radius-sheet);
+  padding: 12px;
   background: var(--grout);
 }
 
-.mini-counts strong {
-  display: block;
-  font-family: var(--display);
-  font-size: 1.706em;
-  font-weight: 400;
-  line-height: 1.1;
-}
-
-.mini-counts span {
-  color: var(--muted);
-  font-size: max(12px, 0.706em);
-}
-
-.mini-counts .is-yours {
-  color: var(--ground);
-  background: var(--ink);
-}
-
-.mini-counts .is-yours span {
-  color: var(--line);
-}
-
-.mini-counts .is-late {
-  color: var(--terracotta);
-  background: #fbeae1;
-}
-
-.mini-counts .is-late span {
-  color: var(--terracotta);
-}
-
-.mini-chips {
-  display: flex;
-  gap: 0.29em;
-}
-
-.mini-chips span {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-chip);
-  padding: 0.24em 0.53em;
-  color: var(--muted);
-  font-size: max(12px, 0.765em);
-}
-
-.mini-chips .is-on {
-  border-color: transparent;
-  color: var(--cobalt);
-  background: var(--cobalt-wash);
-  font-weight: 600;
-}
-
-.mini-person {
-  display: flex;
-  align-items: center;
-  gap: 0.53em;
-  padding: 0.47em 0;
-}
-
-.mini-person i {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 1.647em;
-  height: 1.647em;
-  border-radius: 50%;
-  color: var(--ground);
-  background: var(--ink);
-  font-size: 0.647em;
-  font-style: normal;
+.tour-legend {
+  margin: 2px 4px 10px;
+  color: var(--faint);
+  font-size: 0.75rem;
   font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  text-transform: uppercase;
 }
 
-.mini-person i.tone-2 {
-  background: #3a4553;
-}
-
-.mini-person i.tone-3 {
-  background: #5c6675;
-}
-
-.mini-person b {
-  display: block;
-  font-weight: 600;
-}
-
-.mini-person em {
-  display: block;
-  color: var(--muted);
-  font-size: max(12px, 0.765em);
-  font-style: normal;
-}
-
-.mini-person .mark-slot {
-  display: grid;
-  place-items: center;
-  width: 1.647em;
-  height: 1.647em;
-  color: var(--cobalt);
-  background: none;
-}
-
-/* The workload portrait: three qualitative bands, household order, no number
-   anywhere. A percentage here would be the scoreboard the product refuses. */
-.workload-card {
+.tour-card {
   border: 1px solid var(--line);
-  border-radius: var(--radius-sheet);
-  padding: clamp(24px, 2.6vw, 36px);
+  border-radius: 16px;
+  padding: 12px 14px;
   background: var(--ground);
 }
 
+.tour-card p {
+  margin: 0;
+}
+
+.tour-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: var(--faint);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+
+.tour-group.is-late {
+  color: var(--terracotta);
+}
+
+.tour-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding-block: 6px;
+}
+
+.tour-row + .tour-row {
+  border-top: 1px solid var(--line);
+}
+
+.tour-check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--control);
+  border-radius: 50%;
+}
+
+.tour-row.is-late .tour-check {
+  border-color: var(--terracotta);
+}
+
+.tour-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.tour-trailing {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tour-due {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tour-row.is-late .tour-due {
+  color: var(--terracotta);
+  font-weight: 600;
+}
+
+.tour-glyph {
+  flex: none;
+  color: var(--muted);
+}
+
+.tour-avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* The app's MemberTone tints: people differ by weight of ink, never by hue. */
+.tone-ink {
+  color: var(--ground);
+  background: var(--ink);
+}
+
+.tone-slate {
+  color: var(--ground);
+  background: var(--muted);
+}
+
+.tone-mist {
+  color: var(--ink);
+  background: var(--tint-mist);
+}
+
+.tour-chat {
+  display: grid;
+  gap: 12px;
+}
+
+.tour-you {
+  justify-self: end;
+  max-width: 85%;
+  border-radius: 12px 12px 4px;
+  padding: 9px 13px;
+  color: var(--ground);
+  background: var(--ink);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.tour-nina {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--cobalt);
+}
+
+.tour-nina .nina-mark {
+  flex: none;
+  margin-top: 6px;
+}
+
+.tour-nina p {
+  border-radius: 4px 12px 12px;
+  padding: 9px 13px;
+  color: var(--ink);
+  background: var(--cobalt-wash);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.tour-face {
+  display: grid;
+  gap: 8px;
+  margin-left: 32px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.tour-face .proposal-tag {
+  font-size: 0.75rem;
+}
+
+.tour-face-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.tour-face-title svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.tour-face-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.9375rem;
+}
+
+.tour-face-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tour-face-meta svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.tour-face-meta .is-muted {
+  color: var(--muted);
+}
+
+.tour-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tour-card .tour-chips {
+  margin: 12px 0 8px;
+}
+
+.tour-chips span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  border: 1px solid var(--control);
+  border-radius: var(--radius-chip);
+  padding: 0 14px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.tour-seed {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 13px 16px;
+  background: var(--grout);
+}
+
+.tour-seed svg {
+  flex: none;
+  color: var(--ink);
+}
+
+.tour-seed b {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.0625rem;
+  font-weight: 500;
+}
+
+.tour-seed span {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.tour-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.tour-card .tour-strip {
+  margin: 4px 0 12px;
+}
+
+.tour-strip .tour-avatar {
+  width: 32px;
+  height: 32px;
+  font-size: 0.8125rem;
+}
+
+.tour-pet {
+  color: var(--ink);
+  background: var(--grout);
+}
+
+.tour-strip-mark {
+  display: inline-grid;
+  color: var(--cobalt);
+}
+
+.tour-strip-caption {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.tour-meta {
+  margin: 12px 4px 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+/* --- Sinal de sobrecarga: three qualitative bands, household order, no number anywhere ---- */
+
+.workload-example .tour-legend {
+  margin-inline: 6px;
+}
+
+.workload-card {
+  container-type: inline-size;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sheet);
+  padding: clamp(20px, 2.6vw, 36px);
+  background: var(--ground);
+}
+
+.workload-card .eyebrow {
+  margin-bottom: 12px;
+}
+
 .workload-card h3 {
-  margin: 14px 0 0;
-  font-size: clamp(1.5rem, 2.4vw, 2.125rem);
-  line-height: 1.2;
+  margin: 0;
 }
 
 .band-axis {
   display: flex;
-  margin-top: 30px;
+  margin-top: 26px;
   color: var(--faint);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -1262,61 +1360,73 @@ a:focus-visible {
 
 .band-rows {
   display: grid;
-  gap: 20px;
-  margin-top: 18px;
+  gap: 18px;
+  margin-top: 16px;
 }
 
 .band-head {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 9px;
-  font-weight: 600;
+  margin: 0 0 8px;
+  font-weight: 500;
 }
 
 .band-head i {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  color: #fff;
-  background: var(--ink);
   font-size: 0.6875rem;
   font-style: normal;
   font-weight: 700;
 }
 
-.band-head i.tone-2 {
-  background: var(--muted);
-}
-
 .band-head .glyph-slot {
   display: grid;
   place-items: center;
-  width: 28px;
+  width: 26px;
   color: var(--muted);
-  background: none;
 }
 
 .band-head.is-house {
   color: var(--muted);
 }
 
-.band-track {
-  display: flex;
-  gap: 5px;
-  height: 38px;
+.band-word {
+  display: none;
+  margin-left: -4px;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  font-weight: 400;
 }
 
-.band-track-mini {
-  height: 22px;
+/* The axis shows only over three equal thirds; where it cannot, each row says its band, as the app does. */
+@container (max-width: 320px) {
+  .band-axis {
+    display: none;
+  }
+
+  .band-rows {
+    margin-top: 22px;
+  }
+
+  .band-word {
+    display: inline;
+  }
+}
+
+.band-track {
+  display: flex;
+  gap: 6px;
+  height: 30px;
 }
 
 .band-track i {
   flex: 1;
-  border-radius: 11px;
+  border-radius: 8px;
   background: var(--grout);
 }
 
@@ -1324,27 +1434,68 @@ a:focus-visible {
   background: var(--cobalt);
 }
 
+/* Unowned work is a different weight, never cobalt: it is not a person. */
 .band-track i.is-house {
   background: var(--muted);
   opacity: 0.35;
 }
 
 .workload-caption {
-  margin: 24px 0 0;
+  margin: 22px 0 0;
   color: var(--muted);
   font-size: 0.9375rem;
 }
 
-.support-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  gap: 20px;
-  margin-top: 28px;
+/* --- Crianças ------------------------------------------------------------ */
+
+.children-example {
+  justify-self: center;
+  width: 100%;
+  max-width: 440px;
 }
 
-.support-grid > * {
-  margin-top: 0;
+/* --- Preço --------------------------------------------------------------- */
+
+.price-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
+
+.price-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: clamp(22px, 2.6vw, 32px);
+  background: var(--ground);
+}
+
+.price-card h3 {
+  margin-bottom: 10px;
+}
+
+.price-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.0625rem;
+}
+
+.price-card .price-amount {
+  margin-bottom: 12px;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: clamp(1.375rem, 2.2vw, 1.75rem);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.price-terms {
+  max-width: 760px;
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+/* --- Privacidade --------------------------------------------------------- */
 
 .panel-ink h2,
 .panel-ink h3 {
@@ -1355,38 +1506,39 @@ a:focus-visible {
   color: var(--on-ink-muted);
 }
 
-.privacy-panel {
-  display: flex;
-  flex-direction: column;
+.privacy-panel h2 {
+  max-width: 22ch;
 }
 
-.privacy-panel h2 {
-  font-size: clamp(1.75rem, 2.6vw, 2.375rem);
+.privacy-lede {
+  max-width: 44rem;
+  font-size: 1.0625rem;
 }
 
 .privacy-cards {
   display: grid;
-  gap: 10px;
-  margin: 26px 0 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 28px 0 0;
   padding: 0;
   list-style: none;
 }
 
 .privacy-cards li {
   border-radius: var(--radius-card);
-  padding: 18px 20px;
+  padding: 20px;
   background: var(--ink-card);
   color: var(--on-ink-muted);
 }
 
 .privacy-cards svg {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   color: var(--on-ink-faint);
 }
 
 .privacy-cards strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   color: var(--on-ink);
   font-size: 1rem;
   font-weight: 600;
@@ -1397,15 +1549,37 @@ a:focus-visible {
   line-height: 1.5;
 }
 
+.privacy-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 28px;
+  margin: 18px 0 0;
+}
+
 .privacy-panel .text-link {
-  margin-top: 22px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   color: var(--on-ink);
   text-decoration: underline;
   text-underline-offset: 0.2em;
 }
 
-.faq-panel h2 {
-  font-size: clamp(1.75rem, 2.6vw, 2.375rem);
+/* --- Dúvidas ------------------------------------------------------------- */
+
+.faq-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: start;
+  gap: 24px 56px;
+}
+
+.faq-heading h2 {
+  margin-bottom: 8px;
+}
+
+.faq-section .faq-list {
+  max-width: 760px;
 }
 
 .faq-list {
@@ -1476,36 +1650,39 @@ details p {
   font-size: 0.9375rem;
 }
 
+/* --- Closing ------------------------------------------------------------ */
+
 .final-cta {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 32px;
-  padding: clamp(28px, 3vw, 40px) clamp(24px, 3.4vw, 44px);
+  text-align: center;
 }
 
-.final-cta > svg {
+.final-cta > .nina-mark {
+  margin-bottom: 20px;
   color: var(--cobalt);
 }
 
 .speech {
   width: fit-content;
-  margin-bottom: 10px;
+  margin: 0 0 14px;
   border-radius: 16px 16px 16px 4px;
   padding: 10px 14px;
-  background: var(--ground);
+  background: var(--cobalt-wash);
   font-family: var(--display);
   font-size: 1.0625rem;
 }
 
-.final-copy h2 {
+.final-cta h2 {
   max-width: 20ch;
-  margin: 0;
-  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  margin-bottom: 12px;
 }
 
-.final-cta .check-list {
-  margin: 0;
+.final-footnote {
+  margin-bottom: 26px;
+  color: var(--muted);
+  font-size: 0.9375rem;
 }
 
 .site-footer {
@@ -1528,10 +1705,15 @@ details p {
   grid-area: brand;
 }
 
-.site-footer p {
+.site-footer-note {
   grid-area: note;
-  margin: 0;
+  display: grid;
+  gap: 2px;
   text-align: center;
+}
+
+.site-footer-note p {
+  margin: 0;
 }
 
 .site-footer nav {
@@ -1989,6 +2171,10 @@ details p {
   margin: 22px auto 0;
 }
 
+.invite-footnote + .invite-footnote {
+  margin-top: 8px;
+}
+
 .unsubscribe-footnote {
   margin: 22px auto 0;
 }
@@ -2253,6 +2439,7 @@ details p {
   margin: 0;
 }
 
+
 /* ---------------------------------------------------------------------------
    Motion. One authored sequence, one teaching moment, and feedback.
 
@@ -2279,37 +2466,35 @@ details p {
 
 @keyframes nina-ritual {
   0%,
-  5% {
+  2.3% {
     transform: none;
   }
   /* Ouvindo — the disc lifts and breathes while you are still writing. */
-  11% {
+  6.9% {
     transform: translateY(-3.4375%);
   }
-  16% {
+  11.5% {
     transform: translateY(-4.6%);
   }
-  21% {
+  16.2% {
     transform: translateY(-3.4375%);
   }
   /* Lendo — it becomes a bar and the width oscillates. Never a spin. */
-  27% {
+  20.8% {
     transform: translateY(0) scaleX(1.29);
   }
-  33% {
+  25.4% {
     transform: translateY(0) scaleX(1.06);
   }
-  39% {
+  30% {
     transform: translateY(0) scaleX(1.29);
   }
-  45%,
-  80% {
+  34.6%,
+  76.9% {
     transform: none;
   }
-  /* Esperando você — it lifts clear of the rim and stops there. There is no
-     next state: Guardado belongs to the instant a person confirms, and nobody
-     on this page has. */
-  94%,
+  /* Esperando você — it lifts clear of the rim and stops: only a person's tap settles it. */
+  90.4%,
   100% {
     transform: translateY(-15.9375%);
   }
@@ -2345,71 +2530,47 @@ details p {
   }
 }
 
-/* --- the hero ritual, ~3.2s, played once ---------------------------------- */
+/* --- the hero ritual, 2.6s, played once ----------------------------------- */
 
-[data-ritual] .phone-head .nina-disc {
+[data-ritual] .phone-head .nina-disc,
+.nina-mark.is-waiting .nina-disc {
   transform: translateY(-15.9375%);
 }
 
 [data-ritual].is-playing .phone-head .nina-disc {
-  animation: nina-ritual 3200ms linear backwards;
+  animation: nina-ritual 2600ms linear backwards;
 }
 
 [data-ritual].is-playing .bubble-you {
-  animation: nina-rise 240ms var(--ease-out) 420ms backwards;
+  animation: nina-rise 240ms var(--ease-out) 100ms backwards;
 }
 
 [data-ritual].is-playing .bubble-row {
-  animation: nina-rise 240ms var(--ease-out) 1180ms backwards;
+  animation: nina-rise 240ms var(--ease-out) 820ms backwards;
 }
 
 [data-ritual].is-playing .proposal {
-  animation: nina-lay 420ms var(--ease-out) 1520ms backwards;
+  animation: nina-lay 420ms var(--ease-out) 1000ms backwards;
 }
 
-[data-ritual].is-playing .proposal-row {
-  animation: nina-rise 200ms var(--ease-out) backwards;
+[data-ritual].is-playing .proposal-meta span {
+  animation: nina-rise 200ms var(--ease-out) 1300ms backwards;
 }
 
-[data-ritual].is-playing .proposal-row:nth-child(3) {
-  animation-delay: 1900ms;
-}
-
-[data-ritual].is-playing .proposal-row:nth-child(4) {
-  animation-delay: 1970ms;
-}
-
-[data-ritual].is-playing .proposal-row:nth-child(5) {
-  animation-delay: 2040ms;
+[data-ritual].is-playing .proposal-meta span:nth-child(2) {
+  animation-delay: 1370ms;
 }
 
 [data-ritual].is-playing .proposal-actions {
-  animation: nina-rise 240ms var(--ease-out) 2150ms backwards;
+  animation: nina-rise 240ms var(--ease-out) 1450ms backwards;
 }
 
-[data-ritual].is-playing .phone-waiting {
-  animation: nina-fade 320ms ease 2760ms backwards;
+[data-ritual].is-playing .proposal-disclaimer {
+  animation: nina-fade 320ms ease 1750ms backwards;
 }
 
 [data-ritual].is-playing .phone-captions {
-  animation: nina-rise 320ms var(--ease-out) 2900ms backwards;
-}
-
-/* The three loose notes settle after the phone has finished speaking. */
-[data-ritual].is-playing .floating-note {
-  animation: nina-rise 320ms var(--ease-out) backwards;
-}
-
-[data-ritual].is-playing .note-one {
-  animation-delay: 2900ms;
-}
-
-[data-ritual].is-playing .note-two {
-  animation-delay: 2980ms;
-}
-
-[data-ritual].is-playing .note-three {
-  animation-delay: 3060ms;
+  animation: nina-rise 320ms var(--ease-out) 2000ms backwards;
 }
 
 /* --- the portrait, played once ------------------------------------------- */
@@ -2489,16 +2650,13 @@ details p {
   }
 }
 
+
 @media (max-width: 1080px) {
   .hero {
     grid-template-columns: minmax(0, 1fr);
-    gap: 44px;
-    padding-top: 56px;
+    gap: 36px;
+    padding-top: 32px;
     text-align: center;
-  }
-
-  .hero-product {
-    align-items: center;
   }
 
   .hero-product .phone {
@@ -2517,10 +2675,6 @@ details p {
     margin-inline: auto;
   }
 
-  .floating-note {
-    display: none;
-  }
-
   .split {
     grid-template-columns: 1fr;
   }
@@ -2529,17 +2683,8 @@ details p {
     max-width: 680px;
   }
 
-  .support-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .final-cta {
-    grid-template-columns: auto 1fr;
-  }
-
-  .final-cta .check-list,
-  .final-cta .button {
-    grid-column: 2;
+  .privacy-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2554,6 +2699,12 @@ details p {
     justify-self: end;
     gap: 18px;
     font-size: 0.875rem;
+  }
+
+  .site-header.legal-header .desktop-nav a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
   }
 
   .site-header.legal-header .menu-button {
@@ -2593,14 +2744,18 @@ details p {
     transform: none;
   }
 
-  .mobile-nav a {
+  .mobile-nav a:not(.store-badge) {
     border-radius: var(--radius-field);
     padding: 12px;
     font-weight: 500;
   }
 
-  .mobile-nav a:hover {
+  .mobile-nav a:not(.store-badge):hover {
     background: var(--grout);
+  }
+
+  .faq-section {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2614,56 +2769,47 @@ details p {
   }
 
   .hero {
-    padding-block: 28px 44px;
+    gap: 28px;
+    padding-block: 12px 40px;
   }
 
-  .steps-grid {
-    grid-template-columns: 1fr;
-    gap: 34px;
+  .hero h1 {
+    max-width: none;
+    margin-bottom: 16px;
   }
 
-  .step {
-    max-width: 440px;
-    margin: auto;
+  .hero .eyebrow {
+    margin-bottom: 12px;
   }
 
-  .step-arrow {
-    display: none;
+  .hero-lede {
+    margin-bottom: 20px;
+    font-size: 1.0625rem;
   }
 
-  /* Three phones side by side on a 375px screen would be 8px type. They become
-     a snapping scroller instead, and stay readable. */
-  .phone-gallery {
-    display: flex;
-    overflow-x: auto;
-    gap: 10px;
-    padding-bottom: 6px;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
+  .hero-actions {
+    gap: 4px 24px;
+    margin-bottom: 10px;
   }
 
-  .phone-gallery .phone {
-    flex: 0 0 min(260px, 74vw);
-    scroll-snap-align: center;
-  }
-
-  .policy-grid {
+  .tour-grid,
+  .price-grid,
+  .privacy-cards {
     grid-template-columns: 1fr;
   }
 
-  .final-cta {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
+  .tour-grid {
+    gap: 44px;
   }
 
-  .final-cta .check-list,
-  .final-cta .button {
-    grid-column: 1;
+  .tour-stop {
+    display: block;
+    grid-row: auto;
   }
 
-  .final-copy h2 {
-    margin-inline: auto;
+  .tour-tray,
+  .children-example {
+    max-width: none;
   }
 
   .site-footer {
@@ -2674,6 +2820,10 @@ details p {
       "rating"
       "note";
     justify-items: center;
+  }
+
+  .policy-grid {
+    grid-template-columns: 1fr;
   }
 
   .policy-table,

@@ -44,7 +44,7 @@ const showInvite = (familyName, verified, usesRemaining, expiresAt) => {
   if (title) title.textContent = `${familyName} quer você por perto.`;
   if (description) {
     description.textContent =
-      "Abra a Nina para pedir entrada. Uma pessoa responsável confirma antes de você acessar a rotina.";
+      "Abra a Nina para pedir entrada. O pedido espera a aprovação da casa.";
   }
   if (codeValue) codeValue.textContent = code;
   codeBox?.removeAttribute("hidden");
@@ -125,7 +125,8 @@ openApp?.addEventListener("click", () => {
   setTimeout(() => {
     if (document.visibilityState !== "visible") return;
     flashStatus("neutral", "A Nina não abriu? Ela ainda não está neste aparelho.");
-    document.querySelector("[data-invite-install]")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    document.querySelector("[data-invite-install]")?.scrollIntoView({ behavior, block: "center" });
   }, 1500);
 });
 

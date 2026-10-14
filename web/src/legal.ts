@@ -131,3 +131,12 @@ const buildEnvironment = (
 ).env ?? {};
 
 export const legalIdentity = resolveLegalIdentity(buildEnvironment);
+
+// The footer names a company and its CNPJ only; an address stays in the Terms and the privacy policy.
+export function controllerLine(identity: LegalIdentity): string | undefined {
+  if (identity.legalEntityKind !== "company") return undefined;
+  if (!identity.legalEntityName || !identity.legalEntityDocument) {
+    return undefined;
+  }
+  return `${identity.legalEntityName} · CNPJ ${identity.legalEntityDocument}`;
+}

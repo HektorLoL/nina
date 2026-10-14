@@ -1,0 +1,37 @@
+---
+import Glyph from "./Glyph.astro";
+import { appStoreListing } from "../appStore";
+
+interface Props {
+  source: string;
+  kind?: "primary" | "ink";
+  large?: boolean;
+  arrow?: boolean;
+  class?: string;
+}
+
+const { source, kind = "primary", large = false, arrow = false, class: className } = Astro.props;
+---
+
+{
+  appStoreListing.isPublished ? (
+    <a class:list={["store-badge", className]} href={appStoreListing.appStoreURL}>
+      <img
+        src="/images/app-store-badge.svg"
+        alt="Baixar a Nina na App Store"
+        width={large ? 168 : 144}
+        height={large ? 56 : 48}
+      />
+    </a>
+  ) : (
+    <button
+      class:list={["button", `button-${kind}`, { "button-large": large }, className]}
+      type="button"
+      data-open-waitlist
+      data-waitlist-source={source}
+    >
+      Entrar na lista
+      {arrow && <Glyph name="arrow-right" size={19} />}
+    </button>
+  )
+}

@@ -3,6 +3,7 @@ export interface PublicAppStoreEnvironment {
 }
 
 export interface AppStoreListing {
+  appStoreID?: string;
   appStoreURL?: string;
   isPublished: boolean;
 }
@@ -24,6 +25,7 @@ export function resolveAppStoreListing(
   const isPublished = Boolean(appStoreID && appStoreIDPattern.test(appStoreID));
 
   return {
+    appStoreID: isPublished ? appStoreID : undefined,
     appStoreURL: isPublished
       ? `https://apps.apple.com/br/app/id${appStoreID}`
       : undefined,

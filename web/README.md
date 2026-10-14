@@ -26,10 +26,26 @@ Não há biblioteca de ícones. `src/components/Glyph.astro` guarda os desenhos 
 contorno usados no site; `astro-icon` foi removido porque uma dependência dele
 reprova o `npm audit --audit-level=high` que a CI executa.
 
-Os telefones das seções são desenhados em HTML, não são capturas de tela: as
-capturas antigas mostravam o app anterior ao redesenho e uma captura fica velha
-sozinha. As diferenças em relação às pranchas do Paper estão em
-`docs/rebrand-web.md`.
+O telefone da abertura e os exemplos de "Como funciona" são desenhados em HTML,
+não são capturas de tela: as capturas antigas mostravam o app anterior ao
+redesenho e uma captura fica velha sozinha. Os exemplos usam a casa da
+demonstração do app (`src/landing.ts`), e `tests/landing.test.ts` confere contra
+o código Swift cada texto tirado do app; o que só existe no site está listado em
+`docs/rebrand-web.md` §6c. As diferenças em relação às pranchas do Paper estão
+em `docs/rebrand-web.md`.
+
+As imagens de compartilhamento ficam em `public/images/og/` (1200×630, até
+300 KB). Para refazer uma, monte um HTML de rascunho com a Fraunces embutida
+como `data:` (o Chrome recusa `@font-face` lido de `file://`) e capture com o
+Chrome sem janela:
+
+```sh
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+  --hide-scrollbars --force-device-scale-factor=1 --window-size=1200,630 \
+  --screenshot=nina.png file:///caminho/do/rascunho.html
+```
+
+Abra o PNG e confira que a serifa é a Fraunces, não a Georgia.
 
 ## Cloudflare Workers
 
@@ -159,12 +175,16 @@ uma build sem a identidade aprovada não pode passar pelo gate de produção.
 
 A página de privacidade e os termos também levam `data-legal-launch`. Ele só vale
 `ready` quando a identidade está completa, o documento é um CNPJ, o endereço
-existe e o encarregado tem um nome diferente do da controladora. Os valores de
-hoje, de pessoa física com o próprio controlador como encarregado, continuam
-`complete` e ficam `pending`. O preflight de produção
-(`deployment.legal-launch-identity`) reprova o lançamento enquanto isso não
-mudar. Esses valores são públicos; nenhuma chave ou segredo deve usar o prefixo
-`PUBLIC_`.
+existe e o encarregado tem um nome diferente do da controladora. Desde
+2026-09-30 os valores são os de uma empresa, com endereço e um encarregado que
+não é sócio nem administrador, e as duas páginas leem `complete` e `ready`. O
+preflight de produção (`deployment.legal-launch-identity`) reprova o lançamento
+se um build voltar a ler `pending`. Esses valores são públicos; nenhuma chave ou
+segredo deve usar o prefixo `PUBLIC_`.
+
+O rodapé de todas as páginas mostra o nome da controladora e o CNPJ
+(`controllerLine` em `src/legal.ts`) só quando o documento tem 14 dígitos. O
+endereço fica nos Termos e na política de privacidade, nunca no rodapé.
 
 Um build de teste com valores fictícios de lançamento, numa pasta temporária para
 que `npm run deploy` nunca publique o resultado:

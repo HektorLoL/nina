@@ -1,10 +1,11 @@
 ---
 import Brand from "./Brand.astro";
 import RatingMark from "./RatingMark.astro";
-import { legalIdentity } from "../legal";
+import { controllerLine, legalIdentity } from "../legal";
 import { ninaRating } from "../rating";
 
 const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
+const controller = controllerLine(legalIdentity);
 const year = new Date().getFullYear();
 ---
 
@@ -22,5 +23,8 @@ const year = new Date().getFullYear();
     <RatingMark size={28} />
     <span aria-hidden="true">{ninaRating.name}</span>
   </a>
-  <p>Nina © {year}. Organização da casa com mais leveza.</p>
+  <div class="site-footer-note">
+    <p>Nina © {year}. A rotina da casa, dividida.</p>
+    {controller && <p class="site-footer-controller">{controller}</p>}
+  </div>
 </footer>

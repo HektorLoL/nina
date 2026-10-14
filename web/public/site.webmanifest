@@ -1,7 +1,7 @@
 {
   "name": "Nina",
   "short_name": "Nina",
-  "description": "Organização da casa com mais leveza.",
+  "description": "A rotina da casa, dividida.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FBFCFD",

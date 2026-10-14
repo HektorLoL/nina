@@ -3,41 +3,55 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Brand from "../components/Brand.astro";
 import Glyph from "../components/Glyph.astro";
 import NinaMark from "../components/NinaMark.astro";
+import StoreAction from "../components/StoreAction.astro";
+import TourRow from "../components/TourRow.astro";
+import { appStoreListing } from "../appStore";
+import {
+  availabilityLine,
+  avatarTone,
+  childDayDescription,
+  childDayExample,
+  closingHeadline,
+  closingLine,
+  exampleDescription,
+  heroExample,
+  houseStop,
+  initial,
+  landingFaq,
+  ninaStop,
+  proposalCopy,
+  tasksStop,
+  todayStop,
+  workloadBands,
+  workloadDescription,
+  workloadExample,
+} from "../landing";
 import { waitlistConsentVersion } from "../waitlist";
 
-const steps = [
-  {
-    number: "1",
-    glyph: "chat",
-    title: "Você fala",
-    text: "Conte o que precisa, do jeito que veio na cabeça. Pode ser uma coisa só ou várias de uma vez.",
-  },
-  {
-    number: "2",
-    glyph: "nina",
-    title: "A Nina entende",
-    text: "Ela lê, mostra o que entendeu e espera. Nada entra na casa sozinho.",
-  },
-  {
-    number: "3",
-    glyph: "people",
-    title: "Você confirma",
-    text: "O que você confirma vira tarefa, lembrete ou semente para a casa inteira. Só a semente fica sem data, de propósito.",
-  },
+const navLinks = [
+  { href: "#como-funciona", label: "Como funciona" },
+  { href: "#criancas", label: "Crianças" },
+  { href: "#preco", label: "Preço" },
+  { href: "#privacidade", label: "Privacidade" },
+  { href: "#duvidas", label: "Dúvidas" },
 ] as const;
-
-const features = [
-  "Entende prioridades e prazos",
-  "Sugere quem fica com o quê — quem decide é você",
-  "Lembra no momento certo",
-  "Se ajusta quando a vida muda",
-];
 
 const balancePoints = [
   "Se não der para desenhar sem chutar, ela não desenha. E diz por quê.",
   "Tarefa sem dono fica com a casa. Nunca sobra no nome de alguém.",
   "Ninguém recebe aviso de que o outro terminou alguma coisa.",
   "Criança e adolescente nunca entram no retrato.",
+  workloadExample.method,
+];
+
+const childPoints = [
+  "Quem tem menos de 18 anos entra numa casa só com a aprovação de um responsável.",
+  "Decidir por uma criança ou um adolescente pede idade confirmada pela Apple.",
+  "Na conta de um menor aparecem só as tarefas dele: o título, a hora e o ícone.",
+  "Para quem tem menos de 12 anos, as tarefas ficam grandes e coloridas.",
+  "Na conta de um menor, o silêncio à noite fica sempre ligado e o limite de uso começa em 30 minutos por dia.",
+  "Com a autorização do responsável, o dia de uma criança ou de um adolescente sem conta pode aparecer no celular de um adulto da casa. Só o responsável imprime ou compartilha como imagem ou PDF.",
+  "Nome de criança ou adolescente vai para a OpenAI trocado por um código.",
 ];
 
 const privacyCards = [
@@ -47,72 +61,36 @@ const privacyCards = [
     text: "A Nina propõe. Tarefa, lembrete, compra ou semente só existem depois que você confirma.",
   },
   {
-    glyph: "close",
-    title: "Ela não movimenta dinheiro",
-    text: "A Nina lembra do vencimento. Para pagar, você abre o banco. Ela não guarda nem copia dados de pagamento.",
-  },
-  {
     glyph: "server",
     title: "Onde ficam os seus dados",
-    text: "Os seus registros ficam em servidores em São Paulo. Para ler o que você escreve, a Nina usa a OpenAI, empresa dos Estados Unidos, que pode guardar por até 30 dias para evitar abuso.",
+    text: "Os registros da casa ficam em servidores em São Paulo. O que você escreve para a Nina vai para a OpenAI, nos Estados Unidos, que pode guardar por até 30 dias para evitar abuso. Aqui, a conversa com a Nina é apagada depois de 30 dias.",
+  },
+  {
+    glyph: "people",
+    title: "Conversa só para adultos",
+    text: "A conversa abre para quem tem 18 anos ou mais na faixa de idade da Apple, depois de aceitar o aviso, que inclui o envio aos Estados Unidos. Cada adulto tem a própria conversa.",
+  },
+  {
+    glyph: "shield",
+    title: "Sem senha, sem anúncio",
+    text: "A Nina não pede senha nem email: você entra com a conta Apple. O app não tem anúncio nem rastreamento, e a Nina nunca movimenta dinheiro.",
   },
 ] as const;
 
-const faq = [
-  {
-    question: "A Nina funciona sem internet?",
-    answer:
-      "Algumas informações já carregadas continuam visíveis, mas conversa, sincronização e convites precisam de internet.",
-  },
-  {
-    question: "Posso usar se moro sozinho?",
-    answer:
-      "Pode. O retrato da casa fica dormindo, porque com um adulto só não tem o que comparar, mas as tarefas, as compras, os lembretes e as sementes funcionam igual.",
-  },
-  {
-    question: "Como a Nina ajuda a dividir as tarefas?",
-    answer:
-      "Ela desenha como a casa está dividida em três faixas — leve, parecido, mais pesado — sem número e sem ranking. É um retrato para conversar, não para cobrar.",
-  },
-  {
-    question: "Posso editar ou apagar o que eu confirmei?",
-    answer:
-      "Pode. Quem cria, muda ou apaga é você. A Nina só propõe, e nada existe até você tocar em confirmar.",
-  },
-  {
-    question: "Quanto custa?",
-    answer:
-      "Conversar com a Nina até 10 vezes por dia, tarefas, compras, lembretes e sementes são gratuitos. O Nina Premium custa R$ 24,90 por mês ou R$ 249,90 por ano, cobre a casa inteira e libera até 50 mensagens por dia para cada adulto e o resumo semanal.",
-  },
-  {
-    question: "A Nina funciona no iPhone e Android?",
-    answer:
-      "Ainda não. A primeira versão está sendo preparada para iPhone, e quem entra na lista recebe um aviso quando ela chegar. A expansão para outras plataformas será comunicada depois.",
-  },
-];
+const availability = availabilityLine(appStoreListing);
 ---
 
 <BaseLayout
-  title="Nina — menos coisas na cabeça, mais casa acontecendo junto"
-  description="Fale do seu jeito. A Nina lê, monta a proposta e espera você confirmar: tarefas, lembretes e uma rotina mais leve para toda a casa."
+  title="Nina — a rotina da casa, dividida"
+  description="Você conta o que precisa ser feito, do jeito que vier. A Nina propõe tarefas, lembretes e compras, e nada entra na casa antes de você confirmar. Para iPhone."
 >
   <header class="site-header" data-header>
     <div class="header-inner page-shell">
       <Brand />
       <nav class="desktop-nav" aria-label="Navegação principal">
-        <a href="#como-funciona">Como funciona</a>
-        <a href="#recursos">O que a Nina faz</a>
-        <a href="#privacidade">Privacidade</a>
-        <a href="#duvidas">Dúvidas</a>
+        {navLinks.map((link) => <a href={link.href}>{link.label}</a>)}
       </nav>
-      <button
-        class="button button-ink header-cta"
-        type="button"
-        data-open-waitlist
-        data-waitlist-source="header"
-      >
-        Entrar na lista
-      </button>
+      <StoreAction source="header" kind="ink" class="header-cta" />
       <button
         class="menu-button"
         type="button"
@@ -125,18 +103,8 @@ const faq = [
       </button>
     </div>
     <nav id="mobile-menu" class="mobile-nav" aria-label="Navegação móvel" data-mobile-menu>
-      <a href="#como-funciona">Como funciona</a>
-      <a href="#recursos">O que a Nina faz</a>
-      <a href="#privacidade">Privacidade</a>
-      <a href="#duvidas">Dúvidas</a>
-      <button
-        class="button button-ink"
-        type="button"
-        data-open-waitlist
-        data-waitlist-source="mobile_menu"
-      >
-        Entrar na lista
-      </button>
+      {navLinks.map((link) => <a href={link.href}>{link.label}</a>)}
+      <StoreAction source="mobile_menu" kind="ink" />
     </nav>
   </header>
 
@@ -144,29 +112,19 @@ const faq = [
     <section class="hero page-shell" aria-labelledby="hero-title">
       <div class="hero-copy">
         <p class="eyebrow">Conversa que vira alívio</p>
-        <h1 id="hero-title">Tira da sua cabeça. Ela propõe, você confirma.</h1>
+        <h1 id="hero-title">
+          <span class="hero-line">Tira da sua cabeça.</span>{" "}
+          <span class="hero-line">Ela propõe, você confirma.</span>
+        </h1>
         <p class="lede hero-lede">
-          A Nina organiza a casa pelo seu celular. Você conta o que precisa ser feito, do jeito
-          que veio na cabeça. Ela transforma em tarefa, lembrete, compra — e espera você
-          confirmar.
+          Você conta o que precisa ser feito, do jeito que vier. A Nina propõe tarefas, lembretes
+          e compras, e nada entra na casa antes de você confirmar.
         </p>
         <div class="hero-actions">
-          <button
-            class="button button-primary button-large"
-            type="button"
-            data-open-waitlist
-            data-waitlist-source="hero"
-          >
-            Entrar na lista
-            <Glyph name="arrow-right" size={19} />
-          </button>
-          <a class="button button-secondary button-large" href="#como-funciona">
-            Ver como funciona
-          </a>
+          <StoreAction source="hero" large arrow />
+          <a class="text-link hero-more" href="#como-funciona">Ver como funciona</a>
         </div>
-        <p class="hero-footnote">
-          Em preparação para iPhone · em português · seus registros ficam em São Paulo
-        </p>
+        <p class="hero-footnote">{availability}</p>
       </div>
 
       <div class="hero-product" data-ritual>
@@ -177,360 +135,431 @@ const faq = [
               <NinaMark size={26} />
               <strong>Nina</strong>
             </div>
-            <p class="bubble bubble-you" aria-hidden="true">o boleto do condomínio vence dia 10</p>
+            <p class="bubble bubble-you" aria-hidden="true">{heroExample.message}</p>
             <div class="bubble-row" aria-hidden="true">
               <NinaMark size={22} />
-              <p class="bubble bubble-nina">Li assim. Corrija antes de confirmar.</p>
+              <p class="bubble bubble-nina">{heroExample.reply}</p>
             </div>
             <div class="proposal">
-              <p class="proposal-tag" aria-hidden="true">Isto ainda não existe</p>
-              <p class="proposal-title" aria-hidden="true"><i></i>Pagar o condomínio</p>
-              <p class="proposal-row" aria-hidden="true"><span>Quando</span><strong>segunda, 10 de agosto</strong></p>
-              <p class="proposal-row" aria-hidden="true"><span>Repete</span><strong>todo mês</strong></p>
-              <p class="proposal-row" aria-hidden="true"><span>Dono</span><strong>A casa, por enquanto</strong></p>
+              <div class="proposal-face" aria-hidden="true">
+                <p class="proposal-tag"><Glyph name="plus" size={11} />{proposalCopy.pending}</p>
+                <p class="proposal-title">
+                  <Glyph name={heroExample.proposal.glyph} size={18} />{heroExample.proposal.title}
+                </p>
+                <p class="proposal-meta">
+                  <span><Glyph name="calendar" size={13} />{heroExample.proposal.when}</span>
+                  <span><Glyph name="person" size={13} />{heroExample.proposal.owner}</span>
+                </p>
+              </div>
               <div class="proposal-actions">
                 <button
                   type="button"
                   class="proposal-confirm"
                   data-confirm
-                  aria-label="Confirmar a proposta de exemplo e criar a tarefa Pagar o condomínio"
+                  aria-label={heroExample.confirmLabel}
                 >
-                  Confirmar e criar 1 tarefa
+                  {proposalCopy.create}
                 </button>
-                <div aria-hidden="true"><em>Corrigir</em><em>Não</em></div>
+                <div aria-hidden="true">
+                  <em class="is-outline">{proposalCopy.correct}</em>
+                  <em>{proposalCopy.decline}</em>
+                </div>
               </div>
-              <p class="proposal-stored" aria-hidden="true">
-                <Glyph name="check" size={13} />Na casa agora
+              <p class="proposal-resolved" aria-hidden="true">
+                <Glyph name="check" size={12} />{proposalCopy.resolved}
               </p>
             </div>
-            <p class="phone-waiting" aria-hidden="true">A Nina está esperando você.</p>
-            <p class="phone-waiting phone-stored" aria-hidden="true">Você confirmou. Está na casa agora.</p>
+            <p class="proposal-disclaimer" aria-hidden="true">{proposalCopy.disclaimer}</p>
             <div class="phone-composer" aria-hidden="true">
-              <span>Escreve pra Nina</span>
+              <span>{proposalCopy.composer}</span>
               <i><Glyph name="arrow-up" size={17} /></i>
             </div>
+            <div class="phone-tabbar" aria-hidden="true">
+              <span class="is-selected"><NinaMark size={24} />Nina</span>
+              <span><Glyph name="clock" size={22} />Hoje</span>
+              <span><Glyph name="list" size={22} />Tarefas</span>
+              <span><Glyph name="house" size={22} />Casa</span>
+            </div>
           </div>
-          <figcaption class="sr-only">
-            Uma conversa de exemplo. Você escreve que o boleto do condomínio vence dia 10. A
-            Nina responde que leu assim e pede que você corrija antes de confirmar, e monta uma
-            proposta que ainda não existe: pagar o condomínio, segunda, 10 de agosto, todo mês,
-            dono a casa. O botão abaixo confirma essa proposta de exemplo.
-          </figcaption>
+          <figcaption class="sr-only">{heroExample.description}</figcaption>
         </figure>
 
         <div class="phone-captions" aria-live="polite">
-          <p class="phone-caption">Nada existe até você tocar em confirmar.</p>
+          <p class="phone-caption">{heroExample.captionBefore}</p>
           <p class="phone-caption phone-caption-stored">
-            Isto foi um ensaio — nada saiu daqui. Na Nina, o que você confirma passa a existir
-            para a casa inteira.
-            <button type="button" class="text-button" data-replay>Ver de novo</button>
+            {heroExample.captionAfter}{" "}
+            <button type="button" class="text-button" data-replay>{heroExample.replay}</button>
           </p>
         </div>
-
-        <article class="floating-note note-one">
-          <Glyph name="chat" size={20} />
-          <p><strong>Ideia solta</strong>Comprar o presente da professora até sexta</p>
-        </article>
-        <article class="floating-note note-two">
-          <Glyph name="bell" size={20} />
-          <p><strong>Lembrete</strong>Renovar o plano de internet</p>
-        </article>
-        <article class="floating-note note-three">
-          <Glyph name="seed" size={20} />
-          <p><strong>Semente</strong>Um dia, pintar o corredor</p>
-        </article>
       </div>
     </section>
 
-    <section id="como-funciona" class="section panel page-shell">
-      <div class="section-heading centered">
-        <p class="eyebrow">Sem precisar aprender um sistema</p>
-        <h2>Da conversa à ação, em 3 passos</h2>
+    <section id="como-funciona" class="section section-plain page-shell" aria-labelledby="como-funciona-title">
+      <div class="section-heading">
+        <p class="eyebrow">Como funciona</p>
+        <h2 id="como-funciona-title">A casa em quatro abas.</h2>
       </div>
-      <div class="steps-grid">
-        {
-          steps.map((step, index) => (
-            <article class="step">
-              <div class="step-top">
-                <span class="step-number">{step.number}</span>
-                {step.glyph === "nina" ? <NinaMark size={30} /> : <Glyph name={step.glyph} size={28} />}
+
+      <div class="tour-grid">
+        <article class="tour-stop" aria-labelledby={`${ninaStop.id}-title`}>
+          <h3 id={`${ninaStop.id}-title`}>
+            <span class="tour-stop-icon"><NinaMark size={24} /></span>{ninaStop.title}
+          </h3>
+          <p class="tour-line">{ninaStop.line}</p>
+          <p class="tour-extra">{ninaStop.extra}</p>
+          <div class="tour-tray" role="img" aria-label={exampleDescription(ninaStop)}>
+            <p class="tour-legend" aria-hidden="true">Exemplo</p>
+            <div class="tour-card tour-chat" aria-hidden="true">
+              <p class="tour-you">{ninaStop.message}</p>
+              <div class="tour-nina">
+                <NinaMark size={22} />
+                <p>{ninaStop.reply}</p>
               </div>
-              <h3>{step.title}</h3>
-              <p>{step.text}</p>
-              {index < steps.length - 1 && (
-                <Glyph name="arrow-right" size={26} class="step-arrow" />
-              )}
-            </article>
-          ))
-        }
+              <div class="tour-face">
+                <p class="proposal-tag"><Glyph name="plus" size={11} />{proposalCopy.pending}</p>
+                <p class="tour-face-title">
+                  <Glyph name={ninaStop.proposal.glyph} size={18} />{ninaStop.proposal.title}
+                </p>
+                <p class="tour-face-meta">
+                  <span class="is-muted"><Glyph name="seed" size={14} />{ninaStop.proposal.when}</span>
+                  <span><Glyph name="person" size={14} />{ninaStop.proposal.owner}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="tour-stop" aria-labelledby={`${todayStop.id}-title`}>
+          <h3 id={`${todayStop.id}-title`}>
+            <span class="tour-stop-icon"><Glyph name="clock" size={24} /></span>{todayStop.title}
+          </h3>
+          <p class="tour-line">{todayStop.line}</p>
+          <p class="tour-extra">{todayStop.extra}</p>
+          <div class="tour-tray" role="img" aria-label={exampleDescription(todayStop)}>
+            <p class="tour-legend" aria-hidden="true">Exemplo</p>
+            <div class="tour-card" aria-hidden="true">
+              <p class="tour-group is-late">
+                <Glyph name="chevron-down" size={12} />Atrasadas · {todayStop.rows.filter((row) => row.isLate).length}
+              </p>
+              {todayStop.rows.map((row) => <TourRow {...row} />)}
+            </div>
+          </div>
+        </article>
+
+        <article class="tour-stop" aria-labelledby={`${tasksStop.id}-title`}>
+          <h3 id={`${tasksStop.id}-title`}>
+            <span class="tour-stop-icon"><Glyph name="list" size={24} /></span>{tasksStop.title}
+          </h3>
+          <p class="tour-line">{tasksStop.line}</p>
+          <p class="tour-extra">{tasksStop.extra}</p>
+          <div class="tour-tray" role="img" aria-label={exampleDescription(tasksStop)}>
+            <p class="tour-legend" aria-hidden="true">Exemplo</p>
+            <div class="tour-card" aria-hidden="true">
+              <p class="tour-group">
+                <Glyph name="chevron-down" size={12} />{tasksStop.group.title} · {tasksStop.group.rows.length}
+              </p>
+              {tasksStop.group.rows.map((row) => <TourRow {...row} />)}
+              <p class="tour-chips">
+                {tasksStop.lists.map((list) => <span>{list.title} {list.count}</span>)}
+              </p>
+              <p class="tour-seed">
+                <Glyph name="seed" size={18} />
+                <b>{tasksStop.seed.title}</b>
+                <span>{tasksStop.seed.label}</span>
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article class="tour-stop" aria-labelledby={`${houseStop.id}-title`}>
+          <h3 id={`${houseStop.id}-title`}>
+            <span class="tour-stop-icon"><Glyph name="house" size={24} /></span>{houseStop.title}
+          </h3>
+          <p class="tour-line">{houseStop.line}</p>
+          <p class="tour-extra">{houseStop.extra}</p>
+          <div class="tour-tray" role="img" aria-label={exampleDescription(houseStop)}>
+            <p class="tour-legend" aria-hidden="true">Exemplo</p>
+            <div class="tour-card" aria-hidden="true">
+              <p class="tour-strip">
+                {
+                  houseStop.people.map((person) => (
+                    <span class={`tour-avatar tone-${avatarTone(person.name)}`}>{initial(person.name)}</span>
+                  ))
+                }
+                <span class="tour-avatar tour-pet"><Glyph name="paw" size={16} /></span>
+                <span class="tour-strip-mark"><NinaMark size={32} /></span>
+              </p>
+              <p class="tour-strip-caption">{houseStop.caption}</p>
+            </div>
+          </div>
+        </article>
       </div>
     </section>
 
-    <section id="recursos" class="section panel panel-grout page-shell split">
+    <section id="sobrecarga" class="section panel panel-grout page-shell split" aria-labelledby="sobrecarga-title">
       <div>
-        <p class="eyebrow">Organização que se adapta à sua casa</p>
-        <h2>Da bagunça mental para a rotina leve.</h2>
+        <p class="eyebrow">O retrato da casa</p>
+        <h2 id="sobrecarga-title">Sem porcentagem. Sem placar. Sem ganhador.</h2>
         <p class="split-lede">
-          A Nina entende o contexto da casa e monta um plano prático que funciona de verdade.
-        </p>
-        <ul class="check-list">
-          {features.map((feature) => <li><Glyph name="check" size={20} />{feature}</li>)}
-        </ul>
-      </div>
-      <div class="phone-gallery" role="img" aria-label="As telas Hoje e Tarefas do aplicativo Nina: a agenda do dia com as atrasadas, as que estão na sua mão e uma sem dono, e as tarefas agrupadas por categoria com uma semente sem data.">
-        <figure class="phone">
-          <div class="phone-screen">
-            <span class="phone-island"></span>
-            <p class="mini-eyebrow">Quinta, 14 de agosto</p>
-            <p class="mini-title">Boa tarde, Mirna</p>
-            <div class="mini-counts">
-              <div class="is-yours"><strong>6</strong><span>na sua mão</span></div>
-              <div class="is-late"><strong>2</strong><span>atrasadas</span></div>
-              <div><strong>1</strong><span>sem dono</span></div>
-            </div>
-            <div class="mini-chips">
-              <span class="is-on">Tudo 9</span><span>Minhas</span><span>Sementes</span>
-            </div>
-            <p class="mini-eyebrow">Atrasadas · 2</p>
-            <p class="mini-row late"><i></i><b>Condomínio</b><em>Ontem</em></p>
-            <p class="mini-row late"><i></i><b>Vacina do Bidu</b><em>Terça</em></p>
-            <p class="mini-eyebrow">Hoje · 3</p>
-            <p class="mini-row"><i></i><b>Reunião de pais</b><em>19h</em></p>
-            <p class="mini-row"><i></i><b>Ração do Bidu</b><em>Hoje</em></p>
-            <p class="mini-row"><i></i><b>Remédio do Téo</b><em>21h</em></p>
-            <p class="mini-eyebrow">Sem dono · 1</p>
-            <p class="mini-row"><i></i><b>Trocar o gás</b><em>Amanhã</em></p>
-            <p class="mini-eyebrow">Concluídas hoje · 4</p>
-            <p class="mini-row is-done"><i></i><b>Levar o Téo à escola</b></p>
-            <p class="mini-row is-done"><i></i><b>Pagar a internet</b></p>
-            <p class="mini-row is-done"><i></i><b>Buscar a receita</b></p>
-            <p class="mini-row is-done"><i></i><b>Estender a roupa</b></p>
-          </div>
-        </figure>
-        <figure class="phone">
-          <div class="phone-screen">
-            <span class="phone-island"></span>
-            <p class="mini-title">Tarefas</p>
-            <p class="mini-eyebrow">9 abertas · 3 sementes</p>
-            <p class="mini-eyebrow">Contas · 3</p>
-            <p class="mini-row"><i></i><b>Conta de luz</b><em>Sexta</em></p>
-            <p class="mini-row"><i></i><b>IPVA do carro</b><em>Dia 20</em></p>
-            <p class="mini-row"><i></i><b>Internet</b><em>Dia 25</em></p>
-            <p class="mini-eyebrow">Escola · 2</p>
-            <p class="mini-row"><i></i><b>Autorização</b><em>Sexta</em></p>
-            <p class="mini-row"><i></i><b>Reunião de pais</b><em>19h</em></p>
-            <p class="mini-eyebrow">Cuidado · 2</p>
-            <p class="mini-row"><i></i><b>Pediatra do Téo</b><em>—</em></p>
-            <p class="mini-row"><i></i><b>Remarcar o dentista</b><em>—</em></p>
-            <p class="mini-eyebrow">Casa · 2</p>
-            <p class="mini-row"><i></i><b>Trocar o filtro</b><em>Sábado</em></p>
-            <p class="mini-row"><i></i><b>Lavar as cortinas</b><em>Domingo</em></p>
-            <p class="mini-eyebrow">Sementes · 3</p>
-            <p class="mini-row is-seed"><i></i><span><b>Pintar a sala</b><em>Plante depois</em></span></p>
-            <p class="mini-row is-seed"><i></i><span><b>Arrumar o quintal</b><em>Plante depois</em></span></p>
-          </div>
-        </figure>
-      </div>
-    </section>
-
-    <section class="section panel page-shell split">
-      <div>
-        <p class="eyebrow">Sinal de sobrecarga</p>
-        <h2>Sem porcentagem. Sem placar. Sem ganhador.</h2>
-        <p class="split-lede">
-          Quando a casa teve movimento suficiente, a Nina desenha como ela está dividida — em
-          três faixas, sem número nenhum. Você não pode comparar duas pessoas com uma faixa, e é
-          exatamente por isso que ela é uma faixa.
+          Com pelo menos 6 tarefas abertas com dono, entre 2 pessoas da casa, a Nina desenha como a
+          casa está hoje, em três faixas, sem número nenhum. Você não pode comparar duas pessoas com
+          uma faixa, e é exatamente por isso que ela é uma faixa.
         </p>
         <ul class="check-list">
           {balancePoints.map((point) => <li><Glyph name="check" size={20} />{point}</li>)}
         </ul>
       </div>
-      <div class="workload-card" data-bands>
-        <p class="eyebrow eyebrow-faint">Sinal de sobrecarga · domingo</p>
-        <h3>A casa está pesando mais de um lado.</h3>
-        <div
-          class="band-chart"
-          role="img"
-          aria-label="Retrato da casa em três faixas: leve, parecido e mais pesado. A Mirna está em mais pesado, o Rafa em parecido, e a casa, o que não tem dono, em leve. Não há número nenhum no gráfico."
-        >
-          <div class="band-axis">
-            <span>leve</span><span>parecido</span><span>mais pesado</span>
+      <div class="workload-example">
+        <p class="tour-legend" aria-hidden="true">Exemplo</p>
+        <div class="workload-card" data-bands>
+          <p class="eyebrow">{workloadExample.eyebrow}</p>
+          <h3>{workloadExample.headline}</h3>
+          <div class="band-chart" role="img" aria-label={workloadDescription()}>
+            <div class="band-axis">
+              {workloadBands.map((band) => <span>{band}</span>)}
+            </div>
+            <div class="band-rows">
+              {
+                workloadExample.rows.map((row) => (
+                  <div>
+                    {row.isShared ? (
+                      <p class="band-head is-house">
+                        <span class="glyph-slot"><Glyph name="house" size={20} /></span>{row.name}
+                        <span class="band-word">· {row.band}</span>
+                      </p>
+                    ) : (
+                      <p class="band-head">
+                        <i class={`tone-${avatarTone(row.name)}`}>{initial(row.name)}</i>{row.name}
+                        <span class="band-word">· {row.band}</span>
+                      </p>
+                    )}
+                    <div class="band-track">
+                      {workloadBands.map((band) => (
+                        <i
+                          class:list={{
+                            "is-on": band === row.band && !row.isShared,
+                            "is-house": band === row.band && row.isShared,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
           </div>
-          <div class="band-rows">
-          <div>
-            <p class="band-head"><i>MI</i>Mirna</p>
-            <div class="band-track"><i></i><i></i><i class="is-on"></i></div>
-          </div>
-          <div>
-            <p class="band-head"><i class="tone-2">RA</i>Rafa</p>
-            <div class="band-track"><i></i><i class="is-on"></i><i></i></div>
-          </div>
-          <div>
-            <p class="band-head is-house">
-              <span class="glyph-slot"><Glyph name="house" size={21} /></span>A casa — sem dono
-            </p>
-            <div class="band-track"><i class="is-house"></i><i></i><i></i></div>
-          </div>
-          </div>
+          <p class="workload-caption">{workloadExample.caption}</p>
         </div>
-        <p class="workload-caption">Um retrato para conversar, não para cobrar.</p>
       </div>
     </section>
 
-    <div class="support-grid page-shell">
-      <section id="privacidade" class="section panel panel-ink privacy-panel">
-        <p class="eyebrow">Privacidade</p>
-        <h2>O que ela lê, e por quanto tempo fica.</h2>
-        <p>
-          O material da escola, a lista do mercado, a conta que vence. Você escreve do seu jeito,
-          a Nina monta a proposta. Você confere e confirma.
+    <section id="criancas" class="section panel page-shell split split-top" aria-labelledby="criancas-title">
+      <div>
+        <p class="eyebrow">Crianças e adolescentes</p>
+        <h2 id="criancas-title">Criança entra com um responsável.</h2>
+        <p class="split-lede">
+          A conversa com a Nina é só dos adultos. Uma criança ou um adolescente com conta vê só as
+          próprias tarefas.
         </p>
-        <ul class="privacy-cards">
-          {
-            privacyCards.map((card) => (
-              <li>
-                <Glyph name={card.glyph} size={24} />
-                <strong>{card.title}</strong>
-                <span>{card.text}</span>
-              </li>
-            ))
-          }
+        <ul class="check-list">
+          {childPoints.map((point) => <li><Glyph name="check" size={20} />{point}</li>)}
         </ul>
-        <a class="text-link" href="/privacidade/">Ler política de privacidade</a>
-      </section>
-
-      <section id="duvidas" class="section panel faq-panel" aria-labelledby="faq-title">
-        <p class="eyebrow">Direto ao ponto</p>
-        <h2 id="faq-title">Dúvidas frequentes</h2>
-        <div class="faq-list">
-          {
-            faq.map((item) => (
-              <details>
-                <summary>
-                  {item.question}
-                  <Glyph name="plus" size={17} />
-                </summary>
-                <p>{item.answer}</p>
-              </details>
-            ))
-          }
-        </div>
-      </section>
-    </div>
-
-    <section class="section panel panel-wash final-cta page-shell">
-      <NinaMark size={72} />
-      <div class="final-copy">
-        <p class="speech">Quer uma casa mais leve?</p>
-        <h2>A Nina está quase pronta para a sua casa.</h2>
+        <a class="text-link section-link" href="/familias/">Como a Nina cuida de crianças e adolescentes</a>
       </div>
-      <ul class="check-list compact">
-        <li><Glyph name="check" size={18} />Do seu jeito, no seu ritmo</li>
-        <li><Glyph name="check" size={18} />Menos carga mental no dia a dia</li>
-        <li><Glyph name="check" size={18} />Mais tempo junto, menos cobrança</li>
+      <div class="children-example">
+        <div class="tour-tray" role="img" aria-label={childDayDescription()}>
+          <p class="tour-legend" aria-hidden="true">Exemplo</p>
+          <div class="tour-card" aria-hidden="true">
+            <p class="tour-group">{childDayExample.eyebrow}</p>
+            {
+              childDayExample.rows.map((row) => (
+                <TourRow title={row.title} label={row.time} glyph={row.glyph} />
+              ))
+            }
+          </div>
+        </div>
+        <p class="tour-meta">{childDayExample.meta}</p>
+      </div>
+    </section>
+
+    <section id="preco" class="section section-plain page-shell" aria-labelledby="preco-title">
+      <div class="section-heading">
+        <p class="eyebrow">Preço</p>
+        <h2 id="preco-title">Começa grátis. O Premium vale para a casa toda.</h2>
+      </div>
+      <div class="price-grid">
+        <article class="price-card">
+          <h3>Grátis</h3>
+          <p>
+            Tarefas, lembretes, compras e sementes para a casa toda. Cada adulto manda até 10
+            mensagens por dia para a Nina.
+          </p>
+        </article>
+        <article class="price-card">
+          <h3>Nina Premium</h3>
+          <p class="price-amount">R$ 24,90 por mês ou R$ 249,90 por ano</p>
+          <p>
+            Uma assinatura cobre a casa toda e libera até 50 mensagens por dia para cada adulto.
+            Quando dois adultos da casa aceitam conversar com a Nina, a casa também recebe o resumo
+            semanal nas semanas com movimento.
+          </p>
+        </article>
+      </div>
+      <p class="price-terms">
+        Teto da casa: 100 mensagens por dia. Assina quem tem 18 anos ou mais na faixa de idade da
+        Apple. A assinatura renova sozinha pela App Store e se cancela nos Ajustes do iPhone, em
+        Assinaturas, até 24 horas antes da renovação. Apagar a conta não cancela a cobrança.
+      </p>
+      <a class="text-link section-link" href="/termos/">Condições da assinatura nos Termos</a>
+    </section>
+
+    <section id="privacidade" class="section panel panel-ink page-shell privacy-panel" aria-labelledby="privacidade-title">
+      <p class="eyebrow">Privacidade</p>
+      <h2 id="privacidade-title">O que ela lê, e por quanto tempo fica.</h2>
+      <p class="privacy-lede">
+        O material da escola, a lista do mercado, a conta que vence. Você escreve do seu jeito, a
+        Nina monta a proposta. Você confere e confirma.
+      </p>
+      <ul class="privacy-cards">
+        {
+          privacyCards.map((card) => (
+            <li>
+              <Glyph name={card.glyph} size={24} />
+              <strong>{card.title}</strong>
+              <span>{card.text}</span>
+            </li>
+          ))
+        }
       </ul>
-      <button
-        class="button button-primary button-large"
-        type="button"
-        data-open-waitlist
-        data-waitlist-source="footer"
-      >
-        Entrar na lista
-      </button>
+      <p class="privacy-links">
+        <a class="text-link" href="/privacidade/">Ler a política de privacidade</a>
+        <a class="text-link" href="/denuncia/">Denunciar um problema</a>
+      </p>
+    </section>
+
+    <section id="duvidas" class="section section-plain page-shell faq-section" aria-labelledby="faq-title">
+      <div class="faq-heading">
+        <h2 id="faq-title">Dúvidas frequentes</h2>
+        <a class="text-link section-link" href="/suporte/">Mais respostas em Suporte</a>
+      </div>
+      <div class="faq-list">
+        {
+          landingFaq.map((item) => (
+            <details>
+              <summary>
+                {item.question}
+                <Glyph name="plus" size={17} />
+              </summary>
+              <p>{item.answer}</p>
+            </details>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="section section-plain page-shell final-cta" aria-labelledby="final-title">
+      <NinaMark size={72} class="is-waiting" />
+      <p class="speech">{closingLine}</p>
+      <h2 id="final-title">{closingHeadline(appStoreListing)}</h2>
+      <p class="final-footnote">{availability}</p>
+      <StoreAction source="footer" large />
     </section>
   </main>
 
-  <dialog
-    class="waitlist-dialog"
-    data-waitlist-dialog
-    aria-labelledby="waitlist-title"
-    aria-describedby="waitlist-description"
-  >
-    <button class="dialog-close" type="button" aria-label="Fechar" data-close-waitlist>
-      <Glyph name="close" size={20} />
-    </button>
-    <NinaMark size={56} />
-    <div data-waitlist-entry>
-      <p class="eyebrow">Aviso de lançamento</p>
-      <h2 id="waitlist-title">Entre na lista da Nina.</h2>
-      <p id="waitlist-description">
-        Deixe seu email para receber um aviso quando a primeira versão estiver pronta.
-      </p>
-
-      <form
-        class="waitlist-form"
-        data-waitlist-form
-        data-consent-version={waitlistConsentVersion}
-        novalidate
+  {
+    !appStoreListing.isPublished && (
+      <dialog
+        class="waitlist-dialog"
+        data-waitlist-dialog
+        aria-labelledby="waitlist-title"
+        aria-describedby="waitlist-description"
       >
-        <label class="waitlist-field" for="waitlist-email">
-          <span>Email</span>
-          <input
-            id="waitlist-email"
-            name="email"
-            type="email"
-            inputmode="email"
-            autocomplete="email"
-            maxlength="254"
-            placeholder="voce@exemplo.com"
-            required
-            aria-describedby="waitlist-email-hint"
-          />
-          <small id="waitlist-email-hint" class="waitlist-hint">
-            Um email só, quando a Nina chegar. Seus dados ficam em servidores em São Paulo.
-          </small>
-        </label>
+        <button class="dialog-close" type="button" aria-label="Fechar" data-close-waitlist>
+          <Glyph name="close" size={20} />
+        </button>
+        <NinaMark size={56} />
+        <div data-waitlist-entry>
+          <p class="eyebrow">Aviso de lançamento</p>
+          <h2 id="waitlist-title">Entre na lista da Nina.</h2>
+          <p id="waitlist-description">
+            Deixe seu email para receber um aviso quando a primeira versão estiver pronta.
+          </p>
 
-        <label class="waitlist-field" for="waitlist-first-name">
-          <span>Como quer ser chamado? <small>opcional</small></span>
-          <input
-            id="waitlist-first-name"
-            name="firstName"
-            type="text"
-            autocomplete="given-name"
-            maxlength="80"
-            placeholder="Seu nome"
-          />
-        </label>
+          <form
+            class="waitlist-form"
+            data-waitlist-form
+            data-consent-version={waitlistConsentVersion}
+            novalidate
+          >
+            <label class="waitlist-field" for="waitlist-email">
+              <span>Email</span>
+              <input
+                id="waitlist-email"
+                name="email"
+                type="email"
+                inputmode="email"
+                autocomplete="email"
+                maxlength="254"
+                placeholder="voce@exemplo.com"
+                required
+                aria-describedby="waitlist-email-hint"
+              />
+              <small id="waitlist-email-hint" class="waitlist-hint">
+                Um email só, quando a Nina chegar. Seus dados ficam em servidores em São Paulo.
+              </small>
+            </label>
 
-        <div class="waitlist-honeypot" aria-hidden="true">
-          <label for="waitlist-website">Seu site</label>
-          <input
-            id="waitlist-website"
-            name="website"
-            type="text"
-            autocomplete="off"
-            tabindex="-1"
-          />
+            <label class="waitlist-field" for="waitlist-first-name">
+              <span>Como quer ser chamado? <small>opcional</small></span>
+              <input
+                id="waitlist-first-name"
+                name="firstName"
+                type="text"
+                autocomplete="given-name"
+                maxlength="80"
+                placeholder="Seu nome"
+              />
+            </label>
+
+            <div class="waitlist-honeypot" aria-hidden="true">
+              <label for="waitlist-website">Seu site</label>
+              <input
+                id="waitlist-website"
+                name="website"
+                type="text"
+                autocomplete="off"
+                tabindex="-1"
+              />
+            </div>
+
+            <label class="waitlist-consent">
+              <input name="consent" type="checkbox" required />
+              <span>
+                Quero receber um aviso por email quando a Nina estiver pronta. Posso cancelar
+                quando quiser.
+              </span>
+            </label>
+
+            <button class="button button-primary button-large waitlist-submit" type="submit">
+              <span data-waitlist-submit-label>Entrar na lista</span>
+              <Glyph name="arrow-right" size={19} />
+            </button>
+            <p class="waitlist-status" data-waitlist-status role="status" aria-live="polite"></p>
+            <p class="waitlist-terms">
+              Ao entrar na lista você aceita a <a href="/privacidade/" target="_blank" rel="noopener">Política de Privacidade</a>.
+            </p>
+          </form>
         </div>
 
-        <label class="waitlist-consent">
-          <input name="consent" type="checkbox" required />
-          <span>
-            Quero receber um aviso por email quando a Nina estiver pronta. Posso cancelar
-            quando quiser.
-          </span>
-        </label>
-
-        <button class="button button-primary button-large waitlist-submit" type="submit">
-          <span data-waitlist-submit-label>Entrar na lista</span>
-          <Glyph name="arrow-right" size={19} />
-        </button>
-        <p class="waitlist-status" data-waitlist-status role="status" aria-live="polite"></p>
-        <p class="waitlist-terms">
-          Ao entrar na lista você aceita a <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.
-        </p>
-      </form>
-    </div>
-
-    <div class="waitlist-success" data-waitlist-success hidden>
-      <span class="waitlist-success-icon"><Glyph name="check" size={26} /></span>
-      <h2>Pronto, você está na lista.</h2>
-      <p>Quando a Nina estiver pronta para chegar à sua casa, avisaremos por email.</p>
-      <button class="button button-secondary" type="button" data-close-waitlist>Fechar</button>
-    </div>
-  </dialog>
+        <div class="waitlist-success" data-waitlist-success hidden>
+          <span class="waitlist-success-icon"><Glyph name="check" size={26} /></span>
+          <h2>Pronto, você está na lista.</h2>
+          <p>Quando a Nina estiver pronta para chegar à sua casa, avisaremos por email.</p>
+          <button class="button button-secondary" type="button" data-close-waitlist>Fechar</button>
+        </div>
+      </dialog>
+    )
+  }
 
   <script src="/scripts/home.js" is:inline></script>
 </BaseLayout>

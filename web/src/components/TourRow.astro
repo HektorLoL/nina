@@ -1,0 +1,24 @@
+---
+import Glyph from "./Glyph.astro";
+import { avatarTone, initial, type TrayGlyph } from "../landing";
+
+interface Props {
+  title: string;
+  label: string;
+  glyph: TrayGlyph;
+  owner?: string;
+  isLate?: boolean;
+}
+
+const { title, label, glyph, owner, isLate = false } = Astro.props;
+---
+
+<div class:list={["tour-row", { "is-late": isLate }]}>
+  <span class="tour-check"></span>
+  <span class="tour-title">{title}</span>
+  <span class="tour-trailing">
+    <span class="tour-due">{label}</span>
+    <Glyph name={glyph} size={15} class="tour-glyph" />
+    {owner && <span class={`tour-avatar tone-${avatarTone(owner)}`}>{initial(owner)}</span>}
+  </span>
+</div>

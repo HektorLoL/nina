@@ -39,3 +39,19 @@ Deno.test("app store listing publishes the Brazilian store link once the identif
     "https://apps.apple.com/br/app/id6470000000",
   );
 });
+
+Deno.test("the app store identifier is exposed only once the listing is published", () => {
+  const placeholder = resolveAppStoreListing({
+    PUBLIC_NINA_APP_STORE_ID: "replace_with_the_numeric_app_store_id",
+  });
+  const malformed = resolveAppStoreListing({
+    PUBLIC_NINA_APP_STORE_ID: "id6470000000",
+  });
+  const published = resolveAppStoreListing({
+    PUBLIC_NINA_APP_STORE_ID: " 6470000000 ",
+  });
+
+  assertEquals(placeholder.appStoreID, undefined);
+  assertEquals(malformed.appStoreID, undefined);
+  assertEquals(published.appStoreID, "6470000000");
+});

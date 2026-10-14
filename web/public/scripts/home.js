@@ -141,13 +141,10 @@ waitlistForm?.addEventListener("submit", async (event) => {
   }
 });
 
-// Motion is opt-in: the resting page is already the finished frame, so a reader
-// who has asked for less movement is never handed an empty one.
+// Motion is opt-in: the resting page is already the finished frame.
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-// Measured against the viewport rather than through IntersectionObserver, which
-// is silently absent in some embedded webviews and reports a ratio no element
-// taller than the viewport can ever reach.
+// Measured against the viewport, never IntersectionObserver, which some embedded webviews lack.
 const sequences = [
   { selector: "[data-ritual]", className: "is-playing", shown: 0.2, nodes: null },
   { selector: "[data-bands]", className: "is-landing", shown: 0.4, nodes: null },
@@ -184,10 +181,7 @@ onScroll();
 window.addEventListener("scroll", onScroll, { passive: true });
 window.addEventListener("resize", armSequences, { passive: true });
 
-// The one real confirmation on the page. The hero sequence deliberately ends in
-// waiting because the settled/moss state is licensed by a person confirming
-// something, and nobody on a marketing page has — so this is the only thing that
-// can spend it. The caption says out loud that it was a rehearsal.
+// The settled, moss state is spent only by a visitor's own tap, and the caption says it was an example.
 const ritual = document.querySelector("[data-ritual]");
 const confirmButton = document.querySelector("[data-confirm]");
 const replayButton = document.querySelector("[data-replay]");
@@ -198,6 +192,8 @@ confirmButton?.addEventListener("click", () => {
   window.clearTimeout(mossTimer);
   ritual.classList.remove("is-playing");
   ritual.classList.add("is-confirmed");
+  // The confirm button is hidden with its row, so focus moves to the one control that is still there.
+  replayButton?.focus();
   if (prefersReducedMotion.matches) return;
   ritual.classList.add("is-storing");
   mossTimer = window.setTimeout(() => ritual.classList.remove("is-storing"), 600);

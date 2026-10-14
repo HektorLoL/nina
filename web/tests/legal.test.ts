@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { resolveLegalIdentity } from "../src/legal.ts";
+import { controllerLine, resolveLegalIdentity } from "../src/legal.ts";
 
 Deno.test("legal identity remains explicitly incomplete for local builds", () => {
   const identity = resolveLegalIdentity({
@@ -202,4 +202,41 @@ Deno.test("the families page publishes the impact assessment summary word for wo
   for (const bullet of bullets) {
     assertEquals(pageText.includes(bullet), true, bullet);
   }
+});
+
+Deno.test("the footer names a company controller by name and cnpj and never a person or a placeholder", () => {
+  const company = resolveLegalIdentity({
+    PUBLIC_NINA_LEGAL_ENTITY_NAME: "Nina Tecnologia Ltda.",
+    PUBLIC_NINA_LEGAL_ENTITY_DOCUMENT: "12.345.678/0001-90",
+    PUBLIC_NINA_LEGAL_ENTITY_ADDRESS:
+      "Rua das Flores, 100, sala 2, São Paulo, SP, 01000-000",
+  });
+  const person = resolveLegalIdentity({
+    PUBLIC_NINA_LEGAL_ENTITY_NAME: "Fulano de Tal",
+    PUBLIC_NINA_LEGAL_ENTITY_DOCUMENT: "123.456.789-09",
+  });
+  const placeholder = resolveLegalIdentity({
+    PUBLIC_NINA_LEGAL_ENTITY_NAME: "replace_with_legal_name",
+    PUBLIC_NINA_LEGAL_ENTITY_DOCUMENT: "12.345.678/0001-90",
+  });
+  const missingDocument = resolveLegalIdentity({
+    PUBLIC_NINA_LEGAL_ENTITY_NAME: "Nina Tecnologia Ltda.",
+  });
+
+  assertEquals(
+    controllerLine(company),
+    "Nina Tecnologia Ltda. · CNPJ 12.345.678/0001-90",
+  );
+  assertEquals(controllerLine(person), undefined);
+  assertEquals(controllerLine(placeholder), undefined);
+  assertEquals(controllerLine(missingDocument), undefined);
+});
+
+Deno.test("the footer prints the controller line and never the address", async () => {
+  const footer = await Deno.readTextFile(
+    new URL("../src/components/SiteFooter.astro", import.meta.url),
+  );
+
+  assertEquals(footer.includes("controllerLine(legalIdentity)"), true);
+  assertEquals(footer.includes("legalEntityAddress"), false);
 });
