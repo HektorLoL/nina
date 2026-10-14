@@ -441,6 +441,60 @@ final class MemberRecollectionTests: XCTestCase {
         XCTAssertEqual(MemberRecollection.storedNote(" Horários ", for: .adult), " Horários ")
     }
 
+    func testThePetSpeciesListOffersTheCommonAnimalsThenOutro() {
+        XCTAssertEqual(
+            PetSpecies.allCases.map(\.title),
+            ["Cachorro", "Gato", "Pássaro", "Peixe", "Coelho", "Hamster", "Tartaruga", "Outro"]
+        )
+    }
+
+    func testAStoredSpeciesReopensAsItsOptionWhateverItsAccentsOrCapitals() {
+        XCTAssertEqual(PetSpeciesChoice(stored: "Cachorro"), PetSpeciesChoice(option: .dog))
+        XCTAssertEqual(PetSpeciesChoice(stored: "GATO"), PetSpeciesChoice(option: .cat))
+        XCTAssertEqual(PetSpeciesChoice(stored: " passaro "), PetSpeciesChoice(option: .bird))
+        XCTAssertEqual(PetSpeciesChoice(stored: "tartaruga"), PetSpeciesChoice(option: .turtle))
+    }
+
+    func testAnyOtherStoredSpeciesReopensAsOutroWithTheWordKeptAndNoneReopensUnchosen() {
+        XCTAssertEqual(PetSpeciesChoice(stored: "Furão"), PetSpeciesChoice(option: .other, otherName: "Furão"))
+        XCTAssertEqual(PetSpeciesChoice(stored: "Cachorros"), PetSpeciesChoice(option: .other, otherName: "Cachorros"))
+        XCTAssertEqual(PetSpeciesChoice(stored: "Outro"), PetSpeciesChoice(option: .other, otherName: "Outro"))
+        XCTAssertEqual(PetSpeciesChoice(stored: ""), PetSpeciesChoice())
+        XCTAssertEqual(PetSpeciesChoice(stored: "   "), PetSpeciesChoice())
+        XCTAssertNil(PetSpeciesChoice(stored: "").option)
+    }
+
+    func testAPetIsSavedWithThePlainSpeciesWordAndNoBreed() {
+        var dog = pet("Thor")
+        dog.petSpecies = "Cachorro"
+        dog.petBreed = "Vira-lata"
+
+        let reopened = dog.savingPetDetails(PetSpeciesChoice(stored: dog.petSpecies))
+        let ferret = dog.savingPetDetails(PetSpeciesChoice(option: .other, otherName: " Furão "))
+        let typedAListedOne = dog.savingPetDetails(PetSpeciesChoice(option: .other, otherName: "peixe"))
+        let otherLeftBlank = dog.savingPetDetails(PetSpeciesChoice(option: .other))
+        let unchosen = dog.savingPetDetails(PetSpeciesChoice())
+
+        XCTAssertEqual(reopened.petSpecies, "Cachorro")
+        XCTAssertEqual(ferret.petSpecies, "Furão")
+        XCTAssertEqual(typedAListedOne.petSpecies, "Peixe")
+        XCTAssertEqual(otherLeftBlank.petSpecies, "")
+        XCTAssertEqual(unchosen.petSpecies, "")
+        for saved in [reopened, ferret, typedAListedOne, otherLeftBlank, unchosen] {
+            XCTAssertEqual(saved.petBreed, "", "A breed nobody can see never stays on a saved pet.")
+        }
+    }
+
+    func testOnlyAPetKeepsASpeciesAndNoMemberKeepsABreed() {
+        var father = adult("Heitor")
+        father.petBreed = "Vira-lata"
+
+        let saved = father.savingPetDetails(PetSpeciesChoice(option: .cat))
+
+        XCTAssertEqual(saved.petSpecies, "")
+        XCTAssertEqual(saved.petBreed, "")
+    }
+
     private func recollection(
         for member: HouseholdMember,
         members house: [HouseholdMember]? = nil,

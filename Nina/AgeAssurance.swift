@@ -359,6 +359,21 @@ struct AgeStatus: Decodable, Hashable {
         copy.aiBlocked = true
         return copy
     }
+
+    // A reading is its status, band, assurance and parental controls: a fresh recorded_at alone is no change.
+    func readsTheSame(as other: AgeStatus) -> Bool {
+        status == other.status
+            && band == other.band
+            && assurance == other.assurance
+            && parentalControlsActive == other.parentalControlsActive
+    }
+
+    func reads(_ mapping: AgeMapping) -> Bool {
+        status == mapping.status
+            && band == mapping.band
+            && assurance == mapping.assurance
+            && parentalControlsActive == mapping.parentalControlsActive
+    }
 }
 
 // The exact seven keys age-signal verifies byte for byte: sorted, nulls explicit, no whitespace.
@@ -662,6 +677,7 @@ enum AgeCheckPhase: Hashable {
 
 enum InlineAgeOutcome: Equatable {
     case updated
+    case unchanged
     case declined
     case appleError
     case attestFailure
@@ -670,6 +686,7 @@ enum InlineAgeOutcome: Equatable {
     var line: String {
         switch self {
         case .updated: "Faixa atualizada."
+        case .unchanged: "A Apple manteve a mesma resposta."
         case .declined: "A faixa não foi compartilhada."
         case .appleError: "A Apple não respondeu agora. Tente de novo em instantes."
         case .attestFailure: "Não deu para confirmar este iPhone."
@@ -739,7 +756,11 @@ final class AgeCheckCoordinator {
             phase = .prompt
             return nil
         }
-        let regulatoryChanged = await regulatoryFeaturesChanged(for: user)
+        // An operator's record is never asked of Apple again: any answer Apple gives would replace it.
+        var regulatoryChanged = false
+        if age.assurance != .operatorSet {
+            regulatoryChanged = await regulatoryFeaturesChanged(for: user)
+        }
         if age.isDueForRecheck(now: now) || regulatoryChanged {
             return await requestAndRecord(for: user)
         }
@@ -764,7 +785,7 @@ final class AgeCheckCoordinator {
 
     // A share started from a screen inside the app stays on that screen: routing never sees it, and
     // its outcome is reported where the button was.
-    func requestInline(for user: AuthUser) async -> AgeStatus? {
+    func requestInline(for user: AuthUser, current: AgeStatus) async -> AgeStatus? {
         guard !isRequestingInline, phase == .idle else { return nil }
         let token = generation
         isRequestingInline = true
@@ -790,7 +811,14 @@ final class AgeCheckCoordinator {
             guard token == generation else { return nil }
             storeRegulatoryFeatures(signal.regulatoryFeatures, for: user)
             settledUserIDs.insert(user.id)
-            inlineOutcome = signal.outcome == .declined ? .declined : .updated
+            if signal.outcome == .declined {
+                inlineOutcome = .declined
+            } else {
+                // Only Apple's answer matching the reading already shown, left in place, is the same answer.
+                let answeredAsBefore = status.readsTheSame(as: current)
+                    && current.reads(AgeAssurance.map(signal))
+                inlineOutcome = answeredAsBefore ? .unchanged : .updated
+            }
             return status
         } catch AgeSignalError.rejected(let status) {
             guard token == generation else { return nil }

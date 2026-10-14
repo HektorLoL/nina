@@ -589,7 +589,10 @@ private struct MinorNoHomeView: View {
     private func shareAge() {
         guard let user = authSession.currentUser else { return }
         Task {
-            guard let status = await ageCheck.requestInline(for: user) else { return }
+            guard let status = await ageCheck.requestInline(
+                for: user,
+                current: store.viewerAge
+            ) else { return }
             await store.applyRecordedAge(status, for: user)
         }
     }
@@ -616,7 +619,10 @@ private struct MinorAgeRequiredView: View {
                         Haptics.lightImpact()
                         guard let user = authSession.currentUser else { return }
                         Task {
-                            guard let status = await ageCheck.requestInline(for: user) else { return }
+                            guard let status = await ageCheck.requestInline(
+                                for: user,
+                                current: store.viewerAge
+                            ) else { return }
                             await store.applyRecordedAge(status, for: user)
                         }
                     }
@@ -1038,7 +1044,10 @@ private struct MinorAgeContestView: View {
                             Haptics.lightImpact()
                             guard let user = authSession.currentUser else { return }
                             Task {
-                                guard let status = await ageCheck.requestInline(for: user) else { return }
+                                guard let status = await ageCheck.requestInline(
+                                    for: user,
+                                    current: store.viewerAge
+                                ) else { return }
                                 await store.applyRecordedAge(status, for: user)
                             }
                         }

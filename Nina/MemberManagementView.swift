@@ -20,8 +20,7 @@ struct MemberEditorSheet: View {
     @State private var memoryNote = ""
     @State private var hasBirthDate = false
     @State private var birthDate = Date()
-    @State private var petSpecies = ""
-    @State private var petBreed = ""
+    @State private var petSpecies = PetSpeciesChoice()
     @State private var didLoad = false
     @State private var isSaving = false
     @State private var isShowingRemoveConfirmation = false
@@ -30,6 +29,7 @@ struct MemberEditorSheet: View {
     @State private var handOverConfirmation = ""
     @FocusState private var isNameFocused: Bool
     @FocusState private var isHandOverFocused: Bool
+    @FocusState private var isOtherSpeciesFocused: Bool
 
     private var member: HouseholdMember? {
         guard case .edit(let id) = mode else { return nil }
@@ -280,14 +280,17 @@ struct MemberEditorSheet: View {
                     .frame(minHeight: 44)
                 }
 
-                if householdRole == .pet {
-                    MemberField_(title: "Espécie") {
-                        TextField("Cachorro, gato", text: $petSpecies)
-                            .submitLabel(.done)
+                PetSpeciesMenu(choice: $petSpecies) {
+                    Task {
+                        await Task.yield()
+                        isOtherSpeciesFocused = true
                     }
+                }
 
-                    MemberField_(title: "Raça") {
-                        TextField("Vira-lata", text: $petBreed)
+                if petSpecies.option == .other {
+                    MemberField_(title: "Qual?") {
+                        TextField("", text: $petSpecies.otherName)
+                            .focused($isOtherSpeciesFocused)
                             .submitLabel(.done)
                     }
                 }
@@ -470,15 +473,14 @@ struct MemberEditorSheet: View {
                 memoryNote,
                 for: householdRole.isMinorRole ? .child : householdRole
             ),
-            birthDate: hasBirthDate && householdRole == .pet ? birthDate : nil,
-            petSpecies: householdRole == .pet ? petSpecies : "",
-            petBreed: householdRole == .pet ? petBreed : ""
+            birthDate: hasBirthDate && householdRole == .pet ? birthDate : nil
         )
+        .savingPetDetails(petSpecies)
     }
 
     // Nina reads a member's relationship, not the species field, so a pet's species travels in it.
     private var savedRelationship: String {
-        let species = petSpecies.trimmingCharacters(in: .whitespacesAndNewlines)
+        let species = petSpecies.storedSpecies(for: householdRole)
         guard householdRole == .pet, let first = species.first else { return relationship }
         return first.uppercased() + species.dropFirst()
     }
@@ -549,8 +551,7 @@ struct MemberEditorSheet: View {
                 birthDate = value
                 hasBirthDate = true
             }
-            petSpecies = member.petSpecies
-            petBreed = member.petBreed
+            petSpecies = PetSpeciesChoice(stored: member.petSpecies)
         }
     }
 
@@ -1099,6 +1100,127 @@ struct MemberPermissionBadge: View {
             return store.currentPermissionRole
         }
         return member.permissionRole
+    }
+}
+
+enum PetSpecies: String, CaseIterable, Identifiable {
+    case dog = "Cachorro"
+    case cat = "Gato"
+    case bird = "Pássaro"
+    case fish = "Peixe"
+    case rabbit = "Coelho"
+    case hamster = "Hamster"
+    case turtle = "Tartaruga"
+    case other = "Outro"
+
+    var id: String { rawValue }
+
+    var title: String { rawValue }
+
+    static func listed(matching word: String) -> PetSpecies? {
+        let folded = fold(word)
+        guard !folded.isEmpty else { return nil }
+        return allCases.first { $0 != .other && fold($0.rawValue) == folded }
+    }
+
+    private static func fold(_ word: String) -> String {
+        word
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "pt_BR"))
+    }
+}
+
+// The stored species stays the plain word: a listed one reopens as its option, any other word as Outro with the word kept.
+struct PetSpeciesChoice: Equatable {
+    var option: PetSpecies?
+    var otherName: String
+
+    init(option: PetSpecies? = nil, otherName: String = "") {
+        self.option = option
+        self.otherName = otherName
+    }
+
+    init(stored: String) {
+        let word = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+        if word.isEmpty {
+            self.init()
+        } else if let listed = PetSpecies.listed(matching: word) {
+            self.init(option: listed)
+        } else {
+            self.init(option: .other, otherName: word)
+        }
+    }
+
+    func storedSpecies(for role: HouseholdRole) -> String {
+        guard role == .pet, let option else { return "" }
+        guard option == .other else { return option.rawValue }
+        let typed = otherName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return PetSpecies.listed(matching: typed)?.rawValue ?? typed
+    }
+}
+
+extension HouseholdMember {
+    // No breed is asked any more, so a save clears one typed before: nobody can see or change it here now.
+    func savingPetDetails(_ choice: PetSpeciesChoice) -> HouseholdMember {
+        var saved = self
+        saved.petSpecies = choice.storedSpecies(for: role)
+        saved.petBreed = ""
+        return saved
+    }
+}
+
+private struct PetSpeciesMenu: View {
+    @Binding var choice: PetSpeciesChoice
+    var onChooseOther: () -> Void
+
+    private var shownValue: String {
+        choice.option?.title ?? "Escolher"
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(PetSpecies.allCases) { option in
+                Button {
+                    Haptics.selection()
+                    choice.option = option
+                    if option == .other {
+                        onChooseOther()
+                    }
+                } label: {
+                    if choice.option == option {
+                        Label(option.title, systemImage: "checkmark")
+                    } else {
+                        Text(option.title)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Espécie").ninaText(.meta, NinaTheme.muted)
+                    Text(shownValue)
+                        .ninaText(.body, choice.option == nil ? NinaTheme.muted : NinaTheme.ink)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NinaTheme.muted)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                NinaTheme.grout,
+                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Espécie")
+        .accessibilityValue(shownValue)
     }
 }
 

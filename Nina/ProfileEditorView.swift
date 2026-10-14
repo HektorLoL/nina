@@ -13,6 +13,7 @@ struct ProfileEditorView: View {
 
     @State private var draft: UserProfile
     @State private var didLoad = false
+    @State private var storedPhone = ""
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingPhotoData: Data?
     @State private var photoError: String?
@@ -251,6 +252,14 @@ struct ProfileEditorView: View {
                 TextField("(00) 00000-0000", text: $draft.phone)
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
+                    .onChange(of: draft.phone) { previous, typed in
+                        // The number arriving from the profile is shown as stored; only typing reshapes it.
+                        guard typed != storedPhone else { return }
+                        let shown = BrazilianPhoneNumber.edited(from: previous, to: typed)
+                        if shown != typed {
+                            draft.phone = shown
+                        }
+                    }
             }
         }
     }
@@ -337,7 +346,10 @@ struct ProfileEditorView: View {
     private func loadProfileIfNeeded() {
         guard !didLoad else { return }
         didLoad = true
-        draft = profileStore.profile(for: user)
+        var profile = profileStore.profile(for: user)
+        profile.phone = BrazilianPhoneNumber.reshapedIfPlain(profile.phone)
+        storedPhone = profile.phone
+        draft = profile
     }
 
     private func saveProfile() {
@@ -348,7 +360,7 @@ struct ProfileEditorView: View {
 
         var profile = draft
         profile.displayName = profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        profile.phone = profile.phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        profile.phone = BrazilianPhoneNumber.reshapedIfPlain(profile.phone)
         profile.birthdayLabel = profile.birthdayLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         profile.availabilityNote = profile.availabilityNote.trimmingCharacters(in: .whitespacesAndNewlines)
         profile.memoryNote = profile.memoryNote.trimmingCharacters(in: .whitespacesAndNewlines)

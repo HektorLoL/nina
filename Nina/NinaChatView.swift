@@ -58,13 +58,24 @@ struct NinaChatView: View {
                         Haptics.lightImpact()
                         guard let user = authSession.currentUser else { return }
                         Task {
-                            guard let status = await ageCheck.requestInline(for: user) else { return }
+                            guard let status = await ageCheck.requestInline(
+                                for: user,
+                                current: store.viewerAge
+                            ) else { return }
                             await store.applyRecordedAge(status, for: user)
                         }
                     }
 
                     if let outcome = ageCheck.inlineOutcome {
                         AgeOutcomeNote(outcome: outcome, alignment: .center)
+
+                        // A retry Apple answered as before names what opens the chat, not another retry.
+                        if outcome == .unchanged {
+                            Text("A conversa abre quando a Apple confirmar sua idade.")
+                                .ninaText(.caption, NinaTheme.muted)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
             }

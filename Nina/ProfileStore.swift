@@ -400,6 +400,107 @@ struct UserProfile: Codable, Hashable, Identifiable {
     }
 }
 
+enum BrazilianPhoneNumber {
+    static let maximumDigits = 11
+    private static let separators: Set<Character> = [" ", "(", ")", "-", "."]
+    private static let countryCodeSoFar: Set<String> = ["", "5", "55"]
+
+    static func digits(in text: String) -> String {
+        String(nationalDigits(in: text).prefix(maximumDigits))
+    }
+
+    static func formatted(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typedDigits = trimmed.filter(isDigit)
+        // A "+" stays on screen until the 55 after it is complete and the number itself begins.
+        if trimmed.hasPrefix("+"), countryCodeSoFar.contains(typedDigits) {
+            return "+" + typedDigits
+        }
+
+        let digits = Array(digits(in: text))
+        guard !digits.isEmpty else { return "" }
+        guard digits.count > 2 else { return "(" + String(digits) }
+
+        let areaCode = String(digits[..<2])
+        let local = Array(digits[2...])
+        // Every Brazilian mobile has nine digits and starts with 9, so a 9 is grouped 5-4 while it is still being typed.
+        let firstGroup = digits.count == maximumDigits || local.first == "9" ? 5 : 4
+        guard local.count > firstGroup else { return "(\(areaCode)) \(String(local))" }
+        return "(\(areaCode)) \(String(local[..<firstGroup]))-\(String(local[firstGroup...]))"
+    }
+
+    // Text that is anything but one complete Brazilian number is the person's own writing.
+    static func reshapedIfPlain(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let digits = plainDigits(in: trimmed), digits.count >= maximumDigits - 1 else { return trimmed }
+        return formatted(trimmed)
+    }
+
+    static func edited(from previous: String, to typed: String) -> String {
+        guard previous == formatted(previous) else {
+            return plainDigits(in: typed) == nil ? typed : formatted(typed)
+        }
+        // A complete number takes no more keys: one more digit would shift or drop one already typed.
+        if digits(in: previous).count == maximumDigits, onlyInserts(into: previous, giving: typed) {
+            return previous
+        }
+
+        let removedOnlyASeparator = typed.count < previous.count
+            && digits(in: typed) == digits(in: previous)
+        guard removedOnlyASeparator else { return formatted(typed) }
+
+        // A backspace that took only ")" or "-" takes the digit before it too, so deleting never stalls.
+        var characters = Array(previous)
+        let kept = zip(characters, typed).prefix { $0 == $1 }.count
+        guard let digitIndex = characters[..<kept].lastIndex(where: isDigit) else {
+            return formatted(typed)
+        }
+        characters.remove(at: digitIndex)
+        return formatted(String(characters))
+    }
+
+    // 55 is also a DDD, so it goes only after a "+" or past eleven digits; no DDD starts with 0.
+    private static func nationalDigits(in text: String) -> Substring {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var digits = Substring(trimmed.filter(isDigit))
+        if digits.hasPrefix("55"), trimmed.hasPrefix("+") || digits.count > maximumDigits {
+            digits = digits.dropFirst(2)
+        }
+        while digits.first == "0" {
+            digits = digits.dropFirst()
+        }
+        return digits
+    }
+
+    private static func plainDigits(in text: String) -> Substring? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let international = trimmed.hasPrefix("+")
+        let body = international ? trimmed.dropFirst() : Substring(trimmed)
+        guard body.allSatisfy({ isDigit($0) || separators.contains($0) }) else { return nil }
+        let typedDigits = String(body.filter(isDigit))
+        if international, !typedDigits.hasPrefix("55"), !countryCodeSoFar.contains(typedDigits) {
+            return nil
+        }
+        let national = nationalDigits(in: trimmed)
+        // No DDD ends in 0, so a 0800 number is never read as an area code and reshaped.
+        guard national.count <= maximumDigits, national.dropFirst().first != "0" else { return nil }
+        return national
+    }
+
+    private static func onlyInserts(into previous: String, giving typed: String) -> Bool {
+        let old = Array(previous)
+        let new = Array(typed)
+        guard new.count > old.count else { return false }
+        let head = zip(old, new).prefix { $0 == $1 }.count
+        let tail = zip(old.reversed(), new.reversed()).prefix { $0 == $1 }.count
+        return head + tail >= old.count
+    }
+
+    private static func isDigit(_ character: Character) -> Bool {
+        character.isASCII && character.isNumber
+    }
+}
+
 // A name the server or this device filled in is never one the person chose.
 enum ProfileNaming {
     static let placeholderNames: Set<String> = ["", "você", "família"]

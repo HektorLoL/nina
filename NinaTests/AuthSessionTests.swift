@@ -383,6 +383,152 @@ final class AuthSessionTests: XCTestCase {
         }
     }
 
+    func testAMobileNumberTakesItsBrazilianShapeDigitByDigitAsItIsTyped() {
+        XCTAssertEqual(
+            typedPhone("21993972860"),
+            [
+                "(2", "(21", "(21) 9", "(21) 99", "(21) 993", "(21) 9939", "(21) 99397",
+                "(21) 99397-2", "(21) 99397-28", "(21) 99397-286", "(21) 99397-2860"
+            ]
+        )
+    }
+
+    func testALandlineTakesTheShortShapeAndAnElevenDigitNumberTheLongOne() {
+        XCTAssertEqual(
+            Array(typedPhone("2133334444").suffix(5)),
+            ["(21) 3333", "(21) 3333-4", "(21) 3333-44", "(21) 3333-444", "(21) 3333-4444"]
+        )
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("1123456789"), "(11) 2345-6789")
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("11987654321"), "(11) 98765-4321")
+    }
+
+    func testATwelfthDigitIsNeverKept() {
+        XCTAssertEqual(
+            BrazilianPhoneNumber.edited(from: "(21) 99397-2860", to: "(21) 99397-28601"),
+            "(21) 99397-2860"
+        )
+        XCTAssertEqual(
+            BrazilianPhoneNumber.edited(from: "(21) 99397-2860", to: "(21) 959397-2860"),
+            "(21) 99397-2860"
+        )
+        XCTAssertEqual(BrazilianPhoneNumber.digits(in: "219939728601234"), "21993972860")
+    }
+
+    func testANumberInDDD55KeepsItsAreaCodeWhenOneDigitTooManyIsTyped() {
+        XCTAssertEqual(
+            BrazilianPhoneNumber.edited(from: "(55) 99123-4567", to: "(55) 99123-45678"),
+            "(55) 99123-4567"
+        )
+        XCTAssertEqual(
+            BrazilianPhoneNumber.edited(from: "(55) 99123-4567", to: "(55) 991238-4567"),
+            "(55) 99123-4567"
+        )
+        XCTAssertEqual(typedPhone("559912345678").last, "(55) 99123-4567")
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("+55 55 99123-4567"), "(55) 99123-4567")
+    }
+
+    func testBrazilsCountryCodeGoesOnlyAfterAPlusOrWhenMoreThanElevenDigitsArrive() {
+        XCTAssertEqual(BrazilianPhoneNumber.edited(from: "", to: "+55 21 99397-2860"), "(21) 99397-2860")
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("5521993972860"), "(21) 99397-2860")
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("+55 (21) 3333-4444"), "(21) 3333-4444")
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("55991234567"), "(55) 99123-4567")
+        XCTAssertEqual(Array(typedPhone("+5521993972860").prefix(4)), ["+", "+5", "+55", "(2"])
+        XCTAssertEqual(typedPhone("+5521993972860").last, "(21) 99397-2860")
+    }
+
+    func testALeadingZeroIsATrunkPrefixAndNeverPartOfTheAreaCode() {
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("(021) 99397-2860"), "(21) 99397-2860")
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("(055) 99123-4567"), "(55) 99123-4567")
+        XCTAssertEqual(typedPhone("021993972860").last, "(21) 99397-2860")
+    }
+
+    func testBackspaceRemovesOneDigitAtATimeAndNeverStallsOnASeparator() {
+        var shown = "(21) 99397-2860"
+        var steps: [String] = []
+        while !shown.isEmpty, steps.count < 20 {
+            shown = BrazilianPhoneNumber.edited(from: shown, to: String(shown.dropLast()))
+            steps.append(shown)
+        }
+
+        XCTAssertEqual(
+            steps,
+            [
+                "(21) 99397-286", "(21) 99397-28", "(21) 99397-2", "(21) 99397", "(21) 9939",
+                "(21) 993", "(21) 99", "(21) 9", "(21", "(2", ""
+            ]
+        )
+        XCTAssertEqual(
+            BrazilianPhoneNumber.edited(from: "(21) 99397-2860", to: "(21) 993972860"),
+            "(21) 99392-860"
+        )
+        XCTAssertEqual(BrazilianPhoneNumber.edited(from: "(21) 9", to: "(21 9"), "(29")
+        XCTAssertEqual(BrazilianPhoneNumber.edited(from: "(21", to: "21"), "(21")
+        XCTAssertEqual(BrazilianPhoneNumber.edited(from: "+55", to: "+5"), "+5")
+        XCTAssertEqual(BrazilianPhoneNumber.edited(from: "+", to: ""), "")
+    }
+
+    func testAKeyThatIsNotADigitChangesNothingAndNeverCostsADigit() {
+        XCTAssertEqual(BrazilianPhoneNumber.edited(from: "(21) 9", to: "(21) 9*"), "(21) 9")
+        XCTAssertEqual(BrazilianPhoneNumber.edited(from: "(21) 9*", to: "(21) 9"), "(21) 9")
+        XCTAssertEqual(BrazilianPhoneNumber.edited(from: "(21) 9 ", to: "(21) 9"), "(21) 9")
+    }
+
+    func testAStoredNumberWrittenAnyWayOpensInItsBrazilianShape() {
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("21993972860"), "(21) 99397-2860")
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("21 99397 2860"), "(21) 99397-2860")
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("+55 11 99999-0000"), "(11) 99999-0000")
+        XCTAssertEqual(BrazilianPhoneNumber.formatted("(21) 99397-2860"), "(21) 99397-2860")
+        XCTAssertEqual(BrazilianPhoneNumber.formatted(""), "")
+    }
+
+    func testAStoredTextThatIsNotOneCompleteBrazilianNumberOpensAndSavesAsWritten() {
+        XCTAssertEqual(BrazilianPhoneNumber.reshapedIfPlain("21 99397 2860"), "(21) 99397-2860")
+        XCTAssertEqual(BrazilianPhoneNumber.reshapedIfPlain("+55 11 99999-0000"), "(11) 99999-0000")
+        XCTAssertEqual(BrazilianPhoneNumber.reshapedIfPlain("(021) 99397-2860"), "(21) 99397-2860")
+        XCTAssertEqual(BrazilianPhoneNumber.reshapedIfPlain(" (21) 3333-4444 "), "(21) 3333-4444")
+        XCTAssertEqual(
+            BrazilianPhoneNumber.reshapedIfPlain("(21) 3333-4444 ramal 12"),
+            "(21) 3333-4444 ramal 12"
+        )
+        XCTAssertEqual(
+            BrazilianPhoneNumber.reshapedIfPlain("(21) 99397-2860 / (21) 3333-4444"),
+            "(21) 99397-2860 / (21) 3333-4444"
+        )
+        XCTAssertEqual(BrazilianPhoneNumber.reshapedIfPlain("+1 415 555 0100"), "+1 415 555 0100")
+        XCTAssertEqual(BrazilianPhoneNumber.reshapedIfPlain("0800 123 4567"), "0800 123 4567")
+        XCTAssertEqual(BrazilianPhoneNumber.reshapedIfPlain("(21) 9939"), "(21) 9939")
+        XCTAssertEqual(BrazilianPhoneNumber.reshapedIfPlain(""), "")
+    }
+
+    func testTypingInATextKeptAsWrittenStaysFreeUntilItIsAPlainNumberAgain() {
+        XCTAssertEqual(
+            BrazilianPhoneNumber.edited(from: "(21) 3333-4444 ramal 12", to: "(21) 3333-4444 ramal 1"),
+            "(21) 3333-4444 ramal 1"
+        )
+        XCTAssertEqual(
+            BrazilianPhoneNumber.edited(from: "(21) 3333-4444 r", to: "(21) 3333-4444 "),
+            "(21) 3333-4444"
+        )
+        XCTAssertEqual(
+            BrazilianPhoneNumber.edited(from: "+1 415 555 0100", to: "+1 415 555 010"),
+            "+1 415 555 010"
+        )
+        XCTAssertEqual(BrazilianPhoneNumber.edited(from: "+1 415 555 0100", to: "2"), "(2")
+    }
+
+    private func typedPhone(_ keys: String) -> [String] {
+        var shown = ""
+        var steps: [String] = []
+        for key in keys {
+            let next = BrazilianPhoneNumber.edited(from: shown, to: shown + String(key))
+            if next != shown {
+                steps.append(next)
+            }
+            shown = next
+        }
+        return steps
+    }
+
     func testANewAppleAccountIsAskedForItsNameAndANamedOrDebugAccountIsNot() {
         let fresh = AuthUser(id: UUID().uuidString, displayName: "Família", email: nil, provider: .apple)
         let offline = AuthUser(id: UUID().uuidString, displayName: "Você", email: nil, provider: .apple)

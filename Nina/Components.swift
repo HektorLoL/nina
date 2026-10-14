@@ -214,7 +214,8 @@ struct NinaSuccessNote: View {
     }
 }
 
-// A shared age reading lands green, a refusal by Apple or the server lands red, and a person's own "no" stays neutral.
+// A new age reading lands green, a refusal by Apple or the server lands red, and a person's own "no" or an
+// answer that changed nothing stays neutral.
 struct AgeOutcomeNote: View {
     var outcome: InlineAgeOutcome
     var alignment: TextAlignment = .leading
@@ -225,7 +226,7 @@ struct AgeOutcomeNote: View {
             NinaSuccessNote(text: outcome.line)
         case .appleError, .attestFailure, .rejected:
             NinaErrorNote(text: outcome.line, alignment: alignment)
-        case .declined:
+        case .declined, .unchanged:
             Text(outcome.line)
                 .ninaText(.caption, NinaTheme.ink, weight: .medium)
                 .multilineTextAlignment(alignment)

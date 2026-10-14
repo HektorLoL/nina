@@ -281,7 +281,7 @@ final class AgeAssuranceTests: XCTestCase {
             privateDataStore: InMemoryPrivateStore()
         )
 
-        let recorded = await declining.requestInline(for: user)
+        let recorded = await declining.requestInline(for: user, current: .unknown)
 
         XCTAssertNotNil(recorded)
         XCTAssertFalse(declining.needsAgeCheck)
@@ -296,12 +296,188 @@ final class AgeAssuranceTests: XCTestCase {
             privateDataStore: InMemoryPrivateStore()
         )
 
-        let afterError = await failing.requestInline(for: user)
+        let afterError = await failing.requestInline(for: user, current: .unknown)
 
         XCTAssertNil(afterError)
         XCTAssertFalse(failing.needsAgeCheck)
         XCTAssertEqual(failing.inlineOutcome, .appleError)
         XCTAssertFalse(failing.inlineOutcome?.line.contains("!") ?? true)
+    }
+
+    @MainActor
+    func testARetryAppleAnswersAsBeforeSaysSoAndNeverThatTheRangeWasUpdated() async {
+        let user = AuthUser(id: UUID().uuidString, displayName: "Heitor", email: nil, provider: .apple)
+        let held = adult(.selfDeclared, recordedAt: Date(timeIntervalSince1970: 1_000))
+        var recordedAgain = held
+        recordedAgain.recordedAt = Date(timeIntervalSince1970: 2_000)
+        recordedAgain.recheckAfter = Date(timeIntervalSince1970: 9_000)
+        let retry = AgeCheckCoordinator(
+            provider: ScriptedAgeRangeProvider(result: .success(sharing(lower: 18, upper: nil, "self_declared"))),
+            submitter: RecordingSubmitter(answering: recordedAgain),
+            defaults: isolatedDefaults(),
+            privateDataStore: InMemoryPrivateStore()
+        )
+
+        let recorded = await retry.requestInline(for: user, current: held)
+
+        XCTAssertEqual(recorded, recordedAgain)
+        XCTAssertEqual(retry.inlineOutcome, .unchanged)
+        XCTAssertEqual(retry.inlineOutcome?.line, "A Apple manteve a mesma resposta.")
+        XCTAssertFalse(retry.needsAgeCheck)
+        XCTAssertEqual(retry.phase, .idle)
+    }
+
+    @MainActor
+    func testOnlyARetryThatChangedTheReadingSaysTheRangeWasUpdated() async {
+        let user = AuthUser(id: UUID().uuidString, displayName: "Heitor", email: nil, provider: .apple)
+        let held = adult(.selfDeclared, recordedAt: Date(timeIntervalSince1970: 1_000))
+        let confirmed = adult(.confirmed, recordedAt: Date(timeIntervalSince1970: 2_000))
+        let upgrade = AgeCheckCoordinator(
+            provider: ScriptedAgeRangeProvider(result: .success(sharing(lower: 18, upper: nil, "confirmed"))),
+            submitter: RecordingSubmitter(answering: confirmed),
+            defaults: isolatedDefaults(),
+            privateDataStore: InMemoryPrivateStore()
+        )
+
+        _ = await upgrade.requestInline(for: user, current: held)
+
+        XCTAssertEqual(upgrade.inlineOutcome, .updated)
+        XCTAssertEqual(upgrade.inlineOutcome?.line, "Faixa atualizada.")
+
+        let firstShare = AgeCheckCoordinator(
+            provider: ScriptedAgeRangeProvider(result: .success(sharing(lower: 18, upper: nil, "self_declared"))),
+            submitter: RecordingSubmitter(answering: held),
+            defaults: isolatedDefaults(),
+            privateDataStore: InMemoryPrivateStore()
+        )
+
+        _ = await firstShare.requestInline(for: user, current: .unknown)
+
+        XCTAssertEqual(firstShare.inlineOutcome, .updated)
+    }
+
+    @MainActor
+    func testATeenWhoseGuardianCappedTheBandHearsTheRangeWasUpdatedWhenAppleAnswersOlder() async {
+        let user = AuthUser(id: UUID().uuidString, displayName: "Bia", email: nil, provider: .apple)
+        let capped = AgeStatus(
+            status: .minor,
+            band: .twelveToFifteen,
+            bandSource: .guardian,
+            assurance: .confirmed,
+            parentalControlsActive: false,
+            householdMarked: false,
+            trustedAdult: false,
+            mayUseAI: false,
+            mayBuyPremium: false,
+            aiBlocked: false,
+            recordedAt: Date(timeIntervalSince1970: 1_000),
+            recheckAfter: nil,
+            guardianNames: ["Ana"],
+            terms: .unknown
+        )
+        var stillCapped = capped
+        stillCapped.recordedAt = Date(timeIntervalSince1970: 2_000)
+        let older = AgeCheckCoordinator(
+            provider: ScriptedAgeRangeProvider(result: .success(sharing(lower: 16, upper: 17, "confirmed"))),
+            submitter: RecordingSubmitter(answering: stillCapped),
+            defaults: isolatedDefaults(),
+            privateDataStore: InMemoryPrivateStore()
+        )
+
+        _ = await older.requestInline(for: user, current: capped)
+
+        XCTAssertEqual(older.inlineOutcome, .updated)
+    }
+
+    @MainActor
+    func testAnOperatorsMarkIsNeverAskedOfAppleAgainWhenTheRegulatoryFeaturesChange() async {
+        let user = AuthUser(id: UUID().uuidString, displayName: "Heitor", email: nil, provider: .apple)
+        let defaults = isolatedDefaults()
+        let privateStore = InMemoryPrivateStore()
+        let answer = sharing(lower: 18, upper: nil, "self_declared")
+        let before = ["declared_age_range_required"]
+        let after = ["declared_age_range_required", "significant_app_change_requires_parental_consent"]
+
+        let firstLaunch = AgeCheckCoordinator(
+            provider: ScriptedAgeRangeProvider(result: .success(answer), regulatory: before),
+            submitter: RecordingSubmitter(),
+            defaults: defaults,
+            privateDataStore: privateStore
+        )
+        _ = await firstLaunch.evaluate(
+            user: user,
+            age: adult(.selfDeclared, recordedAt: Date(timeIntervalSince1970: 1_000)),
+            isVerified: true,
+            isLocalContext: false
+        )
+
+        let markedSubmitter = RecordingSubmitter()
+        let marked = AgeCheckCoordinator(
+            provider: ScriptedAgeRangeProvider(result: .success(answer), regulatory: after),
+            submitter: markedSubmitter,
+            defaults: defaults,
+            privateDataStore: privateStore
+        )
+        let afterMark = await marked.evaluate(
+            user: user,
+            age: adult(.operatorSet, recordedAt: Date(timeIntervalSince1970: 2_000)),
+            isVerified: true,
+            isLocalContext: false
+        )
+
+        XCTAssertNil(afterMark)
+        XCTAssertEqual(marked.phase, .idle)
+        let sentForMark = await markedSubmitter.submitted()
+        XCTAssertTrue(sentForMark.isEmpty)
+
+        let declaredSubmitter = RecordingSubmitter()
+        let declared = AgeCheckCoordinator(
+            provider: ScriptedAgeRangeProvider(result: .success(answer), regulatory: after),
+            submitter: declaredSubmitter,
+            defaults: defaults,
+            privateDataStore: privateStore
+        )
+        _ = await declared.evaluate(
+            user: user,
+            age: adult(.selfDeclared, recordedAt: Date(timeIntervalSince1970: 2_000)),
+            isVerified: true,
+            isLocalContext: false
+        )
+
+        let sentForDeclared = await declaredSubmitter.submitted()
+        XCTAssertEqual(sentForDeclared, [answer])
+    }
+
+    func testAReadingIsItsStatusBandAssuranceAndParentalControlsAndNeverItsTimestamp() {
+        let held = adult(.selfDeclared, recordedAt: Date(timeIntervalSince1970: 1_000))
+
+        var restamped = held
+        restamped.recordedAt = Date(timeIntervalSince1970: 2_000)
+        restamped.recheckAfter = Date(timeIntervalSince1970: 3_000)
+        restamped.mayUseAI = true
+        XCTAssertTrue(restamped.readsTheSame(as: held))
+
+        var confirmed = held
+        confirmed.assurance = .confirmed
+        XCTAssertFalse(confirmed.readsTheSame(as: held))
+
+        var supervised = held
+        supervised.parentalControlsActive = true
+        XCTAssertFalse(supervised.readsTheSame(as: held))
+
+        var minor = held
+        minor.status = .minor
+        minor.band = .sixteenToSeventeen
+        var younger = minor
+        younger.band = .twelveToFifteen
+        XCTAssertFalse(minor.readsTheSame(as: held))
+        XCTAssertFalse(younger.readsTheSame(as: minor))
+    }
+
+    func testTheUnchangedLineIsNeutralAndDiffersFromTheUpdatedOne() {
+        XCTAssertNotEqual(InlineAgeOutcome.unchanged.line, InlineAgeOutcome.updated.line)
+        XCTAssertFalse(InlineAgeOutcome.unchanged.line.contains("!"))
+        XCTAssertFalse(InlineAgeOutcome.unchanged.line.localizedCaseInsensitiveContains("atualizad"))
     }
 
     @MainActor
@@ -341,6 +517,26 @@ final class AgeAssuranceTests: XCTestCase {
         )
     }
 
+    private func adult(_ assurance: AgeAssuranceLevel, recordedAt: Date) -> AgeStatus {
+        let trusted = assurance == .confirmed
+        return AgeStatus(
+            status: .adult,
+            band: nil,
+            bandSource: .apple,
+            assurance: assurance,
+            parentalControlsActive: false,
+            householdMarked: false,
+            trustedAdult: trusted,
+            mayUseAI: trusted,
+            mayBuyPremium: trusted,
+            aiBlocked: false,
+            recordedAt: recordedAt,
+            recheckAfter: nil,
+            guardianNames: [],
+            terms: .unknown
+        )
+    }
+
     private func isolatedDefaults() -> UserDefaults {
         let name = "AgeAssuranceTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name) ?? .standard
@@ -371,18 +567,29 @@ private final class InMemoryPrivateStore: PrivateLocalDataStoring {
 
 private struct ScriptedAgeRangeProvider: AgeRangeProviding {
     var result: Result<AgeSignal, Error>
+    var regulatory: [String]?
+
+    init(result: Result<AgeSignal, Error>, regulatory: [String]? = nil) {
+        self.result = result
+        self.regulatory = regulatory
+    }
 
     func requestAgeRange() async throws -> AgeSignal {
         try result.get()
     }
 
     func requiredRegulatoryFeatures() async -> [String]? {
-        nil
+        regulatory
     }
 }
 
 private actor RecordingSubmitter: AgeSignalSubmitting {
     private var signals: [AgeSignal] = []
+    private let answer: AgeStatus
+
+    init(answering answer: AgeStatus = .unknown) {
+        self.answer = answer
+    }
 
     func submitted() -> [AgeSignal] {
         signals
@@ -390,7 +597,7 @@ private actor RecordingSubmitter: AgeSignalSubmitting {
 
     func submit(_ signal: AgeSignal, for user: AuthUser) async throws -> AgeStatus {
         signals.append(signal)
-        return .unknown
+        return answer
     }
 }
 

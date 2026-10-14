@@ -65,7 +65,7 @@ struct MemberDetailView: View {
                             row("Em aberto", "\(store.openTaskCount(for: member))")
                             if member.role == .pet, !member.petSpecies.isEmpty {
                                 NinaDivider(inset: 0)
-                                row("Bicho", [member.petSpecies, member.petBreed].filter { !$0.isEmpty }.joined(separator: " · "))
+                                row("Bicho", member.petSpecies)
                             }
                             if member.role == .pet, let birthDate = member.birthDate,
                                let age = PetAge.label(birthDate: birthDate) {

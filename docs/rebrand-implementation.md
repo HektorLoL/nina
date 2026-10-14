@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-10-05
+Last updated: 2026-10-13
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -640,6 +640,44 @@ No board draws any of these; each reuses a part the app already has.
 - **The Premium chat row reads "50/dia".** The paywall's comparison table drew
   "30 por hora"; Heitor moved Premium to a daily limit on 2026-10-05, so the
   row, the chat's ceiling notice and the FAQ say 50 a day.
+
+## 6m. Phone, pet species and the age retry (2026-10-13)
+
+No board draws any of these; each reuses a part the app already has.
+
+- **"Telefone" takes its shape as it is typed.** `21993972860` reads
+  "(21) 99397-2860" and a landline "(21) 3333-4444"; a number whose local part
+  starts with 9 is grouped 5-4 from its eighth digit, because every Brazilian
+  mobile has nine digits, so the hyphen never jumps back while a mobile is
+  typed. Brazil's 55 goes only after a "+" (typed, pasted or autofilled) or
+  when more than eleven digits arrive, because 55 is also the DDD of Santa
+  Maria; a leading 0 goes, since no DDD starts with 0. A complete number takes
+  no more digits wherever they are typed, and a backspace that would only take
+  ")" or "-" takes the digit before it. A number stored before the field had a
+  shape is reshaped only when it is nothing but one complete Brazilian number;
+  anything else ("ramal 12", a second number, a foreign one) opens and saves as
+  written, and typing in it stays free until it is a plain number again. A
+  caret placed mid-number still jumps to the end after the digits regroup. The
+  profile keeps the formatted text (`BrazilianPhoneNumber`); nothing reads its
+  digits.
+- **A pet's "Espécie" is a menu, and "Raça" is gone.** The field is a grout
+  menu, "Escolher" until chosen, offering Cachorro, Gato, Pássaro, Peixe,
+  Coelho, Hamster, Tartaruga and Outro; Outro opens a "Qual?" field. The stored
+  value is still the plain word. A pet saved since writes no breed, and the
+  member screen's "Bicho" row shows the species alone. A breed typed before
+  stays in `family_members.pet_breed`, and nina-chat still sends it to the
+  model, until that pet is saved again.
+- **"Tentar de novo" says when Apple answered as before.** On the chat's age
+  gate and the minor screens, a share that left status, band, assurance and
+  parental controls as they were reads "A Apple manteve a mesma resposta." in
+  ink, with no tick, and only when Apple's own answer is the reading already
+  shown; "Faixa atualizada." in moss is kept for a reading that changed. On the
+  chat's gate it adds "A conversa abre quando a Apple confirmar sua idade.",
+  because a self-declared answer never opens the chat. This does not unlock the
+  chat for a self-declared adult. An operator's mark is no longer re-asked of
+  Apple when the required regulatory features change, the one launch path that
+  could replace it, but the server still overwrites `operator` with any signal
+  an account records.
 
 ## 7. Verified
 
