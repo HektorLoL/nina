@@ -2015,7 +2015,7 @@ the project, not bugs to fix unprompted.
   it: the full name in Auth user metadata (`full_name` and `display_name` in
   `raw_user_meta_data`), which is also their profile name and the name their
   house copied (§12, "'Família' is the server's word"), and the email; nothing
-  rewrites or removes those. `CURRENT_PROJECT_VERSION` is 12. The App Review
+  rewrites or removes those. `CURRENT_PROJECT_VERSION` was 12. The App Review
   notes carry the Sign in with Apple paragraph in
   `docs/production-launch-runbook.md` §6 word for word. The email switch is on
   in production Auth since 2026-10-05 (Heitor, §12); the release blockers left
@@ -2025,6 +2025,22 @@ the project, not bugs to fix unprompted.
   names it by the given name alone; one that blanks the name sees the field.
   Build 10 asks adults for the email; the website privacy page names the
   builds, so it stays true while build 10 is still installed.
+- **Build 13 (2026-10-14) carries the tour and everything since build 12.**
+  Archived from the sources tagged `testflight-1.0-13` with
+  `CURRENT_PROJECT_VERSION` 13; the online production preflight against the
+  archive read 0 failures and 0 warnings. It brings the tour of the four tabs
+  (`OnboardingTutorialView`, §5), "Passar a casa", "Titular" and "Sair da
+  casa" (migrations `202610050001` and `…0003`), "50 mensagens por dia" in
+  the chat ceiling and the paywall (`…0004`), the Nina tab's mark, the phone
+  that formats as it is typed, the pet species menu without breed, "A Apple
+  manteve a mesma resposta." after a retry that changed nothing, the FAQ
+  "Quem pode conversar com a Nina?" and the parental-controls gates (D3).
+  Heitor's play test of build 12 (2026-10-13) proved on a device what build
+  12 still lacked: an account deletion against `delete-account` v7 (200),
+  App Attest registration and assertion on a real iPhone, and a brand-new
+  account named by Apple's given name alone, with no email and no name in
+  Auth. An account that finished build 12's rehearsal keeps its tutorial
+  flag, so it meets the tour only through Ajustes › "Rever a demonstração".
 - **Migration `202609290009` is applied to production (2026-09-30).** It
   revokes `can_manage_family`, `is_family_member` and `is_family_creator` from
   every API role and makes `shares_family_with` answer only about the caller.
