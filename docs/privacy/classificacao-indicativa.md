@@ -271,4 +271,7 @@ Written so far:
   classificacaoindicativa@mj.gov.br, listed on the ClassInd page, the gov.br
   service page and the Guia's "Contatos úteis" (p. 134). The letter names the
   company and its CNPJ, so it lives outside this public repository, in
-  Heitor's notes. Not sent yet.
+  Heitor's notes.
+- 2026-10-14: Heitor sent it by email to classificacaoindicativa@mj.gov.br.
+  No protocol number came back with the email. If there is no answer by
+  2026-11-13, call (61) 2025-9061 with the date of the email.
