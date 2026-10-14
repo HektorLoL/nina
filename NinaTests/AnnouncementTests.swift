@@ -27,6 +27,27 @@ final class AnnouncementTests: XCTestCase {
         )
     }
 
+    func testAReplayNeverFilesTheNewsBoardUnseen() throws {
+        let suiteName = "AnnouncementTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let user = AuthUser(id: UUID().uuidString, displayName: "Ana", email: nil, provider: .apple)
+        OnboardingStore(defaults: defaults).finishTour(for: user)
+
+        let store = OnboardingStore(defaults: defaults)
+        store.replayTutorial()
+        store.finishTour(for: user)
+
+        XCTAssertEqual(
+            AnnouncementGate.decision(
+                seenBoardID: "",
+                board: board,
+                finishedTutorialThisLaunch: store.completedTutorialUserIDs.contains(user.id)
+            ),
+            .present
+        )
+    }
+
     func testAnEmptyBoardNeverOpens() {
         let empty = NinaAnnouncementBoard(id: "empty", items: [])
 

@@ -14,7 +14,7 @@ struct NinaChatView: View {
     @State private var composerDraft = ""
 
     // An example never names a person or a pet: this house may not have them.
-    private static let captureExamples = [
+    static let captureExamples = [
         "Acabou o café",
         "Autorização da escola até sexta",
         "Um dia, pintar a sala"
@@ -1117,19 +1117,25 @@ private struct NinaTypingBubble: View {
             NinaMark(size: 22, presence: .reading)
                 .padding(.top, 4)
 
-            Text("Lendo")
-                .ninaText(.caption, NinaTheme.muted)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 11)
-                .background(
-                    NinaTheme.grout,
-                    in: RoundedRectangle(cornerRadius: NinaTheme.Radius.card, style: .continuous)
-                )
+            NinaReadingCapsule()
 
             Spacer(minLength: 40)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("A Nina está lendo")
+    }
+}
+
+struct NinaReadingCapsule: View {
+    var body: some View {
+        Text("Lendo")
+            .ninaText(.caption, NinaTheme.muted)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(
+                NinaTheme.grout,
+                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.card, style: .continuous)
+            )
     }
 }
 
@@ -1174,7 +1180,7 @@ private struct MessageBubble: View {
                 }
 
                 if showsDisclaimer {
-                    Text("A Nina pode ler errado. Nada entra sem você confirmar.")
+                    Text(NinaProposalCopy.disclaimer)
                         .ninaText(.meta, NinaTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1484,6 +1490,9 @@ private struct NinaProposalCard: View {
     @State private var isConfirmingShare = false
     @State private var resolveFailure: String?
 
+    @ScaledMetric(relativeTo: .caption) private var tagGlyphSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .subheadline) private var metaGlyphSize: CGFloat = 13
+
     init(proposal: NinaProposal) {
         self.proposal = proposal
         _draftTitle = State(initialValue: proposal.payload.title)
@@ -1514,13 +1523,13 @@ private struct NinaProposalCard: View {
     }
 
     private var pendingTag: some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: proposal.kind == .memory ? "lock" : "plus")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: tagGlyphSize, weight: .semibold))
                 .foregroundStyle(NinaTheme.faint)
                 .accessibilityHidden(true)
 
-            Eyebrow(text: proposal.kind == .memory ? "Ainda não guardada" : "Ainda não existe")
+            Eyebrow(text: proposal.kind == .memory ? "Ainda não guardada" : NinaProposalCopy.pending)
         }
     }
 
@@ -1751,7 +1760,7 @@ private struct NinaProposalCard: View {
     private func metaPairView(_ pair: MetaPair) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: pair.systemName)
-                .font(.system(size: 13, weight: .regular))
+                .font(.system(size: metaGlyphSize, weight: .regular))
                 .foregroundStyle(NinaTheme.muted)
 
             Text(pair.value)

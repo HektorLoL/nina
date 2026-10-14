@@ -151,7 +151,6 @@ enum AppEntryRouting {
         if inputs.reachedMajority { return .majority }
         if inputs.needsTermsAcceptance { return .termsAcceptance }
         if inputs.hasPendingInvite { return .invite }
-        if inputs.shouldShowTutorial { return .tutorial }
 
         switch inputs.homeAccessState {
         case .loading:
@@ -165,7 +164,8 @@ enum AppEntryRouting {
         case .unavailable, .minorMember:
             return .homeUnavailable
         case .authorized:
-            return .app
+            // The tour runs only over an authorized house, so it always ends in the app.
+            return inputs.shouldShowTutorial ? .tutorial : .app
         }
     }
 }
@@ -242,6 +242,14 @@ struct AppRootView: View {
         .onChange(of: store.hasActiveHome) { _, _ in
             selectedTab = .nina
             tabRouter = TabRouter()
+            onboardingStore.cancelReplay()
+        }
+        .onChange(of: entryPhase) { old, new in
+            guard old == .tutorial, new == .app else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                AccessibilityNotification.ScreenChanged(nil).post()
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             // The app-switcher snapshot is taken while inactive; a boleto reading
@@ -332,6 +340,26 @@ struct AppRootView: View {
         )
     }
 
+    private var tourContext: TourContext {
+        TourContext(
+            name: OnboardingTour.greetingName(
+                displayName: authSession.currentUser?.displayName,
+                sharedGivenName: authSession.sharedGivenName
+            ),
+            houseNames: store.familyGroup.members.filter { $0.role != .assistant }.map(\.name),
+            chat: TourChatState(
+                canUseNinaAI: store.canUseNinaAI,
+                requiresConsent: store.requiresAIMemoryConsent,
+                hasConsent: store.hasAIMemoryConsent,
+                isBlocked: store.isAIBlocked,
+                isAdult: store.isAdultViewer,
+                needsConfirmedAge: store.needsConfirmedAgeForChat
+            ),
+            isReplay: onboardingStore.hasCompletedTutorial(for: authSession.currentUser),
+            now: .now
+        )
+    }
+
     private func loadHomeAndAge() async {
         let user = authSession.currentUser
         await store.activateHomeContext(for: user)
@@ -368,8 +396,12 @@ struct AppRootView: View {
             AgeMajorityView(reason: store.hasUnrecordedTermsFootnote ? .termsNotYetRecorded : .termsChanged)
                 .transition(.opacity)
         case .tutorial:
-            OnboardingTutorialView()
-                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 1.01)))
+            OnboardingTutorialView(context: tourContext) { selectedTab = $0 }
+                .transition(
+                    reduceMotion
+                        ? .opacity
+                        : .asymmetric(insertion: .opacity.combined(with: .scale(scale: 1.01)), removal: .opacity)
+                )
         case .homeLoading:
             AppWaitingScreen()
                 .transition(.opacity)
@@ -977,10 +1009,20 @@ struct AppWaitingScreen: View {
     }
 }
 
+// Where no home indicator sits under the bar its titles meet the display edge, so the bar keeps its own clearance there.
+enum TabBarClearance {
+    static let tourPillReachBelowTitle: CGFloat = 2
+
+    static func bottomPadding(meetsDisplayEdge: Bool) -> CGFloat {
+        meetsDisplayEdge ? 8 : 2
+    }
+}
+
 private struct BottomTabBar: View {
     @Environment(AppStore.self) private var store
     var selectedTab: AppTab
     var select: (AppTab) -> Void
+    @State private var meetsDisplayEdge = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -1028,13 +1070,16 @@ private struct BottomTabBar: View {
             }
         }
         .padding(.top, 9)
-        .padding(.bottom, 2)
+        .padding(.bottom, TabBarClearance.bottomPadding(meetsDisplayEdge: meetsDisplayEdge))
         .background(alignment: .top) {
             NinaTheme.ground
                 .overlay(alignment: .top) {
                     Rectangle().fill(NinaTheme.line).frame(height: 1)
                 }
                 .ignoresSafeArea(edges: .bottom)
+        }
+        .onGeometryChange(for: Bool.self) { $0.safeAreaInsets.bottom < 1 } action: { meets in
+            meetsDisplayEdge = meets
         }
     }
 
@@ -1063,7 +1108,7 @@ private struct BottomTabBar: View {
     }
 }
 
-private extension AppTab {
+extension AppTab {
     var title: String {
         switch self {
         case .nina: "Nina"

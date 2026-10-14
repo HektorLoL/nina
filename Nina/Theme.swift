@@ -199,6 +199,9 @@ private struct NinaTextModifier: ViewModifier {
     let color: Color
     let weight: Font.Weight
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    // The sans face is metered at the view's own size, so a `.dynamicTypeSize` clamp holds for it as it does for Fraunces.
     func body(content: Content) -> some View {
         content
             .font(
@@ -206,7 +209,10 @@ private struct NinaTextModifier: ViewModifier {
                     ? .custom("Fraunces", size: style.size, relativeTo: style.textStyle)
                     : Font(
                         UIFontMetrics(forTextStyle: style.uiTextStyle).scaledFont(
-                            for: UIFont.systemFont(ofSize: style.size, weight: weight.uiWeight)
+                            for: UIFont.systemFont(ofSize: style.size, weight: weight.uiWeight),
+                            compatibleWith: UITraitCollection(
+                                preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize)
+                            )
                         )
                     )
             )

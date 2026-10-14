@@ -3628,10 +3628,13 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(AppEntryRouting.phase(for: inputs), .invite)
 
         inputs.hasPendingInvite = false
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .homeSetup)
+
+        inputs.homeAccessState = .authorized
         XCTAssertEqual(AppEntryRouting.phase(for: inputs), .tutorial)
 
         inputs.shouldShowTutorial = false
-        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .homeSetup)
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .app)
 
         inputs.isSignedIn = false
         inputs.needsAgeCheck = true
@@ -3639,7 +3642,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     func testANonAdultNeverMeetsTheInviteTheTutorialOrTheHouseSetup() {
-        let inputs = AppEntryInputs(
+        var inputs = AppEntryInputs(
             isSignedIn: true,
             needsAgeCheck: false,
             homeAccessState: .noHome,
@@ -3649,6 +3652,64 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
 
         XCTAssertEqual(AppEntryRouting.phase(for: inputs), .minorRoot)
+
+        inputs.homeAccessState = .authorized
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .minorRoot)
+    }
+
+    func testTheTourWaitsForAnOpenHouseSoItAlwaysEndsInTheApp() {
+        var inputs = AppEntryInputs(
+            isSignedIn: true,
+            needsAgeCheck: false,
+            homeAccessState: .noHome,
+            viewerIsAdult: true,
+            hasPendingInvite: false,
+            shouldShowTutorial: true
+        )
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .homeSetup)
+
+        inputs.homeAccessState = .pendingApproval
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .pendingApproval)
+
+        inputs.homeAccessState = .accessDecision
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .accessDecision)
+
+        inputs.homeAccessState = .authorized
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .tutorial)
+    }
+
+    func testAHouseThatCannotBeVerifiedNeverShowsTheTour() {
+        for state in [HomeAccessState.unavailable, .minorMember] {
+            let inputs = AppEntryInputs(
+                isSignedIn: true,
+                needsAgeCheck: false,
+                homeAccessState: state,
+                viewerIsAdult: true,
+                hasPendingInvite: false,
+                shouldShowTutorial: true
+            )
+            XCTAssertEqual(AppEntryRouting.phase(for: inputs), .homeUnavailable, "\(state)")
+        }
+    }
+
+    func testTheTermsAndTheInviteStillComeBeforeTheTour() {
+        var inputs = AppEntryInputs(
+            isSignedIn: true,
+            needsAgeCheck: false,
+            homeAccessState: .authorized,
+            viewerIsAdult: true,
+            needsTermsAcceptance: true,
+            hasPendingInvite: false,
+            shouldShowTutorial: true
+        )
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .termsAcceptance)
+
+        inputs.needsTermsAcceptance = false
+        inputs.hasPendingInvite = true
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .invite)
+
+        inputs.hasPendingInvite = false
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .tutorial)
     }
 
     @MainActor

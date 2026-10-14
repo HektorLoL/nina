@@ -725,6 +725,15 @@ final class OnboardingStore {
         isReplayingTutorial = false
     }
 
+    // A replay closes without counting as a first completion, so the news gate keeps its meaning.
+    func finishTour(for user: AuthUser?) {
+        guard hasCompletedTutorial(for: user) else {
+            completeTutorial(for: user)
+            return
+        }
+        cancelReplay()
+    }
+
     func replayTutorial() {
         isReplayingTutorial = true
     }

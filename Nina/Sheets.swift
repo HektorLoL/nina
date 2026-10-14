@@ -616,7 +616,7 @@ struct SettingsSheet: View {
                 dismiss()
             } label: {
                 SettingsLinkRow(
-                    title: "Rever o tutorial",
+                    title: "Rever a demonstração",
                     systemName: "play.circle",
                     destination: .action
                 )

@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -678,6 +678,156 @@ No board draws any of these; each reuses a part the app already has.
   Apple when the required regulatory features change, the one launch path that
   could replace it, but the server still overwrites `operator` with any signal
   an account records.
+
+## 6n. The tour (2026-10-14)
+
+Heitor asked for the tutorial to read as a demonstration: Nina, beside her
+mark, says one line per tab over a small animated example, and the last tap
+lands in the app. No board draws it; these are the departures it makes.
+
+- **The tour runs after house setup.** `AppEntryRouting` shows `.tutorial`
+  only once the house is authorized, so a new owner meets "Toda casa começa com
+  um nome." first and a joiner meets the tour the moment they are approved; the
+  tour always ends in the app, never before a house exists.
+- **"Demonstração" is a grout capsule tag**, the eyebrow in `muted` on grout
+  (the `PremiumBadge` shape), not a bare faint eyebrow: Heitor asked that the
+  screen read as a demonstration at a glance, and a bare eyebrow was the
+  faintest text on it. The header is chrome, like the bar, so its type stops at
+  `xxxLarge` and both the tag and the skip show the Large Content Viewer; there
+  the tag and the trailing skip still share one row, and if they ever cannot,
+  the skip keeps the trailing edge on a row of its own. On the close the hidden
+  skip leaves no empty line. The skip, like every quiet `NinaButton`, is at
+  least 44 pt wide as well as tall ("Pular" alone is 41 pt).
+- **Fraunces in Nina's tour bubble.** The bubble is the live Nina bubble (the
+  cobalt wash, radius 20, 14/12 padding), but its text is Fraunces (`.title` on
+  the greeting and the close, `.section` on the tab steps), because these are
+  Nina's authored words. The live chat bubble stays SF. On a tab step the
+  bubble fills the row, so its right edge meets the tray's on the gutter; the
+  greeting and the close hug their text and break between their two sentences.
+  Every bubble draws `OnboardingTour.drawnLine`, which binds each line's last
+  two words with a no-break space, and binds to the next word every one-letter
+  word and the short words "um", "na", "no", "de", "da", "do" and "eu", so no
+  bubble ends on one word ("cobrar." alone under "não para") and no line ends
+  on "O", "e", "na" or a sentence's opening "Eu" at any width ("…entrou / na
+  sua casa.", "…vier. / Eu leio…" on an iPhone SE); VoiceOver reads the line as
+  written. "em" stays free: bound to "um minuto," it needs 306 pt of the
+  greeting's 292 pt and pushes its second sentence to three lines, so the
+  greeting keeps "…abas em / um minuto, só com exemplos." (CoreText, Fraunces
+  22 pt at 292 pt and 19 pt at 282 and 255 pt; no other bubble changed its line
+  count). At accessibility sizes the greeting and the close drop the 320 pt cap
+  and use the gutter, and on a tab step the mark above the bubble is 32 pt, so
+  Nina still reads as beside her words and more of the example shows above the
+  button.
+- **The closed Nina step centres its line.** With the chat closed there is no
+  example, so the speech row sits in the middle of the screen, as the greeting
+  and the close do, instead of over an empty glaze. Crossing between it and
+  Hoje replaces the whole step, as the greeting does, so the mark fades and
+  hops in its new place instead of gliding up the screen.
+- **A tab-bar map with a grout pill.** Under the cobalt button, 14 pt below it,
+  sits a copy of the bar (the bar's own titles, glyphs and Nina mark, no dots)
+  with a grout capsule behind the step's tab. The capsule is one width under
+  every tab, 76 pt (scaled with the bar's titles, at most the item less 8 pt a
+  side), so the slide only moves it and it clears the display's corner curve
+  under Nina and Casa. It reaches 4 pt above the glyph and 2 pt below the
+  title (`TabBarClearance.tourPillReachBelowTitle`). Above a home indicator
+  the map and the live bar keep 2 pt under their titles; where the bar meets
+  the display edge (an iPhone SE) both keep 8 pt
+  (`TabBarClearance.bottomPadding`, read from the bar's own bottom safe-area
+  inset), so the pill ends 6 pt above the edge instead of being cut by it, and
+  the map and the bar still line up at the handoff. Before the close each item
+  jumps to that tab's example; on the close, where the pill sits under the tab
+  the app opens on, an item is the app's own tab: a tap leaves the tour there
+  (VoiceOver hint "Abre esta aba.", and no item reads as selected, so
+  "Começar" carries the hint "Abre a aba Nina." or "Abre a aba Hoje."; a replay
+  names no tab). The bar's `xxxLarge` clamp now holds for its titles too,
+  because `.ninaText` meters the sans face at the view's `dynamicTypeSize`. The
+  tour leaves by a plain dissolve (it arrives with a 1.01 scale), so the map
+  and the real bar cross-fade in place instead of the map drifting outwards.
+- **The grout "Exemplo" tray holding a stroked ground card.** Every example sits
+  on a grout tray, radius 28, under the eyebrow "Exemplo", and is drawn on a
+  stroked ground card inside it, so the live grout parts ("Lendo", the semente
+  pill, empty band segments) stay visible. The card sits 12 pt in and takes
+  radius 16, concentric with the tray. Under Increase Contrast the tray takes a
+  1 pt `control` stroke. Nothing in a tray is a control. The tray hugs its
+  example 16 pt under Nina's line, so "Exemplo" always heads the frame it
+  labels; whatever the viewport has left falls below it as plain glaze above
+  the button. No example changes height on a beat (rows, chips and the
+  proposal fade in over room they already hold), so nothing above or below a
+  tray moves while it plays. An earlier pass stretched the tray to the
+  button's fade and centred its content, which left 70 to 150 pt of empty
+  grout above "Exemplo" and under the card on an iPhone 17 Pro and Pro Max and
+  read as a broken container. Where the steps scroll
+  under the button (accessibility sizes), a 32 pt fade from the glaze marks the
+  edge, a matching fade appears under the header once the step is scrolled,
+  the scroll indicator flashes once the step's last beat has played and only
+  when it overflows by more than that fade (an SE step a few points too tall
+  reads complete and does not flash), and every step opens scrolled to its
+  top, so a reader who scrolled down one example meets the next one's line
+  first.
+- **Example rows share one layout.** Live rows each choose between one line and
+  a stacked date; an example's rows choose together, so Hoje never shows two
+  one-line rows over a stacked one. The third Hoje row is "Lavar a louça", short
+  enough that the three hold one line at default size.
+- **The pet as a pawprint circle in the Casa strip.** Live Casa draws a pet with
+  initials and a "Pet" subtitle; the strip has no room for the subtitle, so the
+  pet is a 32 pt grout circle with an ink `pawprint`.
+- **The portrait cropped to the two adults.** The example house is drawn by
+  `HouseholdWorkload.snapshot`, the live rule, which also returns the pet; the
+  tray shows only the two adults' rows, with 22 pt avatars and 20 pt segments
+  (live: 26 and 30), and no headline, message or caption, because Nina's line
+  says "É para conversar, não para cobrar." The axis labels sit over equal
+  thirds (`EqualWidthRow`), so "PARECIDO" is centred over the middle segment;
+  where the three cannot share equal thirds (an iPhone SE) or at accessibility
+  sizes, the axis gives way to the band said after each name, so the Casa
+  example still ends above the button. The band stays in words, so colour is
+  never its only sign, but it is quieter than the name: the name in `.body`
+  ink medium, then "· mais pesado" in `.label` muted regular on its baseline
+  (under the name when the two do not fit one line), as the live axis keeps
+  band words faint over the bars.
+- **The example house never borrows a real name.** `TourSample.cast(avoiding:)`
+  folds every word of the greeting name and of every person and pet in the
+  real house (`TourContext.houseNames`, read by `AppRootView` from the
+  members, so the tour still reads no store) and takes the first of three casts
+  (Dani, Cris, Lia, Paçoca; Rafa, Alex, Nico, Pipoca; Tati, Juca, Bento, Farofa)
+  with no word in common, or "Adulto 1", "Adulto 2", "Criança" and "Pet". A
+  joiner who lives with a real Cris never sees "Cris · leve" in the portrait or
+  Cris handed the late bill on Hoje.
+- **The person's message keeps the live chip on one line.** The example's ink
+  bubble leaves a 16 pt leading gap (the live chat: 44), so "Autorização da
+  escola até sexta" fits one line on an iPhone SE and the Nina example ends
+  above the button there in every chat state. The ink bubble and the proposal
+  face take radius 12 (live: 20), like the semente pill, so no shape 12 pt
+  inside the radius-16 card curves wider than the card.
+- **Tarefas draws what "Tudo" draws, then the two lists behind their chips.**
+  Nina's line says "tudo por categoria, e as compras também", so the example
+  opens on one live category group, "PET · 1" (the live chevron header) over
+  the example house's one pet task, "Vacina", a live-anatomy row with its
+  date, pawprint glyph and owner. Under it sit two inert `NinaChip`s, "Sementes
+  1" and "Compras 1" (the live chips' titles and counts, unset), over the live
+  grout "Pintar a sala · Plante depois" pill. Live Tarefas never stacks
+  Sementes or Compras inside "Tudo"; they are chips that switch the list, so
+  they are drawn as chips, not as group headers. The shopping row ("Café · 1
+  pacote") is not drawn: with it the step ran 32 pt past an iPhone SE's
+  viewport, and the "Compras 1" chip already says the compras live here, while
+  the semente keeps its pill because Nina's second sentence explains it.
+  Counts come from the example house (`groupTasks`, `openSeeds`,
+  `pendingShopping`), no row repeats one Hoje showed, and the spoken
+  description follows the picture ("categoria Pet, 1. Vacina, …. Listas
+  Sementes, 1, e Compras, 1. Pintar a sala, plante depois.").
+- **Nina stops reading before she proposes, and her mark never leaves.** At
+  1.20 s the row's 22 pt mark arrives in its `.reading` presence beside "Lendo"
+  (the live `NinaReadingCapsule`), entering the tree as a reading mark so its
+  capsule breathes as the live one does; at 2.20 s "Lendo" fades and the disc
+  settles into the cup; at 2.42 s the proposal fades in (from 96% scale, at
+  its top leading corner) in the same slot. The proposal and its disclaimer
+  are laid out from the first frame at zero opacity, so the white card has its
+  final height while Nina reads and never grows: when the card grew under the
+  proposal's spring, for about 0.3 s the proposal drew past the card's bottom
+  edge and "16 out., 09:00 · Sem dono" sat on the grout.
+- **No FAB or screen headers in the examples.** Each example draws only the
+  object it teaches; the only chips are Tarefas' two inert list chips,
+  "Sementes 1" and "Compras 1", because those lists live behind chips in the
+  live screen.
 
 ## 7. Verified
 

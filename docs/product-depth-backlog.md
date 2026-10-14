@@ -1,6 +1,6 @@
 # Product depth backlog
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 A file-anchored audit of every product area against the product-depth wishlist, produced by
 twelve independent auditors reading the working tree. Each gap states the user-visible symptom,
@@ -1368,6 +1368,7 @@ been closed; everything else in this document is still open.
 - **Backend:** none
 - **Sketch:** Do NOT extend OnboardingTutorialView: it renders before any home exists, and enqueueRemoteMutation silently no-ops with no active home, so a "create your first task" slide would write nothing. Instead add a FirstRunChecklistCard as the first child of TodayView's VStack (TodayView.swift:12), styled like UnifiedTaskEmptyState (TodayView.swift:359-386), with three rows that set router.presentedSheet to the cases that already exist — .addMemberProfile, .inviteFamily, .addTask — plus a fourth row opening .settings for the notification preference. Derive each row's done-state from store.familyGroup.members.count > 2, store.inviteStatus?.isActive, and !store.tasks.isEmpty, and hide the whole card once all are satisfied or the user dismisses it; persist the dismissal in OnboardingStore alongside the existing per-user completedTutorialUserIDs pattern (Nina/AuthSession.swift:574-607). Separately, derive the quick-prompt chips from real data — pet and child members from store.familyGroup.members and the household name — instead of the Thor/mãe literals.
 - **Progress:** 2026-10-05 — `OnboardingTutorialView` is now a three-step capture → confirm → close rehearsal ("Foi só um ensaio. Nada foi criado."). The Thor/mãe chips are gone (the chat intro is "Jogue uma lembrança aqui."). An empty Hoje says "A casa começa vazia.", and Casa alone offers "Convidar". Still open: `AppEntryRouting` still runs `.tutorial` before `.homeSetup`. After "Criar casa" nothing guides the person through who lives there, inviting the partner or a first task (no first-run checklist).
+- **Progress:** 2026-10-14 — the rehearsal is replaced by a six-step tour that runs after the house exists (`AppEntryRouting` `.authorized` → `.tutorial`) and lands in the app. Still open: no first-run checklist.
 
 #### [HIGH] "Sugestões automáticas" and "Resumo semanal" are placebo toggles read by nothing
 

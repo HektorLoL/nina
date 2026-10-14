@@ -1,6 +1,6 @@
 # Nina: rubric for cutting on-screen text
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 This rubric applies to every screen of the iOS app. A screen passes when it meets every rule in §1 and every rule in its surface section (§2), and when none of the text listed in §3 has been lost. The rules come from Mobbin research on about 90 iOS screens across six surfaces. The strongest references are cited inline.
 
@@ -85,7 +85,7 @@ These count authored words only, as defined in §0 step 4.
 | Welcome / login | ≤ 28 including button labels and legal; ≤ 16 without the legal line. The protected age line makes it 30; the legal text wins |
 | Settings root | ≤ 50, and 1 second line in total (the account row) |
 | Settings sub-screen | ≤ 40, plus protected footers |
-| Tutorial | ≤ 3 screens, ≤ 120 words in total, ≤ 45 per screen |
+| Tour | 6 steps, ≤ 120 authored words in total (Nina's lines, the header, the skip, the buttons, the "Exemplo" legend), ≤ 24 per line; example values and protected lines inside the tray are not counted |
 | Empty state | headline ≤ 6 + one line ≤ 10 + one action ≤ 3 |
 | Filter or group empty | one line ≤ 4 |
 | Chat, empty | ≤ 25 including chips and placeholder |
@@ -157,7 +157,7 @@ The two equal spacers center the brand block in the space above the actions. On 
 - **L2.** The mark, title and tagline share one horizontal center.
   - If the text is ever left-aligned instead, it must sit directly on top of the buttons, as in [Brink](https://mobbin.com/screens/8dbbaa4b-6f0a-4631-9e58-5dd5aeec61b7). It never floats at the top.
 - **L3.** The tagline is one line of 6 words or fewer.
-  - The login screen never explains how the product works. That is the tutorial's job.
+  - The login screen never explains how the product works. That is the tour's job.
   - Only 4 of 16 references add a second line, and none explains the product.
 - **L4.** One door, one button (build 11, 2026-10-04): the black system "Continuar com a Apple" (52pt), which asks Apple for the name alone and never the email (build 12, 2026-10-05; build 11 asked for neither), so Apple's own sheet carries the name row and the welcome adds no word about it; the age range is read after sign-in by the age step (M2). There is no cobalt control on the welcome. No other door; email, code and Google sign-in were removed on 2026-09-26.
   - Word count: Apple's system label is not counted, because the system draws it (§0 step 4 counts what the app writes). The welcome is 6 authored words without the legal line and 29 with it.
@@ -177,32 +177,35 @@ The two equal spacers center the brand block in the space above the actions. On 
 | Legal footnote | "Ao continuar, você aceita os Termos e a Política de Privacidade." | the same, plus "Menores de 18 anos entram numa casa com aprovação de um responsável." (§3 row 18) |
 | Backend unavailable | "Configure o projeto Supabase…" plus the error line | Delete the footer sentence. `configurationMissing` becomes "Não dá para entrar agora. Tente mais tarde." |
 
-### 2.2 Onboarding and tutorial
+### 2.2 Onboarding and the tour
 
 **Rules**
 
-- **O1. At most 3 screens: capture, confirm, close.**
-  - Cut any step that leaves nothing behind and rehearses no gesture the real app has. That removes the "subtract" step and the three question steps.
-  - A question comes back only when something reads its answer, and it is asked where that answer takes effect.
-  - Precedents: [Arc Search](https://mobbin.com/flows/4260d248-66f7-4b8a-952e-81446a19bbd6) teaches by doing; the [Things 3 welcome](https://mobbin.com/flows/084e799a-adc4-4949-9393-6065b518211f) uses about 14 words.
-- **O2. Headlines are 7 words or fewer, with no body line by default.** Allow a body line only for a term the reader may not know, and then one sentence of 12 words or fewer. Precedents: the [Duolingo mascot questions](https://mobbin.com/flows/ac9d2f58-868d-4fd3-a79c-9655ce6b1522) and [Blue Apron](https://mobbin.com/screens/abae8f67-deed-43a5-b14b-12094e2fdac1).
-- **O3. The rehearsal uses the live UI's exact strings**: the same pending tag, the same buttons and the same disclaimer line (§2.5). When a live string changes, the tutorial changes in the same commit.
-- **O4. Use one progress indicator**, the segmented bar. No "Pergunta N de M" text.
-- **O5. One skip per screen**: "Pular" at the top right ("Fechar" on replay).
-- **O6. The closing screen** has a headline of 5 words or fewer, one line of 8 words or fewer, and one button. No recap of what the user just did.
-- **O7. Option labels are 5 words or fewer.** No placeholder option ("É outra coisa") unless tapping it opens a field. Counter-example: [MacroFactor](https://mobbin.com/screens/d0e155ed-6da1-4e5f-a03a-675b24be45c9), with 12–15 words per option.
+- **O1. Six steps on one screen**: a greeting, the four tabs in the bar's order, then a close. The tour runs after the house exists and writes nothing. There is no paging swipe and no tap-anywhere advance.
+- **O2. Nina speaks every line in the first person**: at most 2 sentences and 24 words, the name not counted, ending with a period.
+- **O3. Every example sits on a grout tray under "Exemplo", answers no tap, and uses the live strings** ("Ainda não existe" and the disclaimer through `NinaProposalCopy`, "Lendo", "Sem dono", "Plante depois", the band titles, the category and the "Sementes" and "Compras" chip titles with their counts). Dates come from the live reader and formatter. When a live string or the live proposal card changes, the tour changes in the same commit.
+- **O4. One progress indicator**: the tab-bar map under the button. No "N de M" on screen; VoiceOver hears "Etapa N de 6".
+- **O5. One skip**, "Pular" at the top right ("Fechar" on replay), hidden on the close.
+- **O6. The close is Nina's line plus one button**, "Começar" ("Fechar" on replay). No recap.
+- **O7. "Demonstração" names the screen and "Exemplo" names each picture.** They are two facts (G2).
 - **O8. An adult Apple gave no first name types it where the house first needs it** (build 11; a fallback since build 12): "Seu primeiro nome" with the placeholder "Como a casa chama você" (the minor path's words), under "Nome da casa" when creating, under "Link ou código" when joining, and above "Pedir para entrar" on the invite. No helper line, no separate screen. The create or join button stays disabled until it holds a name; a failed save reads "Não deu para salvar seu nome. Tente de novo." Since build 12 Sign in with Apple asks for the name, and an adult who shared a given name never sees the field (App Review 4.0 refuses asking for a name Apple could have shared); it shows only when Apple gave none, since the server's placeholder "Família" would otherwise become the member's name.
 
 **Target strings**
 
-- **Capture:** "O que está na sua cabeça agora?" with the eyebrow "Ou toque em uma", the example chips and the placeholder "Escreva do seu jeito". Delete "Do jeito que você pensou. Sem data, sem categoria, sem forma certa."
-- **Confirm:**
-  - Nina's bubble: "Li assim. Confere?"
-  - Card and buttons: the live card and live buttons, with "Criar tarefa" or "Criar semente", "Corrigir", "Não".
-  - Disclaimer: the live disclaimer line, word for word.
-  - Delete "A Nina está esperando você." and the 20-word footer.
-  - Replace the inert `NinaCheckbox` with the category glyph.
-- **Close:** "Agora é com você." plus "Foi só um ensaio. Nada foi criado." plus the button "Começar".
+- **Header and controls:** "Demonstração"; "Pular" ("Fechar" on replay, spoken "Pular a demonstração" / "Fechar a demonstração"); "Continuar"; "Começar" ("Fechar" on replay); the tray legend "Exemplo".
+- **Greeting:** "Oi, ‹nome›, eu sou a Nina. Vou mostrar as quatro abas em um minuto, só com exemplos." Without a name: "Oi, eu sou a Nina. Vou mostrar as quatro abas em um minuto, só com exemplos." On replay: "Oi de novo, ‹nome›. Vou mostrar as quatro abas em um minuto, só com exemplos." or "Oi de novo. Vou mostrar as quatro abas em um minuto, só com exemplos."
+- **Nina**, by what the chat tab will show the person:
+  - open: "Na minha aba, você me conta o que pesa, do jeito que vier. Eu leio e proponho o que fazer."
+  - consent still to decide: "Na minha aba, você decide se eu posso ler. Depois me conta o que pesa e eu proponho o que fazer."
+  - age not yet confirmed: "Na minha aba, quando a Apple confirmar sua idade, você me conta o que pesa e eu proponho o que fazer."
+  - closed (blocked, or no chat for this account): "Na minha aba, a conversa comigo não abre nesta conta. Tarefas, compras e a casa continuam com você." (the live gates' "continuam com você"). No example proposal is drawn, and the line sits centred on the screen.
+- **Hoje:** "Em Hoje fica o dia da casa. O que atrasou vem primeiro, sem bronca."
+- **Tarefas:** "Em Tarefas fica tudo por categoria, e as compras também. Semente é vontade sem data e nunca atrasa."
+- **Casa:** "Em Casa ficam as pessoas, os pets e um retrato de quem carrega mais. É para conversar, não para cobrar." (three lines on a 402 pt phone, so the protected "não para cobrar" is never split)
+- **Close:** "Pronto, agora é com você. Nada do que você viu entrou na sua casa."
+- Every line is drawn through `OnboardingTour.drawnLine`: its last two words are joined by a no-break space, and so is every one-letter word and every "um", "na", "no", "de", "da", "do" and "eu" to the word after it, so no bubble ends on one word and no line ends on "O", "e", "é", "na" or a sentence's opening "Eu"; the greeting and the close also break between their sentences. "em" stays free, because binding it pushes the greeting's second sentence to three lines. VoiceOver reads the line as written.
+- **Map hint** (VoiceOver): "Mostra esta aba na demonstração." It holds for the Nina item even when the chat is closed and no example is drawn. On the close a tap on the map opens that tab in the app, and the hint is "Abre esta aba."
+- **"Começar" hint** (VoiceOver, first run only): "Abre a aba Nina." or "Abre a aba Hoje.", the tab the map's pill shows. A replay's "Fechar" has none.
 
 ### 2.3 Settings (`SettingsSheet` and the screens it pushes)
 
@@ -238,9 +241,9 @@ Evidence: 9 reference settings roots show about 77 rows, and none of them has a 
   - A member instead sees `Seu acesso   Participante`.
   - An adult who is not the owner also sees `Sair da casa` (no chevron) at the end of the group. Alert: "Sair desta casa?" / "Suas tarefas ficam com a casa." / "Sair". `Haptics.warning()` arms it. A failure reads "Não deu para sair da casa agora. Tente de novo."
   - The owner (Titular) sees the same row; it opens "Antes, passe a casa." with one "Entendi" and one of three lines: "Em Casa, toque na pessoa, depois em Editar e em Passar a casa. Quando ela aceitar, você pode sair.", "Esperando ‹nome› aceitar a casa. Depois disso, você pode sair." while an offer waits, or "Só outro adulto com conta recebe a casa. Convide alguém primeiro." `Haptics.selection()` opens it.
-- **Ajuda group:** `Rever o tutorial` · `Dúvidas e suporte ›` · `Novidades ›` · `Termos de uso ↗` · `Denunciar um problema ›`
+- **Ajuda group:** `Rever a demonstração` · `Dúvidas e suporte ›` · `Novidades ›` · `Termos de uso ↗` · `Denunciar um problema ›`
   - "Dúvidas e suporte" (2026-10-04) pushes a FAQ grouped under three eyebrows, each answer behind its question (G8: the screen the action opens), and ends with one card: "Ainda com dúvida?", the address, and the cobalt "Escrever para o suporte" (mail with the app and iOS versions, nothing from the house). The website's `/suporte/` shows the same answers (`web/src/support.ts`, held equal by `web/tests/support.test.ts`).
-  - "Novidades" (2026-10-04) shows `NinaAnnouncementBoard.current`: the mark, the title "Novidades da Nina", then the eyebrows "Novo" and "Em breve", each item a 48pt glyph tile (cobalt on the wash for Novo, ink on grout for Em breve), a title of 5 words or fewer and one line of 10 words or fewer. The same board opens by itself once per board id as a sheet over the tabs, with one cobalt "Entendi", never over another sheet and never right after the tutorial. "Em breve" names only work that is planned; an item moves to "Novo" in the build that ships it, under a new board id.
+  - "Novidades" (2026-10-04) shows `NinaAnnouncementBoard.current`: the mark, the title "Novidades da Nina", then the eyebrows "Novo" and "Em breve", each item a 48pt glyph tile (cobalt on the wash for Novo, ink on grout for Em breve), a title of 5 words or fewer and one line of 10 words or fewer. The same board opens by itself once per board id as a sheet over the tabs, with one cobalt "Entendi", never over another sheet and never right after the tour. "Em breve" names only work that is planned; an item moves to "Novo" in the build that ships it, under a new board id.
 - `Sair da conta`
 - `Apagar conta` (in ink)
 - Footer: `Nina 1.0 (4)`
@@ -335,7 +338,7 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - The card carries one pending tag of 3 words or fewer: "Ainda não existe" (a memory uses "Ainda não guardada").
   - The disclaimer is one faint line under the newest Nina reply that has a pending proposal: "A Nina pode ler errado. Nada entra sem você confirmar."
   - Delete `waitingLine` and the composer footer.
-  - The research suggested the one-word tag "Proposta". It is not used here, because the pending statement is protected (§3) and the tutorial mirrors it.
+  - The research suggested the one-word tag "Proposta". It is not used here, because the pending statement is protected (§3) and the tour mirrors it.
   - Precedent: [Claude's single disclaimer](https://mobbin.com/screens/ed3e4d7f-e3e5-44e8-a0ad-649a958ce5fa).
 - **C7. Card anatomy: the tag, the title, then one meta line of glyph + value pairs** (date · owner · quantity).
   - No label column ("Quando" / "Repete" / "Dono").
@@ -512,7 +515,7 @@ These strings may be shortened to the minimum form shown. Every element listed m
 | 8 | Who will read a shared memory, and that sharing is irreversible | Memory share alert | C10 | — |
 | 9 | Memories start private | Memórias empty state, memory card | "Memórias começam privadas." and the two separate buttons | — |
 | 10 | An invite link grants nothing; someone in the house approves | Invite sheet; login invite variant | One line each (§2.1, K7) | — |
-| 11 | Pending state; date and owner on the card face; the "can read it wrong" disclaimer | Proposal card, tutorial | One tag + one disclaimer line per screen (C6) | — |
+| 11 | Pending state; date and owner on the card face; the "can read it wrong" disclaimer | Proposal card, tour (Nina step example) | One tag + one disclaimer line per screen (C6) | — |
 | 12 | Nina keeps no photo, and what OpenAI may keep | Composer, while a photo is attached | "A Nina não guarda a foto. A OpenAI pode guardar por até 30 dias para evitar abuso." | Law-text-gated; privacy-sensitive path (CLAUDE.md §13) |
 | 13 | The card cannot be used to pay a bill | "O que eu li" block on bills | "Para pagar, abra o boleto no banco." | — |
 | 14 | Quiet hours silence a notification but never move it | Avisos | "No silêncio, o aviso chega na hora, sem som." | — |

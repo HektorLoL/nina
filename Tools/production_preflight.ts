@@ -161,6 +161,46 @@ export function ratingMarkOffenders(
   return offenders;
 }
 
+const demonstrationPath = "Nina/OnboardingTutorialView.swift";
+
+const demonstrationMarkers: ReadonlyArray<[string, RegExp]> = [
+  ["AppStore.self", /\bAppStore\.self\b/],
+  ["AppStore(", /\bAppStore\(/],
+  [": AppStore", /:\s*AppStore\b(?!\.)/],
+  ["ProfileStore", /\bProfileStore\b/],
+  ["RemoteHomeBackend", /\bRemoteHomeBackend\b/],
+  ["remoteHomeBackend", /\bremoteHomeBackend\b/],
+  ["enqueueRemoteMutation", /\benqueueRemoteMutation\b/],
+];
+
+const demonstrationStatics = new Set(["taskDueLabel", "inferredDueAt", "self"]);
+
+// The tour reads no household store, so its only AppStore calls are the two pure date helpers.
+export function demonstrationOffenders(source: string): string[] {
+  const found = demonstrationMarkers
+    .filter(([, pattern]) => pattern.test(source))
+    .map(([marker]) => marker);
+  for (const match of source.matchAll(/\bAppStore\.(\w+)/g)) {
+    const marker = `AppStore.${match[1]}`;
+    if (!demonstrationStatics.has(match[1]) && !found.includes(marker)) {
+      found.push(marker);
+    }
+  }
+  return found;
+}
+
+export function demonstrationCheckOffenders(
+  sources: ReadonlyArray<{ path: string; text: string }>,
+): string[] {
+  const source = sources.find((candidate) =>
+    candidate.path === demonstrationPath
+  );
+  if (!source) return [`${demonstrationPath} (missing)`];
+  return demonstrationOffenders(source.text).map((marker) =>
+    `${demonstrationPath}: ${marker}`
+  );
+}
+
 export function legalAgeRuleHolds(input: {
   terms: string;
   familiesPageExists: boolean;
@@ -1315,6 +1355,14 @@ export async function repositoryChecks(
       "The rating mark shows on the welcome and the startup screen, and nowhere else in the app.",
       `ClassIndMark must be drawn only in LoginView.swift and AppLoadingScreen (AppRootView.swift): ${
         ratingMarkOffenders(claimSources).join(", ")
+      }`,
+    ),
+    check(
+      "repository.demonstration-writes-nothing",
+      demonstrationCheckOffenders(claimSources).length === 0,
+      "The tour reads no household store, so it can write nothing to the house.",
+      `Nina/OnboardingTutorialView.swift may call only AppStore.taskDueLabel and AppStore.inferredDueAt: ${
+        demonstrationCheckOffenders(claimSources).join(", ")
       }`,
     ),
     check(

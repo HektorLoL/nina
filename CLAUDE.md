@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -784,10 +784,12 @@ of `AppEntryInputs`) evaluates in strict order: `signedOut` → `ageCheck` →
 `homeLoading` → `homeUnavailable` → `minorRoot` (any viewer whose age status is
 not adult; the four-tab container is never mounted for them) → `majority`
 ("Agora a conta é sua.", once, when Apple confirms an ex-minor is 18) →
-`termsAcceptance` ("Os Termos mudaram.", or "Antes, os Termos.") → `invite` → `tutorial` (adults only) → `pendingApproval` / `accessDecision` /
-`homeSetup` / `app`. A failed membership check reads as unavailable before the
-minor check, because a failed verification leaves age unknown and must not
-show a minor screen. `ageCheck` appears only when the server holds no age row
+`termsAcceptance` ("Os Termos mudaram.", or "Antes, os Termos.") → `invite` →
+`pendingApproval` / `accessDecision` / `homeSetup` / `tutorial` (an adult whose
+house is authorized and who has not seen it on this phone, or asked to again) /
+`app`. A failed membership check reads as unavailable before the minor check,
+because a failed verification leaves age unknown and must not show a minor
+screen. `ageCheck` appears only when the server holds no age row
 for the account, on `recheck_after`, or when `requiredRegulatoryFeatures`
 changes; Apple errors are never recorded as an answer. Sign in with Apple asks
 every account the same, for the name alone, so nothing about the person is
@@ -964,7 +966,14 @@ someone else closed meanwhile; the `.reading` mark's capsule breathes; a
 mark instead of a symbol, and its disc lifts and falls back into the cup each
 time a task closes on this phone (`AppStore.completionPulse`, `NinaMark.hops`).
 Every one is movement on top of a state that already reads still, and Reduce
-Motion removes all five (a row then completes at once).
+Motion removes all five (a row then completes at once). The tour
+(`OnboardingTutorialView`, 2026-10-14) plays once per account per phone over an
+authorized house, reads no `AppStore` (`repository.demonstration-writes-nothing`),
+lands on Nina only for someone who can talk to her, and Reduce Motion or
+VoiceOver opens every example on its final frame. Its example house never
+borrows a word of any name in the real house (`TourSample.cast(avoiding:)`, fed
+the members' names by `AppRootView`), so no real person is drawn in a
+workload band or handed a late example task.
 
 **Accessibility:** decorative overlays are `.allowsHitTesting(false)` +
 `.accessibilityHidden(true)`. Since 2026-10-05 `CategoryGlyph` is silent unless
@@ -976,8 +985,14 @@ its grid when `dynamicTypeSize.isAccessibilitySize`. Type is clamped at
 `accessibility3` (`NinaApp`, raised from `accessibility1` on 2026-09-09), which
 only holds because list rows, chips and buttons size with `minHeight` and every
 user-facing string is metered through `.ninaText` — `.compose` (27pt sans) is
-the capture title's tier. A raw `.font(.system(size:))` on text is a regression;
-on an SF Symbol it is fine.
+the capture title's tier. Since 2026-10-14 `.ninaText` meters its sans face at
+the view's own `dynamicTypeSize` (`UIFontMetrics` with a matching trait
+collection), so that clamp, and the tab bar's `xxxLarge`, hold for SF as they
+already did for Fraunces; before, SF followed the system setting past both. A
+primary or outline `NinaButton` keeps 10 pt above and below a label that
+outgrows its 50 pt minimum, and a quiet one answers to at least 44 pt across
+as well as down ("Pular" alone is 41 pt wide). A raw `.font(.system(size:))` on text is a
+regression; on an SF Symbol it is fine.
 
 **On-screen text follows `docs/text-rubric.md`** (2026-09-23, from ~90 Mobbin
 references): a header is the title only, a settings row has no description line,

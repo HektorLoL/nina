@@ -275,6 +275,47 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertFalse(store.isReplayingTutorial)
     }
 
+    @MainActor
+    func testFinishingOrSkippingTheFirstTourMarksItSeenForThatAccountOnly() throws {
+        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let first = AuthUser(id: UUID().uuidString, displayName: "Ana", email: nil, provider: .apple)
+        let second = AuthUser(id: UUID().uuidString, displayName: "Bia", email: nil, provider: .apple)
+        let store = OnboardingStore(defaults: defaults)
+        XCTAssertTrue(store.shouldShowTutorial(for: first))
+
+        store.finishTour(for: first)
+
+        XCTAssertTrue(store.hasCompletedTutorial(for: first))
+        XCTAssertFalse(store.shouldShowTutorial(for: first))
+        XCTAssertTrue(store.completedTutorialUserIDs.contains(first.id))
+        XCTAssertTrue(defaults.bool(forKey: "nina.onboarding.completed.\(first.id)"))
+        XCTAssertTrue(store.shouldShowTutorial(for: second))
+        XCTAssertFalse(store.hasCompletedTutorial(for: second))
+    }
+
+    @MainActor
+    func testFinishingAReplayClosesItWithoutTouchingWhatIsStored() throws {
+        let suiteName = "AuthSessionTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let user = AuthUser(id: UUID().uuidString, displayName: "Ana", email: nil, provider: .apple)
+        OnboardingStore(defaults: defaults).finishTour(for: user)
+
+        let nextLaunch = OnboardingStore(defaults: defaults)
+        nextLaunch.replayTutorial()
+        XCTAssertTrue(nextLaunch.shouldShowTutorial(for: user))
+
+        nextLaunch.finishTour(for: user)
+
+        XCTAssertFalse(nextLaunch.isReplayingTutorial)
+        XCTAssertTrue(nextLaunch.hasCompletedTutorial(for: user))
+        XCTAssertFalse(nextLaunch.shouldShowTutorial(for: user))
+        XCTAssertTrue(nextLaunch.completedTutorialUserIDs.isEmpty)
+        XCTAssertTrue(defaults.bool(forKey: "nina.onboarding.completed.\(user.id)"))
+    }
+
     func testProviderResolverPrefersAppleForRestoredLinkedIdentity() {
         let result = AuthProviderResolver.resolve(
             identityProviders: ["email", "apple"],

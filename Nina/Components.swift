@@ -289,6 +289,7 @@ struct NinaButtonFace: View {
         }
         .foregroundStyle(foreground)
         .frame(maxWidth: fillsWidth ? .infinity : nil)
+        .padding(.vertical, kind == .quiet ? 0 : 10)
         .frame(minHeight: kind == .quiet ? 26 : 50)
         .padding(.horizontal, kind == .quiet ? 0 : 24)
         .background(background, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
@@ -296,8 +297,9 @@ struct NinaButtonFace: View {
             RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
                 .strokeBorder(kind == .outline ? NinaTheme.control : Color.clear, lineWidth: 1)
         )
-        // A quiet button keeps its 26pt look but answers to a 44pt finger.
+        // A quiet button keeps its 26pt look but answers to a 44pt finger, across as well as down.
         .padding(.vertical, kind == .quiet ? 9 : 0)
+        .frame(minWidth: kind == .quiet ? 44 : nil)
         .contentShape(Rectangle())
     }
 
@@ -400,6 +402,12 @@ struct NinaDivider: View {
 enum PremiumTeaserCopy {
     static let activeTitle = "Premium ativo na casa."
     static let activeSubtitle = "Vale para a casa toda."
+}
+
+// The tour draws the live card's words, so a change here changes both.
+enum NinaProposalCopy {
+    static let pending = "Ainda não existe"
+    static let disclaimer = "A Nina pode ler errado. Nada entra sem você confirmar."
 }
 
 // Premium is named where the resource is spent, never as a nag. Every gate says

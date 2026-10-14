@@ -4,6 +4,8 @@ import {
   appleScopeRequests,
   asksAppleForTheNameAlone,
   containsDebugSignIn,
+  demonstrationCheckOffenders,
+  demonstrationOffenders,
   deploymentChecks,
   deploymentTargetsAtLeast,
   iosArtifactChecks,
@@ -976,6 +978,45 @@ Deno.test("the rating mark is drawn on the welcome and the startup screen and no
     ]),
     ["Nina/LoginView.swift (missing)"],
   );
+});
+
+Deno.test("the tour reads no household store, so it can write nothing", async () => {
+  const path = "Nina/OnboardingTutorialView.swift";
+  const shipped = await Deno.readTextFile(
+    new URL(`../${path}`, import.meta.url),
+  );
+  assertEquals(demonstrationOffenders(shipped), []);
+  assertEquals(demonstrationCheckOffenders([{ path, text: shipped }]), []);
+
+  assertEquals(
+    demonstrationOffenders(
+      "@Environment(AppStore.self) private var store",
+    ),
+    ["AppStore.self"],
+  );
+  assert(
+    demonstrationOffenders("store.enqueueRemoteMutation(change)").includes(
+      "enqueueRemoteMutation",
+    ),
+  );
+  assertEquals(
+    demonstrationOffenders(
+      "let label = AppStore.taskDueLabel(for: date, relativeTo: now)\n" +
+        'dueLabel: AppStore.taskDueLabel(for: due), dueAt: AppStore.inferredDueAt(from: "sexta")',
+    ),
+    [],
+  );
+  assertEquals(demonstrationOffenders("var store: AppStore"), [": AppStore"]);
+  assertEquals(demonstrationOffenders("let store = AppStore()"), ["AppStore("]);
+  assertEquals(
+    demonstrationOffenders("store.tasks = AppStore.houseTasksSectionID"),
+    ["AppStore.houseTasksSectionID"],
+  );
+  assertEquals(
+    demonstrationOffenders("@Environment(ProfileStore.self) var profiles"),
+    ["ProfileStore"],
+  );
+  assertEquals(demonstrationCheckOffenders([]), [`${path} (missing)`]);
 });
 
 Deno.test("both age-assurance entitlements must be declared with their release values", () => {
