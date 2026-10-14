@@ -1,6 +1,6 @@
 # App Store listing — draft for version 1.0
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 The text to paste into App Store Connect for the first submission. It is a
 draft: Heitor approves every line before it is pasted. The name was decided on
@@ -66,7 +66,7 @@ indexes the name and subtitle, so the keywords below never repeat "rotina",
 > PRIVACIDADE
 > • Você entra com a sua conta Apple.
 > • Os registros da casa ficam em servidores no Brasil.
-> • A conversa com a Nina é para adultos com idade confirmada pela Apple, e só depois de aceitar o aviso: o que você escreve vai para a OpenAI, nos Estados Unidos, que pode guardar por até 30 dias para evitar abuso. Nome de criança ou adolescente vai trocado por um código.
+> • A conversa com a Nina é para quem tem 18 anos ou mais na faixa de idade da Apple, e só depois de aceitar o aviso: o que você escreve vai para a OpenAI, nos Estados Unidos, que pode guardar por até 30 dias para evitar abuso. Nome de criança ou adolescente vai trocado por um código.
 > • Sem anúncios e sem rastreamento.
 >
 > NINA PREMIUM
@@ -90,6 +90,11 @@ Re-check before pasting:
   line says; the in-app FAQ says the same.
 - Photo and document reading are off at launch (`NINA_ATTACHMENTS_ENABLED =
   NO`), so the description never sells them.
+- The chat line says 18+ on Apple's range, not a confirmed age, because of
+  decision D3 (2026-10-14). It is true only while production's
+  `private.age_policy.trusted_assurances` holds `self_declared`
+  (`docs/production-launch-runbook.md`, "Measuring the age distribution on
+  TestFlight (decision D3)").
 - The prices are the App Store Connect prices for Brazil; Apple shows the
   current price on the page, and this text must match it.
 - The description ends with the Terms link, which Guideline 3.1.2 asks of an
@@ -121,15 +126,15 @@ Each subscription also needs its own review screenshot of the paywall.
 
 > Nina is a Brazilian household organizer in Portuguese. People sign in with Sign in with Apple only; there is no email or password, so there is no demo account. Please sign in with your own Apple Account.
 >
-> Nina proposes tasks from a chat and nothing is created until a person confirms it. The chat with Nina and the Premium subscription are available only to an adult whose age Apple's Declared Age Range confirms. If your review device does not share a confirmed adult age, the chat shows "A conversa pede idade confirmada." and the paywall is not offered. In that case, reply in this submission with the time you signed in and we will mark the review account as an adult on our server within one business day, or tell us how you prefer to reach those features.
+> Nina proposes tasks from a chat and nothing is created until a person confirms it. The chat with Nina and the Premium subscription are available to an adult whose age Apple's Declared Age Range reports as 18 or older, self-declared or confirmed; deciding for a child or teen needs an age Apple confirmed. Nina asks for the age range right after sign-in. If your review device shares no age, Nina treats the account as a minor's, which can only ask to join a household. In that case, reply in this submission with the time you signed in and we will mark the review account as an adult on our server within one business day, or tell us how you prefer to reach those features.
 >
 > Subscriptions are verified with Apple in production first, then in the sandbox, so purchases made by App Review in the sandbox work.
 >
 > Questions about the age rating (we answered "Livre"):
 > 1. Does content shared inside a closed household of up to 8 approved people count as User-Generated Content or as Messaging?
-> 2. Do features that the server gates to users the Declared Age Range API confirms as 18+ count toward the questionnaire answers?
+> 2. Do features that the server gates to users the Declared Age Range API reports as 18+, self-declared or confirmed, count toward the questionnaire answers?
 > 3. Does "some features are only for adults" in the Terms count as a minimum age requirement?
-> 4. Sign in with Apple is the only sign-in, and the chat and the subscription open only for an adult whose age Apple confirmed. How should the reviewer reach those features?
+> 4. Sign in with Apple is the only sign-in. The chat and the subscription open only for an account whose Declared Age Range answer is 18+, self-declared or confirmed, and decisions about children only for an adult Apple confirmed. How should the reviewer reach these features if the review device shares no age?
 >
 > Age Suitability URL: https://ninai.app/familias/ — Support: https://ninai.app/suporte/
 

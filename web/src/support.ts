@@ -34,9 +34,9 @@ export const supportTopics: readonly SupportTopic[] = [
           "Confira Avisos nos Ajustes da Nina e nos Ajustes do iPhone. Uma tarefa sem data não tem aviso. No silêncio da noite, o aviso chega na hora, sem som.",
       },
       {
-        question: "Por que a conversa pede idade confirmada?",
+        question: "Quem pode conversar com a Nina?",
         answer:
-          "Conversar com a Nina, assinar o Premium e incluir uma criança pedem idade confirmada pela Apple. Tarefas, lembretes e compras funcionam sem isso.",
+          "Quem tem 18 anos ou mais na faixa de idade da Apple, declarada ou confirmada. Depois de aceitar o aviso, você conversa com a Nina e pode assinar o Premium. Incluir uma criança ou um adolescente pede idade confirmada pela Apple.",
       },
     ],
   },

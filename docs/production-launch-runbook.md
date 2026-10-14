@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -409,7 +409,8 @@ schema every adult would see the minor screen.
   a first name beside the invite, prefilled with Apple's. A declared
   (not Apple-confirmed) adult keeps
   the house but sees "A conversa pede idade confirmada." instead of the chat,
-  and no paywall.
+  and no paywall. Since D3 (2026-10-14, below) a self-declared adult chats and
+  can buy Premium once production holds the new policy row.
 - **Children's profiles need a guardian.** An existing child profile reads "Sem
   autorização" until an Apple-confirmed adult taps "Sou responsável"; its
   "Mostrar" list is off until then.
@@ -417,11 +418,19 @@ schema every adult would see the minor screen.
 
 ### Measuring the age distribution on TestFlight (decision D3)
 
-D3 keeps chat, Premium, child profiles and approving a minor for Apple-confirmed
-adults, and lets Heitor admit self-declared adults to chat and Premium later.
-Measure before deciding. Nina records only a status, a band, how Apple obtained
-it and a parental-controls flag — never a birth date or the range's bounds —
-and the counts come from one operator function:
+**Decided 2026-10-14: self-declared adults chat and buy Premium.** The
+all-ages release kept chat, Premium, child profiles and approving a minor for
+Apple-confirmed adults. On 2026-10-14 Heitor's own Brazilian adult account
+still read `self_declared` on every retry, and Apple does not confirm adult
+ages in Brazil, so no real adult could chat or buy. The reasoning, the legal
+reading and the rating cost are in `docs/privacy/lgpd-launch-posture.md`,
+"Decision D3". Acting for a minor stays confirmed-or-operator in
+`private.is_trusted_adult`, whatever the policy row says, and active parental
+controls still mean not trusted.
+
+Nina records only a status, a band, how Apple obtained it and a
+parental-controls flag — never a birth date or the range's bounds — and the
+counts come from one operator function:
 
 ```sql
 select * from private.age_assurance_distribution();
@@ -430,9 +439,10 @@ select * from private.age_assurance_distribution();
 Read it after each TestFlight round. What each row means:
 
 - `adult` / `confirmed` — Apple confirmed 18+ (a `.confirmed` declaration on
-  iOS 26.5, or an ID, payment or other check). Trusted.
+  iOS 26.5, or an ID, payment or other check). Trusted for everything.
 - `adult` / `self_declared` — the person or their Apple Account said 18+
-  without a check. Runs a house; no chat, no Premium, never acts for a minor.
+  without a check. Since D3: runs a house, chats after accepting the notice and
+  buys Premium; never acts for a minor.
 - `adult` / `operator` — marked by Heitor in step 6. Trusted; not evidence of
   how real users come back, so leave these out when reading the ratio.
 - `minor` / any — Apple (or a guardian's lower band) says under 18.
@@ -440,17 +450,43 @@ Read it after each TestFlight round. What each row means:
   failed. Treated as the youngest band.
 - `parental_controls_active = true` — never trusted, whatever the assurance.
 
-If most real adults come back `self_declared`, chat and Premium are unusable for
-them. To admit them to chat and Premium only (acting for a minor stays
-confirmed-or-operator in the SQL, whatever this row says):
+**Apply it once in production**, from the SQL editor, in the same release as
+the website that says so (Terms §4, privacy §3A and §5, `/familias/`,
+`/suporte/`):
 
 ```sql
 update private.age_policy set trusted_assurances = '{confirmed,operator,self_declared}' where singleton;
 ```
 
-Change Terms §4 and privacy §5 in the same release, since both say Apple must
-confirm the age (`docs/privacy/lgpd-launch-posture.md`). Revert with
-`'{confirmed,operator}'`; the policy row can never drop those two.
+**Read it back.** The row must list the three assurances, and a
+self-declared adult must read as allowed to use the AI and buy but not to act
+for a minor:
+
+```sql
+select trusted_assurances from private.age_policy where singleton;
+
+select private.may_use_ai('<self-declared adult auth user id>') as may_use_ai,
+       private.is_trusted_adult('<same id>') as acts_for_minors;
+```
+
+Expect `{confirmed,operator,self_declared}`, then `true` and `false`. A
+`false` in `may_use_ai` means the update did not land or that account has
+active parental controls.
+
+**What testers now see.** A self-declared adult who refreshes the house (pull
+or return to the app) gets the consent card where "A conversa pede idade
+confirmada." was, chats once they accept the notice and its transfer box, sees
+Premium in Ajustes (and "Ver o Premium" when the day's messages run out), and
+counts toward the weekly summary once they accept. The tour lands them on Nina. They still
+cannot approve a minor ("Isso pede idade confirmada pela Apple.") or add or
+answer for a child or teen ("Só um responsável com idade confirmada pela Apple
+cadastra."). Build 12's in-app FAQ still asks
+"Por que a conversa pede idade confirmada?" until people update to the next
+build. The Terms version does not change, so nobody sees "Os Termos mudaram.".
+
+**Revert** with `'{confirmed,operator}'`; the policy row can never drop those
+two. A revert makes the pages above untrue again, so they change back in the
+same release.
 
 ### Age contests and child-safety holds
 
@@ -681,12 +717,15 @@ answers, the rationale per item and the review note are in
    1. Does content shared inside a closed household of up to 8 approved people
       count as User-Generated Content or as Messaging?
    2. Do features that the server gates to users the Declared Age Range API
-      confirms as 18+ count toward the questionnaire answers?
+      reports as 18+, self-declared or confirmed, count toward the
+      questionnaire answers?
    3. Does "some features are only for adults" in the Terms count as a minimum
       age requirement?
-   4. Sign in with Apple is the only sign-in, and the chat and the subscription
-      open only for an adult whose age Apple confirmed. How should the reviewer
-      reach those features?
+   4. Sign in with Apple is the only sign-in. The chat and the subscription
+      open only for an account whose Declared Age Range answer is 18+,
+      self-declared or confirmed, and decisions about children only for an
+      adult Apple confirmed. How should the reviewer reach these features if
+      the review device shares no age?
 
    Record the answers in the rating document. The first submission carries the
    "Livre" (AL) answers with these questions beside them in the notes, so the

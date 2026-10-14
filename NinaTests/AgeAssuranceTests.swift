@@ -357,6 +357,41 @@ final class AgeAssuranceTests: XCTestCase {
     }
 
     @MainActor
+    func testARetryTheServerAnswersWithTheOperatorsMarkLeftInPlaceSaysAppleKeptTheSameAnswer() async {
+        let user = AuthUser(id: UUID().uuidString, displayName: "Heitor", email: nil, provider: .apple)
+        var marked = adult(.operatorSet, recordedAt: Date(timeIntervalSince1970: 1_000))
+        marked.parentalControlsActive = true
+        var markKept = marked
+        markKept.recordedAt = Date(timeIntervalSince1970: 2_000)
+        let retry = AgeCheckCoordinator(
+            provider: ScriptedAgeRangeProvider(
+                result: .success(sharing(lower: 18, upper: nil, "self_declared", controls: ["communication_limits"]))
+            ),
+            submitter: RecordingSubmitter(answering: markKept),
+            defaults: isolatedDefaults(),
+            privateDataStore: InMemoryPrivateStore()
+        )
+
+        _ = await retry.requestInline(for: user, current: marked)
+
+        XCTAssertEqual(retry.inlineOutcome, .unchanged)
+        XCTAssertEqual(retry.inlineOutcome?.line, "A Apple manteve a mesma resposta.")
+
+        var controlsLifted = markKept
+        controlsLifted.parentalControlsActive = false
+        let lifted = AgeCheckCoordinator(
+            provider: ScriptedAgeRangeProvider(result: .success(sharing(lower: 18, upper: nil, "self_declared"))),
+            submitter: RecordingSubmitter(answering: controlsLifted),
+            defaults: isolatedDefaults(),
+            privateDataStore: InMemoryPrivateStore()
+        )
+
+        _ = await lifted.requestInline(for: user, current: marked)
+
+        XCTAssertEqual(lifted.inlineOutcome, .updated)
+    }
+
+    @MainActor
     func testATeenWhoseGuardianCappedTheBandHearsTheRangeWasUpdatedWhenAppleAnswersOlder() async {
         let user = AuthUser(id: UUID().uuidString, displayName: "Bia", email: nil, provider: .apple)
         let capped = AgeStatus(

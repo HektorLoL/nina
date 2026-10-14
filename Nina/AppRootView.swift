@@ -353,7 +353,7 @@ struct AppRootView: View {
                 hasConsent: store.hasAIMemoryConsent,
                 isBlocked: store.isAIBlocked,
                 isAdult: store.isAdultViewer,
-                needsConfirmedAge: store.needsConfirmedAgeForChat
+                needsConfirmedAge: store.chatWaitsForConfirmedAge
             ),
             isReplay: onboardingStore.hasCompletedTutorial(for: authSession.currentUser),
             now: .now

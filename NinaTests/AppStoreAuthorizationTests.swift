@@ -3871,9 +3871,85 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(AppEntryRouting.phase(for: entryInputs(for: store)), .app)
         XCTAssertFalse(store.canUseNinaAI)
         XCTAssertTrue(store.needsConfirmedAgeForChat)
+        XCTAssertTrue(store.chatWaitsForConfirmedAge)
         XCTAssertFalse(store.canBuyPremium)
         XCTAssertFalse(store.canActForMinors)
         XCTAssertEqual(store.messages.count, messageCount)
+    }
+
+    @MainActor
+    func testASelfDeclaredAdultThePolicyAdmitsChatsAndBuysButNeverActsForAMinor() async {
+        let user = makeUser()
+        let adultMember = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        var admitted = AgeStatus.testDeclaredAdult
+        admitted.mayUseAI = true
+        admitted.mayBuyPremium = true
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember], viewerAge: admitted)
+        )
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: PersistedNinaEngine(assistantMessageID: UUID())
+        )
+        await store.activateHomeContext(for: user)
+
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertTrue(store.canUseNinaAI)
+        XCTAssertFalse(store.needsConfirmedAgeForChat)
+        XCTAssertTrue(store.canBuyPremium)
+        XCTAssertFalse(store.canActForMinors)
+    }
+
+    @MainActor
+    func testParentalControlsCloseTheChatWithoutSayingItWaitsForApplesConfirmation() async {
+        let user = makeUser()
+        let adultMember = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        var controlled = AgeStatus.testTrustedAdult
+        controlled.parentalControlsActive = true
+        controlled.trustedAdult = false
+        controlled.mayUseAI = false
+        controlled.mayBuyPremium = false
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember], viewerAge: controlled)
+        )
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: PersistedNinaEngine(assistantMessageID: UUID())
+        )
+        await store.activateHomeContext(for: user)
+
+        XCTAssertFalse(store.canUseNinaAI)
+        XCTAssertTrue(store.needsConfirmedAgeForChat)
+        XCTAssertFalse(store.chatWaitsForConfirmedAge)
+        XCTAssertFalse(store.canBuyPremium)
+        XCTAssertFalse(store.canActForMinors)
+        XCTAssertEqual(
+            TourChatState(
+                canUseNinaAI: store.canUseNinaAI,
+                requiresConsent: store.requiresAIMemoryConsent,
+                hasConsent: store.hasAIMemoryConsent,
+                isBlocked: store.isAIBlocked,
+                isAdult: store.isAdultViewer,
+                needsConfirmedAge: store.chatWaitsForConfirmedAge
+            ),
+            .closed
+        )
     }
 
     @MainActor

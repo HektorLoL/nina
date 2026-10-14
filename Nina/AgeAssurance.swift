@@ -814,9 +814,9 @@ final class AgeCheckCoordinator {
             if signal.outcome == .declined {
                 inlineOutcome = .declined
             } else {
-                // Only Apple's answer matching the reading already shown, left in place, is the same answer.
+                // Only Apple's answer matching the reading already shown, left in place, is the same answer; an operator's mark left in place is too.
                 let answeredAsBefore = status.readsTheSame(as: current)
-                    && current.reads(AgeAssurance.map(signal))
+                    && (current.assurance == .operatorSet || current.reads(AgeAssurance.map(signal)))
                 inlineOutcome = answeredAsBefore ? .unchanged : .updated
             }
             return status

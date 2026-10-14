@@ -6,7 +6,7 @@ import RatingMark from "../components/RatingMark.astro";
 import { legalIdentity } from "../legal";
 import { ninaRating } from "../rating";
 
-const updatedAt = "29 de setembro de 2026";
+const updatedAt = "14 de outubro de 2026";
 const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
 const reportMailto = `mailto:${legalIdentity.reportContactEmail}`;
 
@@ -50,9 +50,9 @@ const capabilities: ReadonlyArray<{
   { what: "Criar ou editar tarefas e compras", answers: ["Sim", "Sim", "Não", "Não"] },
   {
     what: "Conversar com a Nina",
-    answers: ["Sim, depois de aceitar o aviso", "Não", "Não", "Não"],
+    answers: ["Sim, depois de aceitar o aviso", "Sim, depois de aceitar o aviso", "Não", "Não"],
   },
-  { what: "Assinar o Nina Premium", answers: ["Sim", "Não", "Não", "Não"] },
+  { what: "Assinar o Nina Premium", answers: ["Sim", "Sim", "Não", "Não"] },
   { what: "Lembretes de reforço", answers: ["Sim", "Sim", "Nunca", "Não"] },
   {
     what: "Silêncio à noite",
@@ -75,7 +75,7 @@ const capabilities: ReadonlyArray<{
     what: "Nome enviado à OpenAI",
     answers: [
       "O nome, se aceitou a conversa; senão, um código",
-      "Um código",
+      "O nome, se aceitou a conversa; senão, um código",
       "Um código",
       "Um código",
     ],
@@ -84,7 +84,7 @@ const capabilities: ReadonlyArray<{
     what: "Tarefas enviadas à OpenAI",
     answers: [
       "Sim, quando um adulto conversa com a Nina",
-      "Sim, com o nome trocado por um código",
+      "Sim, quando um adulto conversa com a Nina",
       "Nunca",
       "Nunca",
     ],
@@ -93,7 +93,7 @@ const capabilities: ReadonlyArray<{
     what: "Aparecer no retrato da casa e no resumo semanal",
     answers: [
       "No retrato, sim; no resumo, só quem aceitou a conversa",
-      "No retrato, sim; no resumo, não",
+      "No retrato, sim; no resumo, só quem aceitou a conversa",
       "Nunca",
       "Nunca",
     ],
@@ -168,16 +168,19 @@ const capabilities: ReadonlyArray<{
         adulto.
       </p>
       <p>
-        Crianças e adolescentes não conversam com a Nina. Para eles, o app mostra só as tarefas que
-        combinaram com eles.
+        Contas de crianças e adolescentes não conversam com a Nina. Para eles, o app mostra só as
+        tarefas que combinaram com eles.
       </p>
 
       <h2>2. Quem usa a Nina, por idade</h2>
       <p>
         A Apple informa ao app uma faixa de idade, nunca a data de nascimento. O que cada conta pode
         fazer depende dessa faixa. Adulto confirmado é quem a Apple confirmou ter 18 anos ou mais.
-        Adulto declarado é quem informou ter 18 anos ou mais sem essa confirmação. Quando a Apple
-        não informa a faixa, a conta é tratada como a de uma criança até que a faixa seja informada.
+        Adulto declarado é quem informou ter 18 anos ou mais sem essa confirmação. Os dois conversam
+        com a Nina e podem assinar o Premium; só o adulto confirmado decide por uma criança ou um
+        adolescente. Uma conta com controles parentais ativos não conversa com a Nina, não assina e
+        não decide por um menor. Quando a Apple não informa a faixa, a conta é tratada como a de uma
+        criança até que a faixa seja informada.
       </p>
       <table class="policy-table" role="table">
         <caption class="sr-only">O que cada idade pode fazer na Nina</caption>
@@ -262,14 +265,15 @@ const capabilities: ReadonlyArray<{
       <h2>5. Riscos que avaliamos e o que fizemos</h2>
       <ul>
         <li>
-          <strong>Conteúdo impróprio gerado por inteligência artificial:</strong> menores não
-          conversam com a Nina, e a conversa bloqueia conteúdo sexual e orientação sobre remédios.
+          <strong>Conteúdo impróprio gerado por inteligência artificial:</strong> contas de menores
+          não conversam com a Nina, e a conversa bloqueia conteúdo sexual e orientação sobre
+          remédios.
         </li>
         <li>
           <strong>Dados de crianças fora do país:</strong> códigos no lugar dos nomes, e as tarefas
           de menores nunca vão.
         </li>
-        <li><strong>Compras:</strong> menores não compram nada na Nina.</li>
+        <li><strong>Compras:</strong> uma conta de menor não compra nada na Nina.</li>
         <li>
           <strong>Uso excessivo:</strong> sem feed, sem lembretes extras, silêncio à noite, limite
           por dia, e o Tempo de Uso da Apple.
@@ -280,7 +284,9 @@ const capabilities: ReadonlyArray<{
         </li>
         <li>
           <strong>Mentira sobre a idade:</strong> a faixa vem da Apple, o app verifica o aparelho, e
-          um menor só entra com a aprovação de um responsável.
+          uma conta de menor só entra com a aprovação de um responsável. Um menor que se declarou
+          adulto na Apple conversa com a Nina e pode assinar; por isso a conversa bloqueia conteúdo
+          sexual para todos, e decidir por uma criança pede idade confirmada pela Apple.
         </li>
         <li>
           <strong>Uma casa sem responsável:</strong> a conta do menor fica pausada, sem mostrar
@@ -371,8 +377,8 @@ const capabilities: ReadonlyArray<{
       <ul>
         <li>
           Os maiores riscos estavam na conversa com a inteligência artificial e no envio de dados
-          para fora do Brasil. Por isso, menores não conversam com a Nina, e nomes e tarefas de
-          menores não vão para a OpenAI.
+          para fora do Brasil. Por isso, contas de menores não conversam com a Nina, e nomes e
+          tarefas de menores não vão para a OpenAI.
         </li>
         <li>
           O menor vê só as próprias tarefas, sem os detalhes que os adultos escrevem, porque esses
@@ -393,8 +399,8 @@ const capabilities: ReadonlyArray<{
         </li>
         <li>
           Riscos que continuam: um apelido que a casa não informou pode chegar à OpenAI; a idade
-          depende do que a Apple informa e da declaração do responsável; e o limite de tempo é
-          contado no próprio iPhone.
+          depende do que a Apple informa e da declaração do responsável; um menor que se declarou
+          adulto na Apple conversa com a Nina; e o limite de tempo é contado no próprio iPhone.
         </li>
       </ul>
       <p>

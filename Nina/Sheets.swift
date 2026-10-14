@@ -322,7 +322,7 @@ struct SettingsSheet: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    // Buying or managing Premium needs an adult Apple confirmed, so nobody else is ever routed to the paywall.
+    // Buying or managing Premium needs an account the server lets buy, so nobody else is ever routed to the paywall.
     @ViewBuilder
     private var premiumRow: some View {
         if store.canBuyPremium {
@@ -1451,10 +1451,15 @@ struct ReportProblemView: View {
     }
 }
 
-// The paywall opens only for an adult Apple confirmed; anyone else meets the age gate instead.
+// The paywall opens only for an account the server lets buy; anyone else meets the age gate instead.
 struct PremiumEntryView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+
+    // Parental controls close Premium whatever Apple says of the age, so that gate never asks Apple to confirm it.
+    private var closedByParentalControls: Bool {
+        store.viewerAge.isAdult && store.viewerAge.parentalControlsActive
+    }
 
     var body: some View {
         if store.canBuyPremium {
@@ -1464,8 +1469,12 @@ struct PremiumEntryView: View {
                 SheetHeader(eyebrow: "Premium") { dismiss() }
                 Spacer(minLength: 24)
                 ZeroState(
-                    headline: "Isso pede idade confirmada pela Apple.",
-                    body_: "O resto funciona.",
+                    headline: closedByParentalControls
+                        ? "O Premium não abre nesta conta."
+                        : "Isso pede idade confirmada pela Apple.",
+                    body_: closedByParentalControls
+                        ? "Esta conta tem controles parentais ativos. O resto funciona."
+                        : "O resto funciona.",
                     presence: .unavailable
                 )
                 .padding(.horizontal, 20)

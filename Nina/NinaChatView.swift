@@ -39,14 +39,19 @@ struct NinaChatView: View {
         .ninaScreenBackground()
     }
 
-    // A declared adult keeps the whole house; only the conversation waits for Apple's confirmation.
+    // An adult the age policy keeps from the AI keeps the whole house; only the conversation waits.
     private var ageConfirmationContent: some View {
-        VStack(spacing: 0) {
+        let waitsForApple = store.chatWaitsForConfirmedAge
+        return VStack(spacing: 0) {
             header
             Spacer(minLength: 0)
             ZeroState(
-                headline: "A conversa pede idade confirmada.",
-                body_: "A Apple ainda não confirmou sua idade. O resto funciona.",
+                headline: waitsForApple
+                    ? "A conversa pede idade confirmada."
+                    : "A conversa não abre nesta conta.",
+                body_: waitsForApple
+                    ? "A Apple ainda não confirmou sua idade. O resto funciona."
+                    : "Esta conta tem controles parentais ativos. O resto funciona.",
                 presence: .unavailable
             ) {
                 VStack(spacing: 10) {
@@ -70,7 +75,7 @@ struct NinaChatView: View {
                         AgeOutcomeNote(outcome: outcome, alignment: .center)
 
                         // A retry Apple answered as before names what opens the chat, not another retry.
-                        if outcome == .unchanged {
+                        if outcome == .unchanged, waitsForApple {
                             Text("A conversa abre quando a Apple confirmar sua idade.")
                                 .ninaText(.caption, NinaTheme.muted)
                                 .multilineTextAlignment(.center)

@@ -1,6 +1,6 @@
 # LGPD Launch Posture - Nina
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 This is an engineering/privacy operations checklist for launch readiness. It is
 not a substitute for Brazilian legal review, but it documents the product
@@ -137,16 +137,70 @@ The new consent:
   no consent, and the card shows "Este aviso mudou.";
 - can be given only by an adult the server may let use the AI: effective status
   adult, no active parental controls, and an assurance inside
-  `private.age_policy.trusted_assurances`, which defaults to `confirmed` and
-  `operator` (decision D3, 2026-09-29).
+  `private.age_policy.trusted_assurances`. The migration creates that row as
+  `{confirmed,operator}`; decision D3 (2026-10-14, below) adds `self_declared`
+  to production's row with one operator statement, and `CLAUDE.md` §13 records
+  when it ran.
 
-`trusted_assurances` is the operator switch that may later admit
-`self_declared` adults to chat and Premium only. It never widens who may act for
-a minor, which stays hard-coded to `confirmed` and `operator`. The TestFlight
-distribution of assurance levels is read with
-`private.age_assurance_distribution()` before deciding. Terms §4 and privacy §5
-say the chat and Premium need an adult whose age Apple confirmed; widening the
-switch makes that false, so both pages change in the same release.
+## Decision D3, 2026-10-14: self-declared adults chat and buy Premium
+
+Heitor decided on 2026-10-14 that an adult whose 18+ age Apple reports as
+self-declared may use the chat and buy Premium. Production runs this once,
+from the SQL editor (`docs/production-launch-runbook.md`, "Measuring the age
+distribution on TestFlight (decision D3)"):
+
+```sql
+update private.age_policy set trusted_assurances = '{confirmed,operator,self_declared}' where singleton;
+```
+
+Why:
+
+- **Apple does not confirm adult ages in Brazil.** Apple's documentation and
+  WWDC25 session 299 say an adult reads `selfDeclared` by default. Apple's
+  adult-confirmation regions do not include Brazil, and the "Confirmação de
+  Idade" row does not exist on Heitor's Brazilian Apple Account (checked
+  2026-10-14). His own adult account reads `self_declared`, with
+  `eligible_for_age_features` false, on every retry (production logs,
+  2026-10-14). With the chat and Premium gated to `confirmed`, no real
+  Brazilian adult could reach either.
+- **The law asks for verified age only for prohibited content and goods.**
+  Lei 15.211 (ECA Digital), Decreto 12.880 and Portaria MJSP 1.048 require it
+  for pornography, sexually explicit AI dialogue, alcohol, tobacco, weapons and
+  gambling. A non-sexual household chat and a household subscription are not on
+  that list. The joint ANPD/MJSP/Secom FAQ of 30 July 2026 draws the same line.
+  This reading comes from research done on 2026-10-14 without a lawyer.
+- **The chat keeps its legal line for every adult.** Decreto 12.880 art. 16 §4
+  treats sexually explicit AI dialogue as pornography. The prompt's refusal of
+  sexual content and the output moderation stay on for every adult, which
+  keeps the chat outside what needs a verified age.
+
+What does not change:
+
+- Acting for a minor (approving a minor, creating a child or teen profile,
+  declaring or holding a guardianship) stays hard-coded to `confirmed` and
+  `operator` in `private.is_trusted_adult`. The policy row never widens it.
+- Active parental controls still mean not trusted, for anything.
+- Minor and unknown accounts stay as they are.
+
+The cost is the ClassInd self-classification. A self-declared gate is
+"facilmente burlável" for attenuator E.1.10, so purchases (D.5.1, rated 14)
+may lift the rating to 14, which is outside D1. The plan is in
+`docs/privacy/classificacao-indicativa.md` §6.
+
+**Versions.** Terms §4, privacy §3A and §5, `/familias/` and `/suporte/` now
+say that the chat and Premium need 18+ by Apple's range, declared or
+confirmed, and that deciding for a minor needs an age Apple confirmed. The
+pages show "14 de outubro de 2026" as their date. `current_terms_version`
+stays `2026-09-29`: the change only widens what an adult may do and adds no
+obligation, so acceptances recorded at `2026-09-29` stay valid and nobody sees
+"Os Termos mudaram."; git keeps the earlier text. `PrivacyPolicyVersion.current`
+and `current_policy_version` also stay `2026-09-29`: the consent card's text
+did not change, and the policy changed only in who may give the consent, not
+in what happens to the data, so no consent is withdrawn.
+
+Revert with `'{confirmed,operator}'`; the CHECK on `private.age_policy` never
+lets the row drop those two. A revert makes the pages above untrue again, so
+they change back in the same release.
 
 ## Minors
 

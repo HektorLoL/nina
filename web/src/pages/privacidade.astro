@@ -4,7 +4,7 @@ import Brand from "../components/Brand.astro";
 import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
 
-const updatedAt = "5 de outubro de 2026";
+const updatedAt = "14 de outubro de 2026";
 const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
 const reportMailto = `mailto:${legalIdentity.reportContactEmail}`;
 const dpoMailto = legalIdentity.dpoContactEmail
@@ -193,6 +193,12 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
         contestar, veja a seção 10.
       </p>
       <p>
+        Conversar com a Nina e assinar o Nina Premium pedem a faixa de 18 anos ou mais, declarada
+        por você à Apple ou confirmada por ela. Decidir por uma criança ou um adolescente pede idade
+        confirmada pela Apple. Com controles parentais ativos, a conta não faz nenhuma das três
+        coisas.
+      </p>
+      <p>
         A faixa só é registrada quando o app prova, por um serviço da Apple, que o pedido saiu dele
         num iPhone. Quando a Apple não informa a faixa, a conta é tratada como a de uma criança até
         que a faixa seja informada.
@@ -211,14 +217,15 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
 
       <h2>5. IA e memória da Nina</h2>
       <p>
-        A Nina só processa conversas depois do consentimento no app, dado por um adulto com idade
-        confirmada pela Apple, com um aceite separado para o envio para fora do Brasil (seção 6A). O
-        que você escreve e o contexto necessário da casa são enviados por uma função segura do nosso
-        servidor para a OpenAI, para gerar respostas e propostas. O backend desativa o armazenamento
-        de respostas na OpenAI. Mesmo assim, a OpenAI pode manter registros de monitoramento de
-        abuso, que podem conter o que foi enviado, por até 30 dias, ou por mais tempo se a lei
-        exigir. A OpenAI não usa esse conteúdo para treinar modelos. O resumo semanal só usa dados de
-        adultos que aceitaram a conversa com a Nina.
+        A Nina só processa conversas depois do consentimento no app, dado por um adulto, pela faixa
+        de idade que a Apple informa, declarada ou confirmada (seção 3A), com um aceite separado
+        para o envio para fora do Brasil (seção 6A). O que você escreve e o contexto necessário da
+        casa são enviados por uma função segura do nosso servidor para a OpenAI, para gerar
+        respostas e propostas. O backend desativa o armazenamento de respostas na OpenAI. Mesmo
+        assim, a OpenAI pode manter registros de monitoramento de abuso, que podem conter o que foi
+        enviado, por até 30 dias, ou por mais tempo se a lei exigir. A OpenAI não usa esse conteúdo
+        para treinar modelos. O resumo semanal só usa dados de adultos que aceitaram a conversa com
+        a Nina.
       </p>
       <p>
         Nada vira tarefa, lembrete ou memória confirmada sem ação do usuário. Memórias pessoais

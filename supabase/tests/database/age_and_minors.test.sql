@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(179);
+select plan(202);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -1582,6 +1582,213 @@ select ok(
   not has_function_privilege('authenticated', 'public.redact_refused_nina_message(uuid)', 'execute'),
   'only the server redacts a refused message'
 );
+
+-- The operator's mark survives a device signal that leaves the account adult.
+insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+values
+  ('c1000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated', 'marta@example.com', '{"full_name":"Marta Marcada"}', now(), now()),
+  ('c1000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated', 'nelson@example.com', '{"full_name":"Nelson Marcado"}', now(), now()),
+  ('c1000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated', 'sergio@example.com', '{"full_name":"Sergio Declarado"}', now(), now()),
+  ('c1000000-0000-4000-8000-000000000004', 'authenticated', 'authenticated', 'paula@example.com', '{"full_name":"Paula Controlada"}', now(), now());
+
+insert into private.account_age_status (user_id, status, minor_band, assurance, parental_controls_active, minor_since, recheck_after)
+values
+  ('c1000000-0000-4000-8000-000000000003', 'adult', null, 'self_declared', false, null, now() + interval '180 days'),
+  ('c1000000-0000-4000-8000-000000000004', 'adult', null, 'self_declared', true, null, now() + interval '180 days');
+
+select lives_ok(
+  $$select private.operator_set_age_status('c1000000-0000-4000-8000-000000000001', 'adult', null, true, 'testflight')$$,
+  'the operator marks a TestFlight account as a trusted adult'
+);
+
+set local role service_role;
+
+select is(
+  public.record_age_signal('c1000000-0000-4000-8000-000000000001', 'adult', null, 'self_declared', false) ->> 'changed',
+  'false',
+  'a self-declared adult signal over the operator''s mark reports no change'
+);
+
+reset role;
+
+select ok(
+  (select assurance = 'operator' from private.account_age_status where user_id = 'c1000000-0000-4000-8000-000000000001')
+    and private.is_trusted_adult('c1000000-0000-4000-8000-000000000001'),
+  'an operator-marked adult keeps the mark and the trust after a self-declared adult signal'
+);
+
+set local role service_role;
+
+select is(
+  public.record_age_signal('c1000000-0000-4000-8000-000000000001', 'adult', null, 'confirmed', false) ->> 'changed',
+  'false',
+  'an Apple-confirmed adult signal over the operator''s mark reports no change'
+);
+
+reset role;
+
+select ok(
+  (select assurance = 'operator' from private.account_age_status where user_id = 'c1000000-0000-4000-8000-000000000001')
+    and private.is_trusted_adult('c1000000-0000-4000-8000-000000000001'),
+  'an operator-marked adult keeps the mark and the trust after an Apple-confirmed adult signal'
+);
+
+set local role service_role;
+
+select is(
+  public.record_age_signal('c1000000-0000-4000-8000-000000000001', 'adult', null, 'self_declared', true) ->> 'changed',
+  'true',
+  'a signal that turns parental controls on still changes an operator-marked adult'
+);
+
+reset role;
+
+select ok(
+  (
+    select assurance = 'operator' and parental_controls_active
+    from private.account_age_status
+    where user_id = 'c1000000-0000-4000-8000-000000000001'
+  )
+    and not private.is_trusted_adult('c1000000-0000-4000-8000-000000000001')
+    and not private.may_use_ai('c1000000-0000-4000-8000-000000000001'),
+  'parental controls follow the device under the mark and leave the account trusted for nothing'
+);
+
+set local role service_role;
+
+select is(
+  public.record_age_signal('c1000000-0000-4000-8000-000000000001', 'minor', '16_17', 'self_declared', false) ->> 'status',
+  'minor',
+  'a minor signal still applies at once to an operator-marked account'
+);
+
+reset role;
+
+select ok(
+  (
+    select status = 'minor' and assurance = 'self_declared' and minor_since is not null
+    from private.account_age_status
+    where user_id = 'c1000000-0000-4000-8000-000000000001'
+  )
+    and not private.is_trusted_adult('c1000000-0000-4000-8000-000000000001'),
+  'a minor signal drops the operator''s mark'
+);
+
+select lives_ok(
+  $$select private.operator_set_age_status('c1000000-0000-4000-8000-000000000002', 'adult', null, true, 'testflight')$$,
+  'the operator marks a second TestFlight account'
+);
+
+set local role service_role;
+
+select is(
+  public.record_age_signal('c1000000-0000-4000-8000-000000000002', 'unknown', null, 'none', false) ->> 'status',
+  'unknown',
+  'a declined share still applies at once to an operator-marked account'
+);
+
+reset role;
+
+select ok(
+  (select assurance = 'none' from private.account_age_status where user_id = 'c1000000-0000-4000-8000-000000000002')
+    and not private.is_trusted_adult('c1000000-0000-4000-8000-000000000002'),
+  'a declined share drops the operator''s mark'
+);
+
+select lives_ok(
+  $$select private.operator_set_age_status('c1000000-0000-4000-8000-000000000002', 'adult', null, true, 'testflight')$$,
+  'the operator marks the account again'
+);
+
+select is(
+  private.operator_set_age_status('c1000000-0000-4000-8000-000000000002', 'adult', null, false, 'testflight_ended') ->> 'changed',
+  'true',
+  'the operator still replaces its own mark'
+);
+
+select ok(
+  (select assurance = 'self_declared' from private.account_age_status where user_id = 'c1000000-0000-4000-8000-000000000002')
+    and not private.is_trusted_adult('c1000000-0000-4000-8000-000000000002'),
+  'an adult the operator stops trusting reads as self-declared'
+);
+
+-- Decision D3 = A admits self-declared adults to chat and Premium, never to act for a minor.
+update private.age_policy
+set trusted_assurances = '{confirmed,operator,self_declared}'
+where singleton;
+
+set local role authenticated;
+set local request.jwt.claim.sub = 'c1000000-0000-4000-8000-000000000003';
+
+select ok(
+  (public.get_my_age_status() ->> 'may_use_ai') = 'true'
+    and (public.get_my_age_status() ->> 'may_buy_premium') = 'true'
+    and (public.get_my_age_status() ->> 'trusted_adult') = 'false',
+  'with self-declared adults admitted, one may chat and buy Premium and is still not a trusted adult'
+);
+
+select lives_ok(
+  $$select public.create_family('Casa Declarada')$$,
+  'a self-declared adult creates a house'
+);
+
+select set_config('test.family3', (select active_family_id::text from public.profiles where id = auth.uid()), true);
+
+select is(
+  public.record_nina_ai_consent('2026-09-29', true, true) #>> '{ai_consent,is_granted}',
+  'true',
+  'an admitted self-declared adult consents to the chat'
+);
+
+select lives_ok(
+  $$select public.begin_nina_chat_run(current_setting('test.family3')::uuid, 'c5000000-0000-4000-8000-000000000001', 'Comprar gás', '[]', 'gpt-6-luna', 1000, '2026-09-23')$$,
+  'an admitted self-declared adult starts a chat turn'
+);
+
+select throws_ok(
+  $$select public.add_minor_profile(current_setting('test.family3')::uuid, 'Lia', 'under_12', 'mae', '2026-09-29')$$,
+  '42501',
+  'age_confirmation_required',
+  'an admitted self-declared adult still cannot register a child'
+);
+
+reset role;
+set local role service_role;
+
+select ok(
+  public.premium_buyer_is_eligible('c1000000-0000-4000-8000-000000000003')
+    and not public.premium_buyer_is_eligible('c1000000-0000-4000-8000-000000000004'),
+  'an admitted self-declared adult may start a subscription and one under parental controls may not'
+);
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = 'c1000000-0000-4000-8000-000000000004';
+
+select ok(
+  (public.get_my_age_status() ->> 'may_use_ai') = 'false'
+    and (public.get_my_age_status() ->> 'may_buy_premium') = 'false'
+    and (public.get_my_age_status() ->> 'trusted_adult') = 'false',
+  'a self-declared adult under parental controls may neither chat nor buy'
+);
+
+reset role;
+
+update private.age_policy
+set trusted_assurances = '{confirmed,operator}'
+where singleton;
+
+set local role authenticated;
+set local request.jwt.claim.sub = 'c1000000-0000-4000-8000-000000000003';
+
+select throws_ok(
+  $$select public.begin_nina_chat_run(current_setting('test.family3')::uuid, 'c5000000-0000-4000-8000-000000000002', 'Comprar pão', '[]', 'gpt-6-luna', 1000, '2026-09-23')$$,
+  '42501',
+  'age_confirmation_required',
+  'reverting the policy closes the chat to a self-declared adult again'
+);
+
+reset role;
 
 select * from finish();
 

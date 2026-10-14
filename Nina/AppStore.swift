@@ -414,13 +414,18 @@ final class AppStore {
         }
     }
 
-    // A declared adult runs the house but sees the confirmation gate where the conversation would be.
+    // An adult the age policy keeps from the AI runs the house but sees a gate where the conversation would be.
     var needsConfirmedAgeForChat: Bool {
         !isUsingLocalNina
             && activeUser != nil
             && viewerAge.isAdult
             && !viewerAge.mayUseAI
             && isAdultHouseholdMember
+    }
+
+    // Parental controls close the conversation whatever Apple says of the age, so only an adult without them waits for Apple.
+    var chatWaitsForConfirmedAge: Bool {
+        needsConfirmedAgeForChat && !viewerAge.parentalControlsActive
     }
 
     var canUseNinaAI: Bool {

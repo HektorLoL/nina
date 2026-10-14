@@ -313,7 +313,11 @@ signal. The band lives in `private.account_age_status`; no function granted to
 signed-in clients takes a user id.
 
 App Attest does not run on the Simulator. Mark a test account from the SQL
-editor, which records assurance `operator`:
+editor, which records assurance `operator`. Since migration `202610140001`, a
+later signal from the account's iPhone that leaves it adult, self-declared or
+confirmed, keeps that mark (parental controls still follow the device), and a
+minor or declined signal replaces it at once; before it, any signal replaced
+the mark:
 
 ```sql
 select private.operator_set_age_status('<auth user id>', 'adult', null, true, 'testflight');
@@ -322,9 +326,12 @@ select * from private.age_assurance_distribution();
 
 The second query is the D3 measurement: accounts per status, band, assurance
 and parental-controls flag, with no birth date or range bound anywhere.
-`private.age_policy.trusted_assurances` starts at `{confirmed,operator}`; adding
-`self_declared` lets self-declared adults chat and buy Premium, and never lets
-them act for a minor.
+`private.age_policy.trusted_assurances` starts at `{confirmed,operator}` on a
+fresh database, local and CI included; adding `self_declared` lets
+self-declared adults chat and buy Premium, and never lets them act for a minor.
+Decision D3 (2026-10-14) adds `self_declared` to production's row with the
+operator statement in `docs/production-launch-runbook.md`, not by a migration;
+`CLAUDE.md` §13 records when it ran.
 
 Deploy the function after the age migrations, with the mode secret already set:
 

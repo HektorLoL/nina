@@ -109,7 +109,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 26.4+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (53 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (54 files) |
 | Server logic | 6 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -290,7 +290,8 @@ product regression, not a refactor.
 Built 2026-09-29 from the all-ages spec (Heitor's decisions D1–D4: aim for
 "Livre" and keep the chat if the rating comes back 10 or 12; a company and an
 independent encarregado before launch; only Apple-confirmed adults act for
-money, AI and minors; iOS 26.4 everywhere). The research and the capability
+minors, and D3, decided again on 2026-10-14, lets self-declared adults also
+chat and buy Premium; iOS 26.4 everywhere). The research and the capability
 table are in `docs/privacy/avaliacao-impacto-criancas.md`.
 
 - **Age is a server-held band written only by `record_age_signal`.** It is
@@ -307,10 +308,21 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   only for a minor status, so an adult who once declined Apple's sheet may
   self-declare again, while a former minor or a household-marked account still
   needs `confirmed` (pgTAP "an adult who once declined may self-declare
-  again…"). Nina never stores a birth date, the range bounds or a history
-  of ranges. The band never enters member lists, model context, logs, the
-  insight or anyone else's export, and **no function a client may execute
-  answers about a user other than the caller**: `get_my_age_status()` answers
+  again…"). An operator's mark outlives the phone (migration `202610140001`):
+  an adult signal over an `operator` adult, self-declared or confirmed, keeps
+  the assurance `operator` and reports no change, parental controls still
+  follow the device, and a minor or declined signal replaces the mark at once
+  (pgTAP "an operator-marked adult keeps the mark and the trust after a
+  self-declared adult signal", "parental controls follow the device under the
+  mark and leave the account trusted for nothing", "a minor signal drops the
+  operator's mark"); the app reads a retry over a mark left in place as "A
+  Apple manteve a mesma resposta."
+  (`AgeAssuranceTests.testARetryTheServerAnswersWithTheOperatorsMarkLeftInPlaceSaysAppleKeptTheSameAnswer`).
+  Before it, any signal replaced the mark. Nina never stores a birth date, the
+  range bounds or a history of ranges. The band never enters member lists,
+  model context, logs, the insight or anyone else's export, and **no function
+  a client may execute answers about a user other than the caller**:
+  `get_my_age_status()` answers
   about the caller only, and must never gain a parameter or it becomes an age
   oracle. `can_manage_family` reads age status and takes a user id, so since
   migration `202609290009` no API role executes it, nor `is_family_member` or
@@ -330,13 +342,25 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
 - **Capabilities come from `AgeStatus`, never from `household_role`.** Three
   levels: *trusted adult* (status adult, no active parental controls, assurance
   `confirmed` or `operator`) may act for a minor; `may_use_ai` and
-  `may_buy_premium` additionally follow `private.age_policy.trusted_assurances`
-  (default `{confirmed,operator}`), the D3 switch that can later admit
-  self-declared adults to chat and Premium only — acting for a minor is
-  hard-coded to the two proven assurances and never widens with the policy row.
-  A *declared adult* runs a house but gets the "A conversa pede idade
-  confirmada." gate instead of the chat and no paywall. A *minor* or *unknown*
-  account never mounts the four tabs.
+  `may_buy_premium` follow `private.age_policy.trusted_assurances` instead, the
+  D3 switch. A migration creates it as `{confirmed,operator}`; decision D3
+  (Heitor, 2026-10-14) adds `self_declared` to production's row with one
+  operator statement, not a migration, and §13 records when it ran (Apple does
+  not confirm adult ages in Brazil; the reasoning is in
+  `docs/privacy/lgpd-launch-posture.md`, "Decision D3"). Acting for a minor is
+  hard-coded to the two proven assurances in `private.is_trusted_adult` and
+  never widens with the policy row, and active parental controls still mean
+  not trusted for anything. So, with `self_declared` in the row, a *declared
+  adult* runs a house, chats once they accept the notice and buys Premium, but
+  never approves a minor, adds a child or answers for one. An adult whose
+  `may_use_ai` is false meets a gate where the chat would be: with parental
+  controls on, "A conversa não abre nesta conta." and "O Premium não abre
+  nesta conta." (the tour's closed line), which never name Apple's
+  confirmation (`AppStore.chatWaitsForConfirmedAge`,
+  `…testParentalControlsCloseTheChatWithoutSayingItWaitsForApplesConfirmation`);
+  otherwise, a self-declared adult while the row leaves `self_declared` out,
+  "A conversa pede idade confirmada." (and the tour's "quando a Apple confirmar
+  sua idade"). A *minor* or *unknown* account never mounts the four tabs.
 - **Minors hold no table access.** Every household policy uses
   `is_adult_family_member` (migration `…0003`); a minor reads only through
   `get_minor_home_view` (their own tasks: title, time, glyph, done — never
@@ -456,11 +480,12 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   `…testANinaDateWrittenWithoutSecondsIsReadAndConfirmedExactlyAsSheWroteIt`
   and the Deno test "a due_at without a zone keeps Nina's São Paulo hour, and
   an unreadable one is re-read from its label or dropped".
-- **Trusted adults only**, checked in the Edge Function (member row with
-  `household_role 'adult'`) *and* again inside `begin_nina_chat_run`, which
-  refuses in order: not an adult member (`nina_adult_access_required`), age not
-  confirmed (`age_confirmation_required`, surfaced as
-  `nina_age_confirmation_required`), blocked (`nina_ai_blocked`), no consent,
+- **Adults the age policy admits only**, checked in the Edge Function (member
+  row with `household_role 'adult'`) *and* again inside `begin_nina_chat_run`,
+  which refuses in order: not an adult member (`nina_adult_access_required`),
+  `may_use_ai` false (`age_confirmation_required`, surfaced as
+  `nina_age_confirmation_required`; since D3 a self-declared adult passes, and
+  the code keeps its name), blocked (`nina_ai_blocked`), no consent,
   outdated consent (`nina_consent_outdated`), no transfer consent
   (`nina_transfer_consent_required`). Each code is matched whole on both sides.
 - **AI consent is a server-side record, not a device flag.** `nina_ai_consents`
@@ -1013,7 +1038,7 @@ is longer than a word budget, the legal text wins.
 
 ## 6. Database
 
-53 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+54 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order. The eight
 `202609290001`–`…0008` files (age assurance, minors and guardianship, adult-only
 RLS, join and house rules, the minor home view, the AI gates, the insight and
@@ -1695,7 +1720,24 @@ Supabase CLI does not read `.gitignore`: `db push` would take a
 the original), and `functions deploy` could upload stale copies. Push
 migrations and deploy functions from a clean export
 (`git archive HEAD | tar -x -C <dir>`, then run the CLI there), as the
-2026-09-29 release did.
+2026-09-29 release did. The local gate reads the same folders: on 2026-10-14
+`deno task db:reset` in the working tree applied
+`202609290001_age_assurance 2.sql` and stopped on a duplicate key in
+`schema_migrations_pkey`, and `db:test` would also run the stale
+`supabase/tests/database/* 2.sql` copies. While copies exist, reset from an
+export with the uncommitted files laid over it (`git ls-files -m -o
+--exclude-standard`, which leaves out the ignored copies); the export keeps
+`project_id`, so it drives the same local stack. Then test from the working
+tree with the files named, a glob the copies do not match:
+
+```sh
+npx --yes supabase@2.110.0 db lint --local --fail-on error && npx --yes supabase@2.110.0 test db --local supabase/tests/database/*.test.sql
+```
+
+Never run `test db` from an export outside the home folder (`/tmp`, the
+scratchpad): colima mounts only the home folder into its VM, so the test
+container sees an empty folder and reports `Files=0` and `Result: NOTESTS`
+with exit 0, a pass that tested nothing (seen 2026-10-14).
 
 **`deno.json` enumerates individual files, not directories.** A new
 `web/src/*.ts` or `_shared/*.ts` module is neither formatted, linted, nor
@@ -1916,8 +1958,14 @@ the project, not bugs to fix unprompted.
   `deployment.legal-launch-identity` failure. No tester account was marked with
   `operator_set_age_status` until 2026-10-06, when Heitor's own account (a
   self-declared adult after build 11's age step) was marked `testflight` so
-  he can chat; every other reading in `private.age_assurance_distribution()`
-  shows how a real iPhone came back. Build
+  he can chat. A later signal from his iPhone replaced that mark before
+  migration `202610140001` existed (on 2026-10-14 production logs read
+  `self_declared` on every retry), so after D3 he chats as a self-declared
+  adult, and acting for a minor needs the mark again
+  (`private.operator_set_age_status('<id>', 'adult', null, true, 'testflight')`),
+  which his phone's adult signals leave in place since `202610140001` was
+  applied the same day. Every other reading in `private.age_assurance_distribution()` shows
+  how a real iPhone came back. Build
   10 reaches the external group only after Beta App Review. Still open on a device, since
   the Simulator runs neither: an Apple-confirmed adult, a self-declared adult, a
   16–17 and a 13–15 Family Sharing child, an under-13, Sign in with Apple with no
@@ -2028,6 +2076,21 @@ the project, not bugs to fix unprompted.
   `rls_policies.test.sql`), 0 unindexed foreign keys, and the version row set
   to `202610050003` (§12). Build 12 ignores the new key; "Passar a casa"
   reaches people with build 13.
+- **Migration `202610140001` (the operator's mark outlives the phone) is
+  applied to production (2026-10-14, Heitor's "go database").** It copies
+  `private.store_age_status` from `202609290002` with one block: while the
+  ratchet runs, an adult signal over an adult whose assurance is `operator`
+  keeps `operator` (parental controls still follow the device, and a minor or
+  declined signal replaces the mark), so a tester's or an age contest's mark
+  survives the person's own retries (§4, "Age is a server-held band").
+  Production's `md5(prosrc)` for
+  `private.store_age_status(uuid, text, text, text, boolean, boolean)` read
+  `9f55c4060cd066e52d4657399e7286ee` (the `202609290002` body) before the
+  apply and `f1efbacfcf913fb82947e7e9412aef8f` after it, the local body; the
+  ACL reads `{postgres=X/postgres}` and neither `authenticated` nor
+  `service_role` executes it. It went through the Supabase MCP
+  `apply_migration`, and its `schema_migrations` row was set to
+  `202610140001` (§12). It needs no new build.
 - **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
   `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
   compares them) and Terms §4 reads the same constant. Apple's questionnaire
@@ -2042,12 +2105,43 @@ the project, not bugs to fix unprompted.
   voice rule for surfaces a minor can see (§2) no longer allows; Heitor
   renamed the listing "Nina: rotina da casa" in App Store Connect on
   2026-10-05.
-- **D3 is measured on TestFlight, not decided.** Only Apple-confirmed adults
-  (or operator-marked accounts) chat, buy Premium, create a child profile or
-  approve a minor. `private.age_assurance_distribution()` shows how Brazilian
-  adults actually come back; if most read `self_declared`, adding it to
-  `trusted_assurances` opens chat and Premium only, and Terms §4 and privacy §5
-  must change in the same release.
+- **D3 is decided (2026-10-14): self-declared adults chat and buy Premium.**
+  Heitor's own Brazilian adult account read `self_declared` on every retry;
+  Apple's documentation and WWDC25 session 299 say adults read `selfDeclared`
+  by default, Apple's adult-confirmation regions do not include Brazil, and
+  the "Confirmação de Idade" row does not exist on Heitor's Brazilian Apple
+  Account (checked 2026-10-14). The legal reading (verified age only for
+  prohibited content and goods; the ANPD/MJSP/Secom FAQ of 2026-07-30) and the
+  cost are in `docs/privacy/lgpd-launch-posture.md`, "Decision D3". Production
+  needs one operator statement,
+  `update private.age_policy set trusted_assurances = '{confirmed,operator,self_declared}' where singleton;`,
+  with its read-back in `docs/production-launch-runbook.md`; it goes out with
+  the site that says so (Terms §4, privacy §3A and §5, `/familias/`,
+  `/suporte/`). Once it runs, rewrite this entry as applied, with the date and
+  the read-back. The policy needs no migration and no build: the app reads
+  `may_use_ai` and `may_buy_premium` from the server. The next build carries
+  the new FAQ answer ("Quem pode conversar com a Nina?") and the
+  parental-controls gates (§4); until people update, build 12's FAQ still asks
+  "Por que a conversa pede idade confirmada?", and an adult with parental
+  controls on still reads "A conversa pede idade confirmada." / "A Apple ainda
+  não confirmou sua idade." on the chat and "Isso pede idade confirmada pela
+  Apple." on the Premium sheet, untrue for them. In every build, two lines
+  raised only when the server refuses a device whose reading is stale still
+  name Apple's confirmation: the chat's `nina_age_confirmation_required` ("A
+  conversa pede idade confirmada.", `MockNinaEngine`) and the purchase's
+  `premium_requires_adult` ("Isso pede idade confirmada pela Apple.",
+  `PremiumSubscriptionStore`); `age_confirmation_required` on the minor paths
+  keeps that line because it is true there. Acting for a minor stays
+  `confirmed` or `operator`. The Terms version stays `2026-09-29` (the change
+  only widens what an adult may do and adds no obligation), and so does the AI
+  consent version. The cost is the
+  ClassInd self-classification: a self-declared gate is "facilmente burlável"
+  for attenuator E.1.10, so purchases (D.5.1) may lift the rating to 14,
+  outside D1; the written question to the ClassInd coordination on Ask to Buy
+  and Screen Time is in `docs/privacy/classificacao-indicativa.md` §6, with
+  the basis for keeping "Livre" published until it answers and the latest
+  point to revisit that (before the first submission's age questionnaire).
+  `private.age_assurance_distribution()` is still read after each round.
 - **Not built:** the guardian's "{nome} agora tem conta de adulto." notice (no
   server field says a ward turned 18; the ex-minor does see "Agora a conta é
   sua."), and a PermissionKit flow for `significantAppChangeRequiresParentalConsent`,

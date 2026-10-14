@@ -555,7 +555,7 @@ final class PremiumSubscriptionStore {
             ledger.lastSyncFailed = true
             writeSyncLedger(ledger, for: userID)
             entitlement = reconciling(for: local)
-            // The receipt stays unfinished so Apple can redeliver it once the age is confirmed.
+            // The receipt stays unfinished so Apple can redeliver it once the server lets this account buy.
             if error as? PremiumBackendRequestError == .premiumRequiresAdult {
                 errorMessage = "Isso pede idade confirmada pela Apple."
             }

@@ -1,6 +1,6 @@
 # Children's Impact Assessment - Nina
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 One document for every assessment the law asks of a product that children and
 adolescents are likely to use. It was written by the controller, without a
@@ -63,8 +63,10 @@ A child is under 12 and an adolescent is 12 to 17 (ECA art. 2; ECA Digital art.
 - **Supervision.** Alerts, quiet hours, a daily limit and a 7-day usage view,
   set by a live guardian.
 - **Adult chat.** Adults with a live, current, transfer-consented AI consent
-  talk to Nina. Every model-bound string is pseudonymized; minors' tasks never
-  reach a tool.
+  talk to Nina. Since decision D3 (2026-10-14), an adult is anyone Apple
+  reports as 18+, self-declared or confirmed, without active parental
+  controls; acting for a minor still needs an age Apple confirmed. Every
+  model-bound string is pseudonymized; minors' tasks never reach a tool.
 - **Weekly insight and workload portrait.** Minors are never carriers and are
   never drawn.
 - **Reports and holds.** An identified report channel; a sealed hold for input
@@ -126,15 +128,15 @@ is this design.
 
 | Risk | Feature | Before (L/S) | Mitigation | After (L/S) |
 | --- | --- | --- | --- | --- |
-| A minor receives inappropriate AI content | Chat | High/High | Minors never reach the chat; the server gates chat to Apple-confirmed adults; prompt rules, output moderation, deterministic medical refusal | Low/Medium |
-| Sexually explicit AI dialogue, which Decreto 12.880 art. 16 §4 treats as pornography | Chat | Medium/High | Prompt rule (no sexual content and no romantic or sensual version offered instead) and output moderation for adults; minors excluded; eval cases, the sexual one checked for "sensual" and "para adultos" | Low/High |
+| A minor receives inappropriate AI content | Chat | High/High | Accounts Nina knows are minors never reach the chat. Since D3 (2026-10-14) the server opens it to accounts Apple reports as 18+, self-declared or confirmed, so a minor who declared 18+ to Apple reaches it; the prompt rules, output moderation and deterministic medical refusal hold for every adult | Low/Medium (reassessed 2026-10-14 for D3: a minor who lied reaches the chat more easily, but meets the same refusals and moderation as every adult, and those, not the age gate, keep the content out) |
+| Sexually explicit AI dialogue, which Decreto 12.880 art. 16 §4 treats as pornography | Chat | Medium/High | Prompt rule (no sexual content and no romantic or sensual version offered instead) and output moderation for every adult; accounts known to be minors excluded; eval cases, the sexual one checked for "sensual" and "para adultos" | Low/High |
 | Clinical or emotional guidance read as a professional's (ClassInd Guia D.7.1) | Chat | Medium/High | Deterministic refusal for diagnosis, symptoms, medicine or dose, and any change of dose even beside a reminder, pointing to a professional; a message moderation flags for self-harm gets the fixed CVV 188 reply before any model; CVV line in the minor's "Precisa conversar?" | Low/Medium |
 | A minor's identity or tasks leave Brazil | Chat, insight | High/Medium | Pseudonymizer on every model-bound string; minors' tasks excluded from every tool; no minors in the insight | Medium/Medium (unregistered nicknames can pass) |
 | A minor sees a boleto reading, a health item or "cerveja" | Household view | High/Medium | Minors read only their own task title, time and glyph through one RPC; no shopping list | Low/Low |
-| A minor buys something | Paywall | Medium/Medium | Minors and self-declared adults never reach the paywall; the server refuses a new purchase with `premium_requires_adult` | Low/Low |
+| A minor buys something | Paywall | Medium/Medium | Accounts Nina knows are minors never reach the paywall; the server refuses a new purchase with `premium_requires_adult`. Since D3 (2026-10-14) a self-declared adult may buy, so a minor who declared 18+ to Apple can too; Apple runs the sale, its purchase controls (Ask to Buy, Screen Time) apply where a guardian set them, and refunds go through Apple | Medium/Low (raised from Low/Low on 2026-10-14 for D3) |
 | Excessive or compulsive use (ECA Digital art. 8 IV; Decreto 12.880 art. 9) | Minor account | Medium/Medium | No feed, no streaks, no rewards, no nudges; forced quiet hours; daily limit; Screen Time recommended | Low/Low |
 | Contact with strangers | Houses | Low/High | Only approved members of one house of at most 8; no messages between people | Low/Medium |
-| A child claims to be an adult | Age | High/High | Apple band, App Attest, most protective result; unknown is a child; minor to adult only on an Apple `confirmed` signal | Low/High |
+| A child claims to be an adult | Age | High/High | Apple band, App Attest, most protective result; unknown is a child; minor to adult only on an Apple `confirmed` signal. Since D3 (2026-10-14) a self-declared 18+ also opens the chat and Premium, never acting for a minor. A Family Sharing child's Apple Account carries the birth date its guardian set, so reading 18+ takes an Apple Account with a false birth date | Medium/High (raised from Low/High on 2026-10-14 for D3: the lie now also reaches the chat and Premium) |
 | Someone falsely claims to be a guardian | Approval | Medium/High | Only an Apple-confirmed adult already in the house, owner or admin to approve; explicit declaration; false declaration breaches the Terms §4 | Medium/High (declared, not proven) |
 | A house left without an adult | Membership | Low/Medium | The minor's account pauses and shows nothing; a minor account without a house is deleted after 30 days | Low/Low |
 | A child's task detail reaches a lock screen, printer or chat | Notifications, child's day | Medium/Medium | `ChildDayRow` has no detail field; neutral notification template on a minor's device; no subtitle in any body | Low/Low |
@@ -154,10 +156,12 @@ is this design.
   all. Their surface has no streaks, rewards, urgency or nudges, and no copy
   pushes a guardian toward weaker settings (ECA Digital art. 18 §§1-2).
 - **III. Algorithmic risk to safety and health.** The model is reachable only by
-  Apple-confirmed adults with a current consent. Its outputs are proposals a
-  human must confirm. Prompt rules forbid sexual, violent, discriminatory,
-  profane or drug content, and clinical, dietary or emotional guidance; output
-  moderation drops a flagged reply and its proposals. The insight prompt forbids
+  adults with a current consent whose age Apple reports as 18+, self-declared
+  or confirmed (D3, 2026-10-14), and these rules hold for every one of them.
+  Its outputs are proposals a human must confirm. Prompt rules forbid sexual,
+  violent, discriminatory, profane or drug content, and clinical, dietary or
+  emotional guidance; output moderation drops a flagged reply and its
+  proposals. The insight prompt forbids
   blame, intent, mental health and moral value. The local eval must include the
   sexual, dose, "o que eu tomo para dor", diet, profanity, "seja minha
   terapeuta", risk (CVV) and redaction cases before each model change.
@@ -232,8 +236,8 @@ rewrite is allowed only if it still says what the cited article asks.
 Mirrored word for word on `/familias/` §10:
 
 - Os maiores riscos estavam na conversa com a inteligência artificial e no
-  envio de dados para fora do Brasil. Por isso, menores não conversam com a
-  Nina, e nomes e tarefas de menores não vão para a OpenAI.
+  envio de dados para fora do Brasil. Por isso, contas de menores não
+  conversam com a Nina, e nomes e tarefas de menores não vão para a OpenAI.
 - O menor vê só as próprias tarefas, sem os detalhes que os adultos escrevem,
   porque esses detalhes podem ter contas, remédios ou assuntos de adulto.
 - Guardamos o mínimo: sem data de nascimento de menores, sem pedir email a
@@ -246,7 +250,8 @@ Mirrored word for word on `/familias/` §10:
   que a conta é acompanhada.
 - Riscos que continuam: um apelido que a casa não informou pode chegar à
   OpenAI; a idade depende do que a Apple informa e da declaração do
-  responsável; e o limite de tempo é contado no próprio iPhone.
+  responsável; um menor que se declarou adulto na Apple conversa com a Nina; e
+  o limite de tempo é contado no próprio iPhone.
 
 Followed by: "Revemos a avaliação a cada mudança que afete menores. A versão
 completa fica disponível para a ANPD quando ela pedir."
@@ -256,7 +261,9 @@ completa fica disponível para a ANPD quando ela pedir."
 - The rating outcome (Apple and the MJSP decide; see the rating document).
 - The age signal is attested by the client device, not proven by a document.
 - Guardianship is declared, not proven.
-- Adults may come back as self-declared rather than confirmed (D3 measures it).
+- Apple does not confirm adult ages in Brazil, so since D3 (2026-10-14) a
+  self-declared 18+ opens the chat and Premium. A minor who declared 18+ to
+  Apple reaches both; acting for a minor still needs Apple's confirmation.
 - Redaction is best effort, and the pseudonymized transfer is still a transfer.
 - No ANPD standard clauses with OpenAI; no Zero Data Retention.
 - The scope of ECA Digital and pending ANPD regulation.
@@ -279,7 +286,8 @@ The controller reviews this document, and its public summary, whenever:
 - photo or PDF reading is considered again (a privacy review of its own);
 - the ANPD publishes its final scope or age-assurance guides;
 - Apple or the MJSP assign a rating other than "Livre";
-- the operator widens `trusted_assurances`.
+- the operator changes `trusted_assurances` (widened to `self_declared` under
+  D3; this document was reviewed for it on 2026-10-14).
 
 Signals to read each month on TestFlight and after launch: the assurance
 distribution (`private.age_assurance_distribution()`), the number of minor

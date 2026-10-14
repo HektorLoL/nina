@@ -1,6 +1,6 @@
 # Age contest runbook
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 Decreto 12.880/2026 art. 27 gives a person a way to contest the age a service
 assigned them. In Nina the age is a band held on the server
@@ -97,7 +97,7 @@ Always choose the more protective reading when the evidence is unclear
 -- An adult Heitor has verified, or a tester (trusted: chats, buys, acts for minors).
 select private.operator_set_age_status('<auth user id>', 'adult', null, true, 'age_contest');
 
--- An adult who is not verified beyond the person's word (runs a house only).
+-- An adult who is not verified beyond the person's word (runs a house; since D3 also chats and buys, never acts for minors).
 select private.operator_set_age_status('<auth user id>', 'adult', null, false, 'age_contest');
 
 -- A minor, with the band: 'under_12', '12_15' or '16_17'.
@@ -119,6 +119,11 @@ What each move does, with no further step:
   proposals are rejected, and optional profile fields are cleared. An account
   with no live guardian reads "Sua conta está pausada." until a guardian of the
   house declares with "Também sou responsável" / "Sou responsável".
+- **Afterwards, from the person's iPhone:** since migration `202610140001`, a
+  later signal that leaves the account adult, self-declared or confirmed, keeps
+  an `operator` mark, while parental controls still follow the device; a minor
+  or declined signal replaces the mark at once. Before that migration any
+  signal replaced it, so an adult marked earlier may need step 4 again.
 
 **Remove the profile photo yourself after a move to minor.** The result reads
 `"photo_cleanup_required": true`; the SQL editor cannot delete Storage objects.

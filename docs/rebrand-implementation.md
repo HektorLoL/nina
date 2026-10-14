@@ -456,8 +456,9 @@ the welcome and Ajustes lose surfaces earlier passes had added.
 ## 6i. Nina for all ages (2026-09-29)
 
 Heitor's decisions D1–D4 (aim for "Livre", a company before launch, only
-Apple-confirmed adults act for AI, money and minors, iOS 26.4) plus the build-10
-Apple fixes. No board draws any of this; every screen below is built from the
+Apple-confirmed adults act for AI, money and minors, iOS 26.4; D3 changed on
+2026-10-14, so self-declared adults now chat and buy, and only acting for a
+minor needs Apple's confirmation) plus the build-10 Apple fixes. No board draws any of this; every screen below is built from the
 existing parts (`NinaMark`, `NinaButton`, `.ninaCard`, `NinaRow`, `Eyebrow`) and
 its strings are in `docs/text-rubric.md` §3, most of them Law-text-gated.
 
@@ -673,11 +674,19 @@ No board draws any of these; each reuses a part the app already has.
   ink, with no tick, and only when Apple's own answer is the reading already
   shown; "Faixa atualizada." in moss is kept for a reading that changed. On the
   chat's gate it adds "A conversa abre quando a Apple confirmar sua idade.",
-  because a self-declared answer never opens the chat. This does not unlock the
-  chat for a self-declared adult. An operator's mark is no longer re-asked of
-  Apple when the required regulatory features change, the one launch path that
-  could replace it, but the server still overwrites `operator` with any signal
-  an account records.
+  because a self-declared answer never opens the chat while
+  `trusted_assurances` leaves out `self_declared`. Since D3 (2026-10-14)
+  production admits self-declared adults, so they meet this gate only before
+  the operator statement or after a revert. An adult with active parental
+  controls meets "A conversa não abre nesta conta." + "Esta conta tem controles
+  parentais ativos. O resto funciona." instead, with no line about Apple's
+  confirmation (`AppStore.chatWaitsForConfirmedAge`), the tour's closed line,
+  and "O Premium não abre nesta conta." on the Premium sheet, because no
+  answer from Apple about the age opens either for them. An operator's mark is
+  no longer re-asked of Apple when the required regulatory features change, and
+  since migration `202610140001` a signal that leaves the account adult keeps
+  the mark (only a minor or declined signal replaces it), so a retry over a
+  mark left in place reads "A Apple manteve a mesma resposta.".
 
 ## 6n. The tour (2026-10-14)
 

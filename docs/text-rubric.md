@@ -198,7 +198,7 @@ The two equal spacers center the brand block in the space above the actions. On 
   - open: "Na minha aba, você me conta o que pesa, do jeito que vier. Eu leio e proponho o que fazer."
   - consent still to decide: "Na minha aba, você decide se eu posso ler. Depois me conta o que pesa e eu proponho o que fazer."
   - age not yet confirmed: "Na minha aba, quando a Apple confirmar sua idade, você me conta o que pesa e eu proponho o que fazer."
-  - closed (blocked, or no chat for this account): "Na minha aba, a conversa comigo não abre nesta conta. Tarefas, compras e a casa continuam com você." (the live gates' "continuam com você"). No example proposal is drawn, and the line sits centred on the screen.
+  - closed (blocked, parental controls, or no chat for this account): "Na minha aba, a conversa comigo não abre nesta conta. Tarefas, compras e a casa continuam com você." (the live gates' "continuam com você"). No example proposal is drawn, and the line sits centred on the screen.
 - **Hoje:** "Em Hoje fica o dia da casa. O que atrasou vem primeiro, sem bronca."
 - **Tarefas:** "Em Tarefas fica tudo por categoria, e as compras também. Semente é vontade sem data e nunca atrasa."
 - **Casa:** "Em Casa ficam as pessoas, os pets e um retrato de quem carrega mais. É para conversar, não para cobrar." (three lines on a 402 pt phone, so the protected "não para cobrar" is never split)
@@ -368,7 +368,8 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Unparseable: "Não entendi a data. Tente "amanhã 18:00"."
 - **C14. The gates** have a headline, at most 4 lines of 10 words or fewer, one button, one footnote and one link. No closing paragraph.
   - Adult-only gate: "A conversa é dos adultos da casa." + "Tarefas e compras continuam com você."
-  - Declared adult: "A conversa pede idade confirmada." + "A Apple ainda não confirmou sua idade. O resto funciona." + "Tentar de novo".
+  - Declared adult the age policy keeps from the AI: "A conversa pede idade confirmada." + "A Apple ainda não confirmou sua idade. O resto funciona." + "Tentar de novo". Since D3 (2026-10-14) production admits self-declared adults, so this gate shows only while `trusted_assurances` leaves out `self_declared` (before the operator statement, or after a revert).
+  - Adult with active parental controls: "A conversa não abre nesta conta." + "Esta conta tem controles parentais ativos. O resto funciona." + "Tentar de novo" (a share after the controls are lifted opens the chat), with no line about Apple's confirmation. Its Premium sheet reads "O Premium não abre nesta conta." + the same line. Build 12 still shows them the declared-adult gate and "Isso pede idade confirmada pela Apple.", which is untrue for them, until the next build ships.
   - Blocked account: "A conversa está suspensa nesta conta." + "Se for engano, escreva para ‹email de privacidade›."
   - Consent gate: see §3 row 3. It is exempt from the line limits, because every line is Law-text-gated.
 - **C15. "Denunciar resposta"** is a context-menu item on every Nina reply. The sheet has four chips ("Conteúdo impróprio", "Risco para alguém", "Saúde ou remédio", "Outro") and "Enviar"; the confirmation is "Recebido. Vamos olhar."
