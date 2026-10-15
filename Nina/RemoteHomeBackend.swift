@@ -145,7 +145,7 @@ enum RemoteRPCErrorCode: String, CaseIterable {
         case .ninaAIBlocked:
             return "A conversa está suspensa nesta conta."
         case .familyMemberLimitReached:
-            return "A casa já atingiu o limite de 8 pessoas."
+            return "A casa já atingiu o limite de 8 pessoas e pets."
         case .familyOwnerTransferDenied:
             return "Não deu para passar a casa para \(person)."
         case .familyOwnershipOfferNotFound:

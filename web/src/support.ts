@@ -31,7 +31,7 @@ export const supportTopics: readonly SupportTopic[] = [
       {
         question: "Por que um aviso não chegou?",
         answer:
-          "Confira Avisos nos Ajustes da Nina e nos Ajustes do iPhone. Uma tarefa sem data não tem aviso. No silêncio da noite, o aviso chega na hora, sem som.",
+          "Confira Avisos nos Ajustes da Nina e nos Ajustes do iPhone. Uma tarefa sem data não tem aviso. Um lembrete que outra pessoa cria só toca no seu iPhone depois que você abre a Nina. No silêncio da noite, o aviso chega na hora, sem som.",
       },
       {
         question: "Quem pode conversar com a Nina?",
@@ -59,9 +59,19 @@ export const supportTopics: readonly SupportTopic[] = [
           "Uma criança ou um adolescente entra numa casa só com a aprovação de um responsável, e vê só as próprias tarefas.",
       },
       {
+        question: "Por que não consigo incluir uma criança?",
+        answer:
+          "Incluir uma criança ou aprovar um adolescente pede idade confirmada pela Apple: a idade que a Apple verificou, não só a declarada. Se a confirmação chegar depois, use Tentar de novo no mesmo lugar.",
+      },
+      {
         question: "O que o Premium inclui?",
         answer:
           "Vale para a casa toda: cada adulto manda até 50 mensagens por dia para a Nina. Sem o Premium, são 10 mensagens por dia. Quando dois adultos aceitaram conversar com a Nina, a casa também recebe o resumo semanal nas semanas com movimento.",
+      },
+      {
+        question: "O Compartilhamento Familiar libera o Premium?",
+        answer:
+          "Não. O Premium vale para a casa na Nina, e não para a família na Apple. Uma assinatura já cobre a casa toda.",
       },
       {
         question: "Como cancelo o Premium?",

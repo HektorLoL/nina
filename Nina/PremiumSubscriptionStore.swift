@@ -328,6 +328,8 @@ final class PremiumSubscriptionStore {
         await refreshEntitlement()
     }
 
+    static let productLoadFailure = "Não deu para carregar os planos agora."
+
     func loadProducts() async {
         guard !isLoadingProducts else { return }
         isLoadingProducts = true
@@ -341,11 +343,9 @@ final class PremiumSubscriptionStore {
                 if lhsRank == rhsRank { return $0.displayName < $1.displayName }
                 return lhsRank < rhsRank
             }
-            productLoadMessage = products.isEmpty
-                ? "Os planos não carregaram. Tente mais tarde."
-                : nil
+            productLoadMessage = products.isEmpty ? Self.productLoadFailure : nil
         } catch {
-            productLoadMessage = "Os planos não carregaram. Tente mais tarde."
+            productLoadMessage = Self.productLoadFailure
         }
     }
 
@@ -520,9 +520,12 @@ final class PremiumSubscriptionStore {
             }
 
             await recordOnServer(local, for: currentUser.id, source: "entitlement_repair")
+        } catch PremiumBackendRequestError.missingSession {
+            // A phone whose session is gone is signed out for Premium: nothing reads as covered, nothing to retry.
+            entitlement = .inactive
         } catch {
             guard let local else {
-                errorMessage = "Não foi possível atualizar o Premium agora."
+                errorMessage = "Não deu para atualizar o Premium agora. Tente de novo."
                 return
             }
             entitlement = reconciling(for: local)
@@ -681,13 +684,13 @@ final class PremiumSubscriptionStore {
             case .systemError:
                 return "A App Store não concluiu. Tente de novo."
             case .unknown, .unsupported:
-                return "Não foi possível concluir. Tente de novo."
+                return "Não deu para concluir agora. Tente de novo."
             @unknown default:
-                return "Não foi possível concluir. Tente de novo."
+                return "Não deu para concluir agora. Tente de novo."
             }
         }
 
-        return "Não foi possível concluir agora."
+        return "Não deu para concluir agora. Tente de novo."
     }
 }
 
@@ -740,12 +743,14 @@ struct SupabasePremiumSubscriptionBackend: PremiumSubscriptionBackend {
     var configuration: SupabaseConfiguration
     var diagnostics: BackendDiagnosticsStore? = nil
 
+    // Without a session the RPC would go out under the publishable key alone, so it never goes out.
     func loadStatus() async throws -> PremiumEntitlement {
         try await BackendRequestLogger.perform(
             component: "premium",
             operation: "load_status",
             diagnostics: diagnostics
         ) {
+            _ = try await authenticatedSession()
             let response = try await client
                 .rpc("get_current_premium_status")
                 .execute()
@@ -801,7 +806,11 @@ struct SupabasePremiumSubscriptionBackend: PremiumSubscriptionBackend {
             return session
         }
 
-        return try await client.auth.session
+        do {
+            return try await client.auth.session
+        } catch AuthError.sessionMissing {
+            throw PremiumBackendRequestError.missingSession
+        }
     }
 }
 

@@ -32,7 +32,7 @@ struct MinorRootView: View {
                         if store.isMinorOverDailyLimit(now: context.date) {
                             MinorStatusView(
                                 headline: "Por hoje é só.",
-                                line: home.viewer.supervision.alertsEnabled
+                                line: store.minorAlertsKeepComing
                                     ? "Seus avisos continuam chegando."
                                     : "Volte amanhã."
                             )
@@ -319,7 +319,10 @@ struct MinorHomeView: View {
             }
         }
         .minorSettingsSheet(isPresented: $isShowingSettings)
-        .onAppear { absorb() }
+        .onAppear {
+            absorb()
+            store.askForNotificationsOnMinorHome()
+        }
         .onChange(of: store.minorTaskItems) { _, _ in absorb() }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -492,9 +495,7 @@ private struct MinorNoHomeView: View {
                     }
 
                     if let error = nameError ?? store.syncErrorMessage {
-                        Text(error)
-                            .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                            .fixedSize(horizontal: false, vertical: true)
+                        NinaErrorNote(text: error)
                     }
 
                     NinaButton(
@@ -788,11 +789,7 @@ struct MinorSettingsView: View {
                             NinaDivider()
                             valueRow("Tempo hoje", usageValue, systemName: "clock")
                             NinaDivider()
-                            valueRow(
-                                "Avisos",
-                                home?.viewer.supervision.alertsEnabled == false ? "Desligados" : "Ligados",
-                                systemName: "bell"
-                            )
+                            valueRow("Avisos", store.minorAlertsValue, systemName: "bell")
                             NinaDivider()
                         }
                         link("O que a Nina guarda", systemName: "lock") { MinorKeepsView() }

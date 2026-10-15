@@ -36,6 +36,8 @@ struct TodayView: View {
     @State private var isOverdueCollapsed = false
     @State private var isTomorrowExpanded = false
     @State private var isConfirmingReschedule = false
+    @AppStorage(LocalHomeNotificationScheduler.notificationsEnabledKey)
+    private var notificationsEnabled = true
 
     private var now: Date { .now }
 
@@ -85,12 +87,23 @@ struct TodayView: View {
         !hasEverCaptured || (agenda.isEmpty && filter == .all)
     }
 
+    // Hoje offers alerts only before iOS has asked; a refusal, or Avisos switched off, is never repeated here.
+    private var asksForAlerts: Bool {
+        store.notificationAuthorizationStatus == .notDetermined
+            && notificationsEnabled
+            && store.tasks.contains { $0.kind == .task && !$0.isDone && $0.dueAt != nil }
+    }
+
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             GeometryReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         header
+
+                        if asksForAlerts {
+                            NotificationPermissionChip()
+                        }
 
                         if !hasEverCaptured {
                             firstDay

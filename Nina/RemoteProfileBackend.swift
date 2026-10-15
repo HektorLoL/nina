@@ -34,7 +34,7 @@ struct SupabaseRemoteProfileBackend: RemoteProfileBackend {
         ) {
             try await client
                 .from("profiles")
-                .select()
+                .select(ProfileRow.columns)
                 .eq("id", value: userID)
                 .limit(1)
                 .execute()
@@ -60,10 +60,7 @@ struct SupabaseRemoteProfileBackend: RemoteProfileBackend {
                         displayName: profile.displayName,
                         displayNameSource: "user",
                         email: user?.email,
-                        sex: profile.sex.rawValue,
                         householdRole: profile.householdRole.rawValue,
-                        phone: profile.phone,
-                        birthdayLabel: profile.birthdayLabel,
                         availabilityNote: profile.availabilityNote,
                         communicationPreference: profile.communicationPreference.rawValue,
                         memoryNote: profile.memoryNote,
@@ -177,12 +174,12 @@ private struct ChosenNameUpdate: Encodable {
 }
 
 private struct ProfileRow: Decodable {
+    // The profile never reads or writes the phone, sex or birthday columns.
+    static let columns = "id,display_name,household_role,availability_note,communication_preference,memory_note,avatar"
+
     var id: UUID
     var displayName: String
-    var sex: String
     var householdRole: String
-    var phone: String
-    var birthdayLabel: String
     var availabilityNote: String
     var communicationPreference: String
     var memoryNote: String
@@ -191,10 +188,7 @@ private struct ProfileRow: Decodable {
     private enum CodingKeys: String, CodingKey {
         case id
         case displayName = "display_name"
-        case sex
         case householdRole = "household_role"
-        case phone
-        case birthdayLabel = "birthday_label"
         case availabilityNote = "availability_note"
         case communicationPreference = "communication_preference"
         case memoryNote = "memory_note"
@@ -205,10 +199,7 @@ private struct ProfileRow: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? "Família"
-        sex = try container.decodeIfPresent(String.self, forKey: .sex) ?? ProfileSex.notDetermined.rawValue
         householdRole = try container.decodeIfPresent(String.self, forKey: .householdRole) ?? ProfileHouseholdRole.responsibleAdult.rawValue
-        phone = try container.decodeIfPresent(String.self, forKey: .phone) ?? ""
-        birthdayLabel = try container.decodeIfPresent(String.self, forKey: .birthdayLabel) ?? ""
         availabilityNote = try container.decodeIfPresent(String.self, forKey: .availabilityNote) ?? ""
         communicationPreference = try container.decodeIfPresent(String.self, forKey: .communicationPreference)
             ?? ProfileCommunicationPreference.gentle.rawValue
@@ -220,10 +211,7 @@ private struct ProfileRow: Decodable {
         UserProfile(
             userID: id.uuidString,
             displayName: displayName,
-            sex: ProfileSex(rawValue: sex) ?? .notDetermined,
             householdRole: ProfileHouseholdRole(rawValue: householdRole) ?? .responsibleAdult,
-            phone: phone,
-            birthdayLabel: birthdayLabel,
             availabilityNote: availabilityNote,
             communicationPreference: ProfileCommunicationPreference(rawValue: communicationPreference) ?? .gentle,
             memoryNote: memoryNote,
@@ -232,15 +220,12 @@ private struct ProfileRow: Decodable {
     }
 }
 
-private struct ProfileUpsertRow: Encodable {
+struct ProfileUpsertRow: Encodable {
     var id: UUID
     var displayName: String
     var displayNameSource: String
     var email: String?
-    var sex: String
     var householdRole: String
-    var phone: String
-    var birthdayLabel: String
     var availabilityNote: String
     var communicationPreference: String
     var memoryNote: String
@@ -251,10 +236,7 @@ private struct ProfileUpsertRow: Encodable {
         case displayName = "display_name"
         case displayNameSource = "display_name_source"
         case email
-        case sex
         case householdRole = "household_role"
-        case phone
-        case birthdayLabel = "birthday_label"
         case availabilityNote = "availability_note"
         case communicationPreference = "communication_preference"
         case memoryNote = "memory_note"

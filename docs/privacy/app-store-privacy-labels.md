@@ -1,6 +1,6 @@
 # App Store Privacy Labels - Nina
 
-Last updated: 2026-10-05
+Last updated: 2026-10-15
 
 Use this as the App Store Connect privacy questionnaire source of truth for the current codebase. Re-check it before every submission because labels must match the shipped binary, backend functions, SDKs, and website data collection.
 
@@ -89,6 +89,19 @@ Current code does not intentionally collect:
 - Financial Info
 - Advertising Data
 - Audio Data
+- Contact Info: Phone Number
+
+**Perfil fields removed on 2026-10-15.** Builds up to 13 offered optional
+"Telefone", "Sexo" and "Aniversário" fields in Perfil. The next build asks for
+none of them: the app selects `profiles` by named columns that leave out
+`phone`, `sex` and `birthday_label`, and a profile save no longer touches those
+three columns, so no build from then on sends a phone number, a sex or a
+birthday. Values typed with an earlier build remain in `profiles` until the
+account is deleted or the operator's planned one-off statement clears the
+columns; until then another adult of the same house can read them through the
+API. Answer Phone Number "not collected" only for a binary
+that carries this change, and clear the legacy values before the first public
+release so the answer is also true of the server.
 
 Re-check before submission: **Purchases.** Since 2026-09-06
 `premium-subscription-sync` and `app-store-server-notifications` store each
@@ -152,7 +165,7 @@ cache files.
 
 Use:
 
-`https://ninai.app/privacidade`
+`https://ninai.app/privacidade/`
 
 Before submission, confirm the deployed page contains the production legal
 entity and privacy contact, and that `data-legal-launch="ready"` (a company

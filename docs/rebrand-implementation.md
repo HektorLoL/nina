@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -646,7 +646,8 @@ No board draws any of these; each reuses a part the app already has.
 
 No board draws any of these; each reuses a part the app already has.
 
-- **"Telefone" takes its shape as it is typed.** `21993972860` reads
+- **"Telefone" takes its shape as it is typed** (removed with the field on
+  2026-10-15, §6p). `21993972860` reads
   "(21) 99397-2860" and a landline "(21) 3333-4444"; a number whose local part
   starts with 9 is grouped 5-4 from its eighth digit, because every Brazilian
   mobile has nine digits, so the hyphen never jumps back while a mobile is
@@ -1042,6 +1043,184 @@ reorganised, never filled.
 - **Left out, on purpose.** A paste button in "Link ou código", `AzulejoBand`
   art or a bigger mark on the setup screens (both fill space), and the shopping
   editor's owner chip beside its commit (crowds a 375 pt phone).
+
+## 6p. Launch polish, batch 1 (2026-10-15)
+
+No board draws any of these; each reuses a part the app already has.
+
+- **Perfil asks for less.** "Sexo", "Telefone" and "Aniversário" are gone
+  (Heitor, 2026-10-15; LGPD art. 6 III), and the phone mask with them. The
+  profile no longer reads those columns (`profiles` is selected by name), and a
+  save no longer sends them, so what an earlier build kept stays until the
+  operator's planned one-off statement clears the columns (CLAUDE.md §12). A
+  profile cached by an earlier build still opens, without them. "Contato" is
+  drawn only when the account carries an email, so a build-11 account goes from
+  "Foto" straight to "Rotina". Perfil hides the system navigation bar like
+  every other screen pushed in Ajustes, so its own chevron is the only way
+  back, and at accessibility sizes the "Memórias" count moves under the title
+  instead of breaking beside it ("Nenhum / a").
+- **iOS is asked for alerts in context.** Never at launch: right after the
+  first dated task or reminder this phone confirms (a proposal, a new task, an
+  edit or a planted semente), and on a minor's first visit to their own tasks
+  while the guardian keeps alerts on. No line precedes the system prompt: the
+  rubric allows no explanation there (§0 step 3), and the card just confirmed
+  is the context. Someone who switched "Avisos" off in Ajustes is never asked by
+  a confirmation. While iOS has not been asked, or refused, the editor's
+  "Ativar avisos" / "Avisos bloqueados" chip (K5) also sits under a dated
+  proposal card's meta line. Under Hoje's header only "Ativar avisos" shows,
+  while iOS has not been asked, "Avisos" is on and the house has open dated
+  tasks: a refusal is never a standing chip on the main screen.
+- **A minor's "Avisos" reads the phone.** The value is "Ligados" only when the
+  guardian keeps alerts on and iOS allows them, "Bloqueados" when iOS refused,
+  "Desligados" otherwise; the daily-limit screen says "Seus avisos continuam
+  chegando." only in the first case, "Volte amanhã." otherwise.
+- **A screen whose task or person is gone keeps its way back.** "Essa tarefa
+  não está mais aqui." and "Essa pessoa não está mais aqui." draw the
+  `BackHeader`, centred between spacers.
+- **The chat's consent and adult-only gates draw the chat header** (wordmark
+  and gear), as the age and blocked gates already did, so the consent card
+  drops its own 48 pt mark and opens on "Antes de eu ler qualquer coisa."; one
+  mark per screen. "Aceitar e conversar com a Nina" shows its pending state
+  while the consent saves, and the chat opens only once the server has recorded
+  it; a failed save keeps the card, the ticked box and the error above the
+  button.
+- **The weekly summary states its condition.** A covered house's "Resumo
+  semanal" row on Casa reads "Com 2 adultos que aceitaram conversar com a
+  Nina." (was "O primeiro chega em até 7 dias.", untrue for a single parent),
+  the paywall's own line under its title (CDC art. 31), which stays true once
+  both adults have accepted and the first summary is still on its way. The row
+  keeps 14 pt above and below its two lines.
+- **The portrait compares adults.** A pet no longer carries load, the
+  inconclusive line says "entre 2 adultos", and "Aparece quando o outro adulto
+  entrar." shows while the house has one adult, however many children or pets
+  live there; the invite row and "Renovar o link" follow the same count.
+- **A self-declared adult at a child gate can share again.** Under "Só um
+  responsável com idade confirmada pela Apple cadastra." (member editor and a
+  legacy child's card) and "Isso pede idade confirmada pela Apple." (a minor's
+  join request), a self-declared adult without parental controls reads
+  "Confirmada é a idade que a Apple verificou, não só a declarada." and a quiet
+  "Tentar de novo" (`AgeCheckCoordinator.requestInline`, outcome in one line,
+  M2). Parental controls keep the bare line, since no share opens those gates.
+- **The paused chat promises no month.** The budget refusal reads "A conversa
+  está pausada agora. Tarefas, compras e casa seguem normais." (was "Cheguei
+  ao limite mensal de conversa. Volto no mês que vem. …"), because the cap is
+  one pool for every house. While that line is the newest in the thread the
+  composer carries "Conversa pausada. Anote pelo + em Hoje." (C11), with no
+  Premium route, since no purchase lifts a shared pause.
+- **FAQ.** "Por que um aviso não chegou?" adds that a reminder another person
+  creates rings only after you open Nina; two entries are new: "Por que não
+  consigo incluir uma criança?" and "O Compartilhamento Familiar libera o
+  Premium?". `/suporte/` carries the same answers.
+
+## 6q. Launch polish, batch 2 (2026-10-15)
+
+Consistency only; no board draws any of these, and each reuses a part the app
+already has.
+
+- **One way to say something failed.** Every failure line now opens "Não deu
+  para ‹ação› agora." and closes "Tente de novo." (rubric G20), and reaches the
+  screen through `NinaErrorNote` or the sync toast. The invite screen, the
+  minor's no-house screen, the Ajustes exits, "Baixar meus dados", the chat's
+  attachment errors, a proposal card that could not be confirmed and the
+  profile editor used to print theirs in plain ink; the store mixed "Não foi
+  possível…", "Não deu para…" and "Não dá para…". Where a retry cannot help the
+  close changes ("Escolha outro.", "Tente mais tarde." for a build with no
+  server), never the opening. The sign-in line "Não foi possível entrar agora.
+  Tente de novo." keeps its words, because CLAUDE.md §12 and the runbook quote
+  it as the sign of a production Auth setting. A failed sign-out used to borrow
+  that sign-in line; it now reads "Não deu para sair da conta agora. Tente de
+  novo."
+- **A closed door stays grout.** Attachments dropped because the house lost
+  Premium leave "Foto e documento são do Premium." in grout and ink, apart from
+  the attachment errors, which are now red.
+- **A failed rename or exit is told in Ajustes.** "Nome da casa" and "Sair da
+  casa" failures show as an error note at the end of the Casa group, because
+  the sync toast sits under the sheet.
+- **Signing out asks once, in Ajustes only.** The adult's "Sair da conta"
+  confirms with "Sair da conta?" / "Para entrar de novo, use sua conta Apple."
+  / "Sair", armed by `warning()`, because it takes the household off the phone.
+  The age check, the majority and Terms gates, house setup and the pending,
+  decision and unavailable screens hold nothing to lose and answer with
+  `selection()` instead of a warning that armed nothing.
+- **A failed invite renewal buzzes once.** Casa's "Renovar o link" no longer
+  adds its own error haptic to the store's.
+- **House setup opens on a choice.** "Primeiro, a casa." / "Se alguém da casa
+  já usa a Nina, peça o convite." over two outline buttons of equal weight,
+  "Criar uma casa" and "Tenho um convite"; the keyboard opens only on the path
+  chosen (the 2026-10-14 rule above still holds inside each path). A partner
+  who installed from a link the App Store dropped landed with the keyboard on
+  "Nome da casa" and could open a second house by accident. The placeholder is
+  "Nossa casa" instead of a real family name.
+- **The invite screen sets an invite aside honestly.** Its second button is
+  "Criar uma casa" for someone with no house (it opens house setup on the
+  create path) and "Agora não" for someone already in a house or waiting on
+  one, where "Criar minha casa" only dismissed the invite.
+- **The invite message has no article.** "‹Nome› quer dividir a casa com você na
+  Nina: ‹casa›. Tocar no link só pede entrada. Alguém da casa ainda precisa
+  aprovar." ("a Lar dos Prado" read wrong, and the em dash became a period.)
+- **Capacity counts pets.** Casa reads "2 de 8 pessoas e pets", and the limit
+  lines say "8 pessoas e pets", as the FAQ already did.
+- **Plans that fail to load can be retried.** The paywall shows "Não deu para
+  carregar os planos agora." with a quiet "Tentar de novo" instead of a grout
+  card that said "Tente mais tarde.".
+- **A person's "Editar" answers to a 44 pt finger**, and so does the back
+  chevron beside it (it was 40 pt).
+
+## 6r. Launch polish, batch 3: developer leftovers (2026-10-15)
+
+No board draws any of these; each takes something a developer needed out of
+the build people install.
+
+- **A turn Nina never answered leaves no reply.** Until now a Release build
+  answered a failed chat turn (no network, a timeout, any server 5xx such as
+  `safety_check_unavailable`) with `MockNinaEngine`, the keyword engine written
+  for local testing, under the composer line "Sem conexão. Esta resposta veio
+  do aparelho.". That skipped moderation, the CVV line and the medical refusal
+  ("remédio" got "Me conta os horários e as doses…"), and said there was no
+  connection when the server had answered. Now the person's message leaves the
+  thread, its words (and any attachment) go back into the composer, and one
+  error note sits above it: "Sem conexão. Tente de novo." only when the request
+  found no network (`URLError` no internet, data not allowed, roaming off, host
+  not found, DNS or connect failure), "Não deu para a Nina responder agora.
+  Tente de novo." for everything else. A refusal the server answered (limit,
+  budget, consent, blocked) still reads as Nina's line in the thread. VoiceOver
+  speaks the error note and never the older reply now last in the thread.
+  Words typed while Nina was reading stay in the composer after the restored
+  ones, and a turn whose answer was lost (a timeout, a dropped connection, a
+  gateway answer with no code) is sent again under its first id, so the server
+  hands back the turn it may already have run instead of running it twice.
+  `MockNinaEngine` and the store's `fallbackNinaEngine` compile only into DEBUG
+  builds, where they still serve the "Teste 1 / Teste 2" local house and the
+  mock backend; a Release build with no Supabase client gets
+  `UnavailableNinaEngine`, which answers nothing. `repository.debug-only-mock`
+  fails the repository preflight if either name, or `DemoHouse`, appears
+  outside an `#if DEBUG` branch, and `artifact.debug-chat-engine` fails the
+  archive gate if the binary carries the mock's replies or the demo house.
+  The legacy `SuggestionMiniCard`, whose only producer is the mock, is
+  therefore DEBUG-only in practice.
+- **No demo house in Release.** `PreviewData`, the placeholder the store holds
+  while there is no house, is empty in Release (no members, tasks, purchases,
+  insight or greeting). The demo house moved to a DEBUG-only `DemoHouse` and its
+  people are made up ("Casa Aroeira": Bia, Leo, a child and the dog Biscoito);
+  it used to carry the founder's family names. The profile editor's preview
+  names "Dani" with no email.
+- **Novidades holds only what 1.0 already does.** The board is now id `1.0`
+  with "Feito pelo aviso" and "Busca sem acento", two capabilities a new
+  install would not find alone. "Sair da casa" (a tester changelog entry) and
+  the "Em breve: Foto vira tarefa" promise (photo reading is off at launch, and
+  App Review reads "coming soon" as unfinished) are gone. The row in Ajustes and
+  the once-per-board sheet stay; testers see the new board once.
+- **Premium never asks the server without a session.** `loadStatus` now needs a
+  signed-in session, as `syncTransaction` always did, so a phone whose session
+  is gone no longer sends `get_current_premium_status` under the publishable
+  key alone (13 refused calls from one build-13 phone on 2026-10-14). Such a
+  phone reads as not covered, with no error line.
+- **The legal links end in a slash** (`/privacidade/`, `/termos/`), so the
+  paywall and Ajustes open the page without a redirect.
+- **The iPad keys are gone from Info.plist.** The target is iPhone-only, so
+  `UIRequiresFullScreen` and `UISupportedInterfaceOrientations~ipad` did
+  nothing but draw a build warning. An iPad runs the app in iPhone mode,
+  portrait.
 
 ## 7. Verified
 

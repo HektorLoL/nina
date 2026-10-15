@@ -57,7 +57,7 @@ struct HouseholdWorkloadSnapshot: Hashable {
         leadName: nil,
         leadShare: 0,
         headline: "Ainda sem retrato da casa",
-        message: "Preciso de \(HouseholdWorkload.minimumAssignedSample) tarefas com dono, entre \(HouseholdWorkload.minimumCarriers) pessoas."
+        message: "Preciso de \(HouseholdWorkload.minimumAssignedSample) tarefas com dono, entre \(HouseholdWorkload.minimumCarriers) adultos."
     )
 }
 
@@ -70,6 +70,11 @@ enum HouseholdWorkload {
     // The headline and the bands share one threshold, so the chart can never contradict the sentence.
     static let overloadMarginAboveAverage = 1.5
 
+    // The portrait compares adults, so one adult waits for another however many children or pets live there.
+    static func waitsForAnotherAdult(members: [HouseholdMember]) -> Bool {
+        members.count { $0.role.isWorkloadCarrier } < minimumCarriers
+    }
+
     static func snapshot(
         tasks: [TaskItem],
         members: [HouseholdMember]
@@ -77,7 +82,7 @@ enum HouseholdWorkload {
         let people = members.filter { $0.role != .assistant }
         let resolver = TaskOwnerResolver(people: people)
         let committedOpenTasks = tasks.filter { !$0.isDone && $0.kind == .task }
-        // Children, teens and anyone whose role this build cannot read are never drawn and never counted.
+        // Children, teens, pets and anyone whose role this build cannot read are never drawn and never counted.
         let carrierPeople = people.filter { $0.role.isWorkloadCarrier }
         let carrierIDs = Set(carrierPeople.map(\.id))
 

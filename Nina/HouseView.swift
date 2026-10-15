@@ -15,8 +15,8 @@ struct HouseView: View {
         store.familyGroup.members.first { $0.role == .assistant }
     }
 
-    private var isAloneInHouse: Bool {
-        people.count <= 1
+    private var isOnlyAdult: Bool {
+        HouseholdWorkload.waitsForAnotherAdult(members: people)
     }
 
     var body: some View {
@@ -30,7 +30,7 @@ struct HouseView: View {
 
                 members
 
-                if isAloneInHouse {
+                if isOnlyAdult {
                     dormantPortrait
                 } else {
                     portraitStrip
@@ -62,7 +62,7 @@ struct HouseView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 houseName
-                Text("\(store.familyPeopleCount) de \(AppStore.maxFamilyPeople) pessoas")
+                Text("\(store.familyPeopleCount) de \(AppStore.maxFamilyPeople) pessoas e pets")
                     .ninaText(.label, NinaTheme.muted)
             }
 
@@ -144,8 +144,8 @@ struct HouseView: View {
                 }
             }
 
-            // Alone, the dormant portrait carries the invite, so the screen never offers it twice.
-            if !isAloneInHouse, store.canInviteMorePeople {
+            // With one adult, the dormant portrait carries the invite, so the screen never offers it twice.
+            if !isOnlyAdult, store.canInviteMorePeople {
                 NinaDivider()
 
                 actionRow("Convidar alguém", systemName: "link") {
@@ -163,7 +163,7 @@ struct HouseView: View {
                 }
             }
 
-            if store.canManageFamily, !isAloneInHouse {
+            if store.canManageFamily, !isOnlyAdult {
                 NinaDivider()
 
                 renewInviteRow
@@ -238,7 +238,7 @@ struct HouseView: View {
         Task {
             let rotated = await store.rotateFamilyInvite()
             isRotatingInvite = false
-            rotated ? Haptics.success() : Haptics.error()
+            if rotated { Haptics.success() }
         }
     }
 
@@ -321,7 +321,12 @@ struct HouseView: View {
     @ViewBuilder
     private var digestPlaceholder: some View {
         if store.householdPremium.isActive {
-            NinaRow(title: "Resumo semanal", subtitle: "O primeiro chega em até 7 dias.") {
+            // The server writes a digest only for a house with two adults who accepted the notice, so the row says so instead of a date.
+            NinaRow(
+                title: "Resumo semanal",
+                subtitle: "Com 2 adultos que aceitaram conversar com a Nina.",
+                verticalPadding: 14
+            ) {
                 CategoryGlyph(systemName: "calendar", size: 18, tint: NinaTheme.ink)
             } trailing: {
                 EmptyView()

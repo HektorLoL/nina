@@ -1,6 +1,6 @@
 # Record of Processing Operations - Nina
 
-Last updated: 2026-10-05
+Last updated: 2026-10-15
 
 LGPD art. 37 asks the controller and each processor to keep a record of the
 processing operations they carry out, especially those based on legitimate
@@ -87,10 +87,14 @@ processors and transfers, retention, and the controls that hold it in place.
 
 - **Purpose:** show who is who in the house.
 - **Subjects:** account holders.
-- **Data:** display name, role, phone, birthday label, availability, preferred
-  communication style, a memory note, an avatar, a profile photo. For an
-  account whose effective status is minor the server forces email to null and
-  every optional field to empty, and no photo can be uploaded.
+- **Data:** display name, role, availability, preferred communication style, a
+  memory note, an avatar, a profile photo. Since 2026-10-15 Perfil no longer
+  asks for a phone, a sex or a birthday (art. 6 III): the app never reads those
+  columns and a profile save no longer touches them. Values typed with builds
+  up to 13 stay in `profiles` until the account is deleted or the operator's
+  planned one-off statement clears the columns. For an account whose effective
+  status is minor the server forces email to null and every optional field to
+  empty, and no photo can be uploaded.
 - **Source:** the person.
 - **Basis:** contract execution (art. 7 V).
 - **Minors:** name only.

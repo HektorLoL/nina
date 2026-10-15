@@ -36,7 +36,7 @@ struct AgeCheckView: View {
     private var accountExits: some View {
         VStack(spacing: 4) {
             NinaButton(title: "Sair da conta", kind: .quiet) {
-                Haptics.warning()
+                Haptics.selection()
                 Task {
                     onboardingStore.cancelReplay()
                     await authSession.signOut()
@@ -205,7 +205,7 @@ struct AgeMajorityView: View {
                         }
 
                         NinaButton(title: "Sair da conta", kind: .quiet) {
-                            Haptics.warning()
+                            Haptics.selection()
                             Task {
                                 onboardingStore.cancelReplay()
                                 await authSession.signOut()

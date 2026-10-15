@@ -383,7 +383,11 @@ enum BackendServices {
         }
         #endif
 
+        #if DEBUG
         return MockNinaEngine()
+        #else
+        return UnavailableNinaEngine()
+        #endif
     }
 }
 

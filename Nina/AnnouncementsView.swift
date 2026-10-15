@@ -31,7 +31,7 @@ struct NinaAnnouncementBoard: Hashable {
     }
 
     static let current = NinaAnnouncementBoard(
-        id: "2026-10-05",
+        id: "1.0",
         items: [
             NinaAnnouncement(
                 title: "Feito pelo aviso",
@@ -44,18 +44,6 @@ struct NinaAnnouncementBoard: Hashable {
                 detail: "Ache tarefas, compras e memórias do jeito que digitar.",
                 systemName: "magnifyingglass",
                 stage: .live
-            ),
-            NinaAnnouncement(
-                title: "Sair da casa",
-                detail: "Quem não é titular sai pelos Ajustes.",
-                systemName: "rectangle.portrait.and.arrow.right",
-                stage: .live
-            ),
-            NinaAnnouncement(
-                title: "Foto vira tarefa",
-                detail: "Boleto, receita ou bilhete da escola, lidos por foto.",
-                systemName: "doc.viewfinder",
-                stage: .comingSoon
             ),
         ]
     )

@@ -46,6 +46,8 @@ enum NinaEngineError: Error, Equatable {
     case consentOutdated
     case ageConfirmationRequired
     case aiBlocked
+    case offline
+    case unconfirmed
     case unavailable
 
     // Codes are matched whole: "nina_ai_consent_required" must never read as "ai_consent_required".
@@ -78,12 +80,28 @@ enum NinaEngineError: Error, Equatable {
         }
     }
 
+    // Only a request that found no network is called offline; a drop or a timeout may have reached the server.
+    init(transportError error: Error) {
+        switch (error as? URLError)?.code {
+        case .notConnectedToInternet?, .dataNotAllowed?, .internationalRoamingOff?,
+             .cannotFindHost?, .dnsLookupFailed?, .cannotConnectToHost?:
+            self = .offline
+        default:
+            self = .unconfirmed
+        }
+    }
+
+    // A turn that ends here was never answered: the phone shows this line, never a reply in Nina's name.
+    var leavesTurnUnanswered: Bool {
+        self == .offline || self == .unconfirmed || self == .unavailable
+    }
+
     var userMessage: String {
         switch self {
         case .rateLimited:
             "Você chegou ao limite de mensagens. Tente mais tarde."
         case .monthlyBudgetReached:
-            "Cheguei ao limite mensal de conversa. Volto no mês que vem. Tarefas, compras e casa seguem normais."
+            "A conversa está pausada agora. Tarefas, compras e casa seguem normais."
         case .inputTooLarge:
             "Essa mensagem ou anexo é grande demais para mim."
         case .adultAccessRequired:
@@ -102,8 +120,10 @@ enum NinaEngineError: Error, Equatable {
             "A conversa pede idade confirmada."
         case .aiBlocked:
             "A conversa está suspensa nesta conta."
-        case .unavailable:
-            "Não consigo responder agora."
+        case .offline:
+            "Sem conexão. Tente de novo."
+        case .unconfirmed, .unavailable:
+            "Não deu para a Nina responder agora. Tente de novo."
         }
     }
 }
@@ -137,6 +157,20 @@ protocol NinaEngine {
     ) async throws -> NinaEngineResponse
 }
 
+// A shipped build with no server answers no turn at all: Nina never speaks from the phone.
+struct UnavailableNinaEngine: NinaEngine {
+    func respond(
+        to _: String,
+        attachments _: [NinaAttachmentInput],
+        familyID _: UUID,
+        messageID _: UUID
+    ) async throws -> NinaEngineResponse {
+        throw NinaEngineError.unavailable
+    }
+}
+
+// The keyword engine skips moderation, the CVV line and the medical refusal, so no shipped build compiles it.
+#if DEBUG
 struct MockNinaEngine: NinaEngine {
     func respond(
         to text: String,
@@ -317,6 +351,7 @@ struct MockNinaEngine: NinaEngine {
         )
     }
 }
+#endif
 
 #if canImport(Supabase)
 struct SupabaseNinaEngine: NinaEngine {
@@ -350,10 +385,13 @@ struct SupabaseNinaEngine: NinaEngine {
 
             return response.domainResponse
         } catch FunctionsError.httpError(_, let data) {
-            let payload = try? JSONDecoder().decode(NinaFunctionErrorResponse.self, from: data)
-            throw NinaEngineError(code: payload?.error ?? "unavailable")
+            // Only the function's own code says how the turn ended; a bare gateway answer may follow a finished one.
+            guard let payload = try? JSONDecoder().decode(NinaFunctionErrorResponse.self, from: data) else {
+                throw NinaEngineError.unconfirmed
+            }
+            throw NinaEngineError(code: payload.error)
         } catch {
-            throw NinaEngineError.unavailable
+            throw NinaEngineError(transportError: error)
         }
     }
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 
 enum HomeSetupMode {
+    case choose
     case create
     case join
 }
@@ -9,6 +10,8 @@ enum HomeSetupArrival {
     static func focus(mode: HomeSetupMode, voiceOverOn: Bool) -> HomeSetupView.FocusedField? {
         guard !voiceOverOn else { return nil }
         switch mode {
+        case .choose:
+            return nil
         case .create:
             return .homeName
         case .join:
@@ -25,7 +28,7 @@ struct HomeSetupView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
 
-    @State private var mode: HomeSetupMode = .create
+    @State private var mode: HomeSetupMode
     @State private var homeName = ""
     @State private var inviteText = ""
     @State private var firstName = ""
@@ -41,6 +44,11 @@ struct HomeSetupView: View {
         case homeName
         case invite
         case firstName
+    }
+
+    // Creating and joining weigh the same on arrival, so a partner who lost the link does not open a second house.
+    init(initialMode: HomeSetupMode = .choose) {
+        _mode = State(initialValue: initialMode)
     }
 
     private var knownName: String? {
@@ -68,14 +76,18 @@ struct HomeSetupView: View {
         VStack(spacing: 0) {
             header
 
-            ScrollView {
-                modeContent
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .padding(.bottom, 16)
+            if mode == .choose {
+                choosePath
+            } else {
+                ScrollView {
+                    modeContent
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
+                        .padding(.bottom, 16)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .scrollBounceBehavior(.basedOnSize)
         }
         .ninaScreenBackground()
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: mode)
@@ -153,7 +165,7 @@ struct HomeSetupView: View {
     }
 
     private func signOut() {
-        Haptics.warning()
+        Haptics.selection()
         Task {
             onboardingStore.cancelReplay()
             await authSession.signOut()
@@ -163,10 +175,53 @@ struct HomeSetupView: View {
     @ViewBuilder
     private var modeContent: some View {
         switch mode {
-        case .create:
+        case .choose, .create:
             createPath
         case .join:
             joinPath
+        }
+    }
+
+    private var choosePath: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 32)
+
+                    VStack(spacing: 14) {
+                        Text("Primeiro, a casa.")
+                            .ninaText(.display)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Text("Se alguém da casa já usa a Nina, peça o convite.")
+                            .ninaText(.label, NinaTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .multilineTextAlignment(.center)
+
+                    Spacer(minLength: 32)
+
+                    VStack(spacing: 12) {
+                        NinaButton(title: "Criar uma casa", kind: .outline, fillsWidth: true) {
+                            Haptics.selection()
+                            mode = .create
+                        }
+
+                        NinaButton(title: "Tenho um convite", kind: .outline, fillsWidth: true) {
+                            Haptics.selection()
+                            mode = .join
+                        }
+
+                        if let displayedError {
+                            errorLine(displayedError)
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
+                .frame(minHeight: proxy.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
         }
     }
 
@@ -179,7 +234,7 @@ struct HomeSetupView: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     HomeSetupField(title: "Nome da casa") {
-                        TextField("Casa Castello", text: $homeName)
+                        TextField("Nossa casa", text: $homeName)
                             .textInputAutocapitalization(.words)
                             .submitLabel(needsName ? .next : .done)
                             .focused($focusedField, equals: .homeName)
@@ -251,7 +306,7 @@ struct HomeSetupView: View {
                 title: store.isSyncingHome || isSavingName ? "Enviando" : "Pedir para entrar",
                 isEnabled: canJoinHome && hasChosenName && !store.isSyncingHome && !isSavingName,
                 action: joinHome,
-                alternateTitle: "Criar minha casa",
+                alternateTitle: "Criar uma casa",
                 alternateTarget: .create
             )
             .padding(.top, 28)
@@ -312,7 +367,7 @@ struct HomeSetupView: View {
             if await store.joinHome(with: inviteText, member: authSession.currentUser) {
                 Haptics.success()
             } else {
-                errorMessage = store.syncErrorMessage ?? "Não foi possível abrir esse convite."
+                errorMessage = store.syncErrorMessage ?? "Não deu para abrir esse convite agora. Tente de novo."
             }
         }
     }

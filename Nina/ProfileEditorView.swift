@@ -8,12 +8,12 @@ struct ProfileEditorView: View {
     @Environment(AppStore.self) private var appStore
     @Environment(ProfileStore.self) private var profileStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let user: AuthUser
 
     @State private var draft: UserProfile
     @State private var didLoad = false
-    @State private var storedPhone = ""
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingPhotoData: Data?
     @State private var photoError: String?
@@ -73,7 +73,7 @@ struct ProfileEditorView: View {
                 VStack(alignment: .leading, spacing: 26) {
                     Text("Meu perfil").ninaText(.screen)
                     nameField
-                    classification
+                    householdRolePicker
                     faceSection
                     contactSection
                     routineSection
@@ -88,6 +88,7 @@ struct ProfileEditorView: View {
             footer
         }
         .ninaScreenBackground()
+        .toolbar(.hidden, for: .navigationBar)
         .onAppear(perform: loadProfileIfNeeded)
         .task {
             await Task.yield()
@@ -132,35 +133,18 @@ struct ProfileEditorView: View {
         }
     }
 
-    private var classification: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ProfileChoiceField(
-                label: "Sexo",
-                value: draft.sex.title,
-                systemName: "person"
-            ) {
-                ForEach(ProfileSex.allCases) { sex in
-                    Button {
-                        Haptics.selection()
-                        draft.sex = sex
-                    } label: {
-                        Label(sex.title, systemImage: sex.symbolName)
-                    }
-                }
-            }
-
-            ProfileChoiceField(
-                label: "Papel na casa",
-                value: draft.householdRole.title,
-                systemName: "house"
-            ) {
-                ForEach(ProfileHouseholdRole.allCases) { role in
-                    Button {
-                        Haptics.selection()
-                        draft.householdRole = role
-                    } label: {
-                        Label(role.title, systemImage: role.symbolName)
-                    }
+    private var householdRolePicker: some View {
+        ProfileChoiceField(
+            label: "Papel na casa",
+            value: draft.householdRole.title,
+            systemName: "house"
+        ) {
+            ForEach(ProfileHouseholdRole.allCases) { role in
+                Button {
+                    Haptics.selection()
+                    draft.householdRole = role
+                } label: {
+                    Label(role.title, systemImage: role.symbolName)
                 }
             }
         }
@@ -199,12 +183,7 @@ struct ProfileEditorView: View {
             }
 
             if let photoError {
-                HStack(alignment: .top, spacing: 8) {
-                    CategoryGlyph(systemName: "exclamationmark.circle", size: 15)
-                    Text(photoError)
-                        .ninaText(.caption, NinaTheme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                NinaErrorNote(text: photoError)
             }
 
             tonePicker
@@ -235,30 +214,17 @@ struct ProfileEditorView: View {
         }
     }
 
+    @ViewBuilder
     private var contactSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Eyebrow(text: "Contato")
+        if let email = user.shownEmail {
+            VStack(alignment: .leading, spacing: 14) {
+                Eyebrow(text: "Contato")
 
-            if let email = user.shownEmail {
                 ProfileReadOnlyField(
                     label: "Email",
                     value: email,
                     note: user.provider == .apple ? user.provider.title : nil
                 )
-            }
-
-            ProfileField(label: "Telefone") {
-                TextField("(00) 00000-0000", text: $draft.phone)
-                    .keyboardType(.phonePad)
-                    .textContentType(.telephoneNumber)
-                    .onChange(of: draft.phone) { previous, typed in
-                        // The number arriving from the profile is shown as stored; only typing reshapes it.
-                        guard typed != storedPhone else { return }
-                        let shown = BrazilianPhoneNumber.edited(from: previous, to: typed)
-                        if shown != typed {
-                            draft.phone = shown
-                        }
-                    }
             }
         }
     }
@@ -266,10 +232,6 @@ struct ProfileEditorView: View {
     private var routineSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             Eyebrow(text: "Rotina")
-
-            ProfileField(label: "Aniversário") {
-                TextField("12 de maio", text: $draft.birthdayLabel)
-            }
 
             ProfileField(label: "Disponibilidade") {
                 TextField("Noites e sábados", text: $draft.availabilityNote, axis: .vertical)
@@ -300,11 +262,19 @@ struct ProfileEditorView: View {
             NinaDivider(inset: 0)
 
             Button(action: showCoreMemories) {
-                NinaRow(title: "Memórias") {
+                NinaRow(
+                    title: "Memórias",
+                    subtitle: dynamicTypeSize.isAccessibilitySize ? memoryCountValue : nil
+                ) {
                     CategoryGlyph(systemName: "bookmark")
                 } trailing: {
                     HStack(spacing: 8) {
-                        Text(memoryCountValue).ninaText(.label, NinaTheme.muted)
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            Text(memoryCountValue)
+                                .ninaText(.label, NinaTheme.muted)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
                         Image(systemName: "chevron.right")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(NinaTheme.muted)
@@ -320,9 +290,7 @@ struct ProfileEditorView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let saveError {
-                Text(saveError)
-                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                    .fixedSize(horizontal: false, vertical: true)
+                NinaErrorNote(text: saveError)
             }
 
             NinaButton(
@@ -345,10 +313,7 @@ struct ProfileEditorView: View {
     private func loadProfileIfNeeded() {
         guard !didLoad else { return }
         didLoad = true
-        var profile = profileStore.profile(for: user)
-        profile.phone = BrazilianPhoneNumber.reshapedIfPlain(profile.phone)
-        storedPhone = profile.phone
-        draft = profile
+        draft = profileStore.profile(for: user)
     }
 
     private func saveProfile() {
@@ -359,8 +324,6 @@ struct ProfileEditorView: View {
 
         var profile = draft
         profile.displayName = profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        profile.phone = BrazilianPhoneNumber.reshapedIfPlain(profile.phone)
-        profile.birthdayLabel = profile.birthdayLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         profile.availabilityNote = profile.availabilityNote.trimmingCharacters(in: .whitespacesAndNewlines)
         profile.memoryNote = profile.memoryNote.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -632,9 +595,9 @@ private struct ProfileCoreMemoriesSheet: View {
     ProfileEditorView(
         user: AuthUser(
             id: "preview",
-            displayName: "Mirna",
-            email: "mirna@ninai.app",
-            provider: .email
+            displayName: "Dani",
+            email: nil,
+            provider: .apple
         )
     )
     .environment(AppStore())

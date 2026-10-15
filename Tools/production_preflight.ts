@@ -22,6 +22,7 @@ export interface IOSArtifactSnapshot {
   scanComplete: boolean;
   containsServerCredential: boolean;
   containsDebugSignIn: boolean;
+  containsDebugChatEngine: boolean;
 }
 
 export interface PreflightEnvironment {
@@ -44,6 +45,21 @@ const localSecretPaths = [
 const premiumRecordedSaleGuard = "if didRecord {";
 
 const debugSignInMarkers = ["@ninai.test", "debug:test-"];
+
+const debugChatEngineMarkers = [
+  "Me conta os hor",
+  "Isso parece pesado. Que tal uma conversa",
+  "Casa Aroeira",
+];
+
+// The keyword chat engine answers without moderation, the CVV line or the
+// medical refusal, and the demo house is made-up data: no Release build
+// compiles either, so every mention of them sits inside an `#if DEBUG` branch.
+export const debugOnlySymbols = [
+  "MockNinaEngine",
+  "fallbackNinaEngine",
+  "DemoHouse",
+];
 
 const nonAppleSignInMarkers = [
   "signInWithOTP",
@@ -157,6 +173,51 @@ export function ratingMarkOffenders(
     if (!source || !drawsMark(source.text)) {
       offenders.push(`${screen} (missing)`);
     }
+  }
+  return offenders;
+}
+
+function isDebugCondition(condition: string): boolean {
+  const trimmed = condition.trim();
+  if (trimmed.includes("||")) return false;
+  return trimmed.split("&&").some((part) => part.trim() === "DEBUG");
+}
+
+export function debugOnlyLines(source: string): boolean[] {
+  const branches: boolean[] = [];
+  return source.split("\n").map((line) => {
+    const directive = line.trim().match(/^#(if|elseif|else|endif)\b(.*)$/);
+    if (!directive) return branches.some(Boolean);
+    const [, keyword, condition] = directive;
+    if (keyword === "if") {
+      branches.push(isDebugCondition(condition));
+    } else if (keyword === "elseif" && branches.length > 0) {
+      branches[branches.length - 1] = isDebugCondition(condition);
+    } else if (keyword === "else" && branches.length > 0) {
+      branches[branches.length - 1] = false;
+    } else if (keyword === "endif") {
+      branches.pop();
+    }
+    return true;
+  });
+}
+
+export function debugOnlyOffenders(
+  sources: ReadonlyArray<{ path: string; text: string }>,
+): string[] {
+  const offenders: string[] = [];
+  for (const source of sources) {
+    if (!/^Nina\/.+\.swift$/.test(source.path)) continue;
+    const debugOnly = debugOnlyLines(source.text);
+    source.text.split("\n").forEach((line, index) => {
+      if (debugOnly[index]) return;
+      const code = line.replace(/\/\/.*$/, "");
+      for (const symbol of debugOnlySymbols) {
+        if (new RegExp(`\\b${symbol}\\b`).test(code)) {
+          offenders.push(`${source.path}:${index + 1} ${symbol}`);
+        }
+      }
+    });
   }
   return offenders;
 }
@@ -793,6 +854,14 @@ export function iosArtifactChecks(
         ? "The app bundle carries the DEBUG test accounts; archive the Release configuration."
         : "The app bundle scan exceeded its safety limit, so the DEBUG test-account check is incomplete.",
     ),
+    check(
+      "artifact.debug-chat-engine",
+      artifact.scanComplete && !artifact.containsDebugChatEngine,
+      "The app bundle carries no DEBUG keyword chat engine or demo house.",
+      artifact.scanComplete
+        ? "The app bundle carries the DEBUG keyword chat engine or demo house; archive the Release configuration."
+        : "The app bundle scan exceeded its safety limit, so the DEBUG chat-engine check is incomplete.",
+    ),
   ];
 
   const entitlements = artifact.entitlements;
@@ -881,6 +950,10 @@ export function looksLikeSecret(value: string): boolean {
 
 export function containsDebugSignIn(value: string): boolean {
   return debugSignInMarkers.some((marker) => value.includes(marker));
+}
+
+export function containsDebugChatEngine(value: string): boolean {
+  return debugChatEngineMarkers.some((marker) => value.includes(marker));
 }
 
 export function nonAppleSignInCalls(source: string): string[] {
@@ -993,6 +1066,7 @@ async function collectArtifactFiles(
     scanComplete: boolean;
     containsServerCredential: boolean;
     containsDebugSignIn: boolean;
+    containsDebugChatEngine: boolean;
   }
 > {
   const files: string[] = [];
@@ -1000,6 +1074,7 @@ async function collectArtifactFiles(
   let scanComplete = true;
   let containsServerCredential = false;
   let carriesDebugSignIn = false;
+  let carriesDebugChatEngine = false;
   const maximumScannedBytes = 256 * 1024 * 1024;
 
   async function visit(directory: string, prefix = ""): Promise<void> {
@@ -1011,7 +1086,8 @@ async function collectArtifactFiles(
       } else if (entry.isFile) {
         files.push(relativePath);
         if (
-          (containsServerCredential && carriesDebugSignIn) || !scanComplete
+          (containsServerCredential && carriesDebugSignIn &&
+            carriesDebugChatEngine) || !scanComplete
         ) continue;
         const metadata = await Deno.stat(absolutePath);
         if (scannedBytes + metadata.size > maximumScannedBytes) {
@@ -1026,6 +1102,7 @@ async function collectArtifactFiles(
           containsServerCredential = true;
         }
         if (containsDebugSignIn(text)) carriesDebugSignIn = true;
+        if (containsDebugChatEngine(text)) carriesDebugChatEngine = true;
       }
     }
   }
@@ -1036,6 +1113,7 @@ async function collectArtifactFiles(
     scanComplete,
     containsServerCredential,
     containsDebugSignIn: carriesDebugSignIn,
+    containsDebugChatEngine: carriesDebugChatEngine,
   };
 }
 
@@ -1083,6 +1161,7 @@ export async function loadIOSArtifactSnapshot(
     scanComplete: scan.scanComplete,
     containsServerCredential: scan.containsServerCredential,
     containsDebugSignIn: scan.containsDebugSignIn,
+    containsDebugChatEngine: scan.containsDebugChatEngine,
   };
 }
 
@@ -1355,6 +1434,14 @@ export async function repositoryChecks(
       "The rating mark shows on the welcome and the startup screen, and nowhere else in the app.",
       `ClassIndMark must be drawn only in LoginView.swift and AppLoadingScreen (AppRootView.swift): ${
         ratingMarkOffenders(claimSources).join(", ")
+      }`,
+    ),
+    check(
+      "repository.debug-only-mock",
+      debugOnlyOffenders(claimSources).length === 0,
+      "The keyword chat engine and the demo house compile into Debug builds only.",
+      `Keep MockNinaEngine, fallbackNinaEngine and DemoHouse inside #if DEBUG: ${
+        debugOnlyOffenders(claimSources).join(", ")
       }`,
     ),
     check(

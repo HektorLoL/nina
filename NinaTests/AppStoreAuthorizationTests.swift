@@ -733,7 +733,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
 
         XCTAssertFalse(approved)
         XCTAssertFalse(store.canInviteMorePeople)
-        XCTAssertEqual(store.syncErrorMessage, "A casa já atingiu o limite de 8 pessoas.")
+        XCTAssertEqual(store.syncErrorMessage, "A casa já atingiu o limite de 8 pessoas e pets.")
     }
 
     @MainActor
@@ -1242,7 +1242,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertFalse(store.shoppingItems.contains { $0.id == itemID })
         XCTAssertEqual(
             store.syncErrorMessage,
-            "Não foi possível verificar sua participação nesta casa."
+            "Não deu para verificar sua participação nesta casa agora. Tente de novo."
         )
     }
 
@@ -2292,7 +2292,11 @@ final class AppStoreAuthorizationTests: XCTestCase {
             .monthlyBudgetReached
         )
         XCTAssertTrue(NinaEngineError.rateLimited.userMessage.contains("limite"))
-        XCTAssertTrue(NinaEngineError.monthlyBudgetReached.userMessage.contains("mensal"))
+        XCTAssertEqual(
+            NinaEngineError.monthlyBudgetReached.userMessage,
+            "A conversa está pausada agora. Tarefas, compras e casa seguem normais."
+        )
+        XCTAssertFalse(NinaEngineError.monthlyBudgetReached.userMessage.contains("mês"))
     }
 
     @MainActor
@@ -2430,7 +2434,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertTrue(store.hasAIMemoryConsent)
         XCTAssertEqual(
             store.syncErrorMessage,
-            "Não foi possível revogar seu consentimento. Ele continua ativo nesta casa."
+            "Não deu para revogar seu consentimento agora. Ele continua ativo nesta casa. Tente de novo."
         )
     }
 
@@ -2460,8 +2464,53 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertFalse(store.canSendNinaMessages)
         XCTAssertEqual(
             store.syncErrorMessage,
-            "Não foi possível registrar seu consentimento. Nada mudou por enquanto."
+            "Não deu para registrar seu consentimento agora. Nada mudou. Tente de novo."
         )
+    }
+
+    @MainActor
+    func testAGrantOpensTheConversationOnlyOnceTheServerHasRecordedIt() async {
+        let user = makeUser()
+        let adultMember = HouseholdMember(
+            userID: user.id,
+            name: user.displayName,
+            relationship: "Você",
+            role: .adult,
+            tone: .mint,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(members: [adultMember])
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        await backend.holdConsentWrites()
+        await backend.setConsentWriteFails(true)
+
+        let failedGrant = Task { await store.grantAIMemoryConsent(transferConsented: true) }
+        await backend.waitUntilAConsentWriteIsHeld()
+        XCTAssertFalse(store.hasAIMemoryConsent)
+        XCTAssertFalse(store.canSendNinaMessages)
+        XCTAssertTrue(store.isSyncingHome)
+
+        await backend.releaseHeldConsentWrite()
+        let didFail = await failedGrant.value
+        XCTAssertFalse(didFail)
+        XCTAssertFalse(store.hasAIMemoryConsent)
+        XCTAssertFalse(store.canSendNinaMessages)
+
+        await backend.setConsentWriteFails(false)
+        let grant = Task { await store.grantAIMemoryConsent(transferConsented: true) }
+        await backend.waitUntilAConsentWriteIsHeld()
+        XCTAssertFalse(store.hasAIMemoryConsent)
+        XCTAssertFalse(store.canSendNinaMessages)
+
+        await backend.releaseHeldConsentWrite()
+        let didGrant = await grant.value
+        XCTAssertTrue(didGrant)
+        XCTAssertTrue(store.hasAIMemoryConsent)
+        XCTAssertTrue(store.canSendNinaMessages)
     }
 
     @MainActor
@@ -3598,6 +3647,241 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertTrue(store.openSeeds.isEmpty)
     }
 
+    @MainActor
+    func testConfirmingADatedProposalAsksIOSForAlertsOnceItsAnswerHasBeenRead() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let scheduler = PermissionPromptRecorder(status: .notDetermined)
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: scheduler
+        )
+        await store.activateHomeContext(for: user)
+        let beforeTheReading = datedProposal(kind: .reminder)
+        let afterTheReading = datedProposal(kind: .task)
+
+        store.messages = [
+            ChatMessage(sender: .nina, text: "Confirme", timestamp: .now, proposals: [beforeTheReading])
+        ]
+        _ = await store.resolveProposal(
+            beforeTheReading,
+            decision: .accept,
+            editedPayload: beforeTheReading.confirmationPayload
+        )
+        let askedBeforeTheReading = await scheduler.requestCount()
+
+        await store.refreshNotificationAuthorizationStatus()
+        store.messages = [
+            ChatMessage(sender: .nina, text: "Confirme", timestamp: .now, proposals: [afterTheReading])
+        ]
+        let didAccept = await store.resolveProposal(
+            afterTheReading,
+            decision: .accept,
+            editedPayload: afterTheReading.confirmationPayload
+        )
+        await store.notificationPromptTask?.value
+
+        XCTAssertEqual(askedBeforeTheReading, 0)
+        XCTAssertTrue(didAccept)
+        let askedAfterTheReading = await scheduler.requestCount()
+        XCTAssertEqual(askedAfterTheReading, 1)
+        XCTAssertEqual(store.notificationAuthorizationStatus, .authorized)
+    }
+
+    @MainActor
+    func testAnUndatedTaskASementeOrARejectedCardNeverAsksForAlerts() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let scheduler = PermissionPromptRecorder(status: .notDetermined)
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: scheduler
+        )
+        await store.activateHomeContext(for: user)
+        await store.refreshNotificationAuthorizationStatus()
+        let undated = makeProposal(kind: .task)
+        var seed = datedProposal(kind: .seed)
+        seed.payload.dueLabel = "amanhã, 09:00"
+        let rejected = datedProposal(kind: .reminder)
+
+        for (proposal, decision) in [
+            (undated, NinaProposalDecision.accept),
+            (seed, .accept),
+            (rejected, .reject)
+        ] {
+            store.messages = [
+                ChatMessage(sender: .nina, text: "Confirme", timestamp: .now, proposals: [proposal])
+            ]
+            _ = await store.resolveProposal(
+                proposal,
+                decision: decision,
+                editedPayload: decision == .accept ? proposal.confirmationPayload : nil
+            )
+        }
+        store.addTask(title: "Comprar pilhas", subtitle: "", owner: "", dueLabel: "Sem data", category: .home)
+
+        XCTAssertNil(store.notificationPromptTask)
+        let asked = await scheduler.requestCount()
+        XCTAssertEqual(asked, 0)
+    }
+
+    @MainActor
+    func testAManualDatedTaskAsksOnceAndNeverAsksSomeoneWhoSwitchedAlertsOff() async throws {
+        let suiteName = "AppStoreAuthorizationTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let scheduler = PermissionPromptRecorder(status: .notDetermined)
+        let store = AppStore(
+            defaults: defaults,
+            remoteHomeBackend: nil,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: scheduler
+        )
+        await store.refreshNotificationAuthorizationStatus()
+        let dueAt = Date().addingTimeInterval(86_400)
+
+        store.addTask(title: "Pagar a luz", subtitle: "", owner: "", dueLabel: "amanhã", dueAt: dueAt, category: .bills)
+        await store.notificationPromptTask?.value
+        store.addTask(title: "Levar o lixo", subtitle: "", owner: "", dueLabel: "amanhã", dueAt: dueAt, category: .home)
+        await store.notificationPromptTask?.value
+        let askedWhileOn = await scheduler.requestCount()
+
+        let offSuiteName = "\(suiteName).off"
+        let offDefaults = try XCTUnwrap(UserDefaults(suiteName: offSuiteName))
+        defer { offDefaults.removePersistentDomain(forName: offSuiteName) }
+        offDefaults.set(false, forKey: LocalHomeNotificationScheduler.notificationsEnabledKey)
+        let offScheduler = PermissionPromptRecorder(status: .notDetermined)
+        let switchedOff = AppStore(
+            defaults: offDefaults,
+            remoteHomeBackend: nil,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: offScheduler
+        )
+        await switchedOff.refreshNotificationAuthorizationStatus()
+        switchedOff.addTask(title: "Pagar a luz", subtitle: "", owner: "", dueLabel: "amanhã", dueAt: dueAt, category: .bills)
+
+        XCTAssertEqual(askedWhileOn, 1)
+        XCTAssertNil(switchedOff.notificationPromptTask)
+        let askedWhileOff = await offScheduler.requestCount()
+        XCTAssertEqual(askedWhileOff, 0)
+    }
+
+    @MainActor
+    func testAMinorsPhoneIsAskedOnItsHomeOnlyWhileTheGuardianKeepsAlertsOn() async {
+        let allowed = MinorAccountBackend(
+            viewerAge: .testMinor(.twelveToFifteen),
+            minorHome: makeMinorHome(memberID: UUID(), tasks: [])
+        )
+        let allowedScheduler = PermissionPromptRecorder(status: .notDetermined)
+        let allowedStore = AppStore(
+            remoteHomeBackend: allowed,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: allowedScheduler
+        )
+        await allowedStore.activateHomeContext(for: makeUser())
+        await allowedStore.refreshNotificationAuthorizationStatus()
+        allowedStore.askForNotificationsOnMinorHome()
+        await allowedStore.notificationPromptTask?.value
+
+        let silenced = MinorAccountBackend(
+            viewerAge: .testMinor(.twelveToFifteen),
+            minorHome: MinorHome(
+                viewer: MinorViewer(
+                    memberID: UUID(),
+                    firstName: "Bia",
+                    guardianNames: ["Ana"],
+                    state: .active,
+                    supervision: MinorSupervisionSettings(
+                        alertsEnabled: false,
+                        quietStart: MinorSupervisionDefaults.quietStart,
+                        quietEnd: MinorSupervisionDefaults.quietEnd,
+                        dailyLimitMinutes: nil
+                    )
+                ),
+                family: MinorFamily(id: UUID(), name: "Casa"),
+                tasks: []
+            )
+        )
+        let silencedScheduler = PermissionPromptRecorder(status: .notDetermined)
+        let silencedStore = AppStore(
+            remoteHomeBackend: silenced,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: silencedScheduler
+        )
+        await silencedStore.activateHomeContext(for: makeUser())
+        await silencedStore.refreshNotificationAuthorizationStatus()
+        silencedStore.askForNotificationsOnMinorHome()
+
+        XCTAssertEqual(allowedStore.homeAccessState, .minorMember)
+        let askedWhileAllowed = await allowedScheduler.requestCount()
+        XCTAssertEqual(askedWhileAllowed, 1)
+        XCTAssertEqual(allowedStore.minorAlertsValue, "Ligados")
+        XCTAssertTrue(allowedStore.minorAlertsKeepComing)
+        XCTAssertNil(silencedStore.notificationPromptTask)
+        let askedWhileSilenced = await silencedScheduler.requestCount()
+        XCTAssertEqual(askedWhileSilenced, 0)
+        XCTAssertEqual(silencedStore.minorAlertsValue, "Desligados")
+        XCTAssertFalse(silencedStore.minorAlertsKeepComing)
+    }
+
+    func testAMinorsAvisosValueSaysWhatThisIPhoneWillActuallyDo() {
+        XCTAssertEqual(AppStore.minorAlertsValue(guardianAllows: true, status: .authorized), "Ligados")
+        XCTAssertEqual(AppStore.minorAlertsValue(guardianAllows: true, status: .provisional), "Ligados")
+        XCTAssertEqual(AppStore.minorAlertsValue(guardianAllows: true, status: .denied), "Bloqueados")
+        XCTAssertEqual(AppStore.minorAlertsValue(guardianAllows: true, status: .notDetermined), "Desligados")
+        XCTAssertEqual(AppStore.minorAlertsValue(guardianAllows: true, status: .unavailable), "Desligados")
+        XCTAssertEqual(AppStore.minorAlertsValue(guardianAllows: false, status: .authorized), "Desligados")
+    }
+
+    @MainActor
+    func testOnlyAnAdultWithoutParentalControlsWaitsForAppleToActForAMinor() async {
+        func waits(_ age: AgeStatus) async -> Bool {
+            let user = makeUser()
+            let adultMember = HouseholdMember(
+                userID: user.id,
+                name: user.displayName,
+                relationship: "Você",
+                role: .adult,
+                tone: .mint,
+                taskCount: 0,
+                memoryNote: ""
+            )
+            let backend = RecordingHomeBackend(state: makeRemoteState(members: [adultMember], viewerAge: age))
+            let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+            await store.activateHomeContext(for: user)
+            return store.actingForMinorsWaitsForApple
+        }
+        var parentalControls = AgeStatus.testDeclaredAdult
+        parentalControls.parentalControlsActive = true
+
+        let declared = await waits(.testDeclaredAdult)
+        let trusted = await waits(.testTrustedAdult)
+        let controlled = await waits(parentalControls)
+        let minor = await waits(.testMinor(.sixteenToSeventeen))
+
+        XCTAssertTrue(declared)
+        XCTAssertFalse(trusted)
+        XCTAssertFalse(controlled)
+        XCTAssertFalse(minor)
+    }
+
+    private func datedProposal(kind: NinaProposalKind) -> NinaProposal {
+        NinaProposal(
+            kind: kind,
+            title: "Proposal",
+            detail: "Detail",
+            actionTitle: "Confirm",
+            payload: NinaProposalPayload(
+                title: "Pagar o boleto",
+                detail: "",
+                dueLabel: "sexta, 09:00",
+                dueAt: "2030-08-16T12:00:00Z"
+            )
+        )
+    }
+
     private func makeUser() -> AuthUser {
         AuthUser(
             id: UUID().uuidString,
@@ -4049,6 +4333,116 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testATurnNinaNeverAnsweredLeavesNoReplyAndPutsTheWordsBackInTheComposer() async {
+        let store = await makeStoreForFailingTurn(error: .unavailable)
+        let before = store.messages
+
+        await store.sendMessage("estou cansada, penso em sumir")
+
+        XCTAssertEqual(store.messages, before)
+        XCTAssertEqual(store.restorableDraft, "estou cansada, penso em sumir")
+        XCTAssertEqual(store.ninaSendFailure, "Não deu para a Nina responder agora. Tente de novo.")
+        XCTAssertFalse(store.isNinaResponding)
+    }
+
+    @MainActor
+    func testResendingATurnWhoseAnswerWasLostReplaysItsIDSoTheServerNeverRunsItTwice() async {
+        let engine = ScriptedNinaEngine(failures: [.unconfirmed, .unconfirmed])
+        let store = await makeStoreForFailingTurn(engine: engine)
+
+        await store.sendMessage("comprar pão amanhã")
+        await store.sendMessage("comprar pão amanhã")
+        await store.sendMessage("comprar pão amanhã")
+        let ids = await engine.recordedMessageIDs()
+
+        XCTAssertEqual(ids.count, 3)
+        XCTAssertEqual(Set(ids).count, 1)
+        XCTAssertEqual(store.messages.last?.sender, .nina)
+        XCTAssertEqual(store.messages.filter { $0.id == ids[0] }.count, 1)
+        XCTAssertNil(store.ninaSendFailure)
+    }
+
+    @MainActor
+    func testATurnTheServerSaidFailedOrNewWordsAreSentAsANewTurn() async {
+        let engine = ScriptedNinaEngine(failures: [.unavailable, .unconfirmed])
+        let store = await makeStoreForFailingTurn(engine: engine)
+
+        await store.sendMessage("comprar pão amanhã")
+        await store.sendMessage("comprar pão amanhã")
+        await store.sendMessage("comprar pão e leite amanhã")
+        let ids = await engine.recordedMessageIDs()
+
+        XCTAssertEqual(ids.count, 3)
+        XCTAssertEqual(Set(ids).count, 3)
+    }
+
+    @MainActor
+    func testOnlyARequestThatFoundNoNetworkIsToldThereIsNoConnection() async {
+        XCTAssertEqual(NinaEngineError(transportError: URLError(.notConnectedToInternet)), .offline)
+        XCTAssertEqual(NinaEngineError(transportError: URLError(.cannotFindHost)), .offline)
+        XCTAssertEqual(NinaEngineError(transportError: URLError(.timedOut)), .unconfirmed)
+        XCTAssertEqual(NinaEngineError(transportError: URLError(.networkConnectionLost)), .unconfirmed)
+        XCTAssertEqual(NinaEngineError(transportError: DiagnosticsTestError.expected), .unconfirmed)
+        XCTAssertEqual(NinaEngineError.unconfirmed.userMessage, NinaEngineError.unavailable.userMessage)
+        XCTAssertEqual(NinaEngineError(code: "service_not_configured"), .unavailable)
+        XCTAssertEqual(NinaEngineError(code: "safety_check_unavailable"), .unavailable)
+        XCTAssertFalse(NinaEngineError.unavailable.userMessage.contains("conexão"))
+
+        let store = await makeStoreForFailingTurn(error: .offline)
+        let before = store.messages
+
+        await store.sendMessage("comprar pão amanhã")
+
+        XCTAssertEqual(store.messages, before)
+        XCTAssertEqual(store.restorableDraft, "comprar pão amanhã")
+        XCTAssertEqual(store.ninaSendFailure, "Sem conexão. Tente de novo.")
+    }
+
+    @MainActor
+    func testAShippedBuildWithNoServerNeverAnswersInNinasName() async {
+        let store = await makeStoreForFailingTurn(engine: UnavailableNinaEngine())
+        let before = store.messages
+
+        await store.sendMessage("remédio do meu filho")
+
+        XCTAssertEqual(store.messages, before)
+        XCTAssertEqual(store.restorableDraft, "remédio do meu filho")
+        XCTAssertEqual(store.ninaSendFailure, NinaEngineError.unavailable.userMessage)
+    }
+
+    @MainActor
+    func testAFailureFromAnyOtherSourceIsAlsoLeftUnansweredAndClearsWithTheAccount() async {
+        let store = await makeStoreForFailingTurn(engine: FailingNinaEngine(error: URLError(.badServerResponse)))
+        let before = store.messages
+
+        await store.sendMessage("Ler isso")
+
+        XCTAssertEqual(store.messages, before)
+        XCTAssertEqual(store.ninaSendFailure, NinaEngineError.unavailable.userMessage)
+
+        await store.activateHomeContext(for: AuthUser(
+            id: UUID().uuidString,
+            displayName: "Outra",
+            email: nil,
+            provider: .apple
+        ))
+        XCTAssertNil(store.ninaSendFailure)
+        XCTAssertNil(store.restorableDraft)
+    }
+
+    @MainActor
+    func testARefusalTheServerAnsweredStillReadsAsNinasLineInTheThread() async {
+        let store = await makeStoreForFailingTurn(error: .rateLimited)
+
+        await store.sendMessage("mais uma")
+
+        XCTAssertEqual(store.messages.last?.sender, .nina)
+        XCTAssertEqual(store.messages.last?.text, NinaEngineError.rateLimited.userMessage)
+        XCTAssertNil(store.ninaSendFailure)
+        XCTAssertNil(store.restorableDraft)
+    }
+
+    @MainActor
     func testARefusedMessageRehydratesAsTheMarkerTheServerKeptAndNeverInItsWords() async {
         let user = makeUser()
         let refused = ChatMessage(sender: .user, text: AppStore.heldMessageMarker, timestamp: .now)
@@ -4396,6 +4790,11 @@ final class AppStoreAuthorizationTests: XCTestCase {
 
     @MainActor
     private func makeStoreForFailingTurn(error: NinaEngineError) async -> AppStore {
+        await makeStoreForFailingTurn(engine: FailingNinaEngine(error: error))
+    }
+
+    @MainActor
+    private func makeStoreForFailingTurn(engine: any NinaEngine) async -> AppStore {
         let user = makeUser()
         let adultMember = HouseholdMember(
             userID: user.id,
@@ -4407,7 +4806,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
             memoryNote: ""
         )
         let backend = RecordingHomeBackend(state: makeRemoteState(members: [adultMember]))
-        let store = AppStore(remoteHomeBackend: backend, ninaEngine: FailingNinaEngine(error: error))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: engine)
         await store.activateHomeContext(for: user)
         await store.grantAIMemoryConsent(transferConsented: true)
         return store
@@ -4571,7 +4970,7 @@ private enum DiagnosticsTestError: Error {
 }
 
 private struct FailingNinaEngine: NinaEngine {
-    var error: NinaEngineError
+    var error: any Error
 
     func respond(
         to text: String,
@@ -4580,6 +4979,41 @@ private struct FailingNinaEngine: NinaEngine {
         messageID: UUID
     ) async throws -> NinaEngineResponse {
         throw error
+    }
+}
+
+private actor ScriptedNinaEngine: NinaEngine {
+    private var failures: [NinaEngineError]
+    private var messageIDs: [UUID] = []
+
+    init(failures: [NinaEngineError]) {
+        self.failures = failures
+    }
+
+    func recordedMessageIDs() -> [UUID] {
+        messageIDs
+    }
+
+    func respond(
+        to text: String,
+        attachments: [NinaAttachmentInput],
+        familyID: UUID,
+        messageID: UUID
+    ) async throws -> NinaEngineResponse {
+        messageIDs.append(messageID)
+        if !failures.isEmpty {
+            throw failures.removeFirst()
+        }
+        return NinaEngineResponse(
+            reply: "Preparei uma proposta.",
+            suggestion: nil,
+            version: 2,
+            runID: UUID(),
+            threadID: UUID(),
+            assistantMessageID: UUID(),
+            proposals: [],
+            serverPersisted: true
+        )
     }
 }
 
@@ -5098,6 +5532,38 @@ private actor RecordingNotificationScheduler: HomeNotificationScheduling {
     }
 }
 
+private actor PermissionPromptRecorder: HomeNotificationScheduling {
+    private var status: HomeNotificationAuthorizationStatus
+    private let answer: HomeNotificationAuthorizationStatus
+    private var requests = 0
+
+    init(
+        status: HomeNotificationAuthorizationStatus,
+        answer: HomeNotificationAuthorizationStatus = .authorized
+    ) {
+        self.status = status
+        self.answer = answer
+    }
+
+    func authorizationStatus() async -> HomeNotificationAuthorizationStatus {
+        status
+    }
+
+    func requestAuthorization() async -> HomeNotificationAuthorizationStatus {
+        requests += 1
+        if status == .notDetermined {
+            status = answer
+        }
+        return status
+    }
+
+    func synchronize(tasks: [TaskItem], familyID: UUID, viewer: HomeNotificationViewer) async {}
+
+    func requestCount() -> Int {
+        requests
+    }
+}
+
 private actor DelayedNotificationScheduler: HomeNotificationScheduling {
     private var syncRecords: [NotificationSyncRecord] = []
     private var didStartNonemptySync = false
@@ -5137,6 +5603,9 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
     private var realtimeSubscribed = false
     private var realtimeSubscribedContinuation: CheckedContinuation<Void, Never>?
     private var consentWriteFails = false
+    private var holdsConsentWrites = false
+    private var heldConsentWrite: CheckedContinuation<Void, Never>?
+    private var consentWriteStartedContinuation: CheckedContinuation<Void, Never>?
     private var confirmedProposalPayloads: [UUID: NinaProposalPayload] = [:]
     private var confirmedMemoryVisibilities: [UUID: NinaMemoryVisibility] = [:]
     private var exportData = Data()
@@ -5189,6 +5658,22 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
 
     func setConsentWriteFails(_ shouldFail: Bool) {
         consentWriteFails = shouldFail
+    }
+
+    func holdConsentWrites() {
+        holdsConsentWrites = true
+    }
+
+    func waitUntilAConsentWriteIsHeld() async {
+        if heldConsentWrite != nil { return }
+        await withCheckedContinuation { continuation in
+            consentWriteStartedContinuation = continuation
+        }
+    }
+
+    func releaseHeldConsentWrite() {
+        heldConsentWrite?.resume()
+        heldConsentWrite = nil
     }
 
     func setExportData(_ data: Data) {
@@ -5326,6 +5811,13 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
     ) async throws -> RemoteHomeState {
         mutations.append(.recordNinaAIConsent(granted))
         lastTransferConsent = transferConsented
+        if holdsConsentWrites {
+            await withCheckedContinuation { continuation in
+                heldConsentWrite = continuation
+                consentWriteStartedContinuation?.resume()
+                consentWriteStartedContinuation = nil
+            }
+        }
         if consentWriteFails {
             throw DiagnosticsTestError.expected
         }

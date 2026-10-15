@@ -196,6 +196,31 @@ final class PremiumSubscriptionTests: XCTestCase {
         XCTAssertEqual(store.householdPremium.status, .inactive)
     }
 
+    @MainActor
+    func testPlansThatFailToLoadSayItInOneLineAndAskTheStoreAgainOnRetry() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+        let catalog = FailingPremiumProductCatalog()
+        let store = PremiumSubscriptionStore(
+            backend: nil,
+            productIDs: TestEnvironment.configuredProductIDs,
+            localTransactions: StubLocalTransactionSource([]),
+            catalog: catalog,
+            defaults: environment.defaults,
+            privateDataStore: environment.privateDataStore
+        )
+
+        await store.loadProducts()
+        XCTAssertTrue(store.products.isEmpty)
+        XCTAssertEqual(store.productLoadMessage, "Não deu para carregar os planos agora.")
+        XCTAssertFalse(store.isLoadingProducts)
+
+        await store.loadProducts()
+        let requests = await catalog.requestCount
+        XCTAssertEqual(requests, 2)
+        XCTAssertEqual(store.productLoadMessage, PremiumSubscriptionStore.productLoadFailure)
+    }
+
     func testThePaywallOnlyMarketsBenefitsTheAppCanDeliverToday() {
         let titles = PremiumPlan.mock.benefits.map(\.title)
         let readsDocuments = NinaAttachmentGate.current.isEnabled
@@ -236,8 +261,8 @@ final class PremiumSubscriptionTests: XCTestCase {
     }
 
     func testThePaywallLinksToTheTermsAndPrivacyPagesNinaPublishesItself() {
-        XCTAssertEqual(NinaLegalLinks.termsOfUse.absoluteString, "https://ninai.app/termos")
-        XCTAssertEqual(NinaLegalLinks.privacyPolicy.absoluteString, "https://ninai.app/privacidade")
+        XCTAssertEqual(NinaLegalLinks.termsOfUse.absoluteString, "https://ninai.app/termos/")
+        XCTAssertEqual(NinaLegalLinks.privacyPolicy.absoluteString, "https://ninai.app/privacidade/")
     }
 
     func testTheTeaserStopsSellingOnceTheHouseholdIsPremium() {
@@ -332,7 +357,7 @@ final class PremiumSubscriptionTests: XCTestCase {
         await store.waitForPendingRemoteMutations()
 
         XCTAssertTrue(store.isWeeklyDigestEnabled)
-        XCTAssertEqual(store.syncErrorMessage, "Não foi possível salvar o resumo semanal.")
+        XCTAssertEqual(store.syncErrorMessage, "Não deu para salvar o resumo semanal agora. Tente de novo.")
     }
 
     func testTheServerCodeForPremiumOnlyAttachmentsGetsItsOwnEngineError() {
@@ -551,6 +576,26 @@ final class PremiumSubscriptionTests: XCTestCase {
         await store.configure(for: environment.user)
 
         XCTAssertEqual(store.entitlement.status, .reconciling)
+        XCTAssertNil(store.errorMessage)
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertTrue(calls.isEmpty)
+    }
+
+    @MainActor
+    func testAPhoneWhoseSessionIsGoneReadsAsSignedOutAndAsksTheServerNothing() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSessionMissing()
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+
+        await store.configure(for: environment.user)
+
+        XCTAssertEqual(store.entitlement.status, .inactive)
         XCTAssertNil(store.errorMessage)
         let calls = await backend.recordedSyncCalls()
         XCTAssertTrue(calls.isEmpty)
@@ -836,6 +881,17 @@ private struct EmptyPremiumProductCatalog: PremiumProductCatalog {
     }
 }
 
+private actor FailingPremiumProductCatalog: PremiumProductCatalog {
+    private struct Unreachable: Error {}
+
+    private(set) var requestCount = 0
+
+    func products(for identifiers: [String]) async throws -> [Product] {
+        requestCount += 1
+        throw Unreachable()
+    }
+}
+
 private actor RecordingPremiumBackend: PremiumSubscriptionBackend {
     struct SyncCall: Equatable {
         var signedTransactionInfo: String
@@ -851,6 +907,7 @@ private actor RecordingPremiumBackend: PremiumSubscriptionBackend {
 
     private let status: PremiumEntitlement
     private var statusFails = false
+    private var sessionMissing = false
     private var syncResult: SyncResult = .failure
     private var statusLoads = 0
     private var syncCalls: [SyncCall] = []
@@ -861,6 +918,10 @@ private actor RecordingPremiumBackend: PremiumSubscriptionBackend {
 
     func setStatusFails(_ shouldFail: Bool) {
         statusFails = shouldFail
+    }
+
+    func setSessionMissing() {
+        sessionMissing = true
     }
 
     func setSyncResult(_ result: SyncResult) {
@@ -877,6 +938,9 @@ private actor RecordingPremiumBackend: PremiumSubscriptionBackend {
 
     func loadStatus() async throws -> PremiumEntitlement {
         statusLoads += 1
+        if sessionMissing {
+            throw PremiumBackendRequestError.missingSession
+        }
         if statusFails {
             throw BackendError()
         }

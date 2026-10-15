@@ -851,6 +851,30 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(wire["due_label"] as? String, "quando der")
     }
 
+    func testSavingAProfileNeverSendsThePhoneSexOrBirthday() throws {
+        let row = ProfileUpsertRow(
+            id: UUID(),
+            displayName: "Dani",
+            displayNameSource: "user",
+            email: nil,
+            householdRole: ProfileHouseholdRole.responsibleAdult.rawValue,
+            availabilityNote: "Noites e sábados",
+            communicationPreference: ProfileCommunicationPreference.gentle.rawValue,
+            memoryNote: "",
+            avatar: .defaultPreset
+        )
+
+        let wire = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(row)) as? [String: Any]
+        )
+
+        XCTAssertFalse(wire.keys.contains("phone"))
+        XCTAssertFalse(wire.keys.contains("sex"))
+        XCTAssertFalse(wire.keys.contains("birthday_label"))
+        XCTAssertEqual(wire["availability_note"] as? String, "Noites e sábados")
+        XCTAssertFalse(wire.keys.contains("email"))
+    }
+
     private static func proposal(kind: NinaProposalKind, dueLabel: String, dueAt: String?) -> NinaProposal {
         NinaProposal(
             kind: kind,

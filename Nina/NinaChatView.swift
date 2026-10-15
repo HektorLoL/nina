@@ -122,14 +122,20 @@ struct NinaChatView: View {
             )
         }
         .onAppear { restoreDraftIfNeeded() }
+        .onChange(of: store.restorableDraft) { _, _ in
+            restoreDraftIfNeeded()
+        }
     }
 
-    // Words the chat dropped when it closed come back once it opens again, never over a new draft.
+    // Words the chat dropped, or a turn Nina never answered, come back to the composer ahead of anything typed since.
     private func restoreDraftIfNeeded() {
         guard let draft = store.restorableDraft else { return }
         store.restorableDraft = nil
-        if composerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let typedSince = composerDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if typedSince.isEmpty || typedSince == draft {
             composerDraft = draft
+        } else if !draft.isEmpty {
+            composerDraft = draft + "\n" + composerDraft
         }
     }
 
@@ -184,9 +190,9 @@ struct NinaChatView: View {
                             .id("nina-typing")
                     }
                 }
-                // Focus stays in the composer, so Nina's answer is spoken the moment it lands.
+                // Focus stays in the composer, so Nina's answer is spoken as it lands; a turn she never answered speaks no old reply.
                 .onChange(of: store.isNinaResponding) { wasResponding, isResponding in
-                    guard wasResponding, !isResponding,
+                    guard wasResponding, !isResponding, store.ninaSendFailure == nil,
                           let reply = store.messages.last, reply.sender == .nina else { return }
                     AccessibilityNotification.Announcement("Nina: \(reply.text)").post()
                 }
@@ -249,35 +255,39 @@ struct NinaChatView: View {
     }
 
     private var consentContent: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                AIMemoryConsentCard()
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 24)
-                    .frame(
-                        maxWidth: .infinity,
-                        minHeight: max(proxy.size.height - 104, 0),
-                        alignment: .leading
-                    )
-                    .padding(.bottom, 104)
+        VStack(spacing: 0) {
+            header
+
+            GeometryReader { proxy in
+                ScrollView {
+                    AIMemoryConsentCard()
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                        .padding(.bottom, 24)
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: max(proxy.size.height - 104, 0),
+                            alignment: .leading
+                        )
+                        .padding(.bottom, 104)
+                }
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollBounceBehavior(.basedOnSize)
         }
     }
 
     private var adultOnlyContent: some View {
-        VStack {
+        VStack(spacing: 0) {
+            header
             Spacer(minLength: 0)
-
             ZeroState(
                 headline: "A conversa é dos adultos da casa.",
                 body_: "Tarefas e compras continuam com você.",
                 presence: .unavailable
             )
-
+            .padding(.horizontal, 20)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
         .padding(.bottom, 104)
     }
 
@@ -316,6 +326,7 @@ struct AIMemoryConsentCard: View {
     var onGranted: () -> Void = {}
 
     @State private var authorizesTransfer = false
+    @State private var isGranting = false
 
     static let lead = "Para eu entender o que você escreve, o texto e os detalhes da casa que eu preciso, como tarefas, compras e nomes, vão para a OpenAI, uma empresa dos Estados Unidos. Cada adulto da casa decide o seu."
 
@@ -331,8 +342,6 @@ struct AIMemoryConsentCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            NinaMark(size: 48, presence: .listening)
-
             if store.aiConsentNoticeChanged {
                 Text("Este aviso mudou.")
                     .ninaText(.label, NinaTheme.ink, weight: .semibold)
@@ -357,22 +366,26 @@ struct AIMemoryConsentCard: View {
 
             transferBlock
 
+            if let error = store.syncErrorMessage {
+                NinaErrorNote(text: error, style: .card, announces: false)
+            }
+
             NinaButton(
                 title: "Aceitar e conversar com a Nina",
                 fillsWidth: true,
-                isEnabled: authorizesTransfer && !store.isSyncingHome
+                isEnabled: authorizesTransfer && !store.isSyncingHome,
+                isPending: isGranting
             ) {
                 Haptics.lightImpact()
+                isGranting = true
                 Task {
-                    if await store.grantAIMemoryConsent(transferConsented: authorizesTransfer) {
+                    let granted = await store.grantAIMemoryConsent(transferConsented: authorizesTransfer)
+                    isGranting = false
+                    if granted {
                         Haptics.success()
                         onGranted()
                     }
                 }
-            }
-
-            if let error = store.syncErrorMessage {
-                NinaErrorNote(text: error, style: .card, announces: false)
             }
 
             Text("Sem aceitar, tudo o mais continua funcionando: tarefas, compras, casa. Só a conversa fica desligada.")
@@ -442,6 +455,7 @@ private struct ChatInputBar: View {
     @State private var isShowingDocumentReadingNotice = false
     @State private var isLoadingAttachments = false
     @State private var attachmentError: String?
+    @State private var droppedAttachmentsForPremium = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -466,13 +480,23 @@ private struct ChatInputBar: View {
                     )
                 }
 
+                if let sendFailure = store.ninaSendFailure {
+                    NinaErrorNote(text: sendFailure, style: .card)
+                }
+
                 if let attachmentError {
+                    NinaErrorNote(text: attachmentError, style: .card)
+                }
+
+                // A house that lost Premium is a closed door, not a failure: grout and ink, never the error red.
+                if droppedAttachmentsForPremium, !canReadDocuments {
                     HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: "exclamationmark.circle")
+                        Image(systemName: "lock")
                             .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(NinaTheme.ink)
+                            .accessibilityHidden(true)
 
-                        Text(attachmentError)
+                        Text("Foto e documento são do Premium.")
                             .ninaText(.meta, NinaTheme.ink)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -540,10 +564,16 @@ private struct ChatInputBar: View {
             guard !items.isEmpty else { return }
             loadPhotos(items)
         }
+        .onAppear(perform: restoreAttachmentsIfNeeded)
+        .onChange(of: store.restorableAttachments) { _, _ in
+            restoreAttachmentsIfNeeded()
+        }
         .onChange(of: canReadDocuments) { _, isAllowed in
+            if isAllowed { droppedAttachmentsForPremium = false }
             guard !isAllowed, !pendingAttachments.isEmpty else { return }
             pendingAttachments = []
-            attachmentError = "Foto e documento são do Premium."
+            attachmentError = nil
+            droppedAttachmentsForPremium = true
         }
     }
 
@@ -580,11 +610,11 @@ private struct ChatInputBar: View {
     // An honesty state is never replaced by silence: whatever the thread cannot show about
     // where a reply came from, or which ceiling stopped it, sits on the composer.
     private var notice: ComposerNotice? {
-        if let connectionNotice = store.ninaConnectionNotice {
-            return ComposerNotice(systemName: "wifi.exclamationmark", text: connectionNotice)
-        }
         if let premiumCeiling {
             return ComposerNotice(systemName: "lock", text: premiumCeiling, opensPremium: true)
+        }
+        if isPausedForBudget {
+            return ComposerNotice(systemName: "pause.circle", text: "Conversa pausada. Anote pelo + em Hoje.")
         }
         if store.isUsingLocalNina {
             return ComposerNotice(systemName: "iphone", text: "Modo local. Nada sai deste aparelho.")
@@ -607,6 +637,12 @@ private struct ChatInputBar: View {
             return "No Premium, 50 mensagens por dia."
         }
         return nil
+    }
+
+    // The shared budget pauses every house alike, so no purchase is offered for it.
+    private var isPausedForBudget: Bool {
+        guard let latest = store.messages.last, latest.sender == .nina else { return false }
+        return latest.text == NinaEngineError.monthlyBudgetReached.userMessage
     }
 
     private func noticeStrip(_ notice: ComposerNotice) -> some View {
@@ -769,9 +805,28 @@ private struct ChatInputBar: View {
         draft = ""
         pendingAttachments = []
         attachmentError = nil
+        droppedAttachmentsForPremium = false
 
         Task {
             await store.sendMessage(text, attachments: attachments)
+        }
+    }
+
+    // Attachments of a turn Nina never answered come back with its words, ahead of any added since.
+    private func restoreAttachmentsIfNeeded() {
+        guard !store.restorableAttachments.isEmpty else { return }
+        let restored = store.restorableAttachments.map {
+            PendingChatAttachment(metadata: $0.metadata, data: $0.data)
+        }
+        store.restorableAttachments = []
+        guard canReadDocuments else {
+            droppedAttachmentsForPremium = true
+            return
+        }
+        let combined = restored + pendingAttachments
+        pendingAttachments = Array(combined.prefix(ChatAttachmentLimits.maxCount))
+        if combined.count > ChatAttachmentLimits.maxCount {
+            attachmentError = ChatAttachmentLimits.countError
         }
     }
 
@@ -815,7 +870,7 @@ private struct ChatInputBar: View {
                     )
                     loaded.append(PendingChatAttachment(metadata: metadata, data: imageData.full))
                 } catch {
-                    loadError = "Não foi possível carregar uma das fotos."
+                    loadError = "Não deu para carregar uma das fotos agora. Tente de novo."
                 }
             }
 
@@ -834,7 +889,7 @@ private struct ChatInputBar: View {
     private func loadDocuments(_ result: Result<[URL], Error>) {
         switch result {
         case .failure:
-            attachmentError = "Não foi possível abrir o seletor de documentos."
+            attachmentError = "Não deu para abrir os documentos agora. Tente de novo."
             Haptics.error()
         case .success(let urls):
             let availableSlots = remainingAttachmentSlots
@@ -856,7 +911,7 @@ private struct ChatInputBar: View {
                     } catch let error as ChatAttachmentLoadError {
                         loadError = error.message
                     } catch {
-                        loadError = "Não foi possível carregar um dos documentos."
+                        loadError = "Não deu para carregar um dos documentos agora. Tente de novo."
                     }
                 }
 
@@ -1031,7 +1086,7 @@ private enum ChatAttachmentLoadError: Error {
     var message: String {
         switch self {
         case .unreadable:
-            "Não foi possível ler esse arquivo."
+            "Não deu para ler esse arquivo. Escolha outro."
         case .unsupported:
             "Esse tipo de documento ainda não é compatível."
         case .tooLarge:
@@ -1582,10 +1637,23 @@ private struct NinaProposalCard: View {
             }
 
             metaLine
+
+            if asksForAlerts {
+                NotificationPermissionChip()
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(NinaTheme.ground)
+    }
+
+    // A dated card that would land with no alert on this phone offers the way to alerts before the tap.
+    private var asksForAlerts: Bool {
+        proposal.state == .pending
+            && (proposal.kind == .task || proposal.kind == .reminder)
+            && confirmationPayload.scheduledDate != nil
+            && (store.notificationAuthorizationStatus == .notDetermined
+                || store.notificationAuthorizationStatus == .denied)
     }
 
     private var objectRow: some View {
@@ -1865,15 +1933,7 @@ private struct NinaProposalCard: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let resolveFailure, proposal.state == .pending {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "exclamationmark.circle")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(NinaTheme.ink)
-                    Text(resolveFailure)
-                        .ninaText(.caption, NinaTheme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityElement(children: .combine)
+                NinaErrorNote(text: resolveFailure)
             }
 
             if proposal.state == .pending {

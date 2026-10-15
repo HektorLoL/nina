@@ -83,6 +83,17 @@ final class InviteLinkStore {
     }
 }
 
+// Someone already in a house, or waiting on one, only sets an invite aside; creating is for no house at all.
+enum InviteSetAside {
+    static func offersHouseCreation(_ access: HomeAccessState) -> Bool {
+        access == .noHome
+    }
+
+    static func title(for access: HomeAccessState) -> String {
+        offersHouseCreation(access) ? "Criar uma casa" : "Agora não"
+    }
+}
+
 struct InviteAcceptanceView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
@@ -95,6 +106,8 @@ struct InviteAcceptanceView: View {
     @State private var errorMessage: String?
     @State private var firstName = ""
     @FocusState private var isNameFocused: Bool
+
+    var onCreateHouse: () -> Void = {}
 
     private var knownName: String? {
         authSession.currentUser.flatMap { profileStore.profiles[$0.id]?.displayName }
@@ -214,10 +227,8 @@ struct InviteAcceptanceView: View {
     private var actions: some View {
         VStack(spacing: 10) {
             if let errorMessage {
-                Text(errorMessage)
-                    .ninaText(.caption, NinaTheme.ink, weight: .semibold)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                NinaErrorNote(text: errorMessage, alignment: .center)
+                    .frame(maxWidth: .infinity)
             }
 
             // request_family_join is the real authority, so an unverified link
@@ -239,7 +250,9 @@ struct InviteAcceptanceView: View {
                 }
             }
 
-            NinaButton(title: "Criar minha casa", kind: .outline, fillsWidth: true) {
+            NinaButton(title: InviteSetAside.title(for: store.homeAccessState), kind: .outline, fillsWidth: true) {
+                Haptics.selection()
+                if InviteSetAside.offersHouseCreation(store.homeAccessState) { onCreateHouse() }
                 inviteLinkStore.clear()
             }
         }
@@ -293,7 +306,7 @@ struct InviteAcceptanceView: View {
                 inviteLinkStore.clear()
             } else {
                 // AppStore already fires the error haptic on every failure path.
-                errorMessage = store.syncErrorMessage ?? "Não foi possível pedir entrada agora."
+                errorMessage = store.syncErrorMessage ?? "Não deu para pedir entrada agora. Tente de novo."
             }
         }
     }

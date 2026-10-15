@@ -3,7 +3,10 @@ import {
   ageAssuranceEntitlementsPresent,
   appleScopeRequests,
   asksAppleForTheNameAlone,
+  containsDebugChatEngine,
   containsDebugSignIn,
+  debugOnlyLines,
+  debugOnlyOffenders,
   demonstrationCheckOffenders,
   demonstrationOffenders,
   deploymentChecks,
@@ -114,6 +117,7 @@ function validArtifact(): IOSArtifactSnapshot {
     scanComplete: true,
     containsServerCredential: false,
     containsDebugSignIn: false,
+    containsDebugChatEngine: false,
   };
 }
 
@@ -279,6 +283,77 @@ Deno.test("a build that still carries the DEBUG test accounts fails the artifact
   assert(containsDebugSignIn("Teste 1\0teste1@ninai.test\0"));
   assert(containsDebugSignIn("debug:test-two"));
   assertFalse(containsDebugSignIn("https://ninai.app/privacidade/"));
+});
+
+Deno.test("a build that still carries the keyword chat engine fails the artifact check", () => {
+  const artifact = validArtifact();
+  artifact.containsDebugChatEngine = true;
+
+  const failedIDs = iosArtifactChecks(artifact, validEnvironment(), facts)
+    .filter((result) => result.status === "failure")
+    .map((result) => result.id);
+
+  assertEquals(failedIDs, ["artifact.debug-chat-engine"]);
+  assert(containsDebugChatEngine("\0Me conta os horários e as doses.\0"));
+  assert(containsDebugChatEngine("Casa Aroeira"));
+  assertFalse(containsDebugChatEngine("Não deu para a Nina responder agora."));
+});
+
+Deno.test("the keyword chat engine and the demo house compile into Debug builds only", async () => {
+  const paths = [
+    "Nina/MockNinaEngine.swift",
+    "Nina/AppStore.swift",
+    "Nina/BackendConfiguration.swift",
+  ];
+  const sources = await Promise.all(
+    paths.map(async (path) => ({
+      path,
+      text: await Deno.readTextFile(new URL(`../${path}`, import.meta.url)),
+    })),
+  );
+
+  assert(sources[0].text.includes("struct MockNinaEngine: NinaEngine"));
+  assert(sources[1].text.includes("enum DemoHouse"));
+  assertEquals(debugOnlyOffenders(sources), []);
+
+  assertEquals(
+    debugOnlyOffenders([{
+      path: "Nina/AppStore.swift",
+      text: "let engine = MockNinaEngine()",
+    }]),
+    ["Nina/AppStore.swift:1 MockNinaEngine"],
+  );
+  assertEquals(
+    debugOnlyOffenders([{
+      path: "Nina/BackendConfiguration.swift",
+      text:
+        "#if DEBUG\nreturn UnavailableNinaEngine()\n#else\nreturn MockNinaEngine()\n#endif",
+    }]),
+    ["Nina/BackendConfiguration.swift:4 MockNinaEngine"],
+  );
+  assertEquals(
+    debugOnlyOffenders([{
+      path: "Nina/AppStore.swift",
+      text:
+        "#if DEBUG\n#if canImport(UIKit)\nlet house = DemoHouse.familyGroup\n#endif\n#endif\n// DemoHouse is made up",
+    }]),
+    [],
+  );
+  assertEquals(
+    debugOnlyOffenders([{
+      path: "Nina/AppStore.swift",
+      text:
+        "#if DEBUG || targetEnvironment(simulator)\nlet fallbackNinaEngine = 1\n#endif",
+    }]),
+    ["Nina/AppStore.swift:2 fallbackNinaEngine"],
+  );
+  assertEquals(debugOnlyLines("a\n#if DEBUG && os(iOS)\nb\n#endif\nc"), [
+    false,
+    true,
+    true,
+    true,
+    false,
+  ]);
 });
 
 Deno.test("the shipped app signs in with Apple and calls no other sign-in door", async () => {

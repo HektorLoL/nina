@@ -14,6 +14,44 @@ enum GuardianSheetMode: Hashable, Identifiable {
     }
 }
 
+// A self-declared adult at a closed child gate learns what Apple's confirmation is and can share again.
+struct AppleConfirmationRetry: View {
+    @Environment(AppStore.self) private var store
+    @Environment(AuthSessionStore.self) private var authSession
+    @Environment(AgeCheckCoordinator.self) private var ageCheck
+
+    var body: some View {
+        if store.actingForMinorsWaitsForApple {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Confirmada é a idade que a Apple verificou, não só a declarada.")
+                    .ninaText(.caption, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                NinaButton(
+                    title: "Tentar de novo",
+                    kind: .quiet,
+                    systemName: "arrow.clockwise",
+                    isPending: ageCheck.isRequestingInline
+                ) {
+                    Haptics.lightImpact()
+                    guard let user = authSession.currentUser else { return }
+                    Task {
+                        guard let status = await ageCheck.requestInline(
+                            for: user,
+                            current: store.viewerAge
+                        ) else { return }
+                        await store.applyRecordedAge(status, for: user)
+                    }
+                }
+
+                if let outcome = ageCheck.inlineOutcome {
+                    AgeOutcomeNote(outcome: outcome)
+                }
+            }
+        }
+    }
+}
+
 // What the guardian sheet must hold before it may be sent: the declaration, the consent, a relationship and a band.
 struct GuardianApprovalForm: Equatable {
     var relationship: GuardianRelationship?
@@ -512,6 +550,7 @@ struct MinorSupervisionSection: View {
                 Text("Só um responsável com idade confirmada pela Apple cadastra.")
                     .ninaText(.caption, NinaTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                AppleConfirmationRetry()
             }
         }
         .padding(16)
@@ -775,7 +814,7 @@ struct MinorSupervisionSection: View {
                 exportURL = try PrivacyExportFileStore.write(data, filename: store.privacyExportFilename)
                 Haptics.success()
             } catch {
-                store.reportSyncError("Não foi possível gerar a exportação agora.")
+                store.reportSyncError("Não deu para gerar o arquivo agora. Tente de novo.")
             }
         }
     }

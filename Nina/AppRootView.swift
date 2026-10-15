@@ -188,6 +188,7 @@ struct AppRootView: View {
     @State private var isAppShellMounted = false
     @State private var didFinishInitialLoad = false
     @State private var shouldRefreshWhenActive = false
+    @State private var homeSetupStartsCreating = false
 
     var body: some View {
         ZStack {
@@ -229,6 +230,7 @@ struct AppRootView: View {
             }
             selectedTab = .nina
             tabRouter = TabRouter()
+            homeSetupStartsCreating = false
         }
         .onChange(of: store.ageCheckRequested) { _, requested in
             guard requested else { return }
@@ -406,7 +408,7 @@ struct AppRootView: View {
             AppWaitingScreen()
                 .transition(.opacity)
         case .invite:
-            InviteAcceptanceView()
+            InviteAcceptanceView { homeSetupStartsCreating = true }
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         case .pendingApproval:
             PendingHomeApprovalView()
@@ -415,8 +417,9 @@ struct AppRootView: View {
             FamilyAccessDecisionView()
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         case .homeSetup:
-            HomeSetupView()
+            HomeSetupView(initialMode: homeSetupStartsCreating ? .create : .choose)
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
+                .onDisappear { homeSetupStartsCreating = false }
         case .homeUnavailable:
             HomeAccessUnavailableView()
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
@@ -617,7 +620,7 @@ private struct HomeAccessUnavailableView: View {
                         }
 
                         NinaButton(title: "Sair da conta", kind: .quiet) {
-                            Haptics.warning()
+                            Haptics.selection()
                             Task {
                                 onboardingStore.cancelReplay()
                                 await authSession.signOut()
@@ -1218,14 +1221,10 @@ private struct TaskRouteDetail: View {
         if let task = store.tasks.first(where: { $0.id == taskID }) {
             TaskDetailView(task: task)
         } else {
-            ZeroState(
+            RouteGoneView(
                 headline: "Essa tarefa não está mais aqui.",
-                body_: "Alguém da casa pode ter concluído ou apagado.",
-                showsMark: false
+                line: "Alguém da casa pode ter concluído ou apagado."
             )
-            .padding(24)
-            .frame(maxHeight: .infinity)
-            .ninaScreenBackground()
         }
     }
 }
@@ -1238,14 +1237,29 @@ private struct MemberRouteDetail: View {
         if let member = store.familyGroup.members.first(where: { $0.id == memberID }) {
             MemberDetailView(member: member)
         } else {
-            ZeroState(
+            RouteGoneView(
                 headline: "Essa pessoa não está mais aqui.",
-                body_: "Alguém pode ter removido este perfil.",
-                showsMark: false
+                line: "Alguém pode ter removido este perfil."
             )
-            .padding(24)
-            .frame(maxHeight: .infinity)
-            .ninaScreenBackground()
         }
+    }
+}
+
+// A pushed screen hides the tab bar, so one whose subject is gone still carries its own way back.
+private struct RouteGoneView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let headline: String
+    let line: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            BackHeader { dismiss() }
+            Spacer(minLength: 24)
+            ZeroState(headline: headline, body_: line, showsMark: false)
+                .padding(.horizontal, 24)
+            Spacer(minLength: 24)
+        }
+        .ninaScreenBackground()
     }
 }

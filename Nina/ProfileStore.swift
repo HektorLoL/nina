@@ -110,9 +110,9 @@ enum ProfilePhotoError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unreadable:
-            "Essa imagem não pôde ser lida. Escolha outra foto."
+            "Não deu para ler essa imagem. Escolha outra foto."
         case .cannotMeetSizeLimit:
-            "Não foi possível reduzir a foto para \(ProfilePhotoPolicy.limitDescription)."
+            "Não deu para reduzir a foto para \(ProfilePhotoPolicy.limitDescription). Escolha outra."
         }
     }
 }
@@ -155,43 +155,6 @@ enum ProfileHouseholdRole: String, CaseIterable, Codable, Hashable, Identifiable
         case .roommate: "house.fill"
         case .caregiver: "cross.case.fill"
         }
-    }
-}
-
-enum ProfileSex: String, CaseIterable, Codable, Hashable, Identifiable {
-    case masculine
-    case feminine
-    case notDetermined
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .masculine: "Masculino"
-        case .feminine: "Feminino"
-        case .notDetermined: "Não determinado"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .masculine, .feminine: "person.fill"
-        case .notDetermined: "questionmark.circle.fill"
-        }
-    }
-
-    static func fromLegacyPronouns(_ label: String?) -> ProfileSex {
-        let normalized = label?
-            .folding(options: [.diacriticInsensitive, .widthInsensitive], locale: .current)
-            .lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        let hasEla = normalized.contains("ela")
-        let hasEle = normalized.contains("ele")
-
-        if hasEla && !hasEle { return .feminine }
-        if hasEle && !hasEla { return .masculine }
-        return .notDetermined
     }
 }
 
@@ -301,15 +264,13 @@ struct ProfileAvatarPreset: Identifiable, Hashable {
     ]
 }
 
+// The profile holds no phone, sex or birthday (LGPD art. 6 III); an older cache carrying them still decodes.
 struct UserProfile: Codable, Hashable, Identifiable {
     var id: String { userID }
 
     var userID: String
     var displayName: String
-    var sex: ProfileSex
     var householdRole: ProfileHouseholdRole
-    var phone: String
-    var birthdayLabel: String
     var availabilityNote: String
     var communicationPreference: ProfileCommunicationPreference
     var memoryNote: String
@@ -318,10 +279,7 @@ struct UserProfile: Codable, Hashable, Identifiable {
     init(
         userID: String,
         displayName: String,
-        sex: ProfileSex,
         householdRole: ProfileHouseholdRole,
-        phone: String,
-        birthdayLabel: String,
         availabilityNote: String,
         communicationPreference: ProfileCommunicationPreference,
         memoryNote: String,
@@ -329,10 +287,7 @@ struct UserProfile: Codable, Hashable, Identifiable {
     ) {
         self.userID = userID
         self.displayName = displayName
-        self.sex = sex
         self.householdRole = householdRole
-        self.phone = phone
-        self.birthdayLabel = birthdayLabel
         self.availabilityNote = availabilityNote
         self.communicationPreference = communicationPreference
         self.memoryNote = memoryNote
@@ -343,10 +298,7 @@ struct UserProfile: Codable, Hashable, Identifiable {
         UserProfile(
             userID: user.id,
             displayName: user.displayName,
-            sex: .notDetermined,
             householdRole: .responsibleAdult,
-            phone: "",
-            birthdayLabel: "",
             availabilityNote: "Costuma resolver coisas da casa no fim do dia.",
             communicationPreference: .gentle,
             memoryNote: "Prefere lembretes práticos e sem pressão.",
@@ -357,11 +309,7 @@ struct UserProfile: Codable, Hashable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case userID
         case displayName
-        case sex
-        case pronounsLabel
         case householdRole
-        case phone
-        case birthdayLabel
         case availabilityNote
         case communicationPreference
         case memoryNote
@@ -373,15 +321,16 @@ struct UserProfile: Codable, Hashable, Identifiable {
 
         userID = try container.decode(String.self, forKey: .userID)
         displayName = try container.decode(String.self, forKey: .displayName)
-        sex = try container.decodeIfPresent(ProfileSex.self, forKey: .sex)
-            ?? ProfileSex.fromLegacyPronouns(try container.decodeIfPresent(String.self, forKey: .pronounsLabel))
-        householdRole = try container.decode(ProfileHouseholdRole.self, forKey: .householdRole)
-        phone = try container.decode(String.self, forKey: .phone)
-        birthdayLabel = try container.decode(String.self, forKey: .birthdayLabel)
-        availabilityNote = try container.decode(String.self, forKey: .availabilityNote)
-        communicationPreference = try container.decode(ProfileCommunicationPreference.self, forKey: .communicationPreference)
-        memoryNote = try container.decode(String.self, forKey: .memoryNote)
-        avatar = try container.decode(ProfileAvatar.self, forKey: .avatar).normalizedPresetVariant()
+        householdRole = try container.decodeIfPresent(ProfileHouseholdRole.self, forKey: .householdRole)
+            ?? .responsibleAdult
+        availabilityNote = try container.decodeIfPresent(String.self, forKey: .availabilityNote) ?? ""
+        communicationPreference = try container.decodeIfPresent(
+            ProfileCommunicationPreference.self,
+            forKey: .communicationPreference
+        ) ?? .gentle
+        memoryNote = try container.decodeIfPresent(String.self, forKey: .memoryNote) ?? ""
+        avatar = (try container.decodeIfPresent(ProfileAvatar.self, forKey: .avatar) ?? .defaultPreset)
+            .normalizedPresetVariant()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -389,115 +338,11 @@ struct UserProfile: Codable, Hashable, Identifiable {
 
         try container.encode(userID, forKey: .userID)
         try container.encode(displayName, forKey: .displayName)
-        try container.encode(sex, forKey: .sex)
         try container.encode(householdRole, forKey: .householdRole)
-        try container.encode(phone, forKey: .phone)
-        try container.encode(birthdayLabel, forKey: .birthdayLabel)
         try container.encode(availabilityNote, forKey: .availabilityNote)
         try container.encode(communicationPreference, forKey: .communicationPreference)
         try container.encode(memoryNote, forKey: .memoryNote)
         try container.encode(avatar, forKey: .avatar)
-    }
-}
-
-enum BrazilianPhoneNumber {
-    static let maximumDigits = 11
-    private static let separators: Set<Character> = [" ", "(", ")", "-", "."]
-    private static let countryCodeSoFar: Set<String> = ["", "5", "55"]
-
-    static func digits(in text: String) -> String {
-        String(nationalDigits(in: text).prefix(maximumDigits))
-    }
-
-    static func formatted(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let typedDigits = trimmed.filter(isDigit)
-        // A "+" stays on screen until the 55 after it is complete and the number itself begins.
-        if trimmed.hasPrefix("+"), countryCodeSoFar.contains(typedDigits) {
-            return "+" + typedDigits
-        }
-
-        let digits = Array(digits(in: text))
-        guard !digits.isEmpty else { return "" }
-        guard digits.count > 2 else { return "(" + String(digits) }
-
-        let areaCode = String(digits[..<2])
-        let local = Array(digits[2...])
-        // Every Brazilian mobile has nine digits and starts with 9, so a 9 is grouped 5-4 while it is still being typed.
-        let firstGroup = digits.count == maximumDigits || local.first == "9" ? 5 : 4
-        guard local.count > firstGroup else { return "(\(areaCode)) \(String(local))" }
-        return "(\(areaCode)) \(String(local[..<firstGroup]))-\(String(local[firstGroup...]))"
-    }
-
-    // Text that is anything but one complete Brazilian number is the person's own writing.
-    static func reshapedIfPlain(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let digits = plainDigits(in: trimmed), digits.count >= maximumDigits - 1 else { return trimmed }
-        return formatted(trimmed)
-    }
-
-    static func edited(from previous: String, to typed: String) -> String {
-        guard previous == formatted(previous) else {
-            return plainDigits(in: typed) == nil ? typed : formatted(typed)
-        }
-        // A complete number takes no more keys: one more digit would shift or drop one already typed.
-        if digits(in: previous).count == maximumDigits, onlyInserts(into: previous, giving: typed) {
-            return previous
-        }
-
-        let removedOnlyASeparator = typed.count < previous.count
-            && digits(in: typed) == digits(in: previous)
-        guard removedOnlyASeparator else { return formatted(typed) }
-
-        // A backspace that took only ")" or "-" takes the digit before it too, so deleting never stalls.
-        var characters = Array(previous)
-        let kept = zip(characters, typed).prefix { $0 == $1 }.count
-        guard let digitIndex = characters[..<kept].lastIndex(where: isDigit) else {
-            return formatted(typed)
-        }
-        characters.remove(at: digitIndex)
-        return formatted(String(characters))
-    }
-
-    // 55 is also a DDD, so it goes only after a "+" or past eleven digits; no DDD starts with 0.
-    private static func nationalDigits(in text: String) -> Substring {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        var digits = Substring(trimmed.filter(isDigit))
-        if digits.hasPrefix("55"), trimmed.hasPrefix("+") || digits.count > maximumDigits {
-            digits = digits.dropFirst(2)
-        }
-        while digits.first == "0" {
-            digits = digits.dropFirst()
-        }
-        return digits
-    }
-
-    private static func plainDigits(in text: String) -> Substring? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let international = trimmed.hasPrefix("+")
-        let body = international ? trimmed.dropFirst() : Substring(trimmed)
-        guard body.allSatisfy({ isDigit($0) || separators.contains($0) }) else { return nil }
-        let typedDigits = String(body.filter(isDigit))
-        if international, !typedDigits.hasPrefix("55"), !countryCodeSoFar.contains(typedDigits) {
-            return nil
-        }
-        let national = nationalDigits(in: trimmed)
-        // No DDD ends in 0, so a 0800 number is never read as an area code and reshaped.
-        guard national.count <= maximumDigits, national.dropFirst().first != "0" else { return nil }
-        return national
-    }
-
-    private static func onlyInserts(into previous: String, giving typed: String) -> Bool {
-        let old = Array(previous)
-        let new = Array(typed)
-        guard new.count > old.count else { return false }
-        let head = zip(old, new).prefix { $0 == $1 }.count
-        let tail = zip(old.reversed(), new.reversed()).prefix { $0 == $1 }.count
-        return head + tail >= old.count
-    }
-
-    private static func isDigit(_ character: Character) -> Bool {
-        character.isASCII && character.isNumber
     }
 }
 

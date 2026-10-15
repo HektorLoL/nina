@@ -265,7 +265,7 @@ final class AppStore {
     var ninaMemories: [NinaMemory]
     private var seenInsightRevision = 0
     var isNinaResponding = false
-    var ninaConnectionNotice: String?
+    var ninaSendFailure: String?
     var taskEditConflict: TaskEditConflict?
     // One action can meet several clashes; each waits its turn and none is replaced unseen.
     @ObservationIgnored private var queuedTaskEditConflicts: [TaskEditConflict] = []
@@ -276,6 +276,9 @@ final class AppStore {
     var aiConsentStatus: NinaAIConsent = .withheld
     var hasStaleLocalConsent = false
     var notificationAuthorizationStatus: HomeNotificationAuthorizationStatus = .notDetermined
+    // The first value is a placeholder: iOS is asked only once its own answer has been read.
+    @ObservationIgnored private var hasReadNotificationAuthorization = false
+    @ObservationIgnored private(set) var notificationPromptTask: Task<Void, Never>?
     // Capabilities come from the server's age record, never from a household role.
     var viewerAge: AgeStatus = .unknown
     var minorHome: MinorHome?
@@ -283,9 +286,20 @@ final class AppStore {
     private(set) var isRecordingFootnoteAcceptance = false
     // What the person typed before the chat closed on them, kept in memory only and never in a snapshot.
     var restorableDraft: String?
+    var restorableAttachments: [NinaAttachmentInput] = []
+    // A turn whose answer was lost keeps its id, so the same words sent again replay it instead of running it twice.
+    @ObservationIgnored private var unconfirmedTurn: UnconfirmedNinaTurn?
+
+    private struct UnconfirmedNinaTurn {
+        let messageID: UUID
+        let text: String
+        let attachments: [NinaAttachmentInput]
+    }
 
     @ObservationIgnored private let ninaEngine: any NinaEngine
+    #if DEBUG
     @ObservationIgnored private let fallbackNinaEngine = MockNinaEngine()
+    #endif
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let privateDataStore: any PrivateLocalDataStoring
     @ObservationIgnored private let remoteHomeBackend: (any RemoteHomeBackend)?
@@ -389,6 +403,11 @@ final class AppStore {
 
     var canActForMinors: Bool {
         viewerAge.canActForMinors
+    }
+
+    // Parental controls close the child gates whatever Apple says, so only an adult without them waits for Apple.
+    var actingForMinorsWaitsForApple: Bool {
+        viewerAge.isAdult && !viewerAge.canActForMinors && !viewerAge.parentalControlsActive
     }
 
     var canBuyPremium: Bool {
@@ -622,6 +641,9 @@ final class AppStore {
             childDayPresentation = nil
             minorSessionStartedAt = nil
             restorableDraft = nil
+            restorableAttachments = []
+            unconfirmedTurn = nil
+            ninaSendFailure = nil
             isRecordingFootnoteAcceptance = false
             if let previousUserID = activeHomeUserID {
                 removeStoredTermsFootnote(for: previousUserID)
@@ -709,7 +731,7 @@ final class AppStore {
                 currentPermissionRole = .member
                 familyGroup = PreviewData.familyGroup
                 resetActivityState()
-                syncErrorMessage = "Não foi possível verificar sua participação nesta casa."
+                syncErrorMessage = "Não deu para verificar sua participação nesta casa agora. Tente de novo."
                 return
             }
             recordTermsAcceptanceIfNeeded()
@@ -720,7 +742,7 @@ final class AppStore {
         activateLocalHomeContext(for: user)
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "Não dá para fazer isso agora. Tente mais tarde."
+        syncErrorMessage = "Não deu para fazer isso agora. Tente mais tarde."
         #endif
     }
 
@@ -852,7 +874,7 @@ final class AppStore {
             // reminders, and an unverifiable membership must not cancel them.
             homeAccessState = .unavailable
             releaseHousehold(discardingQueuedWrites: false)
-            syncErrorMessage = "Não foi possível verificar sua participação nesta casa."
+            syncErrorMessage = "Não deu para verificar sua participação nesta casa agora. Tente de novo."
         }
     }
 
@@ -946,7 +968,7 @@ final class AppStore {
         return true
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "Não dá para criar a casa agora. Tente mais tarde."
+        syncErrorMessage = "Não deu para criar a casa agora. Tente mais tarde."
         return false
         #endif
     }
@@ -1011,7 +1033,7 @@ final class AppStore {
         return true
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "Não dá para entrar na casa agora. Tente mais tarde."
+        syncErrorMessage = "Não deu para entrar na casa agora. Tente mais tarde."
         return false
         #endif
     }
@@ -1035,7 +1057,7 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não foi possível cancelar o pedido agora."
+                syncErrorMessage = "Não deu para cancelar o pedido agora. Tente de novo."
                 Haptics.error()
                 return false
             }
@@ -1136,7 +1158,7 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não foi possível salvar os ajustes da casa."
+                syncErrorMessage = "Não deu para salvar os ajustes da casa agora. Tente de novo."
                 Haptics.error()
                 return false
             }
@@ -1148,7 +1170,7 @@ final class AppStore {
         return true
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "Não dá para fazer isso agora. Tente mais tarde."
+        syncErrorMessage = "Não deu para fazer isso agora. Tente mais tarde."
         return false
         #endif
     }
@@ -1162,7 +1184,7 @@ final class AppStore {
         familyGroup.weeklyDigestEnabled = isEnabled
         persistActiveHome()
 
-        enqueueRemoteMutation(errorMessage: "Não foi possível salvar o resumo semanal.") {
+        enqueueRemoteMutation(errorMessage: "Não deu para salvar o resumo semanal agora. Tente de novo.") {
             [weak self] backend,
             familyID,
             _ in
@@ -1208,7 +1230,7 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não foi possível gerar um novo convite."
+                syncErrorMessage = "Não deu para renovar o link agora. Tente de novo."
                 Haptics.error()
                 return false
             }
@@ -1220,7 +1242,7 @@ final class AppStore {
         return true
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "Não dá para fazer isso agora. Tente mais tarde."
+        syncErrorMessage = "Não deu para fazer isso agora. Tente mais tarde."
         return false
         #endif
     }
@@ -1232,7 +1254,7 @@ final class AppStore {
 
         if member.role != .assistant {
             guard canInviteMorePeople else {
-                syncErrorMessage = "A casa já atingiu o limite de 8 pessoas."
+                syncErrorMessage = "A casa já atingiu o limite de 8 pessoas e pets."
                 return false
             }
         }
@@ -1254,7 +1276,7 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não foi possível adicionar essa pessoa à casa."
+                syncErrorMessage = "Não deu para adicionar essa pessoa agora. Tente de novo."
                 Haptics.error()
                 return false
             }
@@ -1266,7 +1288,7 @@ final class AppStore {
         return true
         #else
         homeAccessState = .unavailable
-        syncErrorMessage = "Não dá para fazer isso agora. Tente mais tarde."
+        syncErrorMessage = "Não deu para fazer isso agora. Tente mais tarde."
         return false
         #endif
     }
@@ -1293,7 +1315,7 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não foi possível salvar este perfil."
+                syncErrorMessage = "Não deu para salvar este perfil agora. Tente de novo."
                 Haptics.error()
                 return false
             }
@@ -1333,7 +1355,7 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não foi possível remover esta pessoa da casa."
+                syncErrorMessage = "Não deu para remover esta pessoa agora. Tente de novo."
                 Haptics.error()
                 return false
             }
@@ -1515,7 +1537,7 @@ final class AppStore {
     ) async -> Bool {
         guard canManageFamily else { return false }
         guard canInviteMorePeople else {
-            syncErrorMessage = "A casa já atingiu o limite de 8 pessoas."
+            syncErrorMessage = "A casa já atingiu o limite de 8 pessoas e pets."
             return false
         }
         guard permissionRole != .owner,
@@ -1544,7 +1566,7 @@ final class AppStore {
                 guard isCurrentHomeContext(contextToken) else { return false }
                 let code = RemoteRPCErrorCode.from(error)
                 syncErrorMessage = code?.userMessage(name: request.requesterName)
-                    ?? "Não foi possível aprovar este pedido."
+                    ?? "Não deu para aprovar este pedido agora. Tente de novo."
                 Haptics.error()
                 if code == .joinRequestAgeChanged {
                     isSyncingHome = false
@@ -1582,7 +1604,7 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                syncErrorMessage = "Não foi possível recusar este pedido."
+                syncErrorMessage = "Não deu para recusar este pedido agora. Tente de novo."
                 Haptics.error()
                 return false
             }
@@ -1603,12 +1625,12 @@ final class AppStore {
     ) async -> Bool {
         guard canManageFamily, canActForMinors, !request.requesterAge.isAdult else { return false }
         guard canInviteMorePeople else {
-            syncErrorMessage = "A casa já atingiu o limite de 8 pessoas."
+            syncErrorMessage = "A casa já atingiu o limite de 8 pessoas e pets."
             return false
         }
         let succeeded = await performHomeMutation(
             name: request.requesterName,
-            fallback: "Não foi possível aprovar este pedido."
+            fallback: "Não deu para aprovar este pedido agora. Tente de novo."
         ) { backend in
             try await backend.approveJoinRequestAsGuardian(request.id, approval: approval)
         }
@@ -1624,7 +1646,7 @@ final class AppStore {
         let familyID = familyGroup.id
         return await performHomeMutation(
             name: draft.name,
-            fallback: "Não foi possível cadastrar este perfil."
+            fallback: "Não deu para cadastrar este perfil agora. Tente de novo."
         ) { backend in
             try await backend.addMinorProfile(draft, familyID: familyID)
         }
@@ -2102,8 +2124,17 @@ final class AppStore {
         }
         let contextToken = currentHomeContextToken
         let familyID = familyGroup.id
+        ninaSendFailure = nil
+        let replayedTurn = unconfirmedTurn.flatMap { turn -> UUID? in
+            guard turn.text == text,
+                  turn.attachments == attachments,
+                  !messages.contains(where: { $0.id == turn.messageID }) else { return nil }
+            return turn.messageID
+        }
+        unconfirmedTurn = nil
 
         let userMessage = ChatMessage(
+            id: replayedTurn ?? UUID(),
             sender: .user,
             text: text,
             timestamp: .now,
@@ -2122,10 +2153,13 @@ final class AppStore {
         let response: NinaEngineResponse
 
         do {
-            let usesLocalEngine = usesLocalDebugBackend(for: activeUser)
-            let engine: any NinaEngine = usesLocalEngine
+            #if DEBUG
+            let engine: any NinaEngine = usesLocalDebugBackend(for: activeUser)
                 ? fallbackNinaEngine
                 : ninaEngine
+            #else
+            let engine = ninaEngine
+            #endif
             response = try await engine.respond(
                 to: text,
                 attachments: attachments,
@@ -2133,8 +2167,7 @@ final class AppStore {
                 messageID: userMessage.id
             )
             guard isCurrentHomeContext(contextToken) else { return }
-            ninaConnectionNotice = nil
-        } catch let engineError as NinaEngineError where engineError != .unavailable {
+        } catch let engineError as NinaEngineError where !engineError.leavesTurnUnanswered {
             guard isCurrentHomeContext(contextToken) else { return }
             switch engineError {
             case .consentOutdated:
@@ -2174,22 +2207,24 @@ final class AppStore {
                 reply: engineError.userMessage,
                 suggestion: nil
             )
-            ninaConnectionNotice = nil
         } catch {
             guard isCurrentHomeContext(contextToken) else { return }
-            let fallbackResponse = try? await fallbackNinaEngine.respond(
-                to: text,
-                attachments: attachments,
-                familyID: familyID,
-                messageID: userMessage.id
-            )
-            guard isCurrentHomeContext(contextToken) else { return }
-            response = fallbackResponse ?? NinaEngineResponse(
-                    reply: "Não consegui organizar isso agora. Tente de novo em instantes.",
-                    suggestion: nil
+            // Nothing answers in Nina's name when the server did not: the words go back to the composer.
+            messages.removeAll { $0.id == userMessage.id }
+            restorableDraft = text
+            restorableAttachments = attachments
+            let failure = (error as? NinaEngineError) ?? .unconfirmed
+            if failure != .unavailable {
+                unconfirmedTurn = UnconfirmedNinaTurn(
+                    messageID: userMessage.id,
+                    text: text,
+                    attachments: attachments
                 )
-            ninaConnectionNotice = "Sem conexão. Esta resposta veio do aparelho."
+            }
+            ninaSendFailure = failure.userMessage
+            persistActivityLocally()
             Haptics.error()
+            return
         }
         guard isCurrentHomeContext(contextToken) else { return }
 
@@ -2306,6 +2341,11 @@ final class AppStore {
             await refreshHomeFromRemote(for: activeUser)
             guard isCurrentHomeContext(contextToken) else { return false }
             Haptics.success()
+            if resolution.state == .accepted, proposal.kind == .task || proposal.kind == .reminder {
+                askForNotificationsAfterConfirming(
+                    dueAt: (editedPayload ?? proposal.confirmationPayload).scheduledDate
+                )
+            }
             return true
         } catch {
             guard isCurrentHomeContext(contextToken) else { return false }
@@ -2342,7 +2382,7 @@ final class AppStore {
             return true
         } catch {
             guard isCurrentHomeContext(contextToken) else { return false }
-            syncErrorMessage = "Não foi possível atualizar essa memória."
+            syncErrorMessage = "Não deu para atualizar essa memória agora. Tente de novo."
             return false
         }
     }
@@ -2365,7 +2405,7 @@ final class AppStore {
             return true
         } catch {
             guard isCurrentHomeContext(contextToken) else { return false }
-            syncErrorMessage = "Não foi possível apagar essa memória."
+            syncErrorMessage = "Não deu para apagar essa memória agora. Tente de novo."
             return false
         }
     }
@@ -2392,7 +2432,7 @@ final class AppStore {
             return true
         } catch {
             guard isCurrentHomeContext(contextToken) else { return false }
-            syncErrorMessage = "Não foi possível apagar o histórico da Nina."
+            syncErrorMessage = "Não deu para apagar sua conversa agora. Tente de novo."
             return false
         }
     }
@@ -2417,18 +2457,24 @@ final class AppStore {
         let previousRecord = aiMemoryConsent
         syncErrorMessage = nil
 
-        let optimisticRecord = granted
-            ? AIMemoryConsentRecord(
-                acceptedAt: .now,
-                policyVersion: PrivacyPolicyVersion.current,
-                transferConsented: transferConsented
-            )
-            : nil
-        applyAIMemoryConsent(optimisticRecord)
+        let savesOnServer = activeUser != nil
+            && !usesLocalDebugBackend(for: activeUser)
+            && remoteHomeBackend != nil
 
-        if activeUser != nil,
-           !usesLocalDebugBackend(for: activeUser),
-           let remoteHomeBackend {
+        // A withdrawal stops the chat at once; a grant opens it only once the server has recorded it.
+        if !granted || !savesOnServer {
+            applyAIMemoryConsent(
+                granted
+                    ? AIMemoryConsentRecord(
+                        acceptedAt: .now,
+                        policyVersion: PrivacyPolicyVersion.current,
+                        transferConsented: transferConsented
+                    )
+                    : nil
+            )
+        }
+
+        if savesOnServer, let remoteHomeBackend {
             await waitForPendingRemoteMutations()
             guard isCurrentHomeContext(contextToken) else { return false }
             isSyncingHome = true
@@ -2450,7 +2496,9 @@ final class AppStore {
                 return hasAIMemoryConsent == granted
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
-                applyAIMemoryConsent(previousRecord)
+                if !granted {
+                    applyAIMemoryConsent(previousRecord)
+                }
                 let code = RemoteRPCErrorCode.from(error)
                 switch code {
                 case .ageConfirmationRequired:
@@ -2463,8 +2511,8 @@ final class AppStore {
                     break
                 }
                 syncErrorMessage = code?.userMessage() ?? (granted
-                    ? "Não foi possível registrar seu consentimento. Nada mudou por enquanto."
-                    : "Não foi possível revogar seu consentimento. Ele continua ativo nesta casa.")
+                    ? "Não deu para registrar seu consentimento agora. Nada mudou. Tente de novo."
+                    : "Não deu para revogar seu consentimento agora. Ele continua ativo nesta casa. Tente de novo.")
                 Haptics.error()
                 return false
             }
@@ -2595,7 +2643,9 @@ final class AppStore {
         joinRequests = []
         houseOwnershipOffer = nil
         isNinaResponding = false
-        ninaConnectionNotice = nil
+        ninaSendFailure = nil
+        restorableAttachments = []
+        unconfirmedTurn = nil
         taskEditConflict = nil
         queuedTaskEditConflicts = []
         isSyncingHome = false
@@ -2661,7 +2711,8 @@ final class AppStore {
         tasks.insert(task, at: 0)
         persistActivityLocally()
         synchronizeLocalNotifications()
-        enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar a nova tarefa.") {
+        askForNotificationsAfterConfirming(dueAt: task.dueAt)
+        enqueueRemoteMutation(errorMessage: "Não deu para salvar a nova tarefa agora. Tente de novo.") {
             backend,
             familyID,
             user in
@@ -2686,7 +2737,7 @@ final class AppStore {
         let sortOrder = taskSections.count
         taskSections.append(section)
         persistActivityLocally()
-        enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar a seção.") {
+        enqueueRemoteMutation(errorMessage: "Não deu para salvar a seção agora. Tente de novo.") {
             backend,
             familyID,
             _ in
@@ -2710,7 +2761,7 @@ final class AppStore {
 
         persistActivityLocally()
         synchronizeLocalNotifications()
-        enqueueRemoteMutation(errorMessage: "Não foi possível excluir a seção.") {
+        enqueueRemoteMutation(errorMessage: "Não deu para apagar a seção agora. Tente de novo.") {
             backend,
             familyID,
             _ in
@@ -2797,7 +2848,7 @@ final class AppStore {
         let category = TaskCategory.custom(id: id, title: trimmedTitle, tone: nextCustomCategoryTone)
         customTaskCategories.append(category)
         persistActivityLocally()
-        enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar a categoria.") {
+        enqueueRemoteMutation(errorMessage: "Não deu para salvar a categoria agora. Tente de novo.") {
             backend,
             familyID,
             _ in
@@ -2965,7 +3016,7 @@ final class AppStore {
         tasks.removeAll { $0.id == id }
         persistActivityLocally()
         synchronizeLocalNotifications()
-        enqueueRemoteMutation(errorMessage: "Não foi possível apagar a tarefa.") {
+        enqueueRemoteMutation(errorMessage: "Não deu para apagar a tarefa agora. Tente de novo.") {
             backend,
             familyID,
             _ in
@@ -2975,17 +3026,64 @@ final class AppStore {
 
     func refreshNotificationAuthorizationStatus() async {
         notificationAuthorizationStatus = await notificationScheduler.authorizationStatus()
+        hasReadNotificationAuthorization = true
     }
 
     @discardableResult
     func requestNotificationAuthorization() async -> Bool {
         notificationAuthorizationStatus = await notificationScheduler.requestAuthorization()
+        hasReadNotificationAuthorization = true
         if notificationAuthorizationStatus.canSchedule {
             defaults.set(true, forKey: LocalHomeNotificationScheduler.notificationsEnabledKey)
             synchronizeLocalNotifications()
             return true
         }
         return false
+    }
+
+    // iOS is asked right after the first dated task this phone confirms, never at launch.
+    func askForNotificationsAfterConfirming(dueAt: Date?) {
+        guard dueAt != nil, homeAccessState != .minorMember else { return }
+        askForNotificationsIfUndetermined()
+    }
+
+    // A minor's phone is asked on the first visit to their own tasks, and only while the guardian keeps alerts on.
+    func askForNotificationsOnMinorHome() {
+        guard homeAccessState == .minorMember,
+              minorHome?.viewer.supervision.alertsEnabled == true else { return }
+        askForNotificationsIfUndetermined()
+    }
+
+    // A person who switched alerts off in Ajustes is never asked by a confirmation.
+    private func askForNotificationsIfUndetermined() {
+        guard hasReadNotificationAuthorization,
+              notificationAuthorizationStatus == .notDetermined,
+              defaults.object(forKey: LocalHomeNotificationScheduler.notificationsEnabledKey) as? Bool ?? true,
+              notificationPromptTask == nil else { return }
+        notificationPromptTask = Task { [weak self] in
+            _ = await self?.requestNotificationAuthorization()
+        }
+    }
+
+    var minorAlertsValue: String {
+        Self.minorAlertsValue(
+            guardianAllows: minorHome?.viewer.supervision.alertsEnabled == true,
+            status: notificationAuthorizationStatus
+        )
+    }
+
+    var minorAlertsKeepComing: Bool {
+        minorHome?.viewer.supervision.alertsEnabled == true && notificationAuthorizationStatus.canSchedule
+    }
+
+    // A minor's "Avisos" says what this iPhone will do: the guardian's switch and iOS's answer together.
+    nonisolated static func minorAlertsValue(
+        guardianAllows: Bool,
+        status: HomeNotificationAuthorizationStatus
+    ) -> String {
+        guard guardianAllows else { return "Desligados" }
+        if status.canSchedule { return "Ligados" }
+        return status == .denied ? "Bloqueados" : "Desligados"
     }
 
     // Quiet hours keep a reminder's time and take its sound, so the editor says so before saving.
@@ -3090,7 +3188,7 @@ final class AppStore {
         )
         shoppingItems.insert(item, at: 0)
         persistActivityLocally()
-        enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar o item de compra.") {
+        enqueueRemoteMutation(errorMessage: "Não deu para salvar o item agora. Tente de novo.") {
             backend,
             familyID,
             user in
@@ -3115,7 +3213,7 @@ final class AppStore {
         shoppingItems[index].ownerMemberID = Self.assignableMemberID(ownerMemberID, forOwner: trimmedOwner)
         let item = shoppingItems[index]
         persistActivityLocally()
-        enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar as alterações da compra.") {
+        enqueueRemoteMutation(errorMessage: "Não deu para salvar a mudança no item agora. Tente de novo.") {
             backend,
             familyID,
             _ in
@@ -3128,7 +3226,7 @@ final class AppStore {
         shoppingItems[index].isChecked.toggle()
         let updatedItem = shoppingItems[index]
         persistActivityLocally()
-        enqueueRemoteMutation(errorMessage: "Não foi possível sincronizar o estado da compra.") {
+        enqueueRemoteMutation(errorMessage: "Não deu para marcar o item agora. Tente de novo.") {
             backend,
             familyID,
             _ in
@@ -3140,7 +3238,7 @@ final class AppStore {
         guard shoppingItems.contains(where: { $0.id == id }) else { return }
         shoppingItems.removeAll { $0.id == id }
         persistActivityLocally()
-        enqueueRemoteMutation(errorMessage: "Não foi possível apagar o item da lista.") {
+        enqueueRemoteMutation(errorMessage: "Não deu para apagar o item agora. Tente de novo.") {
             backend,
             familyID,
             _ in
@@ -3156,7 +3254,7 @@ final class AppStore {
         shoppingItems.removeAll(where: \.isChecked)
         persistActivityLocally()
         for id in checkedIDs {
-            enqueueRemoteMutation(errorMessage: "Não foi possível limpar os itens comprados.") {
+            enqueueRemoteMutation(errorMessage: "Não deu para limpar os comprados agora. Tente de novo.") {
                 backend,
                 familyID,
                 _ in
@@ -3280,7 +3378,7 @@ final class AppStore {
         synchronizeLocalNotifications()
 
         enqueueRemoteMutation(
-            errorMessage: "Não foi possível sincronizar as alterações da tarefa.",
+            errorMessage: "Não deu para salvar a mudança na tarefa agora. Tente de novo.",
             signalsFailure: audience == .adult
         ) {
             [weak self] backend,
@@ -4182,8 +4280,9 @@ final class AppStore {
         )
     }
 
+    #if DEBUG
     private static var ninaAssistantMember: HouseholdMember {
-        PreviewData.familyGroup.members.first { $0.role == .assistant } ?? HouseholdMember(
+        DemoHouse.familyGroup.members.first { $0.role == .assistant } ?? HouseholdMember(
             name: "Nina",
             relationship: "IA da casa",
             role: .assistant,
@@ -4192,6 +4291,7 @@ final class AppStore {
             memoryNote: "Aprende a dinâmica familiar e transforma lembranças soltas em organização."
         )
     }
+    #endif
 }
 
 private struct DueDay: Equatable {
@@ -4218,19 +4318,49 @@ private struct DueWords {
 }
 
 enum PreviewData {
-    static let mirnaID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
-    static let heitorID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+    static let taskSections: [TaskSection] = [
+        TaskSection(
+            id: TaskSectionDefaults.houseTasksID,
+            title: "Tarefas da casa",
+            symbolName: "checklist",
+            tone: .mint
+        )
+    ]
+
+    static let customTaskCategories: [TaskCategory] = []
+
+    #if DEBUG
+    static let familyGroup = DemoHouse.familyGroup
+    static let messages = DemoHouse.messages
+    static let tasks = DemoHouse.tasks
+    static let shoppingItems = DemoHouse.shoppingItems
+    static let insights = DemoHouse.insights
+    #else
+    // A shipped build carries no demo house: a screen that ever drew the placeholder would draw an empty one.
+    static let familyGroup = FamilyGroup(name: "", inviteCode: "", members: [])
+    static let messages: [ChatMessage] = []
+    static let tasks: [TaskItem] = []
+    static let shoppingItems: [ShoppingItem] = []
+    static let insights: [HouseholdInsight] = []
+    #endif
+}
+
+// The house of the mock backend and the local debug accounts names nobody real.
+#if DEBUG
+enum DemoHouse {
+    static let biaID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    static let leoID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
     static let childID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
-    static let thorID = UUID(uuidString: "44444444-4444-4444-4444-444444444444")!
+    static let biscoitoID = UUID(uuidString: "44444444-4444-4444-4444-444444444444")!
     static let ninaID = UUID(uuidString: "55555555-5555-5555-5555-555555555555")!
 
     static let familyGroup = FamilyGroup(
-        name: "Casa Castello",
+        name: "Casa Aroeira",
         inviteCode: "casa-47a9f2d0b3c1e8a4d6f2",
         members: [
             HouseholdMember(
-                id: heitorID,
-                name: "Heitor",
+                id: leoID,
+                name: "Leo",
                 relationship: "Marido",
                 role: .adult,
                 tone: .sky,
@@ -4238,8 +4368,8 @@ enum PreviewData {
                 memoryNote: "Costuma cuidar das contas e compras de última hora."
             ),
             HouseholdMember(
-                id: mirnaID,
-                name: "Mirna",
+                id: biaID,
+                name: "Bia",
                 relationship: "Esposa",
                 role: .adult,
                 tone: .coral,
@@ -4256,8 +4386,8 @@ enum PreviewData {
                 memoryNote: ""
             ),
             HouseholdMember(
-                id: thorID,
-                name: "Thor",
+                id: biscoitoID,
+                name: "Biscoito",
                 relationship: "Pet",
                 role: .pet,
                 tone: .lavender,
@@ -4284,22 +4414,11 @@ enum PreviewData {
         )
     ]
 
-    static let taskSections: [TaskSection] = [
-        TaskSection(
-            id: TaskSectionDefaults.houseTasksID,
-            title: "Tarefas da casa",
-            symbolName: "checklist",
-            tone: .mint
-        )
-    ]
-
-    static let customTaskCategories: [TaskCategory] = []
-
     static let tasks: [TaskItem] = [
         TaskItem(
             title: "Separar uniforme da escola",
             subtitle: "Deixar mochila e garrafa prontas antes de dormir.",
-            owner: "Mirna",
+            owner: "Bia",
             dueLabel: "Hoje, noite",
             category: .school,
             priority: .high,
@@ -4309,7 +4428,7 @@ enum PreviewData {
         TaskItem(
             title: "Pagar conta de energia",
             subtitle: "Vencimento salvo a partir do boleto.",
-            owner: "Heitor",
+            owner: "Leo",
             dueLabel: "Amanhã",
             category: .bills,
             priority: .urgent,
@@ -4371,9 +4490,9 @@ enum PreviewData {
     ]
 
     static let shoppingItems: [ShoppingItem] = [
-        ShoppingItem(title: "Gás", amount: "1 botijão", owner: "Heitor", isChecked: false),
-        ShoppingItem(title: "Ração do Thor", amount: "3 kg", owner: "Casa", isChecked: false),
-        ShoppingItem(title: "Frutas para lancheira", amount: "5 dias", owner: "Mirna", isChecked: true)
+        ShoppingItem(title: "Gás", amount: "1 botijão", owner: "Leo", isChecked: false),
+        ShoppingItem(title: "Ração do Biscoito", amount: "3 kg", owner: "Casa", isChecked: false),
+        ShoppingItem(title: "Frutas para lancheira", amount: "5 dias", owner: "Bia", isChecked: true)
     ]
 
     // Demo insights never assert a metric about the household: the live workload card is the only
@@ -4388,3 +4507,4 @@ enum PreviewData {
         )
     ]
 }
+#endif

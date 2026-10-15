@@ -1,6 +1,6 @@
 # Nina: rubric for cutting on-screen text
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 This rubric applies to every screen of the iOS app. A screen passes when it meets every rule in §1 and every rule in its surface section (§2), and when none of the text listed in §3 has been lost. The rules come from Mobbin research on about 90 iOS screens across six surfaces. The strongest references are cited inline.
 
@@ -82,6 +82,13 @@ This rubric applies to every screen of the iOS app. A screen passes when it meet
   - At accessibility sizes a chip alone in its column, or a lone full-width button, may wrap. Nothing is truncated or clipped.
   - Two labelled buttons side by side ("Feitas" / "Passar", "Aprovar" / "Recusar", "Aceitar" / "Recusar", "Corrigir" / "Não") share the row only while each label fits its share of it; otherwise they stack, full width, and the selection bar drops its glyphs before it stacks. A quiet control beside a commit ("Apagar", "Adicionar e continuar") takes its own line above the commit before either wraps. A text control beside a header's title ("Cancelar", "Sair da conta") drops below the title or into the header's menu before either wraps.
   - Precedents: Apple News Saved Stories, Places and Abode, which keep Edit and Delete out of the card, and Nina's own Hoje header (the date beside the Premium badge in a `ViewThatFits`).
+- **G20. A failure line opens one way: "Não deu para ‹ação› agora. Tente de novo."** (2026-10-15).
+  - It reaches the screen through `NinaErrorNote` or the sync toast, never as plain ink text.
+  - A consequence the person must know may sit between the two ("Não deu para confirmar agora. Nada entrou na casa. Tente de novo."; "… Ele continua ativo nesta casa. Tente de novo.").
+  - Where a retry cannot help, the close changes, never the opening: "Não deu para ler esse arquivo. Escolha outro."; a build with no server reads "Não deu para ‹ação› agora. Tente mais tarde."
+  - When a "Tentar de novo" control sits beside it, the line drops its own "Tente de novo." (G2).
+  - Not covered: a refusal that names its reason ("Este convite é inválido, expirou ou a casa está sem vagas."), a field to fix ("Cada anexo pode ter até 5 MB."), the account-deletion lines (§2.3) and the sign-in line "Não foi possível entrar agora. Tente de novo.", which CLAUDE.md §12 and the launch runbook quote as the sign of a production Auth setting.
+  - A closed door is not a failure: "Foto e documento são do Premium." after a house loses Premium stays grout and ink.
 
 ### Word budgets
 
@@ -182,7 +189,7 @@ The two equal spacers center the brand block in the space above the actions. On 
 | Invite variant | "Você foi convidado para uma casa." plus a subtitle | Title "Você tem um convite"; tagline "Quem convidou aprova sua entrada." The line is protected (§3). The new title is also gender-neutral. |
 | Email and Google buttons | "Entrar com email", "Continuar com o Google" | None. Apple is the only door (2026-09-26). |
 | Legal footnote | "Ao continuar, você aceita os Termos e a Política de Privacidade." | the same, plus "Menores de 18 anos entram numa casa com aprovação de um responsável." (§3 row 18) |
-| Backend unavailable | "Configure o projeto Supabase…" plus the error line | Delete the footer sentence. `configurationMissing` becomes "Não dá para entrar agora. Tente mais tarde." |
+| Backend unavailable | "Configure o projeto Supabase…" plus the error line | Delete the footer sentence. `configurationMissing` becomes "Não deu para entrar agora. Tente mais tarde." (G20, 2026-10-15; it was "Não dá para…") |
 
 ### 2.2 Onboarding and the tour
 
@@ -196,6 +203,7 @@ The two equal spacers center the brand block in the space above the actions. On 
 - **O6. The close is Nina's line plus one button**, "Começar" ("Fechar" on replay). No recap.
 - **O7. "Demonstração" names the screen and "Exemplo" names each picture.** They are two facts (G2).
 - **O8. An adult Apple gave no first name types it where the house first needs it** (build 11; a fallback since build 12): "Seu primeiro nome" with the placeholder "Como a casa chama você" (the minor path's words), under "Nome da casa" when creating, under "Link ou código" when joining, and above "Pedir para entrar" on the invite. No helper line, no separate screen. The create or join button stays disabled until it holds a name; a failed save reads "Não deu para salvar seu nome. Tente de novo." Since build 12 Sign in with Apple asks for the name, and an adult who shared a given name never sees the field (App Review 4.0 refuses asking for a name Apple could have shared); it shows only when Apple gave none, since the server's placeholder "Família" would otherwise become the member's name.
+- **O9. House setup opens on a choice** (2026-10-15). "Primeiro, a casa." + "Se alguém da casa já usa a Nina, peça o convite." as one centred block, with two outline buttons of equal weight at the foot: "Criar uma casa" and "Tenho um convite". Neither is cobalt, and no keyboard opens until a path is chosen; then the path's field takes focus (§2.2's earlier rule still holds there). Each path keeps the other as its quiet alternate ("Tenho um convite" / "Criar uma casa"). A partner whose invite link was lost on the way to the App Store otherwise opened a second house, which its owner cannot leave without handing it over. The house-name placeholder is "Nossa casa", never a real family's name.
 
 **Target strings**
 
@@ -250,10 +258,11 @@ Evidence: 9 reference settings roots show about 77 rows, and none of them has a 
   - The owner (Titular) sees the same row; it opens "Antes, passe a casa." with one "Entendi" and one of three lines: "Em Casa, toque na pessoa, depois em Editar e em Passar a casa. Quando ela aceitar, você pode sair.", "Esperando ‹nome› aceitar a casa. Depois disso, você pode sair." while an offer waits, or "Só outro adulto com conta recebe a casa. Convide alguém primeiro." `Haptics.selection()` opens it.
 - **Ajuda group:** `Rever a demonstração` · `Dúvidas e suporte ›` · `Novidades ›` · `Termos de uso ↗` · `Denunciar um problema ›`
   - "Dúvidas e suporte" (2026-10-04) pushes a FAQ grouped under three eyebrows, each answer behind its question (G8: the screen the action opens), and ends with one card: "Ainda com dúvida?", the address, and the cobalt "Escrever para o suporte" (mail with the app and iOS versions, nothing from the house). The website's `/suporte/` shows the same answers (`web/src/support.ts`, held equal by `web/tests/support.test.ts`).
-  - "Novidades" (2026-10-04) shows `NinaAnnouncementBoard.current`: the mark, the title "Novidades da Nina", then the eyebrows "Novo" and "Em breve", each item a 48pt glyph tile (cobalt on the wash for Novo, ink on grout for Em breve), a title of 5 words or fewer and one line of 10 words or fewer. The same board opens by itself once per board id as a sheet over the tabs, with one cobalt "Entendi", never over another sheet and never right after the tour. "Em breve" names only work that is planned; an item moves to "Novo" in the build that ships it, under a new board id.
-- `Sair da conta`
+  - "Novidades" (2026-10-04) shows `NinaAnnouncementBoard.current`: the mark, the title "Novidades da Nina", then the eyebrows "Novo" and "Em breve", each item a 48pt glyph tile (cobalt on the wash for Novo, ink on grout for Em breve), a title of 5 words or fewer and one line of 10 words or fewer. The same board opens by itself once per board id as a sheet over the tabs, with one cobalt "Entendi", never over another sheet and never right after the tour. "Em breve" names only work that is planned; an item moves to "Novo" in the build that ships it, under a new board id. The 1.0 board (id `1.0`, 2026-10-15) holds only "Feito pelo aviso" and "Busca sem acento": no tester changelog entry, and no "Em breve", since photo reading is off at launch and App Review reads a promise as unfinished.
+- `Sair da conta`. Alert: "Sair da conta?" / "Para entrar de novo, use sua conta Apple." / "Sair". `Haptics.warning()` arms it (2026-10-15): signing out takes the household off this phone. Every other "Sair da conta" (the age check, the majority and Terms gates, house setup, the pending, decision and unavailable screens) has no alert and answers with `Haptics.selection()`. A failed sign-out reads "Não deu para sair da conta agora. Tente de novo." above it.
 - `Apagar conta` (in ink)
 - Footer: `Nina 1.0 (4)`
+- A failed "Nome da casa" or "Sair da casa" reads as an error note at the end of the Casa group, because the sync toast sits under the sheet.
 
 The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://mobbin.com/screens/fd3e8e2e-0b82-4e2f-8223-b410a3e325f9). `settingsSummary()` returns a single word. "Bloqueados" is ink or muted, never terracotta.
 
@@ -337,6 +346,7 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
 - **C4. Attaching uses one unlabeled + icon.**
   - Its accessibility label is "Anexar foto ou documento". It opens a menu with "Foto" and "Documento".
   - In a free house, it opens the gate instead: "Foto e documento são do Premium." with the button "Ver o Premium".
+  - A failed or refused attachment ("Não deu para carregar uma das fotos agora. Tente de novo.", "Você pode enviar até 3 anexos por mensagem.") is an error note above the composer. Attachments dropped because the house lost Premium leave the grout line "Foto e documento são do Premium." (G20).
   - No permanent chip row.
   - Precedent: [Perplexity](https://mobbin.com/screens/7248785b-ef14-4bc8-86ac-6f657fa9e6db).
 - **C5. Photo previews.**
@@ -364,10 +374,11 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Memory share alert: title "Compartilhar com a casa?", message "‹Nome› vai poder ler. Não dá para desfazer."
   - Variants: "Quem entrar vai poder ler. Não dá para desfazer." and "Os outros adultos vão poder ler. Não dá para desfazer."
 - **C11. Notices are one line attached to the top of the composer**, 8 words or fewer, with at most one action. They are not cards in the thread. Precedent: [Claude's limit strip](https://mobbin.com/screens/e4c51fae-e8b6-4e42-8a4c-23d1ec12b06a).
-  - "Sem conexão. Esta resposta veio do aparelho."
+  - A turn Nina never answered is a failure, not a notice (2026-10-15): no Nina reply, the person's words back in the composer, and an error note above it (G20): "Sem conexão. Tente de novo." only when the request found no network, otherwise "Não deu para a Nina responder agora. Tente de novo.". "Sem conexão. Esta resposta veio do aparelho." is gone with the on-device engine that wrote it.
   - "Modo local. Nada sai deste aparelho."
   - "Ler foto e documento é do Premium." with the action "Ver o Premium"
   - "No Premium, 50 mensagens por dia." with the action "Ver o Premium"
+  - "Conversa pausada. Anote pelo + em Hoje." after the shared budget pauses the chat, with no action: no purchase lifts it (2026-10-15).
   - The withheld-proposals notice becomes "Confirmação ainda fechada nesta versão. Nada entrou na casa."
 - **C12. The typing indicator** is the mark in `.reading` presence, plus "Lendo" or no text at all.
 - **C13. Date correction hints.**
@@ -375,6 +386,7 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - Empty: "Vai ficar sem data."
   - Unparseable: "Não entendi a data. Tente "amanhã 18:00"."
 - **C14. The gates** have a headline, at most 4 lines of 10 words or fewer, one button, one footnote and one link. No closing paragraph.
+  - Every gate draws the chat header (wordmark and gear), so the Nina tab always reaches Ajustes (2026-10-15).
   - Adult-only gate: "A conversa é dos adultos da casa." + "Tarefas e compras continuam com você."
   - Declared adult the age policy keeps from the AI: "A conversa pede idade confirmada." + "A Apple ainda não confirmou sua idade. O resto funciona." + "Tentar de novo". Since D3 (2026-10-14) production admits self-declared adults, so this gate shows only while `trusted_assurances` leaves out `self_declared` (before the operator statement, or after a revert).
   - Adult with active parental controls: "A conversa não abre nesta conta." + "Esta conta tem controles parentais ativos. O resto funciona." + "Tentar de novo" (a share after the controls are lifted opens the chat), with no line about Apple's confirmation. Its Premium sheet reads "O Premium não abre nesta conta." + the same line. Build 12 still shows them the declared-adult gate and "Isso pede idade confirmada pela Apple.", which is untrue for them, until the next build ships.
@@ -410,6 +422,8 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
 - **K5. A permission prompt inside a sheet is one chip at the end of the chip row.**
   - Not yet asked: "Ativar avisos", which requests permission.
   - Denied: "Avisos bloqueados", which opens iPhone Ajustes.
+  - The same chip (`NotificationPermissionChip`) sits under a dated proposal card's meta line (2026-10-15). Under Hoje's header only "Ativar avisos" shows, while iOS has not been asked, "Avisos" is on and the house has open dated tasks: a refusal is never a standing chip on the main screen.
+  - iOS's own prompt comes right after the first dated task or reminder this phone confirms, and on a minor's first visit to their tasks, with no line before it (§0 step 3); never at launch.
   - Both use the `bell.slash` glyph.
 - **K6. Delete action.** The button reads "Apagar". Alert: title "Apagar esta tarefa?", message "Some para toda a casa. Não dá para desfazer."
   - In an editor, the quiet "Apagar" sits in the commit row opposite the commit, in edit mode only (never while adding or planting). VoiceOver reads the commit first.
@@ -417,8 +431,10 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
 - **K7. Invite sheet.**
   - The protected line appears once: "Quem abrir o link pede para entrar. Alguém da casa aprova."
   - The four fact rows collapse into one data line: "Vale até 30 de set. · 5 usos restantes".
-  - "Renovar o link" becomes a quiet text button.
+  - "Renovar o link" becomes a quiet text button. A failed renewal buzzes once, from the store (2026-10-15; Casa's row used to buzz a second time).
+  - The shared message names the house after a colon, with no article before it, and keeps the request honest: "‹Nome› quer dividir a casa com você na Nina: ‹casa›. Tocar no link só pede entrada. Alguém da casa ainda precisa aprovar." ("a ‹casa›" broke on names like "Lar dos Prado".)
   - Precedent: [Life360 invite code](https://mobbin.com/screens/a3589921-f6d4-468d-a702-70c2ee835d44).
+- **K8. The invite screen** (`InviteAcceptanceView`, 2026-10-15). Under "Pedir para entrar", the second outline button is "Criar uma casa" for someone with no house, and it opens house setup on the create path; for someone already in a house, or waiting on one, it is "Agora não", which only sets the invite aside. A failure is an error note above the buttons.
 
 ### 2.7 Paywall and premium management (`PremiumBenefitsSheet`)
 
@@ -439,6 +455,8 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - The ceiling note becomes "Teto da casa: 100 conversas por dia." (protected).
   - The CTA becomes "Assinar". "Premium" appears on screen at most twice.
   - Show the "Fotos de documentos" row only when `NinaAttachmentGate` is on.
+  - "Resumo semanal" carries one `.meta` line under its title, "Com 2 adultos que aceitaram conversar com a Nina." (CDC art. 31: the condition is stated where the benefit is sold).
+  - Plans that do not load read "Não deu para carregar os planos agora." as an error note with a quiet "Tentar de novo" under it (2026-10-15; it was a grout card saying "Tente mais tarde." with no way to retry, and sandbox loads fail often during review).
 - **P5. The management state has a title, the plan, price and renewal rows, and one "Gerenciar na App Store" button.**
   - Show a "Situação" row only when the status differs from what the title says (grace period, expired, revoked).
   - No purchase disclosure, because nothing is being sold.
@@ -453,12 +471,12 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
 
 ### 2.8 Casa (`HouseView`, member screens, `WorkloadView`)
 
-Since 2026-09-29 a claimed minor's row reads "Acesso limitado" and an account-less child or teen without a guardian's consent reads "Sem autorização" (G3 values; never the band). The member editor's role chips are "Adulto · Adolescente · Criança · Pet"; "Adulto" shows "Adultos entram por convite." and "Convidar", and a viewer who is not a trusted adult sees the two minor chips disabled with the helper "Só um responsável com idade confirmada pela Apple cadastra." (G6: it prevents an error with a legal consequence).
+Since 2026-09-29 a claimed minor's row reads "Acesso limitado" and an account-less child or teen without a guardian's consent reads "Sem autorização" (G3 values; never the band). The member editor's role chips are "Adulto · Adolescente · Criança · Pet"; "Adulto" shows "Adultos entram por convite." and "Convidar", and a viewer who is not a trusted adult sees the two minor chips disabled with the helper "Só um responsável com idade confirmada pela Apple cadastra." (G6: it prevents an error with a legal consequence). A self-declared adult without parental controls also reads "Confirmada é a idade que a Apple verificou, não só a declarada." and a quiet "Tentar de novo" (M2's inline share), there, on a legacy child's card and on a minor's join request under "Isso pede idade confirmada pela Apple." (2026-10-15).
 
 **Rules**
 
 - **H1. Member rows** are an avatar, a name and one line of data: the role, "Criança" or "Pet". Never a sentence. Precedents: [Greenlight Family](https://mobbin.com/screens/5a8be526-2a1c-4402-9666-fec75183726b) and [Life360](https://mobbin.com/screens/4af1acb5-fbf9-4dd7-832f-d7795f1d5f14).
-- **H2. Capacity is a count**: "2 de 8 pessoas". Delete the separate "casa cheia" sentence.
+- **H2. Capacity is a count**: "2 de 8 pessoas e pets" (2026-10-15: a pet takes a slot, Nina does not; the limit lines say "8 pessoas e pets" too). Delete the separate "casa cheia" sentence.
 - **H3. Each invariant is stated once, on the surface where it matters, in 12 words or fewer.**
   - "Não ocupa vaga." appears on Nina's row only.
   - "Não usa o app" appears in the add-profile sheet only. "Adicionar criança ou pet" has no subtitle.
@@ -466,8 +484,8 @@ Since 2026-09-29 a claimed minor's row reads "Acesso limitado" and an account-le
 - **H4. Actions on the Casa screen are rows, not cards.**
   - "Convidar alguém ›" joins the member list. Precedent: [Splitwise group](https://mobbin.com/screens/f0e6077c-afdf-4cc9-9993-c38a65ef982d); its toggle-description block below is the counter-example.
   - A premium-gated item is one row: a lock glyph, the title, a "Premium" tag and a chevron. Example: "Resumo semanal".
-  - In a covered house, before the first digest: "O primeiro chega em até 7 dias."
-- **H5. The solo portrait** is the eyebrow "Sinal de sobrecarga", the title "Aparece quando o outro adulto entrar.", and the button "Convidar". Delete `aloneReassurance`.
+  - In a covered house the row carries the paywall's line, "Com 2 adultos que aceitaram conversar com a Nina." (2026-10-15; the server writes no digest for a house with fewer than two adults who accepted, and the line stays true once they have).
+- **H5. The solo portrait** is the eyebrow "Sinal de sobrecarga", the title "Aparece quando o outro adulto entrar.", and the button "Convidar". Delete `aloneReassurance`. It shows while the house has one adult, however many children or pets live there: only adults carry load in the portrait (2026-10-15).
 - **H6. The portrait title never equals the eyebrow.**
   - The unbalanced headline "Sinal de sobrecarga" becomes "Pesando de um lado". Update `HouseholdWorkloadTests.swift:40` deliberately.
   - "A casa está parecida" and "Ainda sem retrato da casa" stay.
@@ -475,7 +493,7 @@ Since 2026-09-29 a claimed minor's row reads "Acesso limitado" and an account-le
   - Structure: the headline, the bars, and one caption: "Só o que está aberto e tem dono. Para conversar, não para cobrar." The caption stays gated on `snapshot.isConclusive`.
   - Put "Sementes não entram. Não é histórico, é hoje." behind an (i). Precedent: [Splitwise stats](https://mobbin.com/screens/f77b2738-8716-4219-932f-3e9080cbbd2c).
   - Unbalanced message: "‹Nome› está com a parte mais pesada agora." A balanced house has no message.
-  - Inconclusive message: "Preciso de \(minimumAssignedSample) tarefas com dono, entre \(minimumCarriers) pessoas." Keep the interpolated constants.
+  - Inconclusive message: "Preciso de \(minimumAssignedSample) tarefas com dono, entre \(minimumCarriers) adultos." Keep the interpolated constants.
   - The shared row label becomes "Sem dono".
 - **H8. The child's day** (`ChildTodaySection` on a child's member screen, `ChildDayView`, the printed page and the shared picture and PDF).
   - A child's surface never shows lateness: no terracotta, no "atrasada", no date. An hour shows only for something that happens today.
@@ -499,12 +517,12 @@ Every screen here can be seen by someone under 18, so G17's minor exception appl
 
 **Rules**
 
-- **M1. Each blocked state is one G12 block.** No house: "Peça o convite da sua casa." / "Quem cuida de você aprova sua entrada." Unknown age: "Falta sua faixa de idade." / "Sem ela, só um responsável aprova sua entrada." / "Compartilhar faixa". Sent: "Pedido enviado." / "Um responsável seu na casa precisa aprovar." Limit: "Por hoje é só." / "Seus avisos continuam chegando." ("Volte amanhã." when the guardian turned alerts off, since the other line would be false) No guardian: "Sua conta está pausada." / "Falta um responsável na casa." Removed: "Você saiu da casa." / "Sua conta é apagada em 30 dias." / "Apagar agora".
+- **M1. Each blocked state is one G12 block.** No house: "Peça o convite da sua casa." / "Quem cuida de você aprova sua entrada." Unknown age: "Falta sua faixa de idade." / "Sem ela, só um responsável aprova sua entrada." / "Compartilhar faixa". Sent: "Pedido enviado." / "Um responsável seu na casa precisa aprovar." Limit: "Por hoje é só." / "Seus avisos continuam chegando." ("Volte amanhã." when the guardian turned alerts off or iOS does not allow them, since the other line would be false) No guardian: "Sua conta está pausada." / "Falta um responsável na casa." Removed: "Você saiu da casa." / "Sua conta é apagada em 30 dias." / "Apagar agora".
 - **M2. The age check** is "Antes, sua faixa de idade." + the protected Apple line + "Continuar", with the quiet "Sair da conta" and "Apagar conta" at the foot (since build 11 it is the first screen after sign-in, so it leaves a way out, §3 row 6). Its declined, Apple-error and App Attest states each have one headline, one line, a retry and a quiet "Continuar assim", over the same two exits. Never name the Settings path until the pt-BR labels are read on a device. A share started from a button inside the app ("Tentar de novo", "Compartilhar faixa", "Compartilhar de novo") never replaces the screen: the button shows pending, then one line under it, "Faixa atualizada.", "A faixa não foi compartilhada.", "A Apple não respondeu agora. Tente de novo em instantes.", "Não deu para confirmar este iPhone." or "Não deu para atualizar sua idade."
 - **M2a. The majority and changed-Terms gates** are one title, one line, "Aceitar", then the quiet "Ler os Termos", "Sair da conta" and "Apagar conta" (a gate always leaves a way out, §3 row 6). Majority: "Agora a conta é sua." / "A Apple informou que você tem 18 anos ou mais." / "‹responsável› não acompanha mais sua conta." Changed Terms, for a restored session that never saw the current version: "Os Termos mudaram." / "Para continuar, leia e aceite a nova versão." When this phone's welcome footnote was accepted but the server never recorded it (the recording failed), the gate never claims a change: "Antes, os Termos." / "Para continuar, leia e aceite os Termos."
 - **M3. The minor home** is "Suas tarefas" with the protected second line "Responsável: ‹nome›", sections "Hoje" and "Próximos dias", rows shaped like H8's child's day, and the empty line "Nada para hoje." / "Quando combinarem uma tarefa, ela aparece aqui."
 - **M3a. Kids mode** (2026-10-04, `KidsMode.swift`) replaces M3's list for a minor whose band is `under_12`, or for any minor who turns on "Modo criança" in Ajustes (the switch also turns it off for an under-12). Header: "Oi, ‹nome›" (or "Oi"), then one star per task of today and the value "N de M feitas". One big card per task: a category tile in the kids palette (`NinaTheme.Kids`, the only place category gets a colour), the title in the `.kids` tier, the hour in a sun pill, and a round check that pops with a short shape confetti when it closes. All done: "Tudo feito por hoje." / "Muito bem." on the sun wash. "Próximos dias" keeps small tiled rows. No emoji in any string: the colour, the tiles and the shapes are the "emoji". The shapes are flat circles, stars and squares, never a face or a character. Reduce Motion removes the confetti, the pop and the drifting shapes. The account-less child's list on an adult's phone (`ChildDayView`) uses the same card for a profile whose role is `child`, and closes with the same sun card, "Tudo feito por hoje." / "Pode devolver o celular."
-- **M4. Minor settings** are rows only (S1): "Modo criança" (switch), "Responsável", "Tempo hoje" ("4 de 30 min"), "Avisos", "O que a Nina guarda", "Precisa conversar?", "Minha idade está errada", "Denunciar um problema", "Termos de uso" ↗, "Política de privacidade" ↗, then "Sair" and "Apagar conta". Alerts: "Apagar sua conta?" / "Suas tarefas voltam para a casa. Não dá para desfazer." and "Sair deste iPhone?" / "Para entrar de novo, use sua conta Apple."
+- **M4. Minor settings** are rows only (S1): "Modo criança" (switch), "Responsável", "Tempo hoje" ("4 de 30 min"), "Avisos" ("Ligados" only when the guardian keeps alerts on and iOS allows them, "Bloqueados" when iOS refused, otherwise "Desligados"), "O que a Nina guarda", "Precisa conversar?", "Minha idade está errada", "Denunciar um problema", "Termos de uso" ↗, "Política de privacidade" ↗, then "Sair" and "Apagar conta". Alerts: "Apagar sua conta?" / "Suas tarefas voltam para a casa. Não dá para desfazer." and "Sair deste iPhone?" / "Para entrar de novo, use sua conta Apple."
 - **M5. The guardian sheet** keeps its protected card, declaration and consents whole; its chrome follows the capture sheet (K1–K4) with the title "Você é responsável por ‹nome›?", the eyebrows "Quem você é" and "Idade de ‹nome›", the optional "Apelidos" field (helper "Só para a Nina esconder o nome."), "Aprovar" (or "Cadastrar"), quiet "Agora não", the link "Ler sobre famílias" and the footnote "Se você não é responsável, feche e peça a quem é."
 - **M6. Supervision** is the eyebrow "Supervisão" and value rows (G3); the footer "‹nome› não conversa com a Nina e não compra nada."; the quiet destructive actions last. Choosing "Sem limite" shows only the neutral "Sem limite, o tempo de ‹nome› fica só no Tempo de Uso do iPhone." No copy may push a guardian toward a weaker setting (ECA Digital art. 18 §§1–2).
 - **M7. A minor's notification** is "‹título› · ‹hora›": no Nina voice, no nudge.
@@ -587,5 +605,5 @@ These strings may be shortened to the minimum form shown. Every element listed m
   - The web invite page's "Verificação pendente" state.
 - **Records:**
   - Log every copy change that departs from the Paper boards in `docs/rebrand-implementation.md`.
-  - The seeded greeting (`AppStore.swift:2748`) and `MockNinaEngine` stay in one voice. If one changes, check the other.
+  - The seeded greeting (`DemoHouse.messages`) and `MockNinaEngine` stay in one voice. If one changes, check the other. Both are DEBUG-only since 2026-10-15.
 - **Removed steps:** when a tutorial step is removed, remove its dead state and model code in the same change. Leave no unreachable view.

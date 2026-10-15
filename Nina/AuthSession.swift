@@ -193,15 +193,18 @@ enum AuthFlowError: Error {
     case appleCredentialInvalid
     case configurationMissing
     case unavailable
+    case signOutFailed
 
     var userMessage: String {
         switch self {
         case .appleCredentialInvalid:
             "A Apple não retornou uma credencial válida. Tente novamente."
         case .configurationMissing:
-            "Não dá para entrar agora. Tente mais tarde."
+            "Não deu para entrar agora. Tente mais tarde."
         case .unavailable:
             "Não foi possível entrar agora. Tente de novo."
+        case .signOutFailed:
+            "Não deu para sair da conta agora. Tente de novo."
         }
     }
 }
@@ -499,7 +502,7 @@ final class AuthSessionStore {
         } catch is CancellationError {
             return false
         } catch {
-            handle(error)
+            setError(.signOutFailed)
             return false
         }
 

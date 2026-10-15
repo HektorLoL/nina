@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -84,15 +84,17 @@ measures who is carrying more of the house.**
    Nina names them and lets the AI refuse to invent a date (`due_at: null`).
 3. **Nina is a household member who doesn't take a slot.** She is a real
    `family_members` row (`household_role 'assistant'`, `user_id null`,
-   relationship `'IA da casa'`). UI copy: *"Limite: 8 pessoas na casa. A Nina não
-   ocupa vaga."*
+   relationship `'IA da casa'`). UI copy: her row in Casa reads *"Não ocupa
+   vaga."* and the house counts *"2 de 8 pessoas e pets"*.
 
 ### Voice
 
 Second-person singular informal (`você`), warm, short sentences, no exclamation
 marks, no emoji. Nina is referred to as a person ("a Nina entende"), never as
 "the AI" or "the assistant". Read `Nina/MockNinaEngine.swift` before writing any
-assistant-facing string — it is the canonical corpus of her voice.
+assistant-facing string — it is the canonical corpus of her voice. The keyword
+engine in it compiles into DEBUG builds only (since 2026-10-15); the
+`NinaEngineError` lines beside it ship in every build.
 
 **Surfaces a minor can see are the exception** (`MinorViews.swift`, the
 login, `AgeCheckView`, the web `/familias/` and `/join/`): Nina is spoken of in
@@ -432,15 +434,53 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   by a child or teen are left out of every tool data source and the insight. An
   unregistered nickname passes — a stated limitation, not a bug.
 - **Children and adolescents are never drawn in the portrait or the insight.**
-  `HouseholdWorkload` excludes `.child`, `.teen` and `.unrecognized` carriers at
-  the `isConclusive` gate and in the entries; the weekly insight counts only
-  claimed adults with a live, current consent and skips a house with fewer
-  than 2 of them.
+  `HouseholdWorkload` counts adults alone (`HouseholdRole.isWorkloadCarrier`):
+  `.child`, `.teen`, `.unrecognized` and, since 2026-10-15, `.pet` carriers are
+  left out at the `isConclusive` gate and in the entries, and Casa's dormant
+  "Aparece quando o outro adulto entrar." shows while the house has one adult,
+  however many children or pets live there (`waitsForAnotherAdult`). The weekly
+  insight counts only claimed adults with a live, current consent and skips a
+  house with fewer than 2 of them, so a covered house's "Resumo semanal" row on
+  Casa reads "Com 2 adultos que aceitaram conversar com a Nina.", the paywall's
+  own line, true before and after the condition is met.
 
 ### AI
 
 - **Nina never mutates household data.** Four read-only tools; every durable
   change is a proposal resolved by `resolve_nina_proposal`.
+- **A turn Nina never answered shows no reply, and no shipped build answers in
+  her name from the phone** (since 2026-10-15). Until then a Release build
+  answered a failed turn with `MockNinaEngine`, the keyword engine, which skips
+  moderation, the CVV line and the medical refusal. `MockNinaEngine`,
+  `AppStore.fallbackNinaEngine` and the demo house (`DemoHouse`) now compile
+  into DEBUG builds only, and a Release build with no Supabase client gets
+  `UnavailableNinaEngine`. On `.offline`, `.unavailable` or any error that is
+  not a server refusal, `sendMessage` takes the person's message out of the
+  thread, puts its words and attachments back in the composer
+  (`restorableDraft`, `restorableAttachments`, memory only) and shows one
+  `NinaErrorNote` (`ninaSendFailure`): "Sem conexão. Tente de novo." only when
+  the request found no network (`NinaEngineError(transportError:)`), otherwise
+  "Não deu para a Nina responder agora. Tente de novo.", because a drop or a
+  timeout may have reached the server. Words typed while Nina was reading stay
+  after the restored ones, never in place of them. A failure whose outcome is
+  unknown (`NinaEngineError.unconfirmed`: a timeout, a dropped connection, a
+  gateway answer with no code) keeps its message id in memory
+  (`unconfirmedTurn`), so the same words sent again replay that turn through
+  `begin_nina_chat_run`'s idempotency instead of running and charging it twice;
+  a failure the function reported with its own code gets a new id, because a
+  failed run answers its old id with `request_in_progress` forever (locked by
+  `…testResendingATurnWhoseAnswerWasLostReplaysItsIDSoTheServerNeverRunsItTwice`
+  and `…testATurnTheServerSaidFailedOrNewWordsAreSentAsANewTurn`). A refusal the
+  server answered (limit, budget, consent, block, refused content) still reads
+  as Nina's line; the budget one also sets "Conversa pausada. Anote pelo + em
+  Hoje." on the composer, with no Premium route.
+  `repository.debug-only-mock` fails the repository preflight if any of the
+  three names appears outside an `#if DEBUG` branch of a tracked `Nina/`
+  source, and `artifact.debug-chat-engine` fails the archive gate if the binary
+  carries the mock's replies or the demo house. Locked by
+  `AppStoreAuthorizationTests.testATurnNinaNeverAnsweredLeavesNoReplyAndPutsTheWordsBackInTheComposer`,
+  `…testOnlyARequestThatFoundNoNetworkIsToldThereIsNoConnection` and
+  `…testAShippedBuildWithNoServerNeverAnswersInNinasName`.
 - **Confirming a corrected proposal must bind the correction.** Editing a
   proposal's fields before accepting goes through `NinaProposalPayload.edited(…)`,
   which recomputes `dueAt` from the edited `dueLabel` whenever the label changed
@@ -493,7 +533,13 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   demonstrable consent, and a reinstall must not read as "never accepted".
   `begin_nina_chat_run` and `get_nina_weekly_candidates` both require a live
   grant, so revoking on one phone actually stops the other adult's chat and stops
-  the Sunday insight from shipping member display names to OpenAI.
+  the Sunday insight from shipping member display names to OpenAI. On the phone
+  a grant opens the chat only once `record_nina_ai_consent` has answered (since
+  2026-10-15): the card stays up with "Aceitar e conversar com a Nina" pending,
+  and a failed save leaves the transfer box ticked with the error above the
+  button; a withdrawal still stops the chat at once. Only a build with no
+  backend, or a DEBUG account, mirrors a grant before any server. Locked by
+  `AppStoreAuthorizationTests.testAGrantOpensTheConversationOnlyOnceTheServerHasRecordedIt`.
 - **A consent counts only at the current version and with its separate
   transfer consent.** Consent v2 (2026-09-29) names OpenAI, says the text and the
   house details it needs go to the United States, that OpenAI may keep abuse
@@ -627,7 +673,7 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   reply; that one write now fails with "Não foi possível sincronizar a
   confirmação da Nina." while the task itself syncs.
 - **A portrait the snapshot refused to conclude is never drawn.** `HouseholdWorkload`
-  returns an inconclusive snapshot below 6 assigned open tasks or 2 carriers, but
+  returns an inconclusive snapshot below 6 assigned open tasks or 2 adult carriers, but
   that snapshot still carries a fully populated `entries` array — so both render
   sites (`TodayView.overloadCard`, `HouseView.workloadCard`) gate `WorkloadBars`
   and the "não para cobrar" caption on `snapshot.isConclusive`, not on
@@ -825,7 +871,14 @@ Locked by
 `AppStoreAuthorizationTests.testTheAgeStepComesBeforeTheInviteAndTheTutorial`,
 `…testAMinorAccountLandsOnItsOwnTasksAndNeverOnTheFourTabs`,
 `…testAMinorNeverReachesTheChatThePaywallOrTheWorkloadPortrait` and
-`…testAnAppleFirstSignInRecordsTheFootnoteOnlyOnceTheAgeReadsAdult`. Four tabs
+`…testAnAppleFirstSignInRecordsTheFootnoteOnlyOnceTheAgeReadsAdult`.
+`homeSetup` opens on a choice, "Criar uma casa" or "Tenho um convite", with no
+field focused, so a partner whose invite link was lost on the way to the App
+Store does not open a second house by accident (rubric O9, since 2026-10-15);
+the invite screen's second button reads "Criar uma casa" only for someone with
+no house and opens setup on the create path (`InviteSetAside`), and "Agora não"
+for anyone else (`AuthSessionTests.testHouseSetupOpensNoKeyboardUntilThePersonChoosesToCreateOrJoin`,
+`InviteLinkTests.testOnlySomeoneWithoutAHouseIsOfferedToCreateOneInsteadOfJoining`). Four tabs
 (Nina / Hoje / Tarefas / Casa) in a **custom container, not `TabView`**, each
 with its own `RouterPath`. **Tabs change only by tapping the bar** — the
 horizontal swipe between tabs was removed on 2026-09-23 because it caused
@@ -925,6 +978,9 @@ branching anywhere.
   sync toast, so the `exclamationmark.circle.fill` glyph travels with it.
   Never lateness, never destruction, never a blocked or empty state. A step a
   person completed may answer in moss (`NinaSuccessNote`, the undo toast).
+  A failure line opens one way, "Não deu para ‹ação› agora. Tente de novo."
+  (rubric G20, 2026-10-15); the sign-in line "Não foi possível entrar agora.
+  Tente de novo." keeps its words because §12 and the runbook quote it.
 - `moss #3F6B4A` marks confirmed/done, and only for something a *human* confirmed.
 - **Category is a monochrome outline glyph, never a colour** (kids mode is the
   one exception, §4 "Kids mode is presentation only"). `MemberTone`'s case
@@ -1019,7 +1075,8 @@ household is what this product refuses.
   fitted, and a claimed adult's longer form simply reaches full height.
 - **A form's commit follows its last field**, and on arrival the field the
   person types first is focused (not under VoiceOver), so the keyboard fills the
-  rest. The `Spacer` plus viewport `minHeight` pair is only for a single centered
+  rest. House setup is the one exception: it opens on a choice with no field, and
+  the chosen path's field takes focus (rubric O9). The `Spacer` plus viewport `minHeight` pair is only for a single centered
   block whose exits sit at the foot (the welcome, the gates, the zero states).
   A short page ends at its last control (rubric G15).
 - **`NinaChip` holds one line** below accessibility sizes; a chip row that does
@@ -1601,9 +1658,11 @@ only remnant is `LegacyReminderItem` for decoding old local snapshots — removi
 it breaks caches written by older builds.
 
 **Demo data is the empty state — locally, not remotely.** `AppStore.init` seeds
-every collection from `PreviewData` ("Casa Castello", 7 demo tasks), and
-`resetActivityState()` is `apply(.preview)`, so any "is the home empty?" check
-based on `tasks.isEmpty` is wrong in mock/DEBUG. A real remote household does
+every collection from `PreviewData`, and `resetActivityState()` is
+`apply(.preview)`. In DEBUG `PreviewData` is the made-up `DemoHouse` ("Casa
+Aroeira": Bia, Leo, a child and the dog Biscoito, 7 demo tasks), so any "is the
+home empty?" check based on `tasks.isEmpty` is wrong in mock/DEBUG; in Release
+it is empty (since 2026-10-15; it used to carry the founder's family). A real remote household does
 *not* get demo data: `loadRemoteState` always assigns a snapshot, and `apply(_:)`
 only calls `resetActivityState()` when `state.snapshot` is nil. The one surviving
 substitution on the remote path is `PreviewData.taskSections` — a single
@@ -1647,6 +1706,19 @@ or child whose name is a common word (Café, Mel, Clara, Rosa) collects every
 visible memory that uses the word, and "Pedrinho" or a middle name never
 matches. Both only rearrange what the viewer can already read in Memórias.
 
+**Phone, sex and birthday typed with builds up to 13 are still on the server.**
+Perfil dropped "Telefone", "Sexo" and "Aniversário" on 2026-10-15 (LGPD art. 6
+III). The app selects `profiles` by named columns, so it never reads `phone`,
+`sex` or `birthday_label`, and a profile save no longer sends them at all
+(`ProfileUpsertRow`, locked by
+`RemoteDecodingTests.testSavingAProfileNeverSendsThePhoneSexOrBirthday`):
+Heitor's decision of 2026-10-15 leaves the columns unused rather than blanked
+on save. What an earlier build stored stays until the operator's planned
+one-off server statement clears it, like the notes above, and another adult of
+the house can still read it through the API until then; dropping the columns
+is a later migration. A profile cached by an earlier build still opens
+(`PrivateLocalDataStoreTests.testAProfileCachedByAnOlderBuildOpensWithoutItsPhoneSexOrBirthday`).
+
 **`Route` now has four cases and all of them are reachable** — `task`, `member`,
 `workload`, `memories`. This was fixed in the rebrand: `RouterPath.navigate(to:)`
 used to have zero call sites, so `task.createdBy` was captured on every task and
@@ -1681,7 +1753,32 @@ stay, so signing out and in never resets a daily limit or re-runs the age step,
 and the tutorial flag stays. Account deletion still clears everything. The
 clearing first invalidates the context, so a late reply cannot write the house
 back, and it removes the reminders already shown; "Sair da casa" does the same
-for the house it leaves.
+for the house it leaves. So the adult's "Sair da conta" in Ajustes asks first
+("Sair da conta?" / "Para entrar de novo, use sua conta Apple."), armed by
+`Haptics.warning()`; the exits on the age check, the gates, house setup and the
+pending, decision and unavailable screens hold no house and answer with
+`selection()` (since 2026-10-15). A failed sign-out reads "Não deu para sair da
+conta agora. Tente de novo." (`AuthFlowError.signOutFailed`), never the sign-in
+line.
+
+**iOS is asked for alerts in context, once, and never at launch** (since
+2026-10-15). `AppStore` asks only after it has read iOS's own status
+(`refreshNotificationAuthorizationStatus`, which `AppRootView` runs before the
+shell mounts): right after this phone confirms a dated task or reminder (a
+proposal, a new task, an edit or a planted semente), and on a minor's first
+visit to their tasks while the guardian keeps alerts on; never someone who
+switched "Avisos" off in Ajustes. No line precedes the system prompt (rubric
+K5). While iOS is undetermined or denied, `NotificationPermissionChip` ("Ativar
+avisos" / "Avisos bloqueados") sits in the task editor and under a dated pending
+proposal card; under Hoje's header only "Ativar avisos" shows, while iOS has not
+been asked and "Avisos" is on, so a refusal never becomes a standing chip on the
+main screen. A minor's "Avisos" value and the
+daily-limit line read the guardian's switch and iOS's answer together
+(`AppStore.minorAlertsValue`). Locked by
+`AppStoreAuthorizationTests.testConfirmingADatedProposalAsksIOSForAlertsOnceItsAnswerHasBeenRead`,
+`…testAManualDatedTaskAsksOnceAndNeverAsksSomeoneWhoSwitchedAlertsOff`,
+`…testAMinorsPhoneIsAskedOnItsHomeOnlyWhileTheGuardianKeepsAlertsOn` and
+`…testAMinorsAvisosValueSaysWhatThisIPhoneWillActuallyDo`.
 
 **Notification scheduling is capped at 60 requests globally**, with recurring
 tasks expanded 12 occurrences deep. Since 2026-10-05 every task's next alert is
@@ -2254,7 +2351,8 @@ the project, not bugs to fix unprompted.
   never decodes the stored legacy suggestion at all, and `applySuggestion`
   refuses a suggestion no message in the thread carries, so the legacy
   `SuggestionMiniCard` now reaches only `MockNinaEngine` output — the sole
-  producer of a `NinaSuggestion` with no backing row. Before this, tapping
+  producer of a `NinaSuggestion` with no backing row, and DEBUG-only since
+  2026-10-15. Before this, tapping
   "Criar tarefa" on the legacy card created the task locally and left the
   proposal pending forever: two confirmations, one of them never closed. Locked
   by

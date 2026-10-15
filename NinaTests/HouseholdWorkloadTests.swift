@@ -349,6 +349,41 @@ final class HouseholdWorkloadTests: XCTestCase {
         XCTAssertFalse(snapshot.isConclusive)
     }
 
+    func testAPetIsNeverACarrierSoThePortraitComparesAdultsOnly() {
+        let ana = member(named: "Ana", tone: .mint)
+        let bruno = member(named: "Bruno", tone: .sky)
+        let thor = member(named: "Thor", tone: .amber, role: .pet)
+        let petsWork = (0..<8).map { _ in openTask(owner: "Thor", ownerMemberID: thor.id) }
+        let adultsWork = (0..<3).flatMap { _ in
+            [
+                openTask(owner: "Ana", ownerMemberID: ana.id),
+                openTask(owner: "Bruno", ownerMemberID: bruno.id)
+            ]
+        }
+
+        let snapshot = HouseholdWorkload.snapshot(tasks: petsWork + adultsWork, members: [ana, bruno, thor])
+
+        XCTAssertEqual(snapshot.entries.compactMap(\.memberID), [ana.id, bruno.id])
+        XCTAssertEqual(snapshot.assignedCount, 6)
+        XCTAssertEqual(snapshot.sharedCount, 0)
+        XCTAssertTrue(snapshot.isConclusive)
+        XCTAssertTrue(snapshot.isBalanced)
+    }
+
+    func testOneAdultWithChildrenAndPetsWaitsForAnotherAdult() {
+        let ana = member(named: "Ana", tone: .mint)
+        let pedro = member(named: "Pedro", tone: .amber, role: .child)
+        let thor = member(named: "Thor", tone: .lavender, role: .pet)
+        let bruno = member(named: "Bruno", tone: .sky)
+
+        XCTAssertTrue(HouseholdWorkload.waitsForAnotherAdult(members: [ana, pedro, thor]))
+        XCTAssertFalse(HouseholdWorkload.waitsForAnotherAdult(members: [ana, pedro, thor, bruno]))
+        XCTAssertEqual(
+            HouseholdWorkloadSnapshot.empty.message,
+            "Preciso de \(HouseholdWorkload.minimumAssignedSample) tarefas com dono, entre \(HouseholdWorkload.minimumCarriers) adultos."
+        )
+    }
+
     private func openTask(owner: String, ownerMemberID: UUID? = nil, kind: TaskKind = .task) -> TaskItem {
         TaskItem(
             kind: kind,

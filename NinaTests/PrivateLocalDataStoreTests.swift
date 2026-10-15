@@ -131,7 +131,7 @@ final class PrivateLocalDataStoreTests: XCTestCase {
             provider: .apple
         )
         var expectedProfile = UserProfile.default(for: user)
-        expectedProfile.phone = "+55 11 99999-0000"
+        expectedProfile.availabilityNote = "Noites e sábados"
         expectedProfile.avatar = expectedProfile.avatar.asPhoto(for: user.id)
         let photoData = Data([0xFF, 0xD8, 0xFF, 0xD9])
         let profileKey = "nina.profile.metadata.\(user.id)"
@@ -159,6 +159,41 @@ final class PrivateLocalDataStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testAProfileCachedByAnOlderBuildOpensWithoutItsPhoneSexOrBirthday() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suiteName = "PrivateLocalDataStoreTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let privateStore = ProtectedLocalDataStore(directoryURL: root.appendingPathComponent("private"))
+        let userID = UUID().uuidString
+        let user = AuthUser(id: userID, displayName: "Ana", email: nil, provider: .apple)
+        let olderCache = """
+        {"userID":"\(userID)","displayName":"Ana","sex":"feminine","householdRole":"parent",
+         "phone":"(21) 99397-2860","birthdayLabel":"12 de maio","availabilityNote":"Noites",
+         "communicationPreference":"brief","memoryNote":"","avatar":{"kind":"preset",
+         "symbolName":"avatar.base","tone":"sky"}}
+        """
+        defaults.set(Data(olderCache.utf8), forKey: "nina.profile.metadata.\(userID)")
+        let profileStore = ProfileStore(
+            defaults: defaults,
+            privateDataStore: privateStore,
+            remoteProfileBackend: nil
+        )
+
+        let restored = profileStore.profile(for: user)
+        let rewritten = String(decoding: try JSONEncoder().encode(restored), as: UTF8.self)
+
+        XCTAssertEqual(restored.displayName, "Ana")
+        XCTAssertEqual(restored.householdRole, .parent)
+        XCTAssertEqual(restored.availabilityNote, "Noites")
+        XCTAssertEqual(restored.communicationPreference, .brief)
+        for removed in ["phone", "99397", "birthdayLabel", "12 de maio", "\"sex\"", "feminine"] {
+            XCTAssertFalse(rewritten.contains(removed), removed)
+        }
+    }
+
+    @MainActor
     func testProfileCleanupInvalidatesInFlightRemoteRefresh() async throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -173,7 +208,7 @@ final class PrivateLocalDataStoreTests: XCTestCase {
             provider: .apple
         )
         var staleProfile = UserProfile.default(for: user)
-        staleProfile.phone = "+55 11 98888-0000"
+        staleProfile.availabilityNote = "Só de manhã"
         let backend = ControlledProfileBackend()
         let profileStore = ProfileStore(
             defaults: defaults,

@@ -57,6 +57,12 @@ final class AnnouncementTests: XCTestCase {
         )
     }
 
+    func testTheFirstReleaseBoardPromisesNothingTheAppDoesNotAlreadyDo() {
+        XCTAssertEqual(board.id, "1.0")
+        XCTAssertTrue(board.items(in: .comingSoon).isEmpty)
+        XCTAssertFalse(board.items.contains { $0.title == "Foto vira tarefa" })
+    }
+
     func testEveryAnnouncementIsShortAndInNinasVoice() {
         XCTAssertFalse(board.items.isEmpty)
         XCTAssertEqual(Set(board.items.map(\.id)).count, board.items.count)

@@ -55,9 +55,9 @@ enum HouseholdRole: String, CaseIterable, Identifiable, Codable, Hashable {
         self == .unrecognized ? "" : rawValue
     }
 
-    // Only these three ever carry household load; a minor, an unreadable role or Nina never does.
+    // Only an adult carries household load in the portrait; a pet, a minor, an unreadable role or Nina never does.
     var isWorkloadCarrier: Bool {
-        self == .adult || self == .pet
+        self == .adult
     }
 
     static let editorRoles: [HouseholdRole] = [.adult, .teen, .child, .pet]
@@ -1846,8 +1846,8 @@ enum NinaReplyReportReason: String, CaseIterable, Identifiable, Hashable {
 
 enum NinaLegalLinks {
     // App Store Review 3.1.2 rejects a paywall without reachable terms and privacy links.
-    static let privacyPolicy = URL(string: "https://ninai.app/privacidade")!
-    static let termsOfUse = URL(string: "https://ninai.app/termos")!
+    static let privacyPolicy = URL(string: "https://ninai.app/privacidade/")!
+    static let termsOfUse = URL(string: "https://ninai.app/termos/")!
     static let support = URL(string: "mailto:oi@ninai.app")!
     static let families = URL(string: "https://ninai.app/familias/")!
     static let reportPolicy = URL(string: "https://ninai.app/denuncia/")!

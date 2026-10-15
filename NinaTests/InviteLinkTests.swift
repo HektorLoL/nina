@@ -29,6 +29,27 @@ final class InviteLinkTests: XCTestCase {
         XCTAssertNil(InviteLinkParser.code(from: try XCTUnwrap(URL(string: "https://ninai.app/other/\(code)"))))
     }
 
+    func testOnlySomeoneWithoutAHouseIsOfferedToCreateOneInsteadOfJoining() {
+        XCTAssertTrue(InviteSetAside.offersHouseCreation(.noHome))
+        XCTAssertEqual(InviteSetAside.title(for: .noHome), "Criar uma casa")
+
+        for access: HomeAccessState in [.authorized, .pendingApproval, .accessDecision] {
+            XCTAssertFalse(InviteSetAside.offersHouseCreation(access))
+            XCTAssertEqual(InviteSetAside.title(for: access), "Agora não")
+        }
+    }
+
+    @MainActor
+    func testTheInviteMessageNamesTheHouseWithoutAnArticleAndPromisesOnlyARequest() {
+        let message = InviteFamilySheet.message(inviter: "Marta", houseName: "Lar dos Prado")
+
+        XCTAssertTrue(message.hasPrefix("Marta quer dividir a casa com você na Nina: Lar dos Prado."))
+        XCTAssertFalse(message.contains("a Lar dos Prado"))
+        XCTAssertTrue(message.contains("Tocar no link só pede entrada."))
+        XCTAssertTrue(message.contains("Alguém da casa ainda precisa aprovar."))
+        XCTAssertFalse(message.contains("—"))
+    }
+
     @MainActor
     func testPendingInvitePersistsUntilCleared() throws {
         let suiteName = "InviteLinkTests.\(UUID().uuidString)"

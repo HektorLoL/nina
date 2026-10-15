@@ -234,6 +234,7 @@ struct MemberEditorSheet: View {
                         Text("Só um responsável com idade confirmada pela Apple cadastra.")
                             .ninaText(.caption, NinaTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
+                        AppleConfirmationRetry()
                     }
                 }
             }
@@ -835,6 +836,7 @@ struct PendingJoinRequestCard: View {
             Text("Isso pede idade confirmada pela Apple.")
                 .ninaText(.caption, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
+            AppleConfirmationRetry()
         }
 
         ViewThatFits(in: .horizontal) {
@@ -1034,7 +1036,7 @@ struct PendingHomeApprovalView: View {
                     Spacer(minLength: 24)
 
                     NinaButton(title: "Sair da conta", kind: .quiet) {
-                        Haptics.warning()
+                        Haptics.selection()
                         Task {
                             onboardingStore.cancelReplay()
                             await authSession.signOut()
@@ -1121,7 +1123,7 @@ struct FamilyAccessDecisionView: View {
                     Spacer(minLength: 24)
 
                     NinaButton(title: "Sair da conta", kind: .quiet) {
-                        Haptics.warning()
+                        Haptics.selection()
                         Task {
                             onboardingStore.cancelReplay()
                             await authSession.signOut()

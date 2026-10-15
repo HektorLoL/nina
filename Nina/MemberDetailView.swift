@@ -22,7 +22,8 @@ struct MemberDetailView: View {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(NinaTheme.ink)
-                        .frame(width: 40, height: 40, alignment: .leading)
+                        .frame(width: 44, height: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Voltar")
@@ -34,7 +35,10 @@ struct MemberDetailView: View {
                         Haptics.lightImpact()
                         router.presentedSheet = .member(member.id)
                     } label: {
-                        Text("Editar").ninaText(.label, NinaTheme.ink, weight: .semibold)
+                        Text("Editar")
+                            .ninaText(.label, NinaTheme.ink, weight: .semibold)
+                            .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
