@@ -87,17 +87,14 @@ struct AnnouncementsSheet: View {
     var board: NinaAnnouncementBoard = .current
 
     var body: some View {
-        VStack(spacing: 0) {
+        FittedSheetLayout {
             SheetHeader(eyebrow: "Novidades") { dismiss() }
-
-            ScrollView {
-                AnnouncementsContent(board: board)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 4)
-                    .padding(.bottom, 24)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-
+        } content: {
+            AnnouncementsContent(board: board)
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 24)
+        } bar: {
             NinaButton(title: "Entendi", fillsWidth: true) {
                 Haptics.selection()
                 dismiss()

@@ -14,39 +14,342 @@ struct SheetHeader: View {
     var onClose: () -> Void
 
     var body: some View {
-        ZStack {
+        HStack(spacing: 8) {
+            if alignsCloseTrailing {
+                closeSlot
+            } else {
+                closeButton
+            }
+
+            // The eyebrow never runs under the close disc, at any type size.
             Text(eyebrow)
                 .ninaText(.eyebrow, NinaTheme.faint, weight: .bold)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
                 .accessibilityAddTraits(.isHeader)
 
-            HStack {
-                if alignsCloseTrailing {
-                    Spacer()
-                }
-
-                Button {
-                    Haptics.selection()
-                    onClose()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(NinaTheme.ink)
-                        .frame(width: 32, height: 32)
-                        .background(NinaTheme.grout, in: Circle())
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Fechar")
-
-                if !alignsCloseTrailing {
-                    Spacer()
-                }
+            if alignsCloseTrailing {
+                closeButton
+            } else {
+                closeSlot
             }
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)
         .padding(.bottom, 10)
+    }
+
+    private var closeButton: some View {
+        Button {
+            Haptics.selection()
+            onClose()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(NinaTheme.ink)
+                .frame(width: 32, height: 32)
+                .background(NinaTheme.grout, in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Fechar")
+    }
+
+    private var closeSlot: some View {
+        Color.clear
+            .frame(width: 44, height: 44)
+            .accessibilityHidden(true)
+    }
+}
+
+enum SheetFit {
+    struct Parts: Equatable {
+        var header: CGFloat = 0
+        var content: CGFloat = 0
+        var bar: CGFloat = 0
+    }
+
+    static func height(_ parts: Parts) -> CGFloat {
+        (parts.header + parts.content + parts.bar).rounded(.up)
+    }
+
+    static func detent(_ parts: Parts, keyboardSurplus: CGFloat = 0) -> PresentationDetent {
+        parts.content > 0 ? .height(height(parts) - keyboardSurplus) : .medium
+    }
+
+    static let maximumKeyboardSurplus: CGFloat = 44
+
+    @MainActor static var learnedKeyboardSurplus: CGFloat?
+
+    // With the keyboard up the detent gives back the height the home indicator added, so no glaze opens above the chips.
+    static func keyboardSurplus(container: CGFloat, parts: Parts, previous: CGFloat) -> CGFloat {
+        guard parts.content > 0 else { return 0 }
+        let requested = height(parts) - previous
+        return min(max((container - requested).rounded(.down), 0), maximumKeyboardSurplus)
+    }
+
+    static let insetKeptAboveTheKeyboard: CGFloat = 6
+
+    static func keyboardSurplus(learned: CGFloat?, bottomInset: CGFloat) -> CGFloat {
+        if let learned {
+            return learned
+        }
+        return min(max((bottomInset - insetKeptAboveTheKeyboard).rounded(.down), 0), maximumKeyboardSurplus)
+    }
+
+    static func restingBottomInset(_ reported: CGFloat) -> CGFloat? {
+        reported <= maximumKeyboardSurplus ? reported : nil
+    }
+
+    static func learnsKeyboardSurplus(measured: CGFloat, applied: CGFloat) -> Bool {
+        measured >= applied + 2
+    }
+
+    static let barFloor: CGFloat = 12
+
+    // A bar's commit never sits on a card's rounded foot where no home indicator lifts it.
+    static func barBottomPadding(bottomInset: CGFloat, keyboardIsUp: Bool) -> CGFloat {
+        keyboardIsUp ? 0 : max(barFloor - bottomInset, 0)
+    }
+
+    // The card gives its surplus back once the keyboard is already lifting it, so its top never dips first.
+    static let keyboardHeadStart: Duration = .milliseconds(80)
+
+    static func keyboardAnimation(_ note: Notification) -> Animation {
+        .easeOut(duration: (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25)
+    }
+
+    static func keyboardIsOnScreen(_ note: Notification) -> Bool {
+        guard let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue,
+              frame.height > 0 else { return false }
+        guard let screen = note.object as? UIScreen else { return true }
+        return frame.minY < screen.bounds.maxY - 1
+    }
+
+    static func isChange(from old: CGFloat, to new: CGFloat) -> Bool {
+        abs(old - new) >= 0.5
+    }
+
+    struct ContentReading: Equatable {
+        var height: CGFloat = 0
+        var width: CGFloat = 0
+        var widening: CGFloat = 0
+    }
+
+    static let cardSideInsets: CGFloat = 32
+
+    // A card that reaches full height keeps its card height, so it never flips back.
+    static func content(after previous: ContentReading, height: CGFloat, width: CGFloat) -> ContentReading {
+        let growth = width - previous.width
+        guard previous.width > 0, abs(growth) >= 0.5 else {
+            return ContentReading(height: height + previous.widening, width: width, widening: previous.widening)
+        }
+        guard growth > 0, growth <= cardSideInsets else {
+            return ContentReading(height: height, width: width)
+        }
+        let kept = max(previous.height, height)
+        return ContentReading(height: kept, width: width, widening: kept - height)
+    }
+}
+
+// A sheet is as tall as what it holds, so no glaze opens between the fields and their commit.
+struct FittedSheetLayout<Header: View, Content: View, Bar: View>: View {
+    var fits: Bool = true
+    var revealing: AnyHashable? = nil
+    @ViewBuilder var header: Header
+    @ViewBuilder var content: Content
+    @ViewBuilder var bar: Bar
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var parts = SheetFit.Parts()
+    @State private var contentReading = SheetFit.ContentReading()
+    @State private var container: CGFloat = 0
+    @State private var bottomInset: CGFloat = 0
+    @State private var keyboardIsShowing = false
+    @State private var keyboardIsUp = false
+    @State private var insetIsResting = true
+    @State private var keyboardSurplus: CGFloat = 0
+
+    private var barFloor: CGFloat {
+        parts.bar > 0 ? SheetFit.barBottomPadding(bottomInset: bottomInset, keyboardIsUp: keyboardIsUp) : 0
+    }
+
+    private var fittedParts: SheetFit.Parts {
+        var fitted = parts
+        fitted.bar += barFloor
+        return fitted
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+                .fixedSize(horizontal: false, vertical: true)
+                .reportsGeometry { size, _ in measure(\.header, size.height) }
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    content
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .reportsGeometry { size, _ in readContent(size) }
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: revealing) { _, target in
+                    guard let target else { return }
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(450))
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+                            proxy.scrollTo(target, anchor: .bottom)
+                        }
+                    }
+                }
+            }
+
+            bar
+                .fixedSize(horizontal: false, vertical: true)
+                .reportsGeometry { size, _ in measure(\.bar, size.height) }
+                .padding(.bottom, barFloor)
+        }
+        .reportsGeometry { size, insets in
+            container = size.height
+            if insetIsResting, let resting = SheetFit.restingBottomInset(insets.bottom),
+               SheetFit.isChange(from: bottomInset, to: resting) {
+                bottomInset = resting
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
+            guard SheetFit.keyboardIsOnScreen(note) else { return }
+            keyboardIsShowing = true
+            insetIsResting = false
+            let surplus = SheetFit.keyboardSurplus(learned: SheetFit.learnedKeyboardSurplus, bottomInset: bottomInset)
+            let animation = SheetFit.keyboardAnimation(note)
+            Task {
+                try? await Task.sleep(for: SheetFit.keyboardHeadStart)
+                guard keyboardIsShowing else { return }
+                withAnimation(animation) {
+                    keyboardIsUp = true
+                    setKeyboardSurplus(surplus)
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { note in
+            guard SheetFit.keyboardIsOnScreen(note) else {
+                keyboardIsShowing = false
+                keyboardIsUp = false
+                return setKeyboardSurplus(0)
+            }
+            keyboardIsShowing = true
+            keyboardIsUp = true
+            let surplus = SheetFit.keyboardSurplus(container: container, parts: fittedParts, previous: keyboardSurplus)
+            guard abs(surplus - keyboardSurplus) >= 2 else { return }
+            if fits, SheetFit.learnsKeyboardSurplus(measured: surplus, applied: keyboardSurplus) {
+                SheetFit.learnedKeyboardSurplus = surplus
+            }
+            setKeyboardSurplus(surplus)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { note in
+            keyboardIsShowing = false
+            withAnimation(SheetFit.keyboardAnimation(note)) {
+                keyboardIsUp = false
+                setKeyboardSurplus(0)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+            insetIsResting = true
+        }
+        .presentationDetents([fits ? SheetFit.detent(fittedParts, keyboardSurplus: keyboardSurplus) : .large])
+    }
+
+    private func setKeyboardSurplus(_ surplus: CGFloat) {
+        let applied = fits ? surplus : 0
+        if SheetFit.isChange(from: keyboardSurplus, to: applied) {
+            keyboardSurplus = applied
+        }
+    }
+
+    private func readContent(_ size: CGSize) {
+        let reading = SheetFit.content(after: contentReading, height: size.height, width: size.width)
+        if reading != contentReading {
+            contentReading = reading
+        }
+        measure(\.content, reading.height)
+    }
+
+    private func measure(_ part: WritableKeyPath<SheetFit.Parts, CGFloat>, _ height: CGFloat) {
+        guard SheetFit.isChange(from: parts[keyPath: part], to: height) else { return }
+        parts[keyPath: part] = height
+    }
+}
+
+private extension View {
+    func reportsGeometry(_ report: @escaping (CGSize, EdgeInsets) -> Void) -> some View {
+        background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { report(proxy.size, proxy.safeAreaInsets) }
+                    .onChange(of: proxy.size) { _, size in report(size, proxy.safeAreaInsets) }
+                    .onChange(of: proxy.safeAreaInsets) { _, insets in report(proxy.size, insets) }
+            }
+        }
+    }
+}
+
+extension FittedSheetLayout where Bar == EmptyView {
+    init(
+        fits: Bool = true,
+        revealing: AnyHashable? = nil,
+        @ViewBuilder header: () -> Header,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.init(fits: fits, revealing: revealing, header: header, content: content) {
+            EmptyView()
+        }
+    }
+}
+
+enum EditorDeletePlacement: Equatable {
+    case bar
+    case column
+
+    static func placement(isEditing: Bool, isAccessibilitySize: Bool) -> EditorDeletePlacement? {
+        guard isEditing else { return nil }
+        return isAccessibilitySize ? .column : .bar
+    }
+}
+
+struct EditorCommitRow<Commit: View>: View {
+    var deletePlacement: EditorDeletePlacement?
+    var onDelete: () -> Void
+    @ViewBuilder var commit: Commit
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if deletePlacement == .bar {
+                EditorDeleteButton(action: onDelete)
+            }
+
+            Spacer(minLength: 8)
+
+            commit
+                .accessibilitySortPriority(1)
+        }
+        .accessibilityElement(children: .contain)
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+}
+
+struct EditorDeleteButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        NinaButton(title: "Apagar", kind: .quiet) {
+            Haptics.warning()
+            action()
+        }
     }
 }
 
@@ -1465,9 +1768,9 @@ struct PremiumEntryView: View {
         if store.canBuyPremium {
             PremiumBenefitsSheet()
         } else {
-            VStack(spacing: 0) {
+            FittedSheetLayout {
                 SheetHeader(eyebrow: "Premium") { dismiss() }
-                Spacer(minLength: 24)
+            } content: {
                 ZeroState(
                     headline: closedByParentalControls
                         ? "O Premium não abre nesta conta."
@@ -1478,7 +1781,8 @@ struct PremiumEntryView: View {
                     presence: .unavailable
                 )
                 .padding(.horizontal, 20)
-                Spacer(minLength: 24)
+                .padding(.top, 8)
+                .padding(.bottom, 32)
             }
             .ninaSheetBackground()
             .toolbar(.hidden, for: .navigationBar)
@@ -1724,33 +2028,40 @@ struct PremiumBenefitsSheet: View {
         return premiumStore.entitlement.isActive && premiumStore.entitlement.productID == product.id
     }
 
+    // A purchase made here keeps the full sheet, so the moss moment never shrinks under the person.
+    static func fitsItsContent(wasCoveredOnAppear: Bool?, isCovered: Bool) -> Bool {
+        (wasCoveredOnAppear ?? isCovered) && isCovered
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
+        FittedSheetLayout(
+            fits: Self.fitsItsContent(wasCoveredOnAppear: wasCoveredOnAppear, isCovered: isCovered)
+        ) {
             SheetHeader(eyebrow: "") {
                 dismiss()
             }
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if isCovered {
-                        managementHeading
-                        subscriptionCard
-                    } else {
-                        heading
-                        periodControl
-                        comparison
-                        ceilingNote
-                    }
-                    statusArea
+        } content: {
+            VStack(alignment: .leading, spacing: 20) {
+                if isCovered {
+                    managementHeading
+                    subscriptionCard
+                } else {
+                    heading
+                    periodControl
+                    comparison
+                    ceilingNote
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 2)
-                .padding(.bottom, 24)
-            }
+                statusArea
 
-            if isCovered {
-                manageArea
-            } else {
+                if isCovered {
+                    manageArea
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 2)
+            .padding(.bottom, 24)
+        } bar: {
+            if !isCovered {
                 purchaseArea
             }
         }
@@ -1883,17 +2194,11 @@ struct PremiumBenefitsSheet: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 10)
         } else {
             NinaButton(title: "Gerenciar na App Store", fillsWidth: true) {
                 Haptics.lightImpact()
                 isManagingSubscription = true
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
         }
     }
 
@@ -2236,6 +2541,7 @@ struct TaskEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var mode: TaskEditorMode
     var initialKind: TaskKind = .task
@@ -2255,8 +2561,50 @@ struct TaskEditorSheet: View {
     @State private var newCategoryTitle = ""
     @State private var didLoad = false
     @State private var loadedTaskVersion: Int?
+    @State private var loadedDraft: Draft?
     @State private var isShowingDeleteConfirmation = false
     @FocusState private var isTitleFocused: Bool
+    @FocusState private var isCategoryNameFocused: Bool
+
+    struct Draft: Equatable {
+        var title = ""
+        var subtitle = ""
+        var owner = "Casa"
+        var ownerMemberID: UUID?
+        var dueDate = Date.distantPast
+        var kind: TaskKind = .task
+        var category: TaskCategory = .home
+        var priority: TaskPriority = .normal
+        var recurrence: TaskRecurrence = .none
+        var reminderLead: TaskReminderLead = .atTime
+    }
+
+    // A swipe or a stray tap above the card never throws away what the person typed; the close button still does.
+    static func hasUnsavedInput(mode: TaskEditorMode, loaded: Draft?, current: Draft) -> Bool {
+        switch mode {
+        case .add:
+            return !current.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !current.subtitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .edit, .plant:
+            guard let loaded else { return false }
+            return loaded != current
+        }
+    }
+
+    private var draft: Draft {
+        Draft(
+            title: title,
+            subtitle: subtitle,
+            owner: owner,
+            ownerMemberID: ownerMemberID,
+            dueDate: dueDate,
+            kind: kind,
+            category: category,
+            priority: priority,
+            recurrence: recurrence,
+            reminderLead: reminderLead
+        )
+    }
 
     private var isEditing: Bool {
         switch mode {
@@ -2327,39 +2675,59 @@ struct TaskEditorSheet: View {
         ownerMemberID != nil
     }
 
+    // Planting a semente is not editing it, so Apagar never appears there.
+    static func deletePlacement(mode: TaskEditorMode, dynamicTypeSize: DynamicTypeSize) -> EditorDeletePlacement? {
+        let isEditingTask: Bool = if case .edit = mode { true } else { false }
+        return EditorDeletePlacement.placement(
+            isEditing: isEditingTask,
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+        )
+    }
+
+    private var deletePlacement: EditorDeletePlacement? {
+        Self.deletePlacement(mode: mode, dynamicTypeSize: dynamicTypeSize)
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
+        FittedSheetLayout(revealing: activePanel.map(AnyHashable.init)) {
             SheetHeader(eyebrow: editorTitle) {
                 dismiss()
             }
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    titleField
-                    subtitleField
-                    if !isPlantingSeed {
-                        kindSegment
-                    }
-
-                    if case .edit = mode {
-                        NinaButton(title: "Apagar", kind: .quiet) {
-                            Haptics.warning()
-                            isShowingDeleteConfirmation = true
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 12)
-                    }
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                titleField
+                subtitleField
+                if !isPlantingSeed {
+                    kindSegment
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 2)
-                .padding(.bottom, 20)
-            }
-            .scrollDismissesKeyboard(.interactively)
 
+                if activePanel == .date {
+                    datePanel
+                        .id(TaskEditorPanel.date)
+                }
+
+                if activePanel == .category {
+                    categoryPanel
+                        .id(TaskEditorPanel.category)
+                }
+
+                if deletePlacement == .column {
+                    EditorDeleteButton {
+                        isShowingDeleteConfirmation = true
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 12)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 2)
+            .padding(.bottom, 20)
+        } bar: {
             bottomBar
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .interactiveDismissDisabled(Self.hasUnsavedInput(mode: mode, loaded: loadedDraft, current: draft))
         .onAppear(perform: loadIfNeeded)
         .task {
             await store.refreshNotificationAuthorizationStatus()
@@ -2492,14 +2860,6 @@ struct TaskEditorSheet: View {
 
     private var bottomBar: some View {
         VStack(spacing: 0) {
-            if activePanel == .date {
-                datePanel
-            }
-
-            if activePanel == .category {
-                categoryPanel
-            }
-
             chipRow
 
             if category.id == TaskCategory.health.id, let name = healthBlockedOwnerName {
@@ -2524,9 +2884,9 @@ struct TaskEditorSheet: View {
                     .padding(.top, 8)
             }
 
-            HStack(spacing: 12) {
-                Spacer(minLength: 8)
-
+            EditorCommitRow(deletePlacement: deletePlacement) {
+                isShowingDeleteConfirmation = true
+            } commit: {
                 NinaButton(
                     title: primaryActionTitle,
                     systemName: "arrow.up",
@@ -2535,9 +2895,6 @@ struct TaskEditorSheet: View {
                     save()
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
         }
         .background(NinaTheme.ground)
     }
@@ -2682,56 +3039,53 @@ struct TaskEditorSheet: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.vertical, 4)
     }
 
     private var categoryPanel: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(categoryOptions) { item in
-                        let isBlocked = item.id == TaskCategory.health.id && healthBlockedOwnerName != nil
-                        Button {
-                            Haptics.selection()
-                            category = item
-                            closePanel()
-                        } label: {
-                            categoryChoiceRow(item, isSelected: category.id == item.id)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isBlocked)
-                        .opacity(isBlocked ? 0.4 : 1)
-
-                        if isBlocked, let name = healthBlockedOwnerName {
-                            Text("Sem autorização de saúde para \(name).")
-                                .ninaText(.caption, NinaTheme.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 20)
-                                .padding(.bottom, 8)
-                        }
-
-                        NinaDivider(inset: 34)
-                    }
-
-                    Button {
-                        Haptics.lightImpact()
-                        newCategoryTitle = ""
-                        withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86)) {
-                            isCreatingCategory = true
-                        }
-                    } label: {
-                        categoryChoiceRow(
-                            TaskCategory.custom(id: "new-category", title: "Nova categoria", tone: .mint),
-                            isSelected: false,
-                            overrideSymbolName: "plus"
-                        )
-                    }
-                    .buttonStyle(.plain)
+            ForEach(categoryOptions) { item in
+                let isBlocked = item.id == TaskCategory.health.id && healthBlockedOwnerName != nil
+                Button {
+                    Haptics.selection()
+                    category = item
+                    closePanel()
+                } label: {
+                    categoryChoiceRow(item, isSelected: category.id == item.id)
                 }
+                .buttonStyle(.plain)
+                .disabled(isBlocked)
+                .opacity(isBlocked ? 0.4 : 1)
+
+                if isBlocked, let name = healthBlockedOwnerName {
+                    Text("Sem autorização de saúde para \(name).")
+                        .ninaText(.caption, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 8)
+                }
+
+                NinaDivider(inset: 34)
             }
-            .frame(maxHeight: 208)
+
+            Button {
+                Haptics.lightImpact()
+                newCategoryTitle = ""
+                withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86)) {
+                    isCreatingCategory = true
+                }
+                Task {
+                    await Task.yield()
+                    isCategoryNameFocused = true
+                }
+            } label: {
+                categoryChoiceRow(
+                    TaskCategory.custom(id: "new-category", title: "Nova categoria", tone: .mint),
+                    isSelected: false,
+                    overrideSymbolName: "plus"
+                )
+            }
+            .buttonStyle(.plain)
 
             if isCreatingCategory {
                 HStack(spacing: 10) {
@@ -2739,6 +3093,7 @@ struct TaskEditorSheet: View {
                         .ninaText(.label, NinaTheme.ink)
                         .tint(NinaTheme.cobalt)
                         .textFieldStyle(.plain)
+                        .focused($isCategoryNameFocused)
                         .submitLabel(.done)
 
                     Button {
@@ -2767,7 +3122,6 @@ struct TaskEditorSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 20)
                 .frame(minHeight: 52)
             }
         }
@@ -2798,7 +3152,6 @@ struct TaskEditorSheet: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.horizontal, 20)
         .frame(minHeight: 48)
         .contentShape(Rectangle())
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -2836,20 +3189,33 @@ struct TaskEditorSheet: View {
             return
         }
 
-        title = task.title
-        subtitle = task.subtitle
-        owner = task.owner
-        ownerMemberID = task.ownerMemberID
-        kind = isPlantingSeed ? .task : task.kind
         // A semente has no date to load; the editor must not offer "now", which
         // is already past by the time the sheet is saved.
-        dueDate = isPlantingSeed || task.kind == .seed
-            ? Self.defaultDueDate()
-            : (task.dueAt ?? Self.date(fromDueLabel: task.dueLabel))
-        category = task.category
-        priority = task.priority
-        recurrence = task.recurrence
-        reminderLead = isPlantingSeed ? .atTime : task.reminderLead
+        let loaded = Draft(
+            title: task.title,
+            subtitle: task.subtitle,
+            owner: task.owner,
+            ownerMemberID: task.ownerMemberID,
+            dueDate: isPlantingSeed || task.kind == .seed
+                ? Self.defaultDueDate()
+                : (task.dueAt ?? Self.date(fromDueLabel: task.dueLabel)),
+            kind: isPlantingSeed ? .task : task.kind,
+            category: task.category,
+            priority: task.priority,
+            recurrence: task.recurrence,
+            reminderLead: isPlantingSeed ? .atTime : task.reminderLead
+        )
+        title = loaded.title
+        subtitle = loaded.subtitle
+        owner = loaded.owner
+        ownerMemberID = loaded.ownerMemberID
+        kind = loaded.kind
+        dueDate = loaded.dueDate
+        category = loaded.category
+        priority = loaded.priority
+        recurrence = loaded.recurrence
+        reminderLead = loaded.reminderLead
+        loadedDraft = loaded
         loadedTaskVersion = task.version
     }
 
@@ -3091,6 +3457,7 @@ enum ShoppingEditorMode: Hashable {
 struct ShoppingEditorSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var mode: ShoppingEditorMode
     @State private var title = ""
@@ -3099,8 +3466,31 @@ struct ShoppingEditorSheet: View {
     @State private var ownerMemberID: UUID?
     @State private var didLoad = false
     @State private var addedCount = 0
+    @State private var loadedDraft: Draft?
     @State private var isShowingDeleteConfirmation = false
     @FocusState private var isTitleFocused: Bool
+
+    struct Draft: Equatable {
+        var title = ""
+        var amount = ""
+        var owner = "Casa"
+        var ownerMemberID: UUID?
+    }
+
+    static func hasUnsavedInput(mode: ShoppingEditorMode, loaded: Draft?, current: Draft) -> Bool {
+        switch mode {
+        case .add:
+            return !current.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !current.amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .edit:
+            guard let loaded else { return false }
+            return loaded != current
+        }
+    }
+
+    private var draft: Draft {
+        Draft(title: title, amount: amount, owner: owner, ownerMemberID: ownerMemberID)
+    }
 
     private var isEditing: Bool {
         if case .edit = mode { true } else { false }
@@ -3122,62 +3512,66 @@ struct ShoppingEditorSheet: View {
         option.memberID == ownerMemberID && option.name == owner
     }
 
+    private var deletePlacement: EditorDeletePlacement? {
+        EditorDeletePlacement.placement(
+            isEditing: isEditing,
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+        )
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
+        FittedSheetLayout {
             SheetHeader(eyebrow: isEditing ? "Editar item" : "Novo item") {
                 dismiss()
             }
+        } content: {
+            VStack(alignment: .leading, spacing: 14) {
+                TextField("O que está faltando?", text: $title)
+                    .ninaText(.compose, NinaTheme.ink, weight: .semibold)
+                    .tint(NinaTheme.cobalt)
+                    .textFieldStyle(.plain)
+                    .focused($isTitleFocused)
+                    .submitLabel(.done)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    TextField("O que está faltando?", text: $title)
-                        .ninaText(.compose, NinaTheme.ink, weight: .semibold)
-                        .tint(NinaTheme.cobalt)
-                        .textFieldStyle(.plain)
-                        .focused($isTitleFocused)
-                        .submitLabel(.done)
+                TextField("Quantidade", text: $amount)
+                    .ninaText(.body, NinaTheme.muted)
+                    .tint(NinaTheme.cobalt)
+                    .textFieldStyle(.plain)
 
-                    TextField("Quantidade", text: $amount)
-                        .ninaText(.body, NinaTheme.muted)
-                        .tint(NinaTheme.cobalt)
-                        .textFieldStyle(.plain)
-
-                    if !isEditing {
-                        NinaButton(title: "Adicionar e continuar", kind: .quiet, isEnabled: !trimmedTitle.isEmpty) {
-                            save(keepingSheetOpen: true)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 8)
-
-                        if addedCount > 0 {
-                            Text(
-                                addedCount == 1
-                                    ? "1 item adicionado."
-                                    : "\(addedCount) itens adicionados."
-                            )
-                            .ninaText(.caption, NinaTheme.muted)
-                        }
+                if !isEditing {
+                    NinaButton(title: "Adicionar e continuar", kind: .quiet, isEnabled: !trimmedTitle.isEmpty) {
+                        save(keepingSheetOpen: true)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 8)
 
-                    if isEditing {
-                        NinaButton(title: "Apagar", kind: .quiet) {
-                            Haptics.warning()
-                            isShowingDeleteConfirmation = true
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 12)
+                    if addedCount > 0 {
+                        Text(
+                            addedCount == 1
+                                ? "1 item adicionado."
+                                : "\(addedCount) itens adicionados."
+                        )
+                        .ninaText(.caption, NinaTheme.muted)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 2)
-                .padding(.bottom, 20)
-            }
-            .scrollDismissesKeyboard(.interactively)
 
+                if deletePlacement == .column {
+                    EditorDeleteButton {
+                        isShowingDeleteConfirmation = true
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 12)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 2)
+            .padding(.bottom, 20)
+        } bar: {
             bottomBar
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .interactiveDismissDisabled(Self.hasUnsavedInput(mode: mode, loaded: loadedDraft, current: draft))
         .alert("Apagar este item?", isPresented: $isShowingDeleteConfirmation) {
             Button("Cancelar", role: .cancel) {}
             Button("Apagar", role: .destructive) {
@@ -3233,9 +3627,9 @@ struct ShoppingEditorSheet: View {
             }
             .scrollClipDisabled()
 
-            HStack(spacing: 12) {
-                Spacer(minLength: 8)
-
+            EditorCommitRow(deletePlacement: deletePlacement) {
+                isShowingDeleteConfirmation = true
+            } commit: {
                 NinaButton(
                     title: isEditing ? "Salvar" : "Adicionar",
                     systemName: "arrow.up",
@@ -3244,9 +3638,6 @@ struct ShoppingEditorSheet: View {
                     save(keepingSheetOpen: false)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
         }
         .background(NinaTheme.ground)
     }
@@ -3260,10 +3651,12 @@ struct ShoppingEditorSheet: View {
             return
         }
 
-        title = item.title
-        amount = item.amount
-        owner = item.owner
-        ownerMemberID = item.ownerMemberID
+        let loaded = Draft(title: item.title, amount: item.amount, owner: item.owner, ownerMemberID: item.ownerMemberID)
+        title = loaded.title
+        amount = loaded.amount
+        owner = loaded.owner
+        ownerMemberID = loaded.ownerMemberID
+        loadedDraft = loaded
     }
 
     private func save(keepingSheetOpen: Bool) {
@@ -3340,50 +3733,48 @@ struct InviteFamilySheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        FittedSheetLayout {
             SheetHeader(eyebrow: "") {
                 dismiss()
             }
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Convidar alguém").ninaText(.screen)
-                        Text("Quem abrir o link pede para entrar. Alguém da casa aprova.")
-                            .ninaText(.label, NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if canShare {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(inviteURL.absoluteString)
-                                .ninaText(.caption, NinaTheme.cobalt, weight: .semibold)
-                                .textSelection(.enabled)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-
-                            if let inviteValidity {
-                                Text(inviteValidity)
-                                    .ninaText(.meta, NinaTheme.muted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
-
-                        ShareLink(item: inviteURL, message: Text(messageText)) {
-                            NinaButtonFace(title: "Enviar convite", kind: .primary, fillsWidth: true)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        unavailableState
-                    }
+        } content: {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Convidar alguém").ninaText(.screen)
+                    Text("Quem abrir o link pede para entrar. Alguém da casa aprova.")
+                        .ninaText(.label, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .padding(.bottom, 32)
+
+                if canShare {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(inviteURL.absoluteString)
+                            .ninaText(.caption, NinaTheme.cobalt, weight: .semibold)
+                            .textSelection(.enabled)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        if let inviteValidity {
+                            Text(inviteValidity)
+                                .ninaText(.meta, NinaTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+
+                    ShareLink(item: inviteURL, message: Text(messageText)) {
+                        NinaButtonFace(title: "Enviar convite", kind: .primary, fillsWidth: true)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    unavailableState
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 32)
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
@@ -3452,37 +3843,35 @@ struct SuggestionDetailSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        FittedSheetLayout {
             SheetHeader(eyebrow: "Proposta") {
                 dismiss()
             }
+        } content: {
+            VStack(alignment: .leading, spacing: 18) {
+                Text(suggestion.title).ninaText(.screen)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text(suggestion.title).ninaText(.screen)
+                Text(suggestion.payloadDetail)
+                    .ninaText(.label, NinaTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Text(suggestion.payloadDetail)
-                        .ninaText(.label, NinaTheme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    HStack(spacing: 10) {
-                        CategoryGlyph(systemName: suggestion.symbolName, size: 17, tint: NinaTheme.muted)
-                        Text("\(ownerLabel) · \(suggestion.payloadDueLabel)")
-                            .ninaText(.caption, NinaTheme.muted)
-                    }
-
-                    // Nothing enters the house until a person taps this.
-                    NinaButton(title: suggestion.actionTitle, fillsWidth: true) {
-                        Haptics.success()
-                        store.applySuggestion(suggestion)
-                        dismiss()
-                    }
-                    .padding(.top, 4)
+                HStack(spacing: 10) {
+                    CategoryGlyph(systemName: suggestion.symbolName, size: 17, tint: NinaTheme.muted)
+                    Text("\(ownerLabel) · \(suggestion.payloadDueLabel)")
+                        .ninaText(.caption, NinaTheme.muted)
                 }
-                .padding(.horizontal, 20)
+
+                // Nothing enters the house until a person taps this.
+                NinaButton(title: suggestion.actionTitle, fillsWidth: true) {
+                    Haptics.success()
+                    store.applySuggestion(suggestion)
+                    dismiss()
+                }
                 .padding(.top, 4)
-                .padding(.bottom, 32)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 32)
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
@@ -3509,11 +3898,11 @@ struct TaskQuickActionsSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        FittedSheetLayout {
             SheetHeader(eyebrow: "Ações rápidas") {
                 dismiss()
             }
-
+        } content: {
             VStack(spacing: 0) {
                 taskLine
 
@@ -3568,12 +3957,10 @@ struct TaskQuickActionsSheet: View {
                 }
             }
             .padding(.horizontal, 20)
-
-            Spacer(minLength: 0)
+            .padding(.bottom, 16)
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .presentationDetents([.medium, .large])
     }
 
     // Two presentations in one tick lose one of them; the editor waits for the
@@ -3670,42 +4057,42 @@ struct TaskEditConflictSheet: View {
     let conflict: TaskEditConflict
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("Outra pessoa mexeu nesta tarefa.")
-                        .ninaText(.zero)
-                        .fixedSize(horizontal: false, vertical: true)
+        FittedSheetLayout {
+            EmptyView()
+        } content: {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Outra pessoa mexeu nesta tarefa.")
+                    .ninaText(.zero)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    versionCard(
-                        eyebrow: "Sua versão",
-                        task: conflict.localTask,
-                        isMine: true
-                    )
+                versionCard(
+                    eyebrow: "Sua versão",
+                    task: conflict.localTask,
+                    isMine: true
+                )
 
-                    versionCard(
-                        eyebrow: "Outra versão",
-                        task: conflict.remoteTask,
-                        isMine: false
-                    )
+                versionCard(
+                    eyebrow: "Outra versão",
+                    task: conflict.remoteTask,
+                    isMine: false
+                )
 
-                    VStack(spacing: 8) {
-                        NinaButton(title: "Manter a minha", fillsWidth: true) {
-                            Haptics.success()
-                            store.keepLocalTaskConflict()
-                        }
-
-                        NinaButton(title: "Manter a outra", kind: .outline, fillsWidth: true) {
-                            Haptics.selection()
-                            store.acceptRemoteTaskConflict()
-                        }
+                VStack(spacing: 8) {
+                    NinaButton(title: "Manter a minha", fillsWidth: true) {
+                        Haptics.success()
+                        store.keepLocalTaskConflict()
                     }
-                    .padding(.top, 4)
+
+                    NinaButton(title: "Manter a outra", kind: .outline, fillsWidth: true) {
+                        Haptics.selection()
+                        store.acceptRemoteTaskConflict()
+                    }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 24)
-                .padding(.bottom, 32)
+                .padding(.top, 4)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 32)
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)

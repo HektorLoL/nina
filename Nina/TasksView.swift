@@ -165,22 +165,35 @@ struct TasksView: View {
         }
     }
 
+    // The title never breaks inside a word beside "Cancelar"; "Cancelar" drops below it first.
     private var selectionHeader: some View {
-        HStack(alignment: .center) {
-            Text(selectionTitle).ninaText(.screen)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center) {
+                Text(selectionTitle).ninaText(.screen)
 
-            Spacer()
+                Spacer()
 
-            Button {
-                Haptics.selection()
-                endSelection()
-            } label: {
-                Text("Cancelar")
-                    .ninaText(.label, NinaTheme.muted, weight: .medium)
-                    .frame(minHeight: 44)
+                cancelSelectionButton
             }
-            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(selectionTitle).ninaText(.screen)
+
+                cancelSelectionButton
+            }
         }
+    }
+
+    private var cancelSelectionButton: some View {
+        Button {
+            Haptics.selection()
+            endSelection()
+        } label: {
+            Text("Cancelar")
+                .ninaText(.label, NinaTheme.muted, weight: .medium)
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
     }
 
     private var selectionTitle: String {
@@ -233,63 +246,33 @@ struct TasksView: View {
     }
 
     private var selectionBar: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(spacing: 10))
-            : AnyLayout(HStackLayout(spacing: 10))
-        return layout {
-            NinaButton(
-                title: "Feitas",
-                systemName: dynamicTypeSize.isAccessibilitySize ? nil : "checkmark",
-                fillsWidth: true,
-                isEnabled: !selection.isEmpty
-            ) {
+        TaskSelectionControls(
+            isEnabled: !selection.isEmpty,
+            onDone: {
                 Haptics.success()
                 store.completeTasks(selection)
                 endSelection()
-            }
-
-            Menu {
-                ForEach(handOverChoices) { choice in
-                    Button(choice.memberID == store.currentFamilyMember?.id ? "Comigo" : choice.label) {
-                        Haptics.success()
-                        store.reassignTasks(
-                            selection,
-                            to: store.familyGroup.members.first { $0.id == choice.memberID }
-                        )
-                        endSelection()
-                    }
-                }
-                Button("Sem dono") {
-                    Haptics.success()
-                    store.reassignTasks(selection, to: nil)
-                    endSelection()
-                }
-            } label: {
-                NinaButtonFace(
-                    title: "Passar",
-                    kind: .outline,
-                    systemName: dynamicTypeSize.isAccessibilitySize ? nil : "person.2",
-                    fillsWidth: true
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(selection.isEmpty)
-            .opacity(selection.isEmpty ? 0.4 : 1)
-
-            Button {
+            },
+            onDelete: {
                 Haptics.warning()
                 isConfirmingBulkDelete = true
-            } label: {
-                Image(systemName: "trash")
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundStyle(NinaTheme.ink)
-                    .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
-                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 48, height: 48)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Apagar")
-            .disabled(selection.isEmpty)
-            .opacity(selection.isEmpty ? 0.4 : 1)
+        ) {
+            ForEach(handOverChoices) { choice in
+                Button(choice.memberID == store.currentFamilyMember?.id ? "Comigo" : choice.label) {
+                    Haptics.success()
+                    store.reassignTasks(
+                        selection,
+                        to: store.familyGroup.members.first { $0.id == choice.memberID }
+                    )
+                    endSelection()
+                }
+            }
+            Button("Sem dono") {
+                Haptics.success()
+                store.reassignTasks(selection, to: nil)
+                endSelection()
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
@@ -873,5 +856,81 @@ private struct SelectableTaskRow: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
+// "Feitas" and "Passar" share the row only when each label fits in an equal half; otherwise the bar stacks.
+struct TaskSelectionControls<HandOverChoices: View>: View {
+    var isEnabled: Bool
+    var onDone: () -> Void
+    var onDelete: () -> Void
+    @ViewBuilder var handOverChoices: HandOverChoices
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            stacked
+        } else {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    EqualWidthRow(spacing: 10) {
+                        doneButton
+                        handOverMenu
+                    }
+                    deleteButton(stacked: false)
+                }
+
+                stacked
+            }
+        }
+    }
+
+    private var stacked: some View {
+        VStack(spacing: 10) {
+            doneButton
+            handOverMenu
+            deleteButton(stacked: true)
+        }
+    }
+
+    private var doneButton: some View {
+        NinaButton(
+            title: "Feitas",
+            systemName: dynamicTypeSize.isAccessibilitySize ? nil : "checkmark",
+            fillsWidth: true,
+            isEnabled: isEnabled,
+            action: onDone
+        )
+    }
+
+    private var handOverMenu: some View {
+        Menu {
+            handOverChoices
+        } label: {
+            NinaButtonFace(
+                title: "Passar",
+                kind: .outline,
+                systemName: dynamicTypeSize.isAccessibilitySize ? nil : "person.2",
+                fillsWidth: true
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.4)
+    }
+
+    private func deleteButton(stacked: Bool) -> some View {
+        Button(action: onDelete) {
+            Image(systemName: "trash")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(NinaTheme.ink)
+                .frame(maxWidth: stacked ? .infinity : nil)
+                .frame(width: stacked ? nil : 48, height: 48)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Apagar")
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.4)
     }
 }

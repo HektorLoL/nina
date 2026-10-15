@@ -3,6 +3,16 @@ import XCTest
 @testable import Nina
 
 final class PremiumSubscriptionTests: XCTestCase {
+    @MainActor
+    func testACoveredHousesSubscriptionOpensFittedAndAPurchaseInsideTheSheetNeverResizesIt() {
+        XCTAssertTrue(PremiumBenefitsSheet.fitsItsContent(wasCoveredOnAppear: true, isCovered: true))
+        XCTAssertFalse(PremiumBenefitsSheet.fitsItsContent(wasCoveredOnAppear: false, isCovered: true))
+        XCTAssertFalse(PremiumBenefitsSheet.fitsItsContent(wasCoveredOnAppear: false, isCovered: false))
+        XCTAssertTrue(PremiumBenefitsSheet.fitsItsContent(wasCoveredOnAppear: nil, isCovered: true))
+        XCTAssertFalse(PremiumBenefitsSheet.fitsItsContent(wasCoveredOnAppear: nil, isCovered: false))
+        XCTAssertFalse(PremiumBenefitsSheet.fitsItsContent(wasCoveredOnAppear: true, isCovered: false))
+    }
+
     func testDeletingTheAccountWarnsOnlyWhileApplesBillingWouldContinue() {
         func entitlement(_ status: PremiumSubscriptionStatus, active: Bool, renews: Bool?) -> PremiumEntitlement {
             PremiumEntitlement(

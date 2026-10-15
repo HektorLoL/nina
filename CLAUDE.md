@@ -915,8 +915,10 @@ branching anywhere.
 - `cobalt #1B4FD8` is brand, Nina and commit — **one cobalt control per screen**.
 - `terracotta #C2410C` is **lateness only**. Never destruction, never offline,
   never a category. Destruction is carried by weight and friction (ink fill,
-  terminal position, a typed gate); blocked, empty and offline states use grout
-  + ink.
+  terminal position, a typed gate); in an editor, the quiet "Apagar" sits in the
+  commit row opposite the commit (edit mode only, read after it by VoiceOver,
+  ending the field column at accessibility sizes); blocked, empty and offline
+  states use grout + ink.
 - `alert #D92D20` (text `alertInk`, ground `alertWash`) is **errors only**,
   since 2026-10-04 (Heitor: an error reads red, a success green): a failed
   write, a refused step, a field to fix. Always through `NinaErrorNote` or the
@@ -974,6 +976,57 @@ household is what this product refuses.
   the yield is required or the assignment lands before the field exists).
   Classification (Tipo, Categoria, Prioridade) always comes *after* the title:
   the user names the thing before the app asks what kind of thing it is.
+- **A sheet is as tall as its content** (2026-10-14). Every capture, edit or
+  decision sheet is a `FittedSheetLayout` (`SheetFit`, `Sheets.swift`): header,
+  scrolling content and bar, with a `.height` detent of their sum (`.medium`
+  until measured). It is only ever the root of a presented sheet, never a pushed
+  screen, because a detent set from a pushed screen resizes the sheet that hosts
+  it. Its header and bar report their own height, and nothing inside it sizes
+  from the viewport (no `GeometryReader` sizing, proxy `minHeight`, flexible
+  `Spacer` or `maxHeight: .infinity`), or the detent and the layout chase each
+  other. A card that reaches full height also loses its side insets, so the
+  content's height is read with its width and the card's height is kept there
+  (`SheetFit.content(after:height:width:)`), or a note one line from the ceiling
+  flips the sheet between card and full height. With the software keyboard up
+  the card rides it, chips and commit on the keyboard; the card keeps the height
+  its home-indicator inset added (28 pt of the 34 pt inset on a 402 pt phone),
+  so the detent gives it back while the keyboard rises (80 ms after
+  `keyboardWillShow`, over the keyboard's duration), from the resting bottom
+  inset read while the keyboard is down
+  (`SheetFit.keyboardSurplus(learned:bottomInset:)`), or that height opens as
+  glaze above the chips, the card settles again after it lands, or its top
+  dips before the keyboard lifts it.
+  `keyboardDidShow` only corrects a difference of 2 pt or more and learns only
+  a larger value (a card clamped under the status bar reads a smaller one), and
+  the inset is not read while the keyboard moves. A hardware keyboard's
+  off-screen frame changes nothing. Where no home indicator lifts it, the bar
+  adds space below itself so its commit sits 20 pt from the card's foot
+  (`SheetFit.barBottomPadding`, added to the detent, never measured). The header's eyebrow sits between the close
+  disc and an equal empty slot, so it wraps rather than run under the disc. An
+  editor holding typed input (`hasUnsavedInput` on the task, item and member
+  editors: anything typed while adding, any field changed while editing)
+  refuses a swipe or a tap above the card (`interactiveDismissDisabled`); its
+  close button still discards. `.large` stays only for Settings
+  and what it pushes, the paywall, `GuardianApprovalSheet`, the AI consent
+  sheet, `MinorSettingsView` and the full-screen covers; `MemberEditorSheet` is
+  fitted, and a claimed adult's longer form simply reaches full height.
+- **A form's commit follows its last field**, and on arrival the field the
+  person types first is focused (not under VoiceOver), so the keyboard fills the
+  rest. The `Spacer` plus viewport `minHeight` pair is only for a single centered
+  block whose exits sit at the foot (the welcome, the gates, the zero states).
+  A short page ends at its last control (rubric G15).
+- **`NinaChip` holds one line** below accessibility sizes; a chip row that does
+  not scroll horizontally is a `ViewThatFits(in: .horizontal)` with a stacked
+  fallback (at accessibility sizes the memory card stacks directly); there a
+  lone chip wraps rather than clips (rubric G19).
+- **Two labelled buttons share a row only when neither label would wrap.** The
+  row is a `ViewThatFits(in: .horizontal)` whose first candidate reports an
+  honest ideal width: two filling buttons sit in an `EqualWidthRow` (an `HStack`
+  splits them evenly after measuring their sum, which let "Passar" break into
+  "Passa / r"), and a filling button beside a short one keeps the short one at
+  `fixedSize`. Otherwise the pair stacks, full width. A header with a text
+  control beside the title follows the same rule (Tarefas' "Cancelar" drops
+  below "Selecionar"; house setup's "Sair da conta" moves into its "…" menu).
 
 **Haptics are semantic, not decorative** (`Nina/Haptics.swift`):
 `selection()` = navigate/toggle/close/un-complete · `success()` = completion or

@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import Nina
 
@@ -58,6 +59,62 @@ final class MemberRecollectionTests: XCTestCase {
         nina = nil
         members = nil
         super.tearDown()
+    }
+
+    func testAChipKeepsItsLabelOnOneLineWhenItsRowIsNarrowerThanTheLabel() {
+        let chip = NinaChip(text: "Compartilhar com a casa")
+
+        let narrow = fittedSize(chip, width: 120)
+        let wide = fittedSize(chip, width: 1000)
+
+        XCTAssertEqual(narrow.height, wide.height, accuracy: 0.5)
+        XCTAssertGreaterThan(narrow.width, 120)
+    }
+
+    func testAtAccessibilitySizesALoneChipWrapsRatherThanRunningOffTheScreen() {
+        let size = fittedSize(NinaChip(text: "Compartilhar com a casa"), width: 200, dynamicTypeSize: .accessibility3)
+
+        XCTAssertLessThanOrEqual(size.width, 200.5)
+    }
+
+    func testAMemoryCardsReadingRowHoldsOneLineOnAThreeSeventyFiveAndAFourHundredTwoPointPhone() {
+        let actions = MemoryCardActions(isEditing: false, visibility: .privateMemory)
+
+        for cardWidth in [CGFloat(299), 326] {
+            let size = fittedSize(actions, width: cardWidth)
+            XCTAssertLessThanOrEqual(size.width, cardWidth + 0.5, "\(cardWidth)")
+            XCTAssertLessThanOrEqual(size.height, 44, "\(cardWidth)")
+        }
+    }
+
+    func testAMemoryCardsActionsStackRatherThanWrapAtXXXLargeAndAccessibilitySizes() {
+        let actions = MemoryCardActions(isEditing: false, visibility: .privateMemory)
+        let oneRow = fittedSize(actions, width: 1_000, dynamicTypeSize: .xxxLarge).height
+
+        for cardWidth in [CGFloat(299), 326] {
+            let size = fittedSize(actions, width: cardWidth, dynamicTypeSize: .xxxLarge)
+            XCTAssertLessThanOrEqual(size.width, cardWidth + 0.5, "\(cardWidth)")
+            XCTAssertTrue(
+                abs(size.height - oneRow) < 0.5 || size.height > oneRow * 1.5,
+                "a chip wrapped beside another at \(cardWidth): \(size.height)"
+            )
+        }
+        XCTAssertGreaterThan(fittedSize(actions, width: 299, dynamicTypeSize: .xxxLarge).height, oneRow * 1.5)
+
+        let share = NinaChip(text: "Compartilhar com a casa")
+        let shareAlone = fittedSize(share, width: 299, dynamicTypeSize: .accessibility3)
+        let editAlone = fittedSize(NinaChip(text: "Editar"), width: 299, dynamicTypeSize: .accessibility3)
+        let accessibility = fittedSize(actions, width: 299, dynamicTypeSize: .accessibility3)
+        XCTAssertLessThanOrEqual(accessibility.width, 299.5)
+        XCTAssertEqual(accessibility.height, editAlone.height + 8 + shareAlone.height, accuracy: 1)
+        XCTAssertGreaterThan(shareAlone.height, editAlone.height * 1.5)
+    }
+
+    func testDeletingAMemoryLivesInItsEditRowBesideSalvarAndCancelar() {
+        XCTAssertEqual(MemoryCardActions.items(isEditing: false, visibility: .privateMemory), [.edit, .share])
+        XCTAssertEqual(MemoryCardActions.items(isEditing: false, visibility: .shared), [.edit])
+        XCTAssertEqual(MemoryCardActions.items(isEditing: true, visibility: .privateMemory), [.save, .cancel, .delete])
+        XCTAssertEqual(MemoryCardActions.items(isEditing: true, visibility: .shared), [.save, .cancel, .delete])
     }
 
     func testAMemoryThatNamesTheChildInItsTitleOrItsBodyIsRemembered() {
@@ -590,6 +647,15 @@ final class MemberRecollectionTests: XCTestCase {
             isDone: isDone,
             createdBy: "Manual"
         )
+    }
+
+    private func fittedSize<Content: View>(
+        _ view: Content,
+        width: CGFloat,
+        dynamicTypeSize: DynamicTypeSize = .large
+    ) -> CGSize {
+        UIHostingController(rootView: view.environment(\.dynamicTypeSize, dynamicTypeSize))
+            .sizeThatFits(in: CGSize(width: width, height: 2_000))
     }
 
     private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Date {

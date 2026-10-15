@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import Nina
 
@@ -18,6 +19,224 @@ final class TaskAgendaTests: XCTestCase {
         calendar = nil
         now = nil
         super.tearDown()
+    }
+
+    func testAFittedSheetIsExactlyAsTallAsItsHeaderFieldsAndBarRoundedUpToAWholePoint() {
+        let parts = SheetFit.Parts(header: 59.6, content: 160.2, bar: 118.1)
+
+        XCTAssertEqual(SheetFit.height(parts), 338)
+        XCTAssertEqual(SheetFit.detent(parts), .height(338))
+        XCTAssertEqual(SheetFit.height(SheetFit.Parts(header: 60, content: 156, bar: 118)), 334)
+    }
+
+    func testASheetNotYetMeasuredOpensAtMediumAndNeverAtZeroHeight() {
+        XCTAssertEqual(SheetFit.detent(SheetFit.Parts()), .medium)
+        XCTAssertEqual(SheetFit.detent(SheetFit.Parts(header: 60, content: 0, bar: 118)), .medium)
+        XCTAssertFalse(SheetFit.isChange(from: 156, to: 156.4))
+        XCTAssertTrue(SheetFit.isChange(from: 156, to: 156.5))
+        XCTAssertTrue(SheetFit.isChange(from: 222.3, to: 156))
+    }
+
+    func testAFittedSheetThatReachesFullHeightKeepsItsCardHeightSoItNeverFlipsBackAndForth() {
+        let card = SheetFit.content(after: SheetFit.ContentReading(), height: 500, width: 346)
+        XCTAssertEqual(card.height, 500)
+
+        let full = SheetFit.content(after: card, height: 480, width: 362)
+        XCTAssertEqual(full.height, 500)
+        XCTAssertEqual(full.width, 362)
+
+        let typed = SheetFit.content(after: full, height: 490, width: 362)
+        XCTAssertEqual(typed.height, 510)
+
+        let cleared = SheetFit.content(after: typed, height: 380, width: 362)
+        XCTAssertEqual(cleared.height, 400)
+
+        let cardAgain = SheetFit.content(after: cleared, height: 401, width: 346)
+        XCTAssertEqual(cardAgain, SheetFit.ContentReading(height: 401, width: 346, widening: 0))
+
+        let edited = SheetFit.content(after: cardAgain, height: 420, width: 346)
+        XCTAssertEqual(edited.height, 420)
+    }
+
+    func testWithTheKeyboardUpAFittedCardGivesBackTheHeightItsHomeIndicatorAddedSoNoGlazeOpensAboveTheChips() {
+        let parts = SheetFit.Parts(header: 60, content: 160, bar: 119)
+
+        let surplus = SheetFit.keyboardSurplus(container: 369.3, parts: parts, previous: 0)
+        XCTAssertEqual(surplus, 30)
+        XCTAssertEqual(SheetFit.detent(parts, keyboardSurplus: surplus), .height(309))
+        XCTAssertEqual(SheetFit.keyboardSurplus(container: 339.3, parts: parts, previous: surplus), 30)
+
+        XCTAssertEqual(SheetFit.keyboardSurplus(container: 300, parts: parts, previous: 0), 0)
+        XCTAssertEqual(SheetFit.keyboardSurplus(container: 600, parts: parts, previous: 0), 44)
+        XCTAssertEqual(SheetFit.keyboardSurplus(container: 400, parts: SheetFit.Parts(), previous: 0), 0)
+        XCTAssertEqual(SheetFit.detent(parts), .height(339))
+    }
+
+    func testTheFirstKeyboardOfALaunchLandsTheCardInOneMoveBecauseItsSurplusIsKnownBeforeTheKeyboard() {
+        let homeIndicator: CGFloat = 34
+        let seed = SheetFit.keyboardSurplus(learned: nil, bottomInset: homeIndicator)
+        XCTAssertEqual(seed, 28)
+
+        let parts = SheetFit.Parts(header: 60, content: 156, bar: 143)
+        let landed = SheetFit.keyboardSurplus(container: 359.3, parts: parts, previous: seed)
+        XCTAssertLessThan(abs(landed - seed), 2, "the card would settle again once the keyboard landed")
+
+        XCTAssertEqual(SheetFit.keyboardSurplus(learned: nil, bottomInset: 0), 0)
+        XCTAssertEqual(SheetFit.keyboardSurplus(learned: 30, bottomInset: homeIndicator), 30)
+        XCTAssertEqual(SheetFit.keyboardSurplus(learned: nil, bottomInset: 120), SheetFit.maximumKeyboardSurplus)
+
+        XCTAssertEqual(SheetFit.restingBottomInset(34), 34)
+        XCTAssertEqual(SheetFit.restingBottomInset(0), 0)
+        XCTAssertNil(SheetFit.restingBottomInset(271.3), "a keyboard's inset is never read as the card's resting one")
+
+        XCTAssertTrue(SheetFit.learnsKeyboardSurplus(measured: 28, applied: 0))
+        XCTAssertFalse(SheetFit.learnsKeyboardSurplus(measured: 28, applied: 28))
+        XCTAssertFalse(
+            SheetFit.learnsKeyboardSurplus(measured: 11, applied: 28),
+            "a card clamped under the status bar never teaches a smaller surplus"
+        )
+    }
+
+    func testAHardwareKeyboardsOffScreenFrameNeverShrinksAFittedCard() throws {
+        let screen = try XCTUnwrap(
+            UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen }.first
+        )
+        let bottom = screen.bounds.maxY
+
+        func note(_ frame: CGRect?) -> Notification {
+            Notification(
+                name: UIResponder.keyboardWillShowNotification,
+                object: screen,
+                userInfo: frame.map { [UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: $0)] }
+            )
+        }
+
+        XCTAssertTrue(SheetFit.keyboardIsOnScreen(note(CGRect(x: 0, y: bottom - 335, width: 402, height: 335))))
+        XCTAssertFalse(SheetFit.keyboardIsOnScreen(note(CGRect(x: 0, y: bottom, width: 402, height: 335))))
+        XCTAssertFalse(SheetFit.keyboardIsOnScreen(note(nil)))
+    }
+
+    func testAFirstLayoutAtAPassingNarrowWidthNeverSetsTheSheetsHeight() {
+        let passing = SheetFit.content(after: SheetFit.ContentReading(), height: 222, width: 148)
+        let settled = SheetFit.content(after: passing, height: 156, width: 346)
+
+        XCTAssertEqual(settled, SheetFit.ContentReading(height: 156, width: 346, widening: 0))
+    }
+
+    func testTheSelectionBarKeepsFeitasAndPassarOnOneLineOrStacksThemNeverWrappingOne() {
+        let oneLine = fittedSize(
+            NinaButtonFace(title: "Passar", kind: .outline, systemName: "person.2"),
+            width: 1_000,
+            dynamicTypeSize: .xxxLarge
+        ).height
+
+        for size in [DynamicTypeSize.large, .xLarge, .xxLarge, .xxxLarge] {
+            for width in [CGFloat(335), 362] {
+                let row = fittedSize(
+                    NinaButtonFace(title: "Passar", kind: .outline, systemName: "person.2"),
+                    width: 1_000,
+                    dynamicTypeSize: size
+                ).height
+                let bar = fittedSize(selectionBar(), width: width, dynamicTypeSize: size)
+                let stacked = row * 2 + 48 + 20
+
+                XCTAssertLessThanOrEqual(bar.width, width + 0.5, "\(size) at \(width)")
+                XCTAssertTrue(
+                    abs(bar.height - row) < 0.5 || abs(bar.height - stacked) < 0.5,
+                    "a label wrapped beside another at \(size), \(width): \(bar.height), row \(row)"
+                )
+            }
+        }
+        XCTAssertEqual(
+            fittedSize(selectionBar(), width: 362, dynamicTypeSize: .xxxLarge).height,
+            oneLine * 2 + 48 + 20,
+            accuracy: 0.5
+        )
+    }
+
+    func testAnEditorOffersApagarOnlyWhenEditingBesideTheCommitAndAtTheEndOfTheFieldsAtAccessibilitySizes() {
+        let id = UUID()
+        let add = TaskEditorMode.add(sectionID: AppStore.houseTasksSectionID)
+
+        for size in [DynamicTypeSize.large, .accessibility1] {
+            XCTAssertNil(TaskEditorSheet.deletePlacement(mode: add, dynamicTypeSize: size))
+            XCTAssertNil(TaskEditorSheet.deletePlacement(mode: .plant(id), dynamicTypeSize: size))
+        }
+        XCTAssertEqual(TaskEditorSheet.deletePlacement(mode: .edit(id), dynamicTypeSize: .large), .bar)
+        XCTAssertEqual(TaskEditorSheet.deletePlacement(mode: .edit(id), dynamicTypeSize: .xxxLarge), .bar)
+        XCTAssertEqual(TaskEditorSheet.deletePlacement(mode: .edit(id), dynamicTypeSize: .accessibility1), .column)
+        XCTAssertNil(EditorDeletePlacement.placement(isEditing: false, isAccessibilitySize: true))
+        XCTAssertEqual(EditorDeletePlacement.placement(isEditing: true, isAccessibilitySize: false), .bar)
+        XCTAssertEqual(EditorDeletePlacement.placement(isEditing: true, isAccessibilitySize: true), .column)
+    }
+
+    func testASwipeOrAStrayTapAboveTheCardNeverThrowsAwayWhatThePersonTypedInAnEditor() {
+        let id = UUID()
+        let add = TaskEditorMode.add(sectionID: AppStore.houseTasksSectionID)
+        let due = date(year: 2026, month: 10, day: 20, hour: 9, minute: 0)
+        let loaded = TaskEditorSheet.Draft(title: "Pagar a luz", subtitle: "", dueDate: due, category: .bills)
+
+        XCTAssertFalse(TaskEditorSheet.hasUnsavedInput(mode: add, loaded: nil, current: TaskEditorSheet.Draft(dueDate: due)))
+        XCTAssertFalse(TaskEditorSheet.hasUnsavedInput(mode: add, loaded: nil, current: TaskEditorSheet.Draft(title: "  \n", dueDate: due)))
+        XCTAssertTrue(TaskEditorSheet.hasUnsavedInput(mode: add, loaded: nil, current: TaskEditorSheet.Draft(title: "Gás", dueDate: due)))
+        XCTAssertTrue(TaskEditorSheet.hasUnsavedInput(mode: add, loaded: nil, current: TaskEditorSheet.Draft(subtitle: "Ligar antes", dueDate: due)))
+
+        for mode in [TaskEditorMode.edit(id), .plant(id)] {
+            XCTAssertFalse(TaskEditorSheet.hasUnsavedInput(mode: mode, loaded: nil, current: loaded), "\(mode)")
+            XCTAssertFalse(TaskEditorSheet.hasUnsavedInput(mode: mode, loaded: loaded, current: loaded), "\(mode)")
+
+            var retitled = loaded
+            retitled.title = "Pagar a conta de luz"
+            XCTAssertTrue(TaskEditorSheet.hasUnsavedInput(mode: mode, loaded: loaded, current: retitled), "\(mode)")
+
+            var moved = loaded
+            moved.dueDate = due.addingTimeInterval(3_600)
+            XCTAssertTrue(TaskEditorSheet.hasUnsavedInput(mode: mode, loaded: loaded, current: moved), "\(mode)")
+
+            var reassigned = loaded
+            reassigned.ownerMemberID = UUID()
+            XCTAssertTrue(TaskEditorSheet.hasUnsavedInput(mode: mode, loaded: loaded, current: reassigned), "\(mode)")
+        }
+
+        let item = ShoppingEditorSheet.Draft(title: "Gás", amount: "1 botijão")
+        XCTAssertFalse(ShoppingEditorSheet.hasUnsavedInput(mode: .add, loaded: nil, current: ShoppingEditorSheet.Draft()))
+        XCTAssertTrue(ShoppingEditorSheet.hasUnsavedInput(mode: .add, loaded: nil, current: ShoppingEditorSheet.Draft(amount: "2 kg")))
+        XCTAssertFalse(ShoppingEditorSheet.hasUnsavedInput(mode: .edit(id), loaded: item, current: item))
+        XCTAssertTrue(
+            ShoppingEditorSheet.hasUnsavedInput(
+                mode: .edit(id),
+                loaded: item,
+                current: ShoppingEditorSheet.Draft(title: "Gás", amount: "2 botijões")
+            )
+        )
+
+        let person = MemberEditorSheet.Draft(name: "Thor", relationship: "Cachorro", householdRole: .pet, tone: .amber)
+        XCTAssertFalse(MemberEditorSheet.hasUnsavedInput(mode: .addProfile, loaded: nil, current: MemberEditorSheet.Draft()))
+        XCTAssertTrue(MemberEditorSheet.hasUnsavedInput(mode: .addProfile, loaded: nil, current: MemberEditorSheet.Draft(name: "Bia")))
+        XCTAssertFalse(MemberEditorSheet.hasUnsavedInput(mode: .edit(id), loaded: person, current: person))
+        var retoned = person
+        retoned.tone = .lavender
+        XCTAssertTrue(MemberEditorSheet.hasUnsavedInput(mode: .edit(id), loaded: person, current: retoned))
+    }
+
+    func testABarsCommitSitsTwentyPointsAboveACardsFootOnAPhoneWithoutAHomeIndicator() {
+        let commitRowBottom: CGFloat = 8
+
+        XCTAssertEqual(commitRowBottom + SheetFit.barBottomPadding(bottomInset: 0, keyboardIsUp: false), 20)
+        XCTAssertEqual(SheetFit.barBottomPadding(bottomInset: 34, keyboardIsUp: false), 0)
+        XCTAssertEqual(SheetFit.barBottomPadding(bottomInset: 25, keyboardIsUp: false), 0)
+        XCTAssertEqual(SheetFit.barBottomPadding(bottomInset: 5, keyboardIsUp: false), 7)
+        XCTAssertEqual(SheetFit.barBottomPadding(bottomInset: 0, keyboardIsUp: true), 0)
+    }
+
+    func testASheetsEyebrowNeverRunsUnderItsCloseDiscAtAnyTypeSize() {
+        let header = SheetHeader(eyebrow: "Plantar semente") {}
+        let wide = fittedSize(header, width: 1_000, dynamicTypeSize: .accessibility3)
+        let card = fittedSize(header, width: 359, dynamicTypeSize: .accessibility3)
+
+        XCTAssertLessThanOrEqual(card.width, 359.5)
+        XCTAssertGreaterThan(card.height, wide.height + 20, "the eyebrow kept one line under the close disc")
+        XCTAssertEqual(fittedSize(header, width: 386, dynamicTypeSize: .large).height, 60, accuracy: 0.5)
     }
 
     func testABoletoOverdueSinceYesterdayStaysOnTodaysAgenda() {
@@ -758,6 +977,21 @@ final class TaskAgendaTests: XCTestCase {
             notificationScheduler: NoopHomeNotificationScheduler()
         )
         try body(store)
+    }
+
+    private func selectionBar() -> some View {
+        TaskSelectionControls(isEnabled: true, onDone: {}, onDelete: {}) {
+            Button("Sem dono") {}
+        }
+    }
+
+    private func fittedSize<Content: View>(
+        _ view: Content,
+        width: CGFloat,
+        dynamicTypeSize: DynamicTypeSize
+    ) -> CGSize {
+        UIHostingController(rootView: view.environment(\.dynamicTypeSize, dynamicTypeSize))
+            .sizeThatFits(in: CGSize(width: width, height: 2_000))
     }
 
     private func task(dueAt: Date?) -> TaskItem {

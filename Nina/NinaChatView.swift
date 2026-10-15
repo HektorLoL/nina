@@ -1236,7 +1236,6 @@ private struct MessageBubble: View {
         }
         .sheet(isPresented: $isReporting) {
             ReportReplySheet(message: message)
-                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
     }
@@ -1253,37 +1252,33 @@ private struct ReportReplySheet: View {
     @State private var didSend = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        FittedSheetLayout {
             SheetHeader(eyebrow: "Denunciar resposta") { dismiss() }
+        } content: {
+            VStack(alignment: .leading, spacing: 18) {
+                if didSend {
+                    Text("Recebido. Vamos olhar.")
+                        .ninaText(.title)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    FlowChips(reasons: NinaReplyReportReason.allCases, selection: $reason)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if didSend {
-                        Text("Recebido. Vamos olhar.")
-                            .ninaText(.title)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        FlowChips(reasons: NinaReplyReportReason.allCases, selection: $reason)
+                    if let error = store.syncErrorMessage {
+                        NinaErrorNote(text: error, announces: false)
+                    }
 
-                        if let error = store.syncErrorMessage {
-                            NinaErrorNote(text: error, announces: false)
-                        }
-
-                        NinaButton(
-                            title: "Enviar",
-                            fillsWidth: true,
-                            isEnabled: reason != nil,
-                            isPending: isSending
-                        ) {
-                            send()
-                        }
+                    NinaButton(
+                        title: "Enviar",
+                        fillsWidth: true,
+                        isEnabled: reason != nil,
+                        isPending: isSending
+                    ) {
+                        send()
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
         }
         .ninaSheetBackground()
     }
@@ -1913,22 +1908,28 @@ private struct NinaProposalCard: View {
                 resolve(decision: .accept)
             }
 
-            HStack(spacing: 8) {
-                NinaButton(
-                    title: isEditing ? "Pronto" : "Corrigir",
-                    kind: .outline,
-                    fillsWidth: true
-                ) {
-                    Haptics.selection()
-                    isEditing.toggle()
-                }
-
-                NinaButton(title: "Não", kind: .quiet, fillsWidth: true) {
-                    resolve(decision: .reject)
-                }
-                .frame(minHeight: 50)
+            ViewThatFits(in: .horizontal) {
+                EqualWidthRow(spacing: 8) { standardSecondaryActions }
+                VStack(spacing: 8) { standardSecondaryActions }
             }
         }
+    }
+
+    @ViewBuilder
+    private var standardSecondaryActions: some View {
+        NinaButton(
+            title: isEditing ? "Pronto" : "Corrigir",
+            kind: .outline,
+            fillsWidth: true
+        ) {
+            Haptics.selection()
+            isEditing.toggle()
+        }
+
+        NinaButton(title: "Não", kind: .quiet, fillsWidth: true) {
+            resolve(decision: .reject)
+        }
+        .frame(minHeight: 50)
     }
 
     // Sharing is the one move nobody can take back, so it names who gains the reading and asks
@@ -1944,17 +1945,23 @@ private struct NinaProposalCard: View {
                 isConfirmingShare = true
             }
 
-            HStack(spacing: 8) {
-                NinaButton(title: isEditing ? "Pronto" : "Corrigir", kind: .quiet, fillsWidth: true) {
-                    Haptics.selection()
-                    isEditing.toggle()
-                }
-
-                NinaButton(title: "Não", kind: .quiet, fillsWidth: true) {
-                    resolve(decision: .reject)
-                }
+            ViewThatFits(in: .horizontal) {
+                EqualWidthRow(spacing: 8) { memorySecondaryActions }
+                VStack(spacing: 8) { memorySecondaryActions }
             }
             .padding(.top, 4)
+        }
+    }
+
+    @ViewBuilder
+    private var memorySecondaryActions: some View {
+        NinaButton(title: isEditing ? "Pronto" : "Corrigir", kind: .quiet, fillsWidth: true) {
+            Haptics.selection()
+            isEditing.toggle()
+        }
+
+        NinaButton(title: "Não", kind: .quiet, fillsWidth: true) {
+            resolve(decision: .reject)
         }
     }
 

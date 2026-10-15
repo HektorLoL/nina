@@ -125,6 +125,9 @@ struct NinaChip: View {
     var systemName: String?
     var isDisabled: Bool = false
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    // A chip's label never wraps beside another control; only a lone chip at accessibility sizes may.
     var body: some View {
         HStack(spacing: 6) {
             if let systemName {
@@ -133,11 +136,14 @@ struct NinaChip: View {
             }
             Text(text)
                 .ninaText(.caption, isSet ? NinaTheme.ink : NinaTheme.muted, weight: isSet ? .semibold : .medium)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
         }
         // Selection is weight, not cobalt: cobalt stays with the screen's one commit,
         // and an unset chip is a control, so its edge uses the control stroke.
         .foregroundStyle(isSet ? NinaTheme.ink : NinaTheme.muted)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, dynamicTypeSize.isAccessibilitySize ? 18 : 14)
+        .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
         .frame(minHeight: 36)
         .background(
             isSet ? NinaTheme.grout : Color.clear,
@@ -364,6 +370,7 @@ struct NinaRow<Leading: View, Trailing: View>: View {
     var title: String
     var subtitle: String?
     var titleColor: Color = NinaTheme.ink
+    var verticalPadding: CGFloat = 0
     @ViewBuilder var leading: Leading
     @ViewBuilder var trailing: Trailing
 
@@ -382,6 +389,7 @@ struct NinaRow<Leading: View, Trailing: View>: View {
 
             trailing
         }
+        .padding(.vertical, verticalPadding)
         .frame(minHeight: 56)
     }
 }

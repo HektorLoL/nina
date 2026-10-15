@@ -1,8 +1,20 @@
 import SwiftUI
 
-private enum HomeSetupMode {
+enum HomeSetupMode {
     case create
     case join
+}
+
+enum HomeSetupArrival {
+    static func focus(mode: HomeSetupMode, voiceOverOn: Bool) -> HomeSetupView.FocusedField? {
+        guard !voiceOverOn else { return nil }
+        switch mode {
+        case .create:
+            return .homeName
+        case .join:
+            return .invite
+        }
+    }
 }
 
 struct HomeSetupView: View {
@@ -10,6 +22,8 @@ struct HomeSetupView: View {
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(OnboardingStore.self) private var onboardingStore
     @Environment(ProfileStore.self) private var profileStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
 
     @State private var mode: HomeSetupMode = .create
     @State private var homeName = ""
@@ -23,7 +37,7 @@ struct HomeSetupView: View {
     @State private var canJoinHome = false
     @State private var isShowingDeletion = false
 
-    private enum FocusedField {
+    enum FocusedField {
         case homeName
         case invite
         case firstName
@@ -54,22 +68,23 @@ struct HomeSetupView: View {
         VStack(spacing: 0) {
             header
 
-            GeometryReader { proxy in
-                ScrollView {
-                    modeContent
-                        .padding(.horizontal, 20)
-                        .padding(.top, 20)
-                        .padding(.bottom, 16)
-                        .frame(minHeight: proxy.size.height)
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .scrollBounceBehavior(.basedOnSize)
+            ScrollView {
+                modeContent
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 16)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .scrollBounceBehavior(.basedOnSize)
         }
         .ninaScreenBackground()
-        .animation(.easeInOut(duration: 0.2), value: mode)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: mode)
         .onChange(of: mode) { _, _ in
             errorMessage = nil
+        }
+        .task(id: mode) {
+            await Task.yield()
+            focusedField = HomeSetupArrival.focus(mode: mode, voiceOverOn: voiceOverEnabled)
         }
         .onChange(of: homeName) { _, newValue in
             canCreateHome = !AppStore.normalizedHomeName(newValue).isEmpty
@@ -80,43 +95,69 @@ struct HomeSetupView: View {
         .accountDeletionSheet(isPresented: $isShowingDeletion)
     }
 
+    // "Sair da conta" never wraps beside the wordmark; where it would, it moves into the menu.
     private var header: some View {
-        HStack {
-            NinaWordmark(size: 20)
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                NinaWordmark(size: 20)
 
-            Spacer()
+                Spacer()
 
-            Menu {
-                Button("Apagar conta") {
-                    Haptics.lightImpact()
-                    isShowingDeletion = true
+                optionsMenu(includesSignOut: false)
+
+                Button(action: signOut) {
+                    Text("Sair da conta")
+                        .ninaText(.label, NinaTheme.muted, weight: .semibold)
+                        .frame(minHeight: 44)
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(NinaTheme.muted)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .disabled(isSigningOutBlocked)
+                .opacity(isSigningOutBlocked ? 0.4 : 1)
             }
-            .accessibilityLabel("Mais opções")
 
-            Button {
-                Haptics.warning()
-                Task {
-                    onboardingStore.cancelReplay()
-                    await authSession.signOut()
-                }
-            } label: {
-                Text("Sair da conta")
-                    .ninaText(.label, NinaTheme.muted, weight: .semibold)
-                    .frame(minHeight: 44)
+            HStack {
+                NinaWordmark(size: 20)
+
+                Spacer()
+
+                optionsMenu(includesSignOut: true)
             }
-            .buttonStyle(.plain)
-            .disabled(authSession.isSigningIn || isSavingName)
-            .opacity(authSession.isSigningIn || isSavingName ? 0.4 : 1)
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)
+    }
+
+    private var isSigningOutBlocked: Bool {
+        authSession.isSigningIn || isSavingName
+    }
+
+    private func optionsMenu(includesSignOut: Bool) -> some View {
+        Menu {
+            if includesSignOut {
+                Button("Sair da conta", action: signOut)
+                    .disabled(isSigningOutBlocked)
+            }
+
+            Button("Apagar conta") {
+                Haptics.lightImpact()
+                isShowingDeletion = true
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(NinaTheme.muted)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Mais opções")
+    }
+
+    private func signOut() {
+        Haptics.warning()
+        Task {
+            onboardingStore.cancelReplay()
+            await authSession.signOut()
+        }
     }
 
     @ViewBuilder
@@ -159,8 +200,6 @@ struct HomeSetupView: View {
                 }
             }
 
-            Spacer(minLength: 32)
-
             actionGroup(
                 title: store.isSyncingHome || isSavingName ? "Criando" : "Criar",
                 isEnabled: canCreateHome && hasChosenName && !store.isSyncingHome && !isSavingName,
@@ -168,6 +207,7 @@ struct HomeSetupView: View {
                 alternateTitle: "Tenho um convite",
                 alternateTarget: .join
             )
+            .padding(.top, 28)
         }
     }
 
@@ -207,8 +247,6 @@ struct HomeSetupView: View {
                 }
             }
 
-            Spacer(minLength: 32)
-
             actionGroup(
                 title: store.isSyncingHome || isSavingName ? "Enviando" : "Pedir para entrar",
                 isEnabled: canJoinHome && hasChosenName && !store.isSyncingHome && !isSavingName,
@@ -216,6 +254,7 @@ struct HomeSetupView: View {
                 alternateTitle: "Criar minha casa",
                 alternateTarget: .create
             )
+            .padding(.top, 28)
         }
     }
 
@@ -235,7 +274,6 @@ struct HomeSetupView: View {
 
             NinaButton(title: alternateTitle, kind: .quiet) {
                 Haptics.selection()
-                focusedField = nil
                 mode = alternateTarget
             }
         }

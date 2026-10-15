@@ -23,7 +23,7 @@ This rubric applies to every screen of the iOS app. A screen passes when it meet
    - Count every word the app writes: buttons, eyebrows, placeholders, footers and legal text.
    - A number, price, time or date counts as one word.
    - Do not count household content: task titles, people's names, the house name, message text, or Nina's generated replies.
-5. **Run the layout checks** (G15–G16) and the engineering guardrails (§4).
+5. **Run the layout checks** (G15, G16, G19) and the engineering guardrails (§4).
 
 ---
 
@@ -61,10 +61,11 @@ This rubric applies to every screen of the iOS app. A screen passes when it meet
   - The destructive button is the verb alone.
   - Precedent: [Vocabulary account deletion](https://mobbin.com/flows/979ec144-9635-428a-b171-3d0223fa30c6).
 - **G14. No vendor names, configuration instructions or error codes.** "Supabase", "configure o projeto" and similar never appear. Technical nouns are allowed only inside a protected privacy line from §3. "Apple" and "App Store" are allowed where the system or the purchase requires them.
-- **G15. Composition.**
-  - Free space sits above the actions, never below them.
-  - A single block (an empty state, the brand block, a gate) is centered vertically in the space it has.
-  - Screens scroll at `accessibility3`. Content uses `minHeight` equal to the viewport, never fixed heights.
+- **G15. Composition** (rewritten 2026-10-14; its old first bullet, "free space sits above the actions, never below them", pinned every form's commit to the foot of the screen and opened the gaps Heitor rejected).
+  - No glaze sits between a control and what it acts on.
+  - A sheet is as tall as its content (`FittedSheetLayout`), and a form's commit follows its last field, with that field focused on arrival. Precedents: Things 3 new to-do, Todoist and TickTick quick add, Toggl "Edit Project", WHOOP "Join team", Quizlet "Join with code"; counter-examples: Faire "Edit board" and Discord "Join an existing server", whose commit floats at the foot under empty glaze.
+  - A single centered block (an empty state, the brand block, a gate) keeps a spacer above and below it and its exits at the foot. The old "free space above the actions" survives only here.
+  - A short page ends at its last control, and the leftover glaze falls below it, the way a short list ends. Screens scroll at `accessibility3`; a `minHeight` equal to the viewport is only for a centered block, never fixed heights.
 - **G16. Glyphs replace words only where the glyph is standard**: chevron, ↗, +, bell, calendar, person, lock, (i).
   - Every icon-only control has an explicit `accessibilityLabel`.
   - A state word removed from the screen moves into `accessibilityValue`.
@@ -75,6 +76,12 @@ This rubric applies to every screen of the iOS app. A screen passes when it meet
   - Short does not mean telegraphic: Nina's own lines stay whole sentences with a period.
   - **Exception, surfaces a minor can see** (§2.9 and the login): Nina is spoken of in the third person and never says "eu", she is "um programa de computador" once per flow (Decreto 12.880 art. 11 I), and she is never "amiga". The guardian sheet and "O que a Nina guarda" may say "inteligência artificial", because the legal line has to name what the data does not reach.
 - **G18. No string claims that nothing sent to the model is kept.** OpenAI may keep abuse logs up to 30 days. "fica guardado lá", "servidor nenhum", "usado só para responder" and "não guarde o que recebe" fail `repository.retention-claims`.
+- **G19. A control's label never wraps beside another control** (2026-10-14).
+  - `NinaChip` holds one line. A chip row that does not scroll horizontally is a `ViewThatFits(in: .horizontal)`: the row first, then a stacked fallback.
+  - If a row cannot fit at default size on a 375 pt phone, a control moves into the edit state before any label is shortened, and a protected label (§3) is never shortened.
+  - At accessibility sizes a chip alone in its column, or a lone full-width button, may wrap. Nothing is truncated or clipped.
+  - Two labelled buttons side by side ("Feitas" / "Passar", "Aprovar" / "Recusar", "Aceitar" / "Recusar", "Corrigir" / "Não") share the row only while each label fits its share of it; otherwise they stack, full width. A text control beside a header's title ("Cancelar", "Sair da conta") drops below the title or into the header's menu before either wraps.
+  - Precedents: Apple News Saved Stories, Places and Abode, which keep Edit and Delete out of the card, and Nina's own Hoje header (the date beside the Premium badge in a `ViewThatFits`).
 
 ### Word budgets
 
@@ -310,6 +317,7 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
 | Compras | Empty: "Nada faltando." + "O que acabar em casa aparece aqui." The inline field "Adicionar item" sits above the list (since 2026-10-04): return adds the item to the top and keeps the keyboard up; its trailing control opens the full sheet for quantity and owner ("Adicionar com quantidade e dono"). Clear button: "Limpar comprados". Alert: "Limpar comprados?" / "Some da lista para todo mundo da casa." |
 | Search, no results | "Nada com esse nome." + "Tenta outra palavra." + one chip, "Conversar com a Nina" |
 | Memórias, empty | "A Nina propõe guardar. Memórias começam privadas." |
+| Memórias, a card (2026-10-14) | The reading row is "Editar" and, for a private memory, "Compartilhar com a casa" (protected, §3 row 9, never shortened). Deleting a memory lives in the edit row: "Salvar", "Cancelar", then the trash glyph ("Apagar memória"). Both rows stack rather than wrap (G19). |
 
 ### 2.5 Chat and proposal cards (`NinaChatView`)
 
@@ -396,11 +404,16 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - The date panel loses its "Quando" label.
   - Commit is one verb, because the header already names the object: "Criar", "Salvar" or "Plantar".
 - **K4. Keep the capture-sheet structure.** The title field comes first and is focused on appear (with `Task.yield()`). Classification comes after the title.
+  - The sheet fits its content (2026-10-14). The chips and the commit sit directly under the fields and ride the keyboard, the Todoist, TickTick, Things 3 and Toggl shape; nothing opens a gap between the last field and the chips.
+  - The date and category panels open at the end of the fields, directly above the chips, and the card grows by them.
+  - A sheet holding typed input does not close on a swipe or a tap above the card; the close button discards it. Nothing is added to say so.
 - **K5. A permission prompt inside a sheet is one chip at the end of the chip row.**
   - Not yet asked: "Ativar avisos", which requests permission.
   - Denied: "Avisos bloqueados", which opens iPhone Ajustes.
   - Both use the `bell.slash` glyph.
 - **K6. Delete action.** The button reads "Apagar". Alert: title "Apagar esta tarefa?", message "Some para toda a casa. Não dá para desfazer."
+  - In an editor, the quiet "Apagar" sits in the commit row opposite the commit, in edit mode only (never while adding or planting). VoiceOver reads the commit first.
+  - At accessibility sizes it ends the field column instead, so it never squeezes the commit.
 - **K7. Invite sheet.**
   - The protected line appears once: "Quem abrir o link pede para entrar. Alguém da casa aprova."
   - The four fact rows collapse into one data line: "Vale até 30 de set. · 5 usos restantes".

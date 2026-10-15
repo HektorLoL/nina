@@ -61,12 +61,7 @@ struct HouseView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .center, spacing: 10) {
-                    Text(store.familyGroup.name).ninaText(.screen)
-                    if store.householdPremium.isActive {
-                        PremiumBadge()
-                    }
-                }
+                houseName
                 Text("\(store.familyPeopleCount) de \(AppStore.maxFamilyPeople) pessoas")
                     .ninaText(.label, NinaTheme.muted)
             }
@@ -85,6 +80,26 @@ struct HouseView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Abrir ajustes")
             .padding(.top, 4)
+        }
+    }
+
+    // The name never wraps to make room for the badge; the badge drops below it instead.
+    @ViewBuilder
+    private var houseName: some View {
+        if store.householdPremium.isActive {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 10) {
+                    Text(store.familyGroup.name).ninaText(.screen).fixedSize()
+                    PremiumBadge().fixedSize()
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(store.familyGroup.name).ninaText(.screen)
+                    PremiumBadge().fixedSize()
+                }
+            }
+        } else {
+            Text(store.familyGroup.name).ninaText(.screen)
         }
     }
 
@@ -537,15 +552,21 @@ private struct MemoryCard: View {
                     .padding(12)
                     .background(NinaTheme.grout, in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous))
 
-                HStack(spacing: 10) {
-                    NinaButton(title: isSaving ? "Salvando" : "Salvar", isEnabled: !isSaving && !draftTitle.trimmingCharacters(in: .whitespaces).isEmpty) {
-                        save()
-                    }
-                    NinaButton(title: "Cancelar", kind: .quiet) {
+                MemoryCardActions(
+                    isEditing: true,
+                    visibility: memory.visibility,
+                    isSaving: isSaving,
+                    canSave: !isSaving && !draftTitle.trimmingCharacters(in: .whitespaces).isEmpty,
+                    onSave: save,
+                    onCancel: {
                         Haptics.selection()
                         isEditing = false
+                    },
+                    onDelete: {
+                        Haptics.warning()
+                        isConfirmingDelete = true
                     }
-                }
+                )
             } else {
                 Text(memory.title).ninaText(.section)
                 if !memory.body.isEmpty {
@@ -555,41 +576,20 @@ private struct MemoryCard: View {
                 }
 
                 if canEdit {
-                    HStack(spacing: 8) {
-                        Button {
+                    MemoryCardActions(
+                        isEditing: false,
+                        visibility: memory.visibility,
+                        onEdit: {
                             Haptics.lightImpact()
                             draftTitle = memory.title
                             draftBody = memory.body
                             isEditing = true
-                        } label: {
-                            NinaChip(text: "Editar")
-                        }
-                        .buttonStyle(.plain)
-
-                        if memory.visibility == .privateMemory {
-                            Button {
-                                Haptics.warning()
-                                isConfirmingShare = true
-                            } label: {
-                                NinaChip(text: "Compartilhar com a casa")
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        Spacer()
-
-                        Button {
+                        },
+                        onShare: {
                             Haptics.warning()
-                            isConfirmingDelete = true
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 15, weight: .regular))
-                                .foregroundStyle(NinaTheme.muted)
-                                .frame(width: 44, height: 44)
+                            isConfirmingShare = true
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Apagar memória")
-                    }
+                    )
                     .padding(.top, 2)
                 }
             }
@@ -647,6 +647,97 @@ private struct MemoryCard: View {
         edited.visibility = .shared
         Task {
             if await store.updateMemory(edited) { Haptics.success() }
+        }
+    }
+}
+
+// Deleting lives in the edit row, so the reading row never squeezes a protected label.
+struct MemoryCardActions: View {
+    enum Item: Equatable {
+        case edit
+        case share
+        case save
+        case cancel
+        case delete
+    }
+
+    static func items(isEditing: Bool, visibility: NinaMemoryVisibility) -> [Item] {
+        if isEditing {
+            return [.save, .cancel, .delete]
+        }
+        return visibility == .privateMemory ? [.edit, .share] : [.edit]
+    }
+
+    var isEditing: Bool
+    var visibility: NinaMemoryVisibility
+    var isSaving: Bool = false
+    var canSave: Bool = true
+    var onEdit: () -> Void = {}
+    var onShare: () -> Void = {}
+    var onSave: () -> Void = {}
+    var onCancel: () -> Void = {}
+    var onDelete: () -> Void = {}
+
+    private var items: [Item] {
+        Self.items(isEditing: isEditing, visibility: visibility)
+    }
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            stacked
+        } else {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: isEditing ? 10 : 8) {
+                    ForEach(items, id: \.self) { item in
+                        if item == .delete {
+                            Spacer(minLength: 8)
+                        }
+                        control(item)
+                    }
+                }
+
+                stacked
+            }
+        }
+    }
+
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(items, id: \.self) { item in
+                control(item)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func control(_ item: Item) -> some View {
+        switch item {
+        case .edit:
+            Button(action: onEdit) {
+                NinaChip(text: "Editar")
+            }
+            .buttonStyle(.plain)
+        case .share:
+            Button(action: onShare) {
+                NinaChip(text: "Compartilhar com a casa")
+            }
+            .buttonStyle(.plain)
+        case .save:
+            NinaButton(title: isSaving ? "Salvando" : "Salvar", isEnabled: canSave, action: onSave)
+        case .cancel:
+            NinaButton(title: "Cancelar", kind: .quiet, action: onCancel)
+        case .delete:
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(NinaTheme.muted)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Apagar memória")
         }
     }
 }

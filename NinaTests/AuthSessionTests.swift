@@ -4,6 +4,14 @@ import XCTest
 @testable import Nina
 
 final class AuthSessionTests: XCTestCase {
+    @MainActor
+    func testHouseSetupOpensTheKeyboardOnTheFieldThePersonTypesFirstAndNotUnderVoiceOver() {
+        XCTAssertEqual(HomeSetupArrival.focus(mode: .create, voiceOverOn: false), .homeName)
+        XCTAssertEqual(HomeSetupArrival.focus(mode: .join, voiceOverOn: false), .invite)
+        XCTAssertNil(HomeSetupArrival.focus(mode: .create, voiceOverOn: true))
+        XCTAssertNil(HomeSetupArrival.focus(mode: .join, voiceOverOn: true))
+    }
+
     func testNonceHashMatchesKnownSHA256Value() {
         XCTAssertEqual(
             AppleSignInNonce.sha256("nina"),

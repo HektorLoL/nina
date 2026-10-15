@@ -27,9 +27,47 @@ struct MemberEditorSheet: View {
     @State private var guardianSheet: GuardianSheetMode?
     @State private var isHandingOver = false
     @State private var handOverConfirmation = ""
+    @State private var loadedDraft: Draft?
+    @State private var skipsLoadedRoleChange = false
     @FocusState private var isNameFocused: Bool
     @FocusState private var isHandOverFocused: Bool
     @FocusState private var isOtherSpeciesFocused: Bool
+
+    struct Draft: Equatable {
+        var name = ""
+        var relationship = ""
+        var householdRole: HouseholdRole = .child
+        var permissionRole: FamilyPermissionRole = .member
+        var tone: MemberTone = .amber
+        var memoryNote = ""
+        var hasBirthDate = false
+        var birthDate = Date.distantPast
+        var petSpecies = PetSpeciesChoice()
+    }
+
+    static func hasUnsavedInput(mode: MemberEditorMode, loaded: Draft?, current: Draft) -> Bool {
+        switch mode {
+        case .addProfile:
+            return !current.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .edit:
+            guard let loaded else { return false }
+            return loaded != current
+        }
+    }
+
+    private var draft: Draft {
+        Draft(
+            name: name,
+            relationship: relationship,
+            householdRole: householdRole,
+            permissionRole: permissionRole,
+            tone: tone,
+            memoryNote: memoryNote,
+            hasBirthDate: hasBirthDate,
+            birthDate: birthDate,
+            petSpecies: petSpecies
+        )
+    }
 
     private var member: HouseholdMember? {
         guard case .edit(let id) = mode else { return nil }
@@ -54,9 +92,9 @@ struct MemberEditorSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        FittedSheetLayout {
             header
-
+        } content: {
             if case .edit = mode, member == nil {
                 ZeroState(
                     headline: "Essa pessoa não está mais aqui.",
@@ -65,13 +103,22 @@ struct MemberEditorSheet: View {
                 )
                 .padding(.horizontal, 20)
                 .padding(.top, 40)
-                .frame(maxHeight: .infinity, alignment: .top)
+                .padding(.bottom, 32)
             } else {
                 editorContent
+            }
+        } bar: {
+            if isAdding {
+                actions
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+                    .background(NinaTheme.ground)
             }
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .interactiveDismissDisabled(Self.hasUnsavedInput(mode: mode, loaded: loadedDraft, current: draft))
         .onAppear(perform: loadIfNeeded)
         .task {
             await Task.yield()
@@ -101,25 +148,24 @@ struct MemberEditorSheet: View {
         SheetHeader(eyebrow: "Pessoa") {
             dismiss()
         }
-        .padding(.horizontal, 20)
         .padding(.top, 4)
     }
 
     private var editorContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                titleBlock
-                identityFields
-                classification
-                careFields
-                permissionBlock
+        VStack(alignment: .leading, spacing: 24) {
+            titleBlock
+            identityFields
+            classification
+            careFields
+            permissionBlock
+            if !isAdding {
                 actions
+                    .padding(.top, 4)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 4)
-            .padding(.bottom, 32)
         }
-        .scrollDismissesKeyboard(.interactively)
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+        .padding(.bottom, isAdding ? 16 : 32)
     }
 
     private var titleBlock: some View {
@@ -175,7 +221,7 @@ struct MemberEditorSheet: View {
     @ViewBuilder
     private var classification: some View {
         VStack(alignment: .leading, spacing: 18) {
-            if member?.identityState != .claimed {
+            if member?.identityState != .claimed, !availableHouseholdRoles.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Eyebrow(text: "Tipo")
 
@@ -220,6 +266,10 @@ struct MemberEditorSheet: View {
             }
         }
         .onChange(of: householdRole) { oldValue, newValue in
+            if skipsLoadedRoleChange {
+                skipsLoadedRoleChange = false
+                return
+            }
             updateDefaultRelationship(from: oldValue, to: newValue)
             if newValue == .pet, tone == .amber {
                 tone = .lavender
@@ -315,9 +365,15 @@ struct MemberEditorSheet: View {
 
                 // Owner is never a chip: the house changes hands only through Passar a casa.
                 if store.canChangePermissionRole(for: member) {
-                    HStack(spacing: 8) {
-                        permissionChip(.admin)
-                        permissionChip(.member)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) {
+                            permissionChip(.admin)
+                            permissionChip(.member)
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            permissionChip(.admin)
+                            permissionChip(.member)
+                        }
                     }
 
                     if permissionRole == .admin {
@@ -455,7 +511,6 @@ struct MemberEditorSheet: View {
                 NinaErrorNote(text: error, style: .card, announces: false)
             }
         }
-        .padding(.top, 4)
     }
 
     private var draftMember: HouseholdMember {
@@ -539,19 +594,30 @@ struct MemberEditorSheet: View {
             tone = householdRole == .pet ? .lavender : .amber
         case .edit:
             guard let member else { return }
-            name = member.name
-            relationship = member.relationship
-            householdRole = member.role
-            permissionRole = member.userID == store.currentFamilyMember?.userID
-                ? store.currentPermissionRole
-                : member.permissionRole
-            tone = member.tone
-            memoryNote = MemberRecollection.replacesNote(for: member.role) ? "" : member.memoryNote
-            if let value = member.birthDate {
-                birthDate = value
-                hasBirthDate = true
-            }
-            petSpecies = PetSpeciesChoice(stored: member.petSpecies)
+            let loaded = Draft(
+                name: member.name,
+                relationship: member.relationship,
+                householdRole: member.role,
+                permissionRole: member.userID == store.currentFamilyMember?.userID
+                    ? store.currentPermissionRole
+                    : member.permissionRole,
+                tone: member.tone,
+                memoryNote: MemberRecollection.replacesNote(for: member.role) ? "" : member.memoryNote,
+                hasBirthDate: member.birthDate != nil,
+                birthDate: member.birthDate ?? birthDate,
+                petSpecies: PetSpeciesChoice(stored: member.petSpecies)
+            )
+            skipsLoadedRoleChange = loaded.householdRole != householdRole
+            name = loaded.name
+            relationship = loaded.relationship
+            householdRole = loaded.householdRole
+            permissionRole = loaded.permissionRole
+            tone = loaded.tone
+            memoryNote = loaded.memoryNote
+            hasBirthDate = loaded.hasBirthDate
+            birthDate = loaded.birthDate
+            petSpecies = loaded.petSpecies
+            loadedDraft = loaded
         }
     }
 
@@ -721,9 +787,15 @@ struct PendingJoinRequestCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 Eyebrow(text: "Entra como")
 
-                HStack(spacing: 8) {
-                    permissionChip(.member)
-                    permissionChip(.admin)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        permissionChip(.member)
+                        permissionChip(.admin)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        permissionChip(.member)
+                        permissionChip(.admin)
+                    }
                 }
 
                 if permissionRole == .admin {
@@ -734,16 +806,25 @@ struct PendingJoinRequestCard: View {
             }
         }
 
-        HStack(spacing: 10) {
-            NinaButton(
-                title: store.canInviteMorePeople ? "Aprovar" : "Casa cheia",
-                fillsWidth: true,
-                isEnabled: store.canInviteMorePeople && !isBusy
-            ) {
-                approve()
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                adultApproveButton
+                declineButton(fillsWidth: false)
             }
+            VStack(spacing: 10) {
+                adultApproveButton
+                declineButton(fillsWidth: true)
+            }
+        }
+    }
 
-            declineButton
+    private var adultApproveButton: some View {
+        NinaButton(
+            title: store.canInviteMorePeople ? "Aprovar" : "Casa cheia",
+            fillsWidth: true,
+            isEnabled: store.canInviteMorePeople && !isBusy
+        ) {
+            approve()
         }
     }
 
@@ -759,11 +840,11 @@ struct PendingJoinRequestCard: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
                 guardianButton
-                declineButton
+                declineButton(fillsWidth: false)
             }
             VStack(spacing: 10) {
                 guardianButton
-                declineButton
+                declineButton(fillsWidth: true)
             }
         }
     }
@@ -778,11 +859,12 @@ struct PendingJoinRequestCard: View {
         }
     }
 
-    private var declineButton: some View {
-        NinaButton(title: "Recusar", kind: .outline, isEnabled: !isBusy) {
+    private func declineButton(fillsWidth: Bool) -> some View {
+        NinaButton(title: "Recusar", kind: .outline, fillsWidth: fillsWidth, isEnabled: !isBusy) {
             Haptics.warning()
             isShowingDeclineConfirmation = true
         }
+        .fixedSize(horizontal: !fillsWidth, vertical: false)
     }
 
     private func permissionChip(_ role: FamilyPermissionRole) -> some View {
@@ -844,14 +926,14 @@ struct HouseOwnershipOfferCard: View {
                 .ninaText(.caption, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 10) {
-                NinaButton(title: isWorking ? "Aceitando" : "Aceitar", fillsWidth: true, isEnabled: !isBusy) {
-                    accept()
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    acceptButton
+                    declineButton(fillsWidth: false)
                 }
-
-                NinaButton(title: "Recusar", kind: .outline, isEnabled: !isBusy) {
-                    Haptics.warning()
-                    isShowingDeclineConfirmation = true
+                VStack(spacing: 10) {
+                    acceptButton
+                    declineButton(fillsWidth: true)
                 }
             }
         }
@@ -866,6 +948,20 @@ struct HouseOwnershipOfferCard: View {
         } message: {
             Text("\(ownerName) continua como titular.")
         }
+    }
+
+    private var acceptButton: some View {
+        NinaButton(title: isWorking ? "Aceitando" : "Aceitar", fillsWidth: true, isEnabled: !isBusy) {
+            accept()
+        }
+    }
+
+    private func declineButton(fillsWidth: Bool) -> some View {
+        NinaButton(title: "Recusar", kind: .outline, fillsWidth: fillsWidth, isEnabled: !isBusy) {
+            Haptics.warning()
+            isShowingDeclineConfirmation = true
+        }
+        .fixedSize(horizontal: !fillsWidth, vertical: false)
     }
 
     private func accept() {

@@ -430,14 +430,12 @@ struct MinorSupervisionSection: View {
             NavigationStack {
                 MinorHealthConsentSheet(member: member)
             }
-            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingUsage) {
             NavigationStack {
                 MinorUsageHistoryView(name: member.name, days: access.supervision?.usageLast7Days ?? [])
             }
-            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
         .accountDeletionSheet(isPresented: $isShowingWardDeletion, target: .ward(member))
@@ -800,10 +798,27 @@ struct MinorHealthConsentSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        FittedSheetLayout {
             SheetHeader(eyebrow: "Saúde") { dismiss() }
-                .padding(.horizontal, -20)
+        } content: {
+            consentColumn
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
+        }
+        .ninaSheetBackground()
+        .toolbar(.hidden, for: .navigationBar)
+        .alert("Retirar a autorização de saúde?", isPresented: $isConfirmingWithdrawal) {
+            Button("Cancelar", role: .cancel) {}
+            Button("Retirar", role: .destructive) {
+                save(granted: false)
+            }
+        } message: {
+            Text("Os lembretes de saúde de \(member.name) são apagados.")
+        }
+    }
 
+    private var consentColumn: some View {
+        VStack(alignment: .leading, spacing: 18) {
             if isGranted {
                 Text("Lembretes de saúde de \(member.name) estão autorizados.")
                     .ninaText(.title)
@@ -842,19 +857,6 @@ struct MinorHealthConsentSheet: View {
             if let error = store.syncErrorMessage {
                 NinaErrorNote(text: error, announces: false)
             }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 20)
-        .ninaSheetBackground()
-        .toolbar(.hidden, for: .navigationBar)
-        .alert("Retirar a autorização de saúde?", isPresented: $isConfirmingWithdrawal) {
-            Button("Cancelar", role: .cancel) {}
-            Button("Retirar", role: .destructive) {
-                save(granted: false)
-            }
-        } message: {
-            Text("Os lembretes de saúde de \(member.name) são apagados.")
         }
     }
 
@@ -883,10 +885,19 @@ struct MinorUsageHistoryView: View {
     let days: [MinorUsageDay]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        FittedSheetLayout {
             SheetHeader(eyebrow: "Tempo na Nina") { dismiss() }
-                .padding(.horizontal, -20)
+        } content: {
+            usageColumn
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
+        }
+        .ninaSheetBackground()
+        .toolbar(.hidden, for: .navigationBar)
+    }
 
+    private var usageColumn: some View {
+        VStack(alignment: .leading, spacing: 12) {
             if days.isEmpty {
                 Text("Sem tempo registrado nos últimos 7 dias.")
                     .ninaText(.label, NinaTheme.muted)
@@ -901,11 +912,7 @@ struct MinorUsageHistoryView: View {
                     NinaDivider(inset: 0)
                 }
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
-        .ninaSheetBackground()
-        .toolbar(.hidden, for: .navigationBar)
     }
 
     private static func label(for day: String) -> String {

@@ -98,7 +98,6 @@ struct ProfileEditorView: View {
         }
         .sheet(isPresented: $isShowingCoreMemories) {
             ProfileCoreMemoriesSheet(memories: coreMemories)
-                .presentationDetents([.large])
         }
     }
 
@@ -583,25 +582,16 @@ private struct ProfileCoreMemoriesSheet: View {
     var memories: [ProfileCoreMemory]
 
     var body: some View {
-        VStack(spacing: 0) {
+        FittedSheetLayout {
             SheetHeader(eyebrow: "Memórias") {
                 dismiss()
             }
             .padding(.top, 8)
-
-            GeometryReader { proxy in
-                ScrollView {
-                    list
-                        .padding(.horizontal, 20)
-                        .padding(.top, 6)
-                        .padding(.bottom, 28)
-                        .frame(
-                            minHeight: proxy.size.height,
-                            alignment: memories.isEmpty ? .center : .top
-                        )
-                }
-                .scrollBounceBehavior(.basedOnSize)
-            }
+        } content: {
+            list
+                .padding(.horizontal, 20)
+                .padding(.top, 6)
+                .padding(.bottom, 28)
         }
         .ninaSheetBackground()
     }
@@ -621,7 +611,7 @@ private struct ProfileCoreMemoriesSheet: View {
                             NinaDivider()
                         }
 
-                        NinaRow(title: memory.title, subtitle: memory.detail) {
+                        NinaRow(title: memory.title, subtitle: memory.detail, verticalPadding: 10) {
                             CategoryGlyph(systemName: memory.systemName)
                         } trailing: {
                             Text(memory.scopeLabel).ninaText(.meta, NinaTheme.muted)

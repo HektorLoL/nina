@@ -838,6 +838,188 @@ lands in the app. No board draws it; these are the departures it makes.
   "Sementes 1" and "Compras 1", because those lists live behind chips in the
   live screen.
 
+## 6o. Fitted sheets, forms that end at their commit, chips that hold one line (2026-10-14)
+
+Heitor sent five screenshots: "Entrar numa casa.", "Editar item", "Editar
+tarefa" and "Nova tarefa" each held their fields at the top and their commit at
+the foot of the screen with half the screen of empty glaze between them, and a
+memory card's "Compartilhar com a casa" wrapped onto two lines. The cause was
+one written rule, the rubric's G15 "free space sits above the actions, never
+below them", which every form followed with a greedy `ScrollView` or a
+`Spacer` plus viewport `minHeight`. G15 is rewritten (the centered blocks keep
+the old bullet) and G19 is new. Nothing here adds a word; space is removed or
+reorganised, never filled.
+
+- **Capture, edit and decision sheets fit their content.** `FittedSheetLayout`
+  (`Sheets.swift`) measures its header, its content inside the scroll view and
+  its bar, and sets `.presentationDetents([.height(sum)])`; before the first
+  measure it asks for `.medium`, never a zero height. Header and bar are
+  `.fixedSize(vertical)` and nothing inside sizes from the viewport, so the
+  detent and the layout never feed each other. Heights are read by a
+  `GeometryReader` behind each part: `onGeometryChange` and a preference both
+  missed the pass after a sheet settles its width (the first layout runs at
+  about 148 pt, where a typed title wraps to three lines, and the 222 pt it
+  measured then stayed, leaving a 66 pt gap above the chips). Taller than the
+  screen, the system clamps it, the column scrolls and the bar stays. A card
+  that reaches full height also loses its 8 pt side insets, and its wider
+  column holds the same note in fewer lines; the content's height is read with
+  its width, and a widening of up to 32 pt keeps the card's height
+  (`SheetFit.content(after:height:width:)`), so a note one line from the ceiling
+  cannot flip the sheet between card and full height. A first layout at a
+  passing narrow width (the 148 pt pass above) is a jump far wider than 32 pt
+  and never sets the height. Fitted:
+  `TaskEditorSheet` (all four modes), `ShoppingEditorSheet`, the non-buyer
+  `PremiumEntryView`, `PremiumBenefitsSheet` when it opens on a covered house,
+  `InviteFamilySheet`, `TaskEditConflictSheet`, `ProfileCoreMemoriesSheet` (its
+  `GeometryReader` and viewport `minHeight` removed, and 10 pt above and below
+  each row so a wrapped detail line no longer sits on its divider),
+  `SuggestionDetailSheet`, `TaskQuickActionsSheet`, `MinorHealthConsentSheet`,
+  `MinorUsageHistoryView` (which also stops clipping a seventh day under its
+  header), `ReportReplySheet`, `AnnouncementsSheet` and `MemberEditorSheet`. The
+  member editor was first kept at `.large` as a long form, but a child's, a
+  pet's or a new profile's ends about halfway down and left some 360 pt of glaze
+  under "Tirar da casa"; fitted, a claimed adult's longer form reaches full
+  height and scrolls, its nested guardian sheet is untouched, and its close disc
+  sits where every other sheet's does (it was padded twice, 20 pt further in).
+  A fitted sheet is only ever the root of a presented sheet; `.large` stays for
+  Settings and everything pushed in it, `AccountDeletionView` included, the
+  paywall, `GuardianApprovalSheet`, the AI consent sheet, `MinorSettingsView`
+  and the full-screen covers. On iOS 26 a fitted sheet floats as the partial
+  card `TaskQuickActionsSheet` already used, on the same glaze.
+- **The card rides the keyboard.** Seen with the software keyboard on the
+  iPhone 17 Pro simulator (the first pass had a hardware keyboard attached and
+  saw none): in Nova tarefa, Nova semente, Novo item, Editar tarefa and Editar
+  item the card sits on the keyboard with the chips and the commit on it, no
+  fallback to `.large` needed. It showed one gap the keyboard-down screens do
+  not have: a card keeps the height its home-indicator inset added, about
+  28 pt, and with the keyboard covering that inset the column took it as glaze
+  between the fields and the chips. The detent gives it back while the
+  keyboard rises: while the keyboard is down the card reads its resting bottom
+  inset (34 pt on a 402 pt phone, 0 without a home indicator), and the surplus
+  is that inset less the 6 pt the card keeps above the keyboard
+  (`SheetFit.keyboardSurplus(learned:bottomInset:)`, 28 pt, what the simulator
+  measured once the keyboard had landed). A first cut learned it only on the
+  first `keyboardDidShow` of a launch, so the first quick-add of every session
+  landed on the keyboard and then dropped 28 pt. It is applied 80 ms after
+  `keyboardWillShow` (`SheetFit.keyboardHeadStart`), animated over the
+  keyboard's duration: applied at once, the card's top dipped 27 to 38 pt
+  before the keyboard began to lift it. Traced frame by frame on the iPhone 17
+  Pro simulator, "Nova tarefa" and "Editar tarefa" now rise to the keyboard in
+  one move with no step down, and lowering the keyboard lifts the card 4 pt for
+  one frame before it falls.
+  `keyboardDidShow` now only corrects a difference of 2 pt or more, and learns
+  only a larger value, because a card clamped under the status bar reads a
+  smaller one that is not the phone's. The inset is not read from
+  `keyboardWillShow` to `keyboardDidHide`: SwiftUI hands the reader the
+  keyboard's own inset (about 271 pt) before the show notification arrives, and
+  the hide animation passes through 6 pt, which bobbed the bar. Measuring it on
+  every layout instead chased the sheet's own in-flight sizes and overshot to
+  the 44 pt cap. `keyboardWillHide` returns it. A long note clamps under the
+  status bar with the bar on the keyboard, and "Nome da categoria" scrolls into
+  view above the chips.
+- **A bar's commit keeps 20 pt from the card's foot.** Where no home indicator
+  lifts it (a 375 pt phone), "Salvar", "Criar", "Adicionar" and "Plantar" ended
+  8 pt above the card's rounded edge, their corners inside its curve, and 9 pt
+  from the screen edge at full height. With the keyboard down the bar now adds
+  `12 − inset` below itself (`SheetFit.barBottomPadding`): 20 pt on that phone,
+  nothing on a 402 pt one or above a keyboard. That space is added to the
+  detent rather than measured with the bar: measured, the bar kept the 12 pt it
+  had before the inset was read, and every edit sheet on a 402 pt phone opened
+  12 pt of glaze above its chips.
+- **The sheet header keeps a close-sized slot on both sides.** The eyebrow sits
+  between the close disc and an equal empty slot, with 12 pt above and below
+  it; at accessibility3 "Plantar semente" covered its "P" with the disc on a
+  375 pt phone and touched it on a 402 pt one. It now wraps between words in its
+  column and clears the grabber; at default size the header is the same 60 pt.
+- **The member editor's commit rides the keyboard while adding.** "Nome" takes
+  focus on arrival, and with the commit at the end of the column "Continuar"
+  sat 4 pt under the keyboard, corners and all. While adding, the commit (or
+  "Adultos entram por convite." and "Convidar") sits in the bar, 8 pt above the
+  keyboard; editing keeps "Salvar" and "Tirar da casa" in the column.
+- **An editor holding typed input does not close on a swipe or a tap above it.**
+  A fitted card leaves the screen above it tappable (190 pt over "Nova tarefa"
+  with the keyboard up, 570 pt over "Editar item" with it down, on a 402 pt
+  phone), where the full-height sheet left a sliver, and one stray tap threw
+  away a typed title. `TaskEditorSheet`,
+  `ShoppingEditorSheet` and `MemberEditorSheet` now carry
+  `.interactiveDismissDisabled(hasUnsavedInput)`: while adding, a typed title,
+  note or quantity (a person's name); while editing or planting, any field that
+  differs from what was loaded. The close button still discards, as
+  `TaskEditConflictSheet` already works; nothing new is written. Loading a
+  member no longer runs the type chip's defaults, which turned a pet's "Pedra"
+  tone into "Névoa" on every open and would have read as an edit.
+- **The editor panels moved into the field column.** The date and category
+  panels open at the end of the fields, directly above the chips (where the bar
+  held them before). The category list is whole, with "Nova categoria" right
+  under it: a first cut capped it at 208 pt inside its own scroll, which the
+  four default categories fill exactly, so "Nova categoria" sat hidden below a
+  clean divider with nothing hinting at a scroll, a scroll nested in the
+  column's own. The card grows by the panel, and a clamped card scrolls the
+  panel into view, "Nova categoria" right above the chips, 450 ms after it opens:
+  a sheet puts its scroll view back to the top while it resizes, so the scroll
+  the first cut asked for during the resize never showed. Tapping "Nova
+  categoria" now focuses "Nome da categoria" (the one thing to do next is type),
+  so on a 375 pt phone, where the field opened below the fold, the keyboard
+  comes up and the column keeps the field above the chips.
+- **"Apagar" moved into the commit row.** In edit mode the quiet "Apagar" sits
+  opposite "Salvar" (VoiceOver reads "Salvar" first); at accessibility sizes it
+  ends the field column instead. It never appears while adding or planting. The
+  alert, its copy and `Haptics.warning()` are unchanged.
+- **A memory's trash moved into its edit row.** The reading row is "Editar"
+  plus, for a private memory, the protected "Compartilhar com a casa", whole;
+  the edit row is "Salvar", "Cancelar", then the trash ("Apagar memória") with
+  the same alert. Both rows are `MemoryCardActions`, which stack rather than
+  wrap: one line on a 375 pt and a 402 pt phone at default size, stacked on a
+  375 pt phone at xxxLarge and at every accessibility size.
+- **House setup ends at its commit and opens the keyboard.** "Toda casa começa
+  com um nome." and "Entrar numa casa." drop the `GeometryReader`, the viewport
+  `minHeight` and both `Spacer(minLength: 32)`: the full-width commit, the error
+  line and the quiet alternate follow the field 28 pt below it, the
+  `MinorNoHomeView` shape. On arrival and on each switch of path the field the
+  person types first takes focus (not under VoiceOver), so the keyboard fills
+  what was empty glaze. The mode switch no longer animates under Reduce Motion.
+  `InviteAcceptanceView` and every gate stay centered.
+- **The task detail's footer is inline.** "Marcar como feita" and the quiet
+  "Apagar" follow the quick actions inside the scroll column, the
+  `MemberDetailView` shape; board C3 drew them pinned to the foot.
+- **Premium management is a column.** A covered house's "Gerenciar na App
+  Store" (or "Só quem assina muda o plano.") follows the plan card instead of
+  being pinned. A purchase made inside the sheet keeps `.large`, so the moss
+  moment never shrinks under the person; the paywall's pinned purchase block is
+  unchanged.
+- **`NinaChip` holds one line** below accessibility sizes (`lineLimit(1)` and
+  horizontal `fixedSize`); at accessibility sizes a lone chip wraps, with 8 pt
+  above and below and 18 pt at the sides so a two-line label stays inside its
+  capsule. Every `NinaChip` sits in a horizontal scroll, a `ViewThatFits`, a
+  single-chip column, a short row with a trailing spacer, or a row this pass
+  fixed, so the `fixedSize` never clips.
+- **Rows that could wrap or squeeze.** The member editor's permission chips
+  and the approval's "Entra como" chips are `ViewThatFits`; Casa's header puts
+  the house name and the Premium badge on one line and drops the badge below a
+  long name (Hoje's date rule); the member editor hides its "Tipo" eyebrow when
+  there is no type to choose.
+- **Two labelled buttons stack before either wraps.** A `ViewThatFits` alone
+  was not enough for the Tarefas selection bar: it measured "Feitas" and
+  "Passar" by their sum, which fit at xxxLarge, and the `HStack` then split the
+  row evenly, so "Passar" broke into "Passa / r". "Feitas" and "Passar" now sit
+  in an `EqualWidthRow` (the layout the suggestion card and the child's day
+  already use), whose ideal width is twice the wider label, beside the trash;
+  the bar is `TaskSelectionControls`, and it stacks at xxxLarge on both phones.
+  The same rule now holds for every paired decision: "Aprovar" / "Recusar" and
+  "Aprovar como responsável" / "Recusar" on a join request, "Aceitar" /
+  "Recusar" on the house offer (a short "Recusar" keeps its own width beside the
+  filling button, then fills under it when stacked), and "Corrigir" / "Não" on
+  Nina's task and memory proposal cards (an `EqualWidthRow`). At accessibility3
+  each pair stacks instead of reading "Aprov / ar".
+- **Headers keep their title whole.** In Tarefas' selection mode "Cancelar"
+  drops below the title rather than break "Selecionar" mid-word; on house setup,
+  where "Sair da conta" wrapped beside the wordmark at accessibility3, it moves
+  into the "…" menu above "Apagar conta". Both are a `ViewThatFits`; nothing
+  is added.
+- **Left out, on purpose.** A paste button in "Link ou código", `AzulejoBand`
+  art or a bigger mark on the setup screens (both fill space), and the shopping
+  editor's owner chip beside its commit (crowds a 375 pt phone).
+
 ## 7. Verified
 
 - `xcodebuild build` — succeeds.
@@ -849,6 +1031,51 @@ lands in the app. No board draws it; these are the departures it makes.
   sheet. Screens compared against their boards; three defects found and fixed on
   the spot (a duplicated system back chevron, a footer clipped by the tab bar, and
   two cobalt controls competing on Casa).
+
+2026-10-14, §6o: `xcodebuild test` **TEST SUCCEEDED**, 580 tests, 0 failures;
+`deno task test` 369 passed, 0 failed; `deno task preflight:repo` 0 failures, 1
+warning (`repository.legal-values`, intentional). On the iPhone 17 Pro simulator
+(signed Debug build, the DEBUG "Teste 1" local house): house setup on both
+paths, Nova tarefa, Editar tarefa (default, xxxLarge, accessibility3), the date
+panel with its calendar popover, the category panel, an eight-line note growing
+the card, Editar item, Convidar alguém, Ações rápidas and the task detail all
+fit with no gap. A throwaway render (not committed) showed house setup at 375
+and 402 pt and the memory card's rows on one line at 375 and 402 pt, stacked at
+xxxLarge on 375 pt and at accessibility3, with no label cut. Not seen: the keyboard
+(the simulator ran with a hardware keyboard attached, so no software keyboard
+rose), VoiceOver order and Reduce Motion; a device pass covers them.
+
+2026-10-14, §6o second pass (the fitted member editor, the panel list and its
+reveal, the keyboard surplus, the width hysteresis, paired buttons and
+headers): `xcodebuild test` **TEST SUCCEEDED**, 585 tests, 0 failures;
+`deno task test` 373 passed, 0 failed; `deno task preflight:repo` 0 failures, 1
+warning (`repository.legal-values`). A throwaway render (not committed) hosted
+each changed screen in a 402 × 874 window at default, xxxLarge and
+accessibility3 and in a 375 × 667 window, and captured the simulator's own
+screen with the software keyboard up: every editor card rides the keyboard with
+its chips right under the fields and returns to its fitted height when the
+keyboard goes; house setup opens with the keyboard on its field and the
+commit above it; the selection bar keeps "Feitas" and "Passar" whole at every
+size; every paired decision stacks at accessibility3. Still not seen: VoiceOver
+order, Reduce Motion, dragging the fields to lower the keyboard, and a
+keyboard on a 375 pt phone (the simulator is a 402 pt one); a device pass
+covers them.
+
+2026-10-14, §6o third pass (the keyboard surplus known before the keyboard,
+the bar's 20 pt floor, the header's close slot, the member editor's commit in
+the bar while adding, the unsaved-input guard): `xcodebuild test` **TEST
+SUCCEEDED**, 589 tests, 0 failures; `deno task test` 373 passed, 0 failed;
+`deno task preflight:repo` 0 failures, 1 warning (`repository.legal-values`).
+A throwaway XCTest (not committed) traced the card's on-screen frame every
+20 ms with the software keyboard up on the iPhone 17 Pro simulator: "Nova
+tarefa", "Novo item", "Editar tarefa" and "Editar item" rise to the keyboard
+with no step down and their commit 8 pt above it, and no keyboard of the run
+needed a correction after it landed; "Continuar" for a new child sits 8 pt
+above the keyboard. Rendered at 402 × 874 and 375 × 667, at default size and
+accessibility3: every commit 40 pt from a 402 pt card's foot and 19–20 pt from
+a 375 pt one, and "Plantar semente", "Nova semente" and "Editar semente" wrap
+or sit clear of the close disc. Still not seen: VoiceOver order, Reduce Motion
+and a real device's keyboard timing.
 
 Not verified: the database gate (`deno task db:reset && db:test`) was not run —
 no migration changed. The `Cuidado` category is the one thing here that will need

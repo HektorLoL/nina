@@ -54,13 +54,12 @@ struct TaskDetailView: View {
                     metadata
                     provenance
                     quickActions
+                    footer
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
                 .padding(.bottom, 28)
             }
-
-            footer
         }
         .ninaScreenBackground()
         .alert(task.kind == .seed ? "Apagar esta semente?" : "Apagar esta tarefa?", isPresented: $isConfirmingDelete) {
@@ -317,9 +316,8 @@ struct TaskDetailView: View {
                 isConfirmingDelete = true
             }
         }
-        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity)
         .padding(.top, 10)
-        .padding(.bottom, 8)
     }
 }
 
