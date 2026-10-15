@@ -80,7 +80,7 @@ This rubric applies to every screen of the iOS app. A screen passes when it meet
   - `NinaChip` holds one line. A chip row that does not scroll horizontally is a `ViewThatFits(in: .horizontal)`: the row first, then a stacked fallback.
   - If a row cannot fit at default size on a 375 pt phone, a control moves into the edit state before any label is shortened, and a protected label (§3) is never shortened.
   - At accessibility sizes a chip alone in its column, or a lone full-width button, may wrap. Nothing is truncated or clipped.
-  - Two labelled buttons side by side ("Feitas" / "Passar", "Aprovar" / "Recusar", "Aceitar" / "Recusar", "Corrigir" / "Não") share the row only while each label fits its share of it; otherwise they stack, full width. A text control beside a header's title ("Cancelar", "Sair da conta") drops below the title or into the header's menu before either wraps.
+  - Two labelled buttons side by side ("Feitas" / "Passar", "Aprovar" / "Recusar", "Aceitar" / "Recusar", "Corrigir" / "Não") share the row only while each label fits its share of it; otherwise they stack, full width, and the selection bar drops its glyphs before it stacks. A quiet control beside a commit ("Apagar", "Adicionar e continuar") takes its own line above the commit before either wraps. A text control beside a header's title ("Cancelar", "Sair da conta") drops below the title or into the header's menu before either wraps.
   - Precedents: Apple News Saved Stories, Places and Abode, which keep Edit and Delete out of the card, and Nina's own Hoje header (the date beside the Premium badge in a `ViewThatFits`).
 
 ### Word budgets

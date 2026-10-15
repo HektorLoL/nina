@@ -965,6 +965,27 @@ reorganised, never filled.
   opposite "Salvar" (VoiceOver reads "Salvar" first); at accessibility sizes it
   ends the field column instead. It never appears while adding or planting. The
   alert, its copy and `Haptics.warning()` are unchanged.
+- **"Adicionar e continuar" moved into the commit row too.** While adding an
+  item it sits opposite "Adicionar", after the owner chip, so nothing that saves
+  comes before the last field. `EditorCommitRow` gives up the commit's arrow
+  first, then, where the pair still does not fit one line (a 320 pt phone at
+  default size), puts the quiet label on its own line at the field edge with
+  the commit under it; no label wraps. At accessibility sizes it ends the field
+  column, centred, as "Apagar" does, and a label that wraps there centres
+  both lines.
+- **A clamped card marks the edge its fields run under.** When the content is
+  taller than the card and scrolls, a 1 pt `NinaTheme.line` rule appears on the
+  header's foot while content sits above the fold and on the bar's top while
+  content sits below it (`SheetFit.slicedEdges`), so chips and a commit no
+  longer read as floating on half-cut fields; a card whose fields fit, even
+  one that bounces, draws none. Overflow is read from the measured heights of
+  the fields and the scroll view, and `onScrollGeometryChange` reports only
+  how far the person scrolled: on its own it skipped the layout "Plantar
+  semente" settled on at accessibility3, and that clamped card opened with no
+  rule above its chips. The task and item editors pad their chip row 10 pt
+  below that edge (and their fields 8 pt less at the end, so the resting gap
+  and the fitted height are unchanged); at 2 pt the rule doubled the chips'
+  own stroke.
 - **A memory's trash moved into its edit row.** The reading row is "Editar"
   plus, for a private memory, the protected "Compartilhar com a casa", whole;
   the edit row is "Salvar", "Cancelar", then the trash ("Apagar memória") with
@@ -1004,7 +1025,9 @@ reorganised, never filled.
   row evenly, so "Passar" broke into "Passa / r". "Feitas" and "Passar" now sit
   in an `EqualWidthRow` (the layout the suggestion card and the child's day
   already use), whose ideal width is twice the wider label, beside the trash;
-  the bar is `TaskSelectionControls`, and it stacks at xxxLarge on both phones.
+  the bar is `TaskSelectionControls`. Before it stacks it drops the checkmark
+  and the two-person glyph, which holds one row through xxxLarge on a 375 pt
+  and a 402 pt phone; it stacks only at accessibility sizes.
   The same rule now holds for every paired decision: "Aprovar" / "Recusar" and
   "Aprovar como responsável" / "Recusar" on a join request, "Aceitar" /
   "Recusar" on the house offer (a short "Recusar" keeps its own width beside the
@@ -1076,6 +1099,22 @@ accessibility3: every commit 40 pt from a 402 pt card's foot and 19–20 pt from
 a 375 pt one, and "Plantar semente", "Nova semente" and "Editar semente" wrap
 or sit clear of the close disc. Still not seen: VoiceOver order, Reduce Motion
 and a real device's keyboard timing.
+
+2026-10-14, §6o fourth pass (the selection bar without its glyphs, "Adicionar
+e continuar" in the commit row and its stacked fallback, the scroll-edge rules
+read from measured heights and the chips' clearance under them): `xcodebuild
+test` **TEST SUCCEEDED**, 592 tests, 0 failures; `deno task test` 373 passed,
+0 failed; `deno task preflight:repo` 0 failures, 1 warning
+(`repository.legal-values`). A throwaway render (not committed) showed
+Tarefas in selection mode on one row at default and xxxLarge on 375 and
+402 pt and stacked at accessibility3; "Novo item" with "Adicionar e
+continuar" opposite "Adicionar" on 375 and 402 pt at default and on 402 pt at
+xLarge, on its own line above the commit at xxxLarge and on a 320 pt-wide
+screen, with no label wrapped, and centred at the end of the fields at
+accessibility3; and "Plantar semente", "Editar tarefa" and "Novidades" at
+accessibility3 on 375 pt with the rule on the edge the fields run under, at
+rest as well as scrolled, and the chips 10 pt below it. Still not seen:
+VoiceOver order and a real 320 pt Display Zoom phone.
 
 Not verified: the database gate (`deno task db:reset && db:test`) was not run —
 no migration changed. The `Cuidado` category is the one thing here that will need

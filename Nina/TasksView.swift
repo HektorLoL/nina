@@ -859,7 +859,7 @@ private struct SelectableTaskRow: View {
     }
 }
 
-// "Feitas" and "Passar" share the row only when each label fits in an equal half; otherwise the bar stacks.
+// "Feitas" and "Passar" drop their glyphs before either label would wrap beside the other; only then does the bar stack.
 struct TaskSelectionControls<HandOverChoices: View>: View {
     var isEnabled: Bool
     var onDone: () -> Void
@@ -873,45 +873,49 @@ struct TaskSelectionControls<HandOverChoices: View>: View {
             stacked
         } else {
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    EqualWidthRow(spacing: 10) {
-                        doneButton
-                        handOverMenu
-                    }
-                    deleteButton(stacked: false)
-                }
-
+                row(showsGlyphs: true)
+                row(showsGlyphs: false)
                 stacked
             }
         }
     }
 
+    private func row(showsGlyphs: Bool) -> some View {
+        HStack(spacing: 10) {
+            EqualWidthRow(spacing: 10) {
+                doneButton(showsGlyph: showsGlyphs)
+                handOverMenu(showsGlyph: showsGlyphs)
+            }
+            deleteButton(stacked: false)
+        }
+    }
+
     private var stacked: some View {
         VStack(spacing: 10) {
-            doneButton
-            handOverMenu
+            doneButton(showsGlyph: !dynamicTypeSize.isAccessibilitySize)
+            handOverMenu(showsGlyph: !dynamicTypeSize.isAccessibilitySize)
             deleteButton(stacked: true)
         }
     }
 
-    private var doneButton: some View {
+    private func doneButton(showsGlyph: Bool) -> some View {
         NinaButton(
             title: "Feitas",
-            systemName: dynamicTypeSize.isAccessibilitySize ? nil : "checkmark",
+            systemName: showsGlyph ? "checkmark" : nil,
             fillsWidth: true,
             isEnabled: isEnabled,
             action: onDone
         )
     }
 
-    private var handOverMenu: some View {
+    private func handOverMenu(showsGlyph: Bool) -> some View {
         Menu {
             handOverChoices
         } label: {
             NinaButtonFace(
                 title: "Passar",
                 kind: .outline,
-                systemName: dynamicTypeSize.isAccessibilitySize ? nil : "person.2",
+                systemName: showsGlyph ? "person.2" : nil,
                 fillsWidth: true
             )
         }

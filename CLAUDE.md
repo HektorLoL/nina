@@ -1001,8 +1001,15 @@ household is what this product refuses.
   the inset is not read while the keyboard moves. A hardware keyboard's
   off-screen frame changes nothing. Where no home indicator lifts it, the bar
   adds space below itself so its commit sits 20 pt from the card's foot
-  (`SheetFit.barBottomPadding`, added to the detent, never measured). The header's eyebrow sits between the close
-  disc and an equal empty slot, so it wraps rather than run under the disc. An
+  (`SheetFit.barBottomPadding`, added to the detent, never measured). While
+  the fields run under the header or the bar, that edge draws a 1 pt
+  `NinaTheme.line` rule (`SheetFit.slicedEdges`), and a card whose fields fit
+  draws none. Whether they overflow is read from measured heights, never from
+  `onScrollGeometryChange` alone, which skipped the layout a sheet settled on
+  and left a clamped card's bar unmarked; the callback only says how far the
+  person scrolled. A bar that opens with chips keeps them 10 pt below that
+  edge. The header's eyebrow sits between the close disc and an equal empty
+  slot, so it wraps rather than run under the disc. An
   editor holding typed input (`hasUnsavedInput` on the task, item and member
   editors: anything typed while adding, any field changed while editing)
   refuses a swipe or a tap above the card (`interactiveDismissDisabled`); its
@@ -1024,9 +1031,16 @@ household is what this product refuses.
   honest ideal width: two filling buttons sit in an `EqualWidthRow` (an `HStack`
   splits them evenly after measuring their sum, which let "Passar" break into
   "Passa / r"), and a filling button beside a short one keeps the short one at
-  `fixedSize`. Otherwise the pair stacks, full width. A header with a text
-  control beside the title follows the same rule (Tarefas' "Cancelar" drops
-  below "Selecionar"; house setup's "Sair da conta" moves into its "…" menu).
+  `fixedSize`. Otherwise the pair stacks, full width; the Tarefas selection
+  bar first drops its glyphs, so it holds one row through xxxLarge and stacks
+  only at accessibility sizes. An editor's commit row (`EditorCommitRow`)
+  gives up the commit's arrow first, then puts the quiet control beside it
+  ("Apagar" while editing, "Adicionar e continuar" while adding an item) on
+  its own line above the commit; only at accessibility sizes does that control
+  end the field column instead, so below them nothing that saves sits ahead of
+  the owner chip. A header with a text control beside the title follows the
+  same rule (Tarefas' "Cancelar" drops below "Selecionar"; house setup's "Sair
+  da conta" moves into its "…" menu).
 
 **Haptics are semantic, not decorative** (`Nina/Haptics.swift`):
 `selection()` = navigate/toggle/close/un-complete · `success()` = completion or

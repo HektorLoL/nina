@@ -123,35 +123,156 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertEqual(settled, SheetFit.ContentReading(height: 156, width: 346, widening: 0))
     }
 
-    func testTheSelectionBarKeepsFeitasAndPassarOnOneLineOrStacksThemNeverWrappingOne() {
-        let oneLine = fittedSize(
-            NinaButtonFace(title: "Passar", kind: .outline, systemName: "person.2"),
-            width: 1_000,
-            dynamicTypeSize: .xxxLarge
-        ).height
-
+    func testTheSelectionBarHoldsOneRowShortOfAccessibilitySizesByDroppingItsGlyphsAndStacksOnlyThere() {
         for size in [DynamicTypeSize.large, .xLarge, .xxLarge, .xxxLarge] {
+            let face = fittedSize(
+                NinaButtonFace(title: "Passar", kind: .outline),
+                width: 1_000,
+                dynamicTypeSize: size
+            ).height
+
             for width in [CGFloat(335), 362] {
-                let row = fittedSize(
-                    NinaButtonFace(title: "Passar", kind: .outline, systemName: "person.2"),
-                    width: 1_000,
-                    dynamicTypeSize: size
-                ).height
                 let bar = fittedSize(selectionBar(), width: width, dynamicTypeSize: size)
-                let stacked = row * 2 + 48 + 20
 
                 XCTAssertLessThanOrEqual(bar.width, width + 0.5, "\(size) at \(width)")
-                XCTAssertTrue(
-                    abs(bar.height - row) < 0.5 || abs(bar.height - stacked) < 0.5,
-                    "a label wrapped beside another at \(size), \(width): \(bar.height), row \(row)"
+                XCTAssertEqual(
+                    bar.height,
+                    max(face, 48),
+                    accuracy: 0.5,
+                    "the bar stacked or a label wrapped at \(size), \(width)"
                 )
             }
         }
+
+        for size in [DynamicTypeSize.accessibility1, .accessibility3] {
+            let face = fittedSize(
+                NinaButtonFace(title: "Passar", kind: .outline, fillsWidth: true),
+                width: 335,
+                dynamicTypeSize: size
+            ).height
+
+            XCTAssertEqual(
+                fittedSize(selectionBar(), width: 335, dynamicTypeSize: size).height,
+                face * 2 + 48 + 20,
+                accuracy: 0.5,
+                "\(size)"
+            )
+        }
+    }
+
+    func testAFittedSheetDrawsAnEdgeOnlyWhereItsFieldsRunUnderTheHeaderOrTheBar() {
+        XCTAssertEqual(SheetFit.slicedEdges(content: 300, visible: 300.5, scrolled: 0), SheetFit.SlicedEdges())
+        XCTAssertEqual(SheetFit.slicedEdges(content: 300.8, visible: 300, scrolled: 0), SheetFit.SlicedEdges())
         XCTAssertEqual(
-            fittedSize(selectionBar(), width: 362, dynamicTypeSize: .xxxLarge).height,
-            oneLine * 2 + 48 + 20,
-            accuracy: 0.5
+            SheetFit.slicedEdges(content: 300, visible: 300, scrolled: 12),
+            SheetFit.SlicedEdges(),
+            "a card at rest that only bounces never draws an edge"
         )
+        XCTAssertEqual(SheetFit.slicedEdges(content: 640, visible: 0, scrolled: 0), SheetFit.SlicedEdges())
+
+        XCTAssertEqual(
+            SheetFit.slicedEdges(content: 640, visible: 480, scrolled: 0),
+            SheetFit.SlicedEdges(top: false, bottom: true)
+        )
+        XCTAssertEqual(
+            SheetFit.slicedEdges(content: 640, visible: 480, scrolled: 80),
+            SheetFit.SlicedEdges(top: true, bottom: true)
+        )
+        XCTAssertEqual(
+            SheetFit.slicedEdges(content: 640, visible: 480, scrolled: 160),
+            SheetFit.SlicedEdges(top: true, bottom: false)
+        )
+        XCTAssertEqual(
+            SheetFit.slicedEdges(content: 640, visible: 480, scrolled: 190),
+            SheetFit.SlicedEdges(top: true, bottom: false)
+        )
+    }
+
+    func testAClampedCardAtRestMarksItsBarEvenWhenTheScrollViewNeverReportedWhereItSettled() {
+        let unreported = SheetFit.ScrollMarks()
+        let staleSizingPass = SheetFit.ScrollMarks(leftTop: false, reachedEnd: true)
+
+        for marks in [unreported, staleSizingPass] {
+            XCTAssertEqual(
+                SheetFit.slicedEdges(content: 292, visible: 201.7, marks: marks),
+                SheetFit.SlicedEdges(top: false, bottom: true)
+            )
+            XCTAssertEqual(SheetFit.slicedEdges(content: 201, visible: 201.7, marks: marks), SheetFit.SlicedEdges())
+            XCTAssertEqual(SheetFit.slicedEdges(content: 292, visible: 0, marks: marks), SheetFit.SlicedEdges())
+        }
+        XCTAssertEqual(
+            SheetFit.slicedEdges(content: 292, visible: 201.7, marks: SheetFit.ScrollMarks(leftTop: true, reachedEnd: false)),
+            SheetFit.SlicedEdges(top: true, bottom: true)
+        )
+        XCTAssertEqual(
+            SheetFit.slicedEdges(content: 292, visible: 201.7, marks: SheetFit.ScrollMarks(leftTop: true, reachedEnd: true)),
+            SheetFit.SlicedEdges(top: true, bottom: false)
+        )
+        XCTAssertEqual(
+            SheetFit.scrollMarks(content: 292, visible: 201.7, scrolled: 0),
+            SheetFit.ScrollMarks(leftTop: false, reachedEnd: false)
+        )
+        XCTAssertEqual(
+            SheetFit.scrollMarks(content: 292, visible: 201.7, scrolled: 90.3),
+            SheetFit.ScrollMarks(leftTop: true, reachedEnd: true)
+        )
+    }
+
+    func testAddingAShoppingItemKeepsAdicionarEContinuarAfterTheOwnerChipBesideOrAboveItsCommitAndNeverWrapsALabel() {
+        func commitRow(_ size: DynamicTypeSize, width: CGFloat) -> CGSize {
+            fittedSize(
+                EditorCommitRow(title: "Adicionar", isEnabled: false, action: {}) {
+                    EditorContinueButton(isEnabled: false) {}
+                },
+                width: width,
+                dynamicTypeSize: size
+            )
+        }
+
+        for size in [DynamicTypeSize.xSmall, .large, .xLarge, .xxLarge, .xxxLarge] {
+            XCTAssertEqual(
+                EditorSecondaryPlacement.continuePlacement(isAdding: true, isAccessibilitySize: size.isAccessibilitySize),
+                .bar,
+                "\(size)"
+            )
+
+            let quiet = fittedSize(EditorContinueButton(isEnabled: false) {}, width: 1_000, dynamicTypeSize: size).height
+            let commit = fittedSize(
+                NinaButtonFace(title: "Adicionar", systemName: "arrow.up"),
+                width: 1_000,
+                dynamicTypeSize: size
+            ).height
+            let oneRow = max(quiet, commit) + 12 + 8
+            let stacked = quiet + 4 + commit + 12 + 8
+
+            for width in [CGFloat(304), 359, 386, 424] {
+                let row = commitRow(size, width: width)
+
+                XCTAssertLessThanOrEqual(row.width, width + 0.5, "\(size) at \(width)")
+                XCTAssertTrue(
+                    abs(row.height - oneRow) < 0.5 || abs(row.height - stacked) < 0.5,
+                    "a label wrapped at \(size), \(width): \(row.height), one row \(oneRow), stacked \(stacked)"
+                )
+            }
+
+            if size == .large {
+                XCTAssertEqual(commitRow(size, width: 304).height, stacked, accuracy: 0.5, "a 320-point phone")
+            }
+        }
+
+        for (size, width) in [(DynamicTypeSize.large, CGFloat(359)), (.large, 386), (.xLarge, 386)] {
+            XCTAssertEqual(commitRow(size, width: width).height, 50 + 12 + 8, accuracy: 0.5, "\(size) at \(width)")
+        }
+
+        for size in [DynamicTypeSize.accessibility1, .accessibility3, .accessibility5] {
+            XCTAssertEqual(
+                EditorSecondaryPlacement.continuePlacement(isAdding: true, isAccessibilitySize: size.isAccessibilitySize),
+                .column,
+                "\(size)"
+            )
+        }
+        XCTAssertNil(EditorSecondaryPlacement.continuePlacement(isAdding: false, isAccessibilitySize: false))
+        XCTAssertNil(EditorSecondaryPlacement.continuePlacement(isAdding: false, isAccessibilitySize: true))
     }
 
     func testAnEditorOffersApagarOnlyWhenEditingBesideTheCommitAndAtTheEndOfTheFieldsAtAccessibilitySizes() {
@@ -165,9 +286,9 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertEqual(TaskEditorSheet.deletePlacement(mode: .edit(id), dynamicTypeSize: .large), .bar)
         XCTAssertEqual(TaskEditorSheet.deletePlacement(mode: .edit(id), dynamicTypeSize: .xxxLarge), .bar)
         XCTAssertEqual(TaskEditorSheet.deletePlacement(mode: .edit(id), dynamicTypeSize: .accessibility1), .column)
-        XCTAssertNil(EditorDeletePlacement.placement(isEditing: false, isAccessibilitySize: true))
-        XCTAssertEqual(EditorDeletePlacement.placement(isEditing: true, isAccessibilitySize: false), .bar)
-        XCTAssertEqual(EditorDeletePlacement.placement(isEditing: true, isAccessibilitySize: true), .column)
+        XCTAssertNil(EditorSecondaryPlacement.deletePlacement(isEditing: false, isAccessibilitySize: true))
+        XCTAssertEqual(EditorSecondaryPlacement.deletePlacement(isEditing: true, isAccessibilitySize: false), .bar)
+        XCTAssertEqual(EditorSecondaryPlacement.deletePlacement(isEditing: true, isAccessibilitySize: true), .column)
     }
 
     func testASwipeOrAStrayTapAboveTheCardNeverThrowsAwayWhatThePersonTypedInAnEditor() {

@@ -153,6 +153,34 @@ enum SheetFit {
         let kept = max(previous.height, height)
         return ContentReading(height: kept, width: width, widening: kept - height)
     }
+
+    struct SlicedEdges: Equatable {
+        var top = false
+        var bottom = false
+    }
+
+    struct ScrollMarks: Equatable {
+        var leftTop = false
+        var reachedEnd = false
+    }
+
+    static func scrollMarks(content: CGFloat, visible: CGFloat, scrolled: CGFloat) -> ScrollMarks {
+        ScrollMarks(leftTop: scrolled > 0.5, reachedEnd: scrolled + visible >= content - 0.5)
+    }
+
+    // A rule marks the header or the bar only where the fields actually run under it, so a card at rest stays clean.
+    static func slicedEdges(content: CGFloat, visible: CGFloat, marks: ScrollMarks) -> SlicedEdges {
+        guard visible > 0, content - visible > 1 else { return SlicedEdges() }
+        return SlicedEdges(top: marks.leftTop, bottom: !(marks.leftTop && marks.reachedEnd))
+    }
+
+    static func slicedEdges(content: CGFloat, visible: CGFloat, scrolled: CGFloat) -> SlicedEdges {
+        slicedEdges(
+            content: content,
+            visible: visible,
+            marks: scrollMarks(content: content, visible: visible, scrolled: scrolled)
+        )
+    }
 }
 
 // A sheet is as tall as what it holds, so no glaze opens between the fields and their commit.
@@ -172,6 +200,9 @@ struct FittedSheetLayout<Header: View, Content: View, Bar: View>: View {
     @State private var keyboardIsUp = false
     @State private var insetIsResting = true
     @State private var keyboardSurplus: CGFloat = 0
+    @State private var fieldsHeight: CGFloat = 0
+    @State private var viewport: CGFloat = 0
+    @State private var scrollMarks = SheetFit.ScrollMarks()
 
     private var barFloor: CGFloat {
         parts.bar > 0 ? SheetFit.barBottomPadding(bottomInset: bottomInset, keyboardIsUp: keyboardIsUp) : 0
@@ -183,11 +214,19 @@ struct FittedSheetLayout<Header: View, Content: View, Bar: View>: View {
         return fitted
     }
 
+    // Overflow comes from measured heights, because a presented sheet's scroll geometry callback can skip the layout it settles on.
+    private var slicedEdges: SheetFit.SlicedEdges {
+        SheetFit.slicedEdges(content: fieldsHeight, visible: viewport, marks: scrollMarks)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
                 .fixedSize(horizontal: false, vertical: true)
                 .reportsGeometry { size, _ in measure(\.header, size.height) }
+                .overlay(alignment: .bottom) {
+                    edgeRule(shown: slicedEdges.top && parts.header > 0)
+                }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -196,6 +235,21 @@ struct FittedSheetLayout<Header: View, Content: View, Bar: View>: View {
                         .reportsGeometry { size, _ in readContent(size) }
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .reportsGeometry { size, _ in
+                    if SheetFit.isChange(from: viewport, to: size.height) {
+                        viewport = size.height
+                    }
+                }
+                .onScrollGeometryChange(for: SheetFit.ScrollMarks.self) { geometry in
+                    let insets = geometry.contentInsets
+                    return SheetFit.scrollMarks(
+                        content: geometry.contentSize.height,
+                        visible: geometry.containerSize.height - insets.top - insets.bottom,
+                        scrolled: geometry.contentOffset.y + insets.top
+                    )
+                } action: { _, marks in
+                    scrollMarks = marks
+                }
                 .onChange(of: revealing) { _, target in
                     guard let target else { return }
                     Task {
@@ -210,6 +264,9 @@ struct FittedSheetLayout<Header: View, Content: View, Bar: View>: View {
             bar
                 .fixedSize(horizontal: false, vertical: true)
                 .reportsGeometry { size, _ in measure(\.bar, size.height) }
+                .overlay(alignment: .top) {
+                    edgeRule(shown: slicedEdges.bottom && parts.bar > 0)
+                }
                 .padding(.bottom, barFloor)
         }
         .reportsGeometry { size, insets in
@@ -262,6 +319,16 @@ struct FittedSheetLayout<Header: View, Content: View, Bar: View>: View {
         .presentationDetents([fits ? SheetFit.detent(fittedParts, keyboardSurplus: keyboardSurplus) : .large])
     }
 
+    private func edgeRule(shown: Bool) -> some View {
+        Rectangle()
+            .fill(NinaTheme.line)
+            .frame(height: 1)
+            .opacity(shown ? 1 : 0)
+            .animation(.easeOut(duration: 0.15), value: shown)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
     private func setKeyboardSurplus(_ surplus: CGFloat) {
         let applied = fits ? surplus : 0
         if SheetFit.isChange(from: keyboardSurplus, to: applied) {
@@ -270,6 +337,9 @@ struct FittedSheetLayout<Header: View, Content: View, Bar: View>: View {
     }
 
     private func readContent(_ size: CGSize) {
+        if SheetFit.isChange(from: fieldsHeight, to: size.height) {
+            fieldsHeight = size.height
+        }
         let reading = SheetFit.content(after: contentReading, height: size.height, width: size.width)
         if reading != contentReading {
             contentReading = reading
@@ -309,36 +379,70 @@ extension FittedSheetLayout where Bar == EmptyView {
     }
 }
 
-enum EditorDeletePlacement: Equatable {
+enum EditorSecondaryPlacement: Equatable {
     case bar
     case column
 
-    static func placement(isEditing: Bool, isAccessibilitySize: Bool) -> EditorDeletePlacement? {
+    static func deletePlacement(isEditing: Bool, isAccessibilitySize: Bool) -> EditorSecondaryPlacement? {
         guard isEditing else { return nil }
+        return isAccessibilitySize ? .column : .bar
+    }
+
+    // Below accessibility sizes "Adicionar e continuar" saves from the commit row, after the owner chip and never ahead of it.
+    static func continuePlacement(isAdding: Bool, isAccessibilitySize: Bool) -> EditorSecondaryPlacement? {
+        guard isAdding else { return nil }
         return isAccessibilitySize ? .column : .bar
     }
 }
 
-struct EditorCommitRow<Commit: View>: View {
-    var deletePlacement: EditorDeletePlacement?
-    var onDelete: () -> Void
-    @ViewBuilder var commit: Commit
+// The commit gives up its arrow, then takes a line under the control beside it, before either label would wrap.
+struct EditorCommitRow<Leading: View>: View {
+    var title: String
+    var isEnabled: Bool
+    var action: () -> Void
+    @ViewBuilder var leading: Leading
 
     var body: some View {
-        HStack(spacing: 12) {
-            if deletePlacement == .bar {
-                EditorDeleteButton(action: onDelete)
-            }
+        ViewThatFits(in: .horizontal) {
+            row(systemName: "arrow.up")
+            row(systemName: nil)
+            stacked
+        }
+    }
 
-            Spacer(minLength: 8)
+    private func row(systemName: String?) -> some View {
+        HStack(spacing: 0) {
+            leading
 
-            commit
-                .accessibilitySortPriority(1)
+            Spacer(minLength: 16)
+
+            commit(systemName: systemName)
         }
         .accessibilityElement(children: .contain)
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 8)
+    }
+
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            leading
+
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                commit(systemName: "arrow.up")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    private func commit(systemName: String?) -> some View {
+        NinaButton(title: title, systemName: systemName, isEnabled: isEnabled, action: action)
+            .accessibilitySortPriority(1)
     }
 }
 
@@ -350,6 +454,15 @@ struct EditorDeleteButton: View {
             Haptics.warning()
             action()
         }
+    }
+}
+
+struct EditorContinueButton: View {
+    var isEnabled: Bool
+    var action: () -> Void
+
+    var body: some View {
+        NinaButton(title: "Adicionar e continuar", kind: .quiet, isEnabled: isEnabled, action: action)
     }
 }
 
@@ -2676,15 +2789,15 @@ struct TaskEditorSheet: View {
     }
 
     // Planting a semente is not editing it, so Apagar never appears there.
-    static func deletePlacement(mode: TaskEditorMode, dynamicTypeSize: DynamicTypeSize) -> EditorDeletePlacement? {
+    static func deletePlacement(mode: TaskEditorMode, dynamicTypeSize: DynamicTypeSize) -> EditorSecondaryPlacement? {
         let isEditingTask: Bool = if case .edit = mode { true } else { false }
-        return EditorDeletePlacement.placement(
+        return EditorSecondaryPlacement.deletePlacement(
             isEditing: isEditingTask,
             isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
         )
     }
 
-    private var deletePlacement: EditorDeletePlacement? {
+    private var deletePlacement: EditorSecondaryPlacement? {
         Self.deletePlacement(mode: mode, dynamicTypeSize: dynamicTypeSize)
     }
 
@@ -2715,13 +2828,14 @@ struct TaskEditorSheet: View {
                     EditorDeleteButton {
                         isShowingDeleteConfirmation = true
                     }
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 12)
                 }
             }
             .padding(.horizontal, 20)
             .padding(.top, 2)
-            .padding(.bottom, 20)
+            .padding(.bottom, 12)
         } bar: {
             bottomBar
         }
@@ -2884,15 +2998,15 @@ struct TaskEditorSheet: View {
                     .padding(.top, 8)
             }
 
-            EditorCommitRow(deletePlacement: deletePlacement) {
-                isShowingDeleteConfirmation = true
-            } commit: {
-                NinaButton(
-                    title: primaryActionTitle,
-                    systemName: "arrow.up",
-                    isEnabled: !trimmedTitle.isEmpty && !isHealthBlocked
-                ) {
-                    save()
+            EditorCommitRow(
+                title: primaryActionTitle,
+                isEnabled: !trimmedTitle.isEmpty && !isHealthBlocked,
+                action: { save() }
+            ) {
+                if deletePlacement == .bar {
+                    EditorDeleteButton {
+                        isShowingDeleteConfirmation = true
+                    }
                 }
             }
         }
@@ -2991,7 +3105,8 @@ struct TaskEditorSheet: View {
                 .accessibilityValue(priority.title)
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 2)
+            .padding(.top, 10)
+            .padding(.bottom, 2)
         }
         .scrollClipDisabled()
         .chipRowTrailingFade()
@@ -3512,11 +3627,24 @@ struct ShoppingEditorSheet: View {
         option.memberID == ownerMemberID && option.name == owner
     }
 
-    private var deletePlacement: EditorDeletePlacement? {
-        EditorDeletePlacement.placement(
+    private var deletePlacement: EditorSecondaryPlacement? {
+        EditorSecondaryPlacement.deletePlacement(
             isEditing: isEditing,
             isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
         )
+    }
+
+    private var continuePlacement: EditorSecondaryPlacement? {
+        EditorSecondaryPlacement.continuePlacement(
+            isAdding: !isEditing,
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+        )
+    }
+
+    private var continueButton: some View {
+        EditorContinueButton(isEnabled: !trimmedTitle.isEmpty) {
+            save(keepingSheetOpen: true)
+        }
     }
 
     var body: some View {
@@ -3538,34 +3666,34 @@ struct ShoppingEditorSheet: View {
                     .tint(NinaTheme.cobalt)
                     .textFieldStyle(.plain)
 
-                if !isEditing {
-                    NinaButton(title: "Adicionar e continuar", kind: .quiet, isEnabled: !trimmedTitle.isEmpty) {
-                        save(keepingSheetOpen: true)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 8)
+                if !isEditing, addedCount > 0 {
+                    Text(
+                        addedCount == 1
+                            ? "1 item adicionado."
+                            : "\(addedCount) itens adicionados."
+                    )
+                    .ninaText(.caption, NinaTheme.muted)
+                }
 
-                    if addedCount > 0 {
-                        Text(
-                            addedCount == 1
-                                ? "1 item adicionado."
-                                : "\(addedCount) itens adicionados."
-                        )
-                        .ninaText(.caption, NinaTheme.muted)
-                    }
+                if continuePlacement == .column {
+                    continueButton
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
                 }
 
                 if deletePlacement == .column {
                     EditorDeleteButton {
                         isShowingDeleteConfirmation = true
                     }
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 12)
                 }
             }
             .padding(.horizontal, 20)
             .padding(.top, 2)
-            .padding(.bottom, 20)
+            .padding(.bottom, 12)
         } bar: {
             bottomBar
         }
@@ -3623,19 +3751,23 @@ struct ShoppingEditorSheet: View {
                     )
                 }
                 .padding(.horizontal, 20)
-                .padding(.vertical, 2)
+                .padding(.top, 10)
+                .padding(.bottom, 2)
             }
             .scrollClipDisabled()
 
-            EditorCommitRow(deletePlacement: deletePlacement) {
-                isShowingDeleteConfirmation = true
-            } commit: {
-                NinaButton(
-                    title: isEditing ? "Salvar" : "Adicionar",
-                    systemName: "arrow.up",
-                    isEnabled: !trimmedTitle.isEmpty
-                ) {
-                    save(keepingSheetOpen: false)
+            EditorCommitRow(
+                title: isEditing ? "Salvar" : "Adicionar",
+                isEnabled: !trimmedTitle.isEmpty,
+                action: { save(keepingSheetOpen: false) }
+            ) {
+                if deletePlacement == .bar {
+                    EditorDeleteButton {
+                        isShowingDeleteConfirmation = true
+                    }
+                }
+                if continuePlacement == .bar {
+                    continueButton
                 }
             }
         }
