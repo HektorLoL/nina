@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(34);
+select plan(35);
 
 insert into auth.users (
   id,
@@ -624,6 +624,18 @@ select is(
   ),
   'removed',
   'the minor left behind is told the house is gone instead of being dropped silently'
+);
+
+select is(
+  (
+    select house_deleted
+    from public.family_access_decisions
+    where subject_user_id = '71000000-0000-0000-0000-000000000005'
+    order by decided_at desc
+    limit 1
+  ),
+  true,
+  'the minor left behind reads the house as deleted, never as staying with tasks and lists'
 );
 
 select is(

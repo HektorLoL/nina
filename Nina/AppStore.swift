@@ -324,6 +324,9 @@ final class AppStore {
     @ObservationIgnored private var remoteMutationGeneration: UInt64 = 0
     @ObservationIgnored private var remoteMutationTask: Task<Void, Never>?
     @ObservationIgnored private var realtimeListenerTask: Task<Void, Never>?
+    @ObservationIgnored private var realtimeFamilyID: UUID?
+    @ObservationIgnored private var homeActivation: (user: AuthUser?, task: Task<Void, Never>)?
+    @ObservationIgnored private var refreshRequestedWhileSyncing = false
     @ObservationIgnored private var realtimeRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var notificationSyncTask: Task<Void, Never>?
     @ObservationIgnored private var minorSessionStartedAt: Date?
@@ -344,6 +347,10 @@ final class AppStore {
     @ObservationIgnored private var undoableRoll: (before: TaskItem, after: TaskItem)?
     var isSyncingHome = false
     var syncErrorMessage: String?
+    // The house this person just deleted, named once on the screen that follows.
+    private(set) var deletedHouseName: String?
+    // A deletion whose answer was lost reads as the deletion, never as a removal, wherever the house is next found gone.
+    @ObservationIgnored private var unconfirmedHouseDeletion: (familyID: UUID, name: String)?
 
     var hasActiveHome: Bool {
         homeAccessState == .authorized
@@ -651,7 +658,21 @@ final class AppStore {
             && member.permissionRole != .owner
     }
 
+    // Callers asking for the same account at once share one activation, so one realtime subscription starts.
     func activateHomeContext(for user: AuthUser?) async {
+        if let homeActivation, homeActivation.user?.id == user?.id {
+            await homeActivation.task.value
+            return
+        }
+        let activation = Task { await performHomeContextActivation(for: user) }
+        homeActivation = (user, activation)
+        await activation.value
+        if homeActivation?.task == activation {
+            homeActivation = nil
+        }
+    }
+
+    private func performHomeContextActivation(for user: AuthUser?) async {
         if user?.id != activeHomeUserID {
             childDayPresentation = nil
             minorSessionStartedAt = nil
@@ -662,6 +683,7 @@ final class AppStore {
             ninaSendFailure = nil
             chatRefusal = nil
             isRecordingFootnoteAcceptance = false
+            unconfirmedHouseDeletion = nil
             if let previousUserID = activeHomeUserID {
                 removeStoredTermsFootnote(for: previousUserID)
             }
@@ -675,6 +697,8 @@ final class AppStore {
         remoteMutationTask = nil
         remoteMutationGeneration = 0
         stopRealtimeSync()
+        refreshRequestedWhileSyncing = false
+        deletedHouseName = nil
         activeHomeUserID = user?.id
         activeUser = user
         let contextToken = currentHomeContextToken
@@ -724,6 +748,7 @@ final class AppStore {
             viewerAge = load.viewerAge
             switch load.outcome {
             case .member(let state):
+                unconfirmedHouseDeletion = nil
                 apply(state)
                 homeAccessState = .authorized
                 cacheActiveHomeLocally()
@@ -767,8 +792,12 @@ final class AppStore {
         guard let user,
               user.id == activeHomeUserID,
               !usesLocalDebugBackend(for: user),
-              let remoteHomeBackend,
-              !isSyncingHome else {
+              let remoteHomeBackend else {
+            return
+        }
+        // A change announced while another sync runs is read once that sync ends, never dropped.
+        guard !isSyncingHome else {
+            refreshRequestedWhileSyncing = true
             return
         }
 
@@ -860,6 +889,7 @@ final class AppStore {
 
         switch outcome {
         case .member(let state):
+            unconfirmedHouseDeletion = nil
             if homeAccessState == .minorMember {
                 minorHome = nil
             }
@@ -868,6 +898,10 @@ final class AppStore {
             apply(state)
             cacheActiveHomeLocally()
             cacheAppSnapshotLocally()
+            // A house regained after an unverifiable load, or entered from a request, listens again.
+            if realtimeListenerTask == nil || realtimeFamilyID != familyGroup.id {
+                startRealtimeSync()
+            }
         case .minor(let home):
             if hadAuthorizedHome {
                 releaseHousehold(discardingQueuedWrites: true)
@@ -881,11 +915,23 @@ final class AppStore {
             homeAccessState = .pendingApproval
             syncErrorMessage = lostMembershipNotice
         case .notAMember(let decision):
+            let releasedFamilyID = familyGroup.id
             releaseHousehold(discardingQueuedWrites: true)
             clearCachedHome(for: userID)
             familyAccessDecision = decision
             homeAccessState = decision == nil ? .noHome : .accessDecision
-            syncErrorMessage = lostMembershipNotice
+            if decision == nil,
+               !hasUnmergedLocalEdits,
+               let deletion = unconfirmedHouseDeletion,
+               deletion.familyID == releasedFamilyID {
+                unconfirmedHouseDeletion = nil
+                notificationScheduler.removeDeliveredNotifications()
+                deletedHouseName = deletion.name
+                syncErrorMessage = nil
+            } else {
+                // The decision screen already says the person is out; only discarded edits add a line to it.
+                syncErrorMessage = (decision == nil || hasUnmergedLocalEdits) ? lostMembershipNotice : nil
+            }
         case .unverifiable:
             // The state must change first: releasing the household re-syncs the
             // reminders, and an unverifiable membership must not cancel them.
@@ -1409,6 +1455,19 @@ final class AppStore {
         familyGroup.members.contains { canOfferHouse(to: $0) }
     }
 
+    // Deleting erases every member's shared data, so only the titular, an adult today, may do it.
+    var canDeleteFamily: Bool {
+        ownerMustHandOverBeforeLeaving && isAdultViewer
+    }
+
+    // Typed like a person's name: case and accents never decide, but every letter must be there.
+    static func confirmsHouseName(_ typed: String, houseName: String) -> Bool {
+        let typed = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = houseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty
+            && typed.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }
+
     // Only the owner offers the house, and only to another adult with an account in it.
     func canOfferHouse(to member: HouseholdMember) -> Bool {
         ownerMustHandOverBeforeLeaving
@@ -1545,6 +1604,66 @@ final class AppStore {
         notificationScheduler.removeDeliveredNotifications()
         await activateHomeContext(for: activeUser)
         return true
+    }
+
+    // The server checks the name the phone shows, so a house renamed meanwhile is never deleted.
+    @discardableResult
+    func deleteFamily(confirmingName typed: String) async -> Bool {
+        let houseName = familyGroup.name
+        guard canDeleteFamily,
+              Self.confirmsHouseName(typed, houseName: houseName),
+              let remoteHomeBackend else { return false }
+        let contextToken = currentHomeContextToken
+        let familyID = familyGroup.id
+        syncErrorMessage = nil
+
+        await waitForPendingRemoteMutations()
+        guard isCurrentHomeContext(contextToken) else { return false }
+        isSyncingHome = true
+
+        do {
+            try await remoteHomeBackend.deleteFamily(familyID: familyID, confirmedName: houseName)
+        } catch {
+            finishSyncingHome(ifCurrent: contextToken)
+            guard isCurrentHomeContext(contextToken) else { return false }
+            let code = RemoteRPCErrorCode.from(error)
+            // A deletion whose answer was lost reads as not found on the retry: the house is gone either way.
+            if code == .familyNotFound {
+                await leaveDeletedHouse(named: houseName)
+                return true
+            }
+            if code == .familyDeleteNameMismatch || code == .familyDeleteDenied {
+                await refreshHomeFromRemote(for: activeUser)
+                guard isCurrentHomeContext(contextToken) else { return false }
+            }
+            // Only an answer that arrived may say the house was not deleted.
+            if code == nil, RemoteWriteAnswer.mayHaveBeenLost(error) {
+                unconfirmedHouseDeletion = (familyID, houseName)
+                syncErrorMessage = "A resposta não chegou. Tente de novo."
+            } else {
+                syncErrorMessage = code?.userMessage() ?? "Não deu para apagar a casa agora. Tente de novo."
+            }
+            Haptics.error()
+            return false
+        }
+
+        finishSyncingHome(ifCurrent: contextToken)
+        guard isCurrentHomeContext(contextToken) else { return false }
+        await leaveDeletedHouse(named: houseName)
+        return true
+    }
+
+    private func leaveDeletedHouse(named houseName: String) async {
+        unconfirmedHouseDeletion = nil
+        if let activeHomeUserID {
+            clearCachedHome(for: activeHomeUserID)
+        }
+        notificationScheduler.removeDeliveredNotifications()
+        await activateHomeContext(for: activeUser)
+        // The server records no decision for the titular who deletes, so landing on one means a removal from a house that still stands.
+        if homeAccessState == .noHome {
+            deletedHouseName = houseName
+        }
     }
 
     @discardableResult
@@ -3499,8 +3618,10 @@ final class AppStore {
 
         let familyID = familyGroup.id
         let userID = activeUser.id
+        realtimeFamilyID = familyID
 
         realtimeListenerTask = Task { [weak self] in
+            var isRejoining = false
             while !Task.isCancelled {
                 guard let self,
                       self.activeHomeUserID == userID,
@@ -3509,16 +3630,19 @@ final class AppStore {
                 }
 
                 let events = await remoteHomeBackend.realtimeEvents(familyID: familyID)
-                for await _ in events {
+                for await event in events {
                     guard !Task.isCancelled else { return }
                     guard self.activeHomeUserID == userID,
                           self.familyGroup.id == familyID else {
                         return
                     }
+                    // A rejoin reads the house once, so nothing changed while the last channel was down is lost.
+                    if event == .subscribed, !isRejoining { continue }
                     self.scheduleRealtimeRefresh(for: activeUser)
                 }
 
                 guard !Task.isCancelled else { return }
+                isRejoining = true
                 try? await Task.sleep(for: .seconds(2))
             }
         }
@@ -3538,6 +3662,7 @@ final class AppStore {
     private func stopRealtimeSync() {
         realtimeListenerTask?.cancel()
         realtimeListenerTask = nil
+        realtimeFamilyID = nil
         realtimeRefreshTask?.cancel()
         realtimeRefreshTask = nil
     }
@@ -3570,6 +3695,15 @@ final class AppStore {
     private func finishSyncingHome(ifCurrent token: HomeContextToken) {
         guard isCurrentHomeContext(token) else { return }
         isSyncingHome = false
+        guard refreshRequestedWhileSyncing else { return }
+        refreshRequestedWhileSyncing = false
+        guard let activeUser, !usesLocalDebugBackend(for: activeUser) else { return }
+        scheduleRealtimeRefresh(for: activeUser)
+    }
+
+    // Pull to refresh reads the house through the same verified path a foreground return takes.
+    func refreshHome() async {
+        await refreshHomeFromRemote(for: activeUser)
     }
 
     private func usesLocalDebugBackend(for user: AuthUser?) -> Bool {
@@ -3760,6 +3894,7 @@ final class AppStore {
         houseOwnershipOffer = state.ownershipOffer
         pendingJoinRequest = nil
         familyAccessDecision = nil
+        deletedHouseName = nil
 
         if let snapshot = state.snapshot {
             apply(snapshot)

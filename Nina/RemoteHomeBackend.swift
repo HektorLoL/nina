@@ -94,6 +94,9 @@ enum RemoteRPCErrorCode: String, CaseIterable {
     case familyMemberLimitReached = "family_member_limit_reached"
     case familyOwnerTransferDenied = "family_owner_transfer_denied"
     case familyOwnershipOfferNotFound = "family_ownership_offer_not_found"
+    case familyDeleteDenied = "family_delete_denied"
+    case familyDeleteNameMismatch = "family_delete_name_mismatch"
+    case familyNotFound = "family_not_found"
 
     // The message is the code itself; a longer message never contains another code by accident because matching is exact.
     init?(message: String?) {
@@ -150,6 +153,12 @@ enum RemoteRPCErrorCode: String, CaseIterable {
             return "Não deu para passar a casa para \(person)."
         case .familyOwnershipOfferNotFound:
             return "Esse pedido já não vale."
+        case .familyDeleteDenied:
+            return "Só quem é titular apaga a casa."
+        case .familyDeleteNameMismatch:
+            return "O nome da casa mudou. Confira e escreva de novo."
+        case .familyNotFound:
+            return "Você não faz mais parte desta casa."
         case .minorBirthDateNotAllowed, .invalidNicknames, .invalidSupervisionSettings,
              .invalidAcknowledgement, .invalidUsage, .invalidNextDueAt, .invalidReportReason,
              .notAMinorMember, .minorAccountRequired, .taskVersionConflict, .taskNotFound,
@@ -161,6 +170,19 @@ enum RemoteRPCErrorCode: String, CaseIterable {
 
 struct RemoteRPCError: Error, Equatable {
     var code: RemoteRPCErrorCode
+}
+
+enum RemoteWriteAnswer {
+    // A dropped connection or a gateway 5xx may arrive after the write committed; only the database's own answer proves it did not.
+    static func mayHaveBeenLost(_ error: Error) -> Bool {
+        if error is URLError { return true }
+        #if canImport(Supabase)
+        if let httpError = error as? HTTPError {
+            return httpError.response.statusCode >= 500
+        }
+        #endif
+        return false
+    }
 }
 
 struct FamilyInvitePreview: Hashable {
@@ -177,6 +199,8 @@ enum FamilyJoinOutcome {
 }
 
 enum HomeRealtimeEvent: Sendable {
+    // The channel joined; a change committed before this instant never reaches the stream.
+    case subscribed
     case family
     case familyMembers
     case taskSections
@@ -270,6 +294,7 @@ protocol RemoteHomeBackend {
     func declineJoinRequest(_ requestID: UUID) async throws -> RemoteHomeState
     func cancelJoinRequest(_ requestID: UUID) async throws
     func leaveFamily(familyID: UUID) async throws
+    func deleteFamily(familyID: UUID, confirmedName: String) async throws
     func offerFamilyOwnership(to memberID: UUID) async throws -> RemoteHomeState
     func cancelFamilyOwnershipOffer(familyID: UUID) async throws -> RemoteHomeState
     func acceptFamilyOwnershipOffer(familyID: UUID) async throws -> RemoteHomeState
@@ -397,6 +422,10 @@ extension RemoteHomeBackend {
     }
 
     func leaveFamily(familyID: UUID) async throws {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func deleteFamily(familyID: UUID, confirmedName: String) async throws {
         throw RemoteHomeBackendError.operationUnavailable
     }
 
@@ -1110,6 +1139,20 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         }
     }
 
+    func deleteFamily(familyID: UUID, confirmedName: String) async throws {
+        try await perform(operation: "delete_family") {
+            _ = try await client
+                .rpc(
+                    "delete_family",
+                    params: DeleteFamilyParams(
+                        targetFamilyID: familyID,
+                        confirmedFamilyName: confirmedName
+                    )
+                )
+                .execute()
+        }
+    }
+
     func offerFamilyOwnership(to memberID: UUID) async throws -> RemoteHomeState {
         let context: HomeContextRow = try await perform(operation: "offer_family_ownership") {
             try await client
@@ -1409,8 +1452,15 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
         return state
     }
 
+    // A topic of its own per subscription: the client hands back any channel still registered
+    // under a topic, even one being torn down, and binds nothing to a channel already joining.
+    static func realtimeTopic(familyID: UUID, subscription: UUID = UUID()) -> String {
+        "home-\(familyID.uuidString)-\(subscription.uuidString)"
+    }
+
     func realtimeEvents(familyID: UUID) async -> AsyncStream<HomeRealtimeEvent> {
-        let channel = client.channel("home-\(familyID.uuidString)")
+        let channel = client.channel(Self.realtimeTopic(familyID: familyID))
+        let realtime = client.realtimeV2
         let filter = RealtimePostgresFilter.eq("family_id", value: familyID)
         // Clients hold no read on family_join_requests, so a request can only surface as a family bump.
         let familyChanges = channel.postgresChange(
@@ -1465,6 +1515,7 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                     await client.removeChannel(channel)
                     return
                 }
+                continuation.yield(.subscribed)
 
                 await withTaskGroup(of: Void.self) { group in
                     group.addTask {
@@ -1497,7 +1548,11 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                             continuation.yield(.chatMessages)
                         }
                     }
-                    await group.waitForAll()
+                    group.addTask {
+                        await Self.waitUntilSubscriptionLapses(channel: channel, realtime: realtime)
+                    }
+                    await group.next()
+                    group.cancelAll()
                 }
 
                 continuation.finish()
@@ -1507,6 +1562,28 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
             continuation.onTermination = { _ in
                 observationTask.cancel()
             }
+        }
+    }
+
+    // A channel the server closed, or one whose socket dropped, never delivers again; the client
+    // does not rejoin a channel it still counts as joined. Ending the stream lets the store subscribe anew.
+    private static func waitUntilSubscriptionLapses(
+        channel: RealtimeChannelV2,
+        realtime: RealtimeClientV2
+    ) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for await status in channel.statusChange where status != .subscribed {
+                    return
+                }
+            }
+            group.addTask {
+                for await status in realtime.statusChange where status != .connected {
+                    return
+                }
+            }
+            await group.next()
+            group.cancelAll()
         }
     }
 
@@ -1945,6 +2022,16 @@ private struct FamilyIDParams: Encodable {
 
     private enum CodingKeys: String, CodingKey {
         case targetFamilyID = "target_family_id"
+    }
+}
+
+private struct DeleteFamilyParams: Encodable {
+    var targetFamilyID: UUID
+    var confirmedFamilyName: String
+
+    private enum CodingKeys: String, CodingKey {
+        case targetFamilyID = "target_family_id"
+        case confirmedFamilyName = "confirmed_family_name"
     }
 }
 

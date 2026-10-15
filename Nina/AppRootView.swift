@@ -189,6 +189,12 @@ struct AppRootView: View {
     @State private var didFinishInitialLoad = false
     @State private var shouldRefreshWhenActive = false
     @State private var homeSetupStartsCreating = false
+    @State private var homeLoad: HomeLoad?
+
+    private struct HomeLoad {
+        let userID: String?
+        let task: Task<Void, Never>
+    }
 
     var body: some View {
         ZStack {
@@ -362,10 +368,19 @@ struct AppRootView: View {
         )
     }
 
+    // A launch both restores the session and sees the account change; one load serves both callers.
     private func loadHomeAndAge() async {
         let user = authSession.currentUser
-        await store.activateHomeContext(for: user)
-        await evaluateAge(for: user)
+        if let homeLoad, homeLoad.userID == user?.id {
+            await homeLoad.task.value
+            return
+        }
+        let load = Task {
+            await store.activateHomeContext(for: user)
+            await evaluateAge(for: user)
+        }
+        homeLoad = HomeLoad(userID: user?.id, task: load)
+        await load.value
     }
 
     private func evaluateAge(for user: AuthUser?) async {

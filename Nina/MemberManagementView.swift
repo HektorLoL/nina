@@ -924,7 +924,7 @@ struct HouseOwnershipOfferCard: View {
                 .ninaText(.title)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Como titular, você cuida de convites, permissões e ajustes. Para sair depois, passe a casa para outra pessoa.")
+            Text("Como titular, você cuida de convites, permissões e ajustes. Para sair depois, passe a casa ou apague a casa.")
                 .ninaText(.caption, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -1145,21 +1145,32 @@ struct FamilyAccessDecisionView: View {
         .accountDeletionSheet(isPresented: $isShowingDeletion)
     }
 
-    private var outcome: FamilyAccessOutcome {
-        store.familyAccessDecision?.outcome ?? .declined
-    }
-
     private var title: String {
-        switch outcome {
-        case .declined: "Seu pedido não foi aprovado."
-        case .removed: "Você não está mais nessa casa."
-        }
+        FamilyAccessDecisionView.title(for: store.familyAccessDecision)
     }
 
     private var message: String {
-        switch outcome {
-        case .declined: "A Nina não recebe o motivo."
-        case .removed: "As tarefas e as listas ficam com a casa."
+        FamilyAccessDecisionView.message(for: store.familyAccessDecision)
+    }
+
+    // A deleted house keeps nothing, so it is never described as keeping the tasks and lists.
+    static func title(for decision: FamilyAccessDecision?) -> String {
+        if decision?.houseDeleted == true { return "Essa casa foi apagada." }
+        switch decision?.outcome ?? .declined {
+        case .declined: return "Seu pedido não foi aprovado."
+        case .removed: return "Você não está mais nessa casa."
+        }
+    }
+
+    static func message(for decision: FamilyAccessDecision?) -> String {
+        if decision?.houseDeleted == true {
+            return decision?.outcome == .removed
+                ? "Tudo o que estava nela foi junto, memórias privadas também."
+                : "Seu pedido de entrada não vale mais."
+        }
+        switch decision?.outcome ?? .declined {
+        case .declined: return "A Nina não recebe o motivo."
+        case .removed: return "As tarefas e as listas ficam com a casa."
         }
     }
 

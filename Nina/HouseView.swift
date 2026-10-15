@@ -55,6 +55,9 @@ struct HouseView: View {
             .padding(.top, 4)
             .padding(.bottom, 104)
         }
+        .refreshable {
+            await store.refreshHome()
+        }
         .ninaScreenBackground()
         .ninaStatusBarMask()
     }

@@ -1,6 +1,6 @@
 # LGPD Launch Posture - Nina
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 This is an engineering/privacy operations checklist for launch readiness. It is
 not a substitute for Brazilian legal review, but it documents the product
@@ -197,6 +197,20 @@ obligation, so acceptances recorded at `2026-09-29` stay valid and nobody sees
 and `current_policy_version` also stay `2026-09-29`: the consent card's text
 did not change, and the policy changed only in who may give the consent, not
 in what happens to the data, so no consent is withdrawn.
+
+**The Terms of 15 October.** Terms §5 changed on 2026-10-15: the titular
+leaves by passing the house or deleting it, only the titular deletes it and
+only after typing its name, deleting erases what the house holds for every
+participant (private memories included) except the records the privacy policy
+keeps, and it cancels no Apple subscription. That adds a power over other
+people's data, so this time the version moves: Heitor decided on 2026-10-15
+that the recorded Terms version follows the date the Terms page shows. The
+page reads "15 de outubro de 2026", and once it is live and migration
+`202610150001` is applied, the operator sets `current_terms_version` to
+`2026-10-15` (`docs/production-launch-runbook.md` §3, "Deleting a house");
+every adult accepts again on "Os Termos mudaram." and every minor
+acknowledges again. `current_policy_version` and the minors' consent version
+stay `2026-09-29`.
 
 Revert with `'{confirmed,operator}'`; the CHECK on `private.age_policy` never
 lets the row drop those two. A revert makes the pages above untrue again, so

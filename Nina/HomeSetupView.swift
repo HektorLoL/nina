@@ -214,6 +214,9 @@ struct HomeSetupView: View {
 
                         if let displayedError {
                             errorLine(displayedError)
+                        } else if store.deletedHouseName != nil {
+                            NinaSuccessNote(text: "Casa apagada.")
+                                .padding(.top, 4)
                         }
                     }
                 }

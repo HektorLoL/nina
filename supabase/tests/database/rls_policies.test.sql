@@ -360,6 +360,7 @@ select set_eq(
     'declare_minor_guardianship(uuid, text, text, text, boolean, text[])',
     'decline_family_join_request(uuid)',
     'delete_current_nina_chat_history(uuid)',
+    'delete_family(uuid, text)',
     'delete_nina_memory(uuid)',
     'delete_task_section(uuid, text)',
     'end_minor_guardianship(uuid)',

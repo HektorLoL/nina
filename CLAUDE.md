@@ -111,7 +111,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 26.4+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (54 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (55 files) |
 | Server logic | 6 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -168,10 +168,65 @@ product regression, not a refactor.
   Nobody removes themselves, the owner, or the assistant row; an adult who is
   not the owner leaves through `leave_family` instead (since 2026-10-05),
   which runs a removal's guardian cleanup and records no access decision, and
-  the owner cannot leave until someone accepts the house. The owner's
+  the owner leaves only by handing the house over or by deleting it. The owner's
   title is "Titular" (since 2026-10-05; "Responsável" also named a child's
   guardian), and `create_family` no longer writes the masculine `'Criador'` as
   the creator's relationship.
+- **Only the titular deletes a house, and every house is deleted one way**
+  (since 2026-10-15, migration `202610150001`, written and not yet applied).
+  `delete_family(target_family_id, confirmed_family_name)` takes the family
+  advisory lock first and refuses anyone but a member whose row says `owner`
+  *and* for whom `can_manage_family` holds (`family_delete_denied`, 42501), so
+  an admin never deletes over the titular and a titular who became a minor
+  keeps the role but not the power. The name must still be the house's
+  (`lower(btrim(…))`, `family_delete_name_mismatch`, 22023): the phone folds
+  case and accents against the name the person typed and then sends the name
+  it shows, so a house renamed meanwhile is never deleted. It and
+  `prepare_account_deletion`'s no-successor branches both go through
+  `private.delete_household`, which copies every account the house held or
+  that wrote in it (a removal or a departure leaves the person's chat and
+  memories in the house) into the child-safety preservation table when a hold
+  is in its period (a later
+  copy merges into it), books
+  every open run's reservation as spent (`private.settle_household_ai_runs`;
+  a run the cascade took used to strand its reservation and shrink the month's
+  cap for good), writes a `'removed'` decision with `house_deleted = true` for
+  every other claimed member and a `'declined'` one for every pending
+  requester (which is also what starts a minor account's thirty days from the
+  deletion rather than from the account's creation), clears every
+  `profiles.active_family_id` (a Premium bound to the house then covers none
+  and keeps billing), withdraws the house's AI consents with `'house_deleted'`
+  (their `family_id` goes null, the rows stay), and deletes `families`; the
+  cascade takes the rest, every adult's private memories included, and
+  the `BEFORE DELETE` trigger on `family_members` closes a minor's links and
+  consents, kept as proof. `get_family_access_decision` returns
+  `house_deleted`; a build up to 14 ignores it and reads a plain removal,
+  never a refused request. Other phones learn it on their next verified load
+  (a return to the app, a pull, a failed write): a realtime delete carries no
+  filterable row. The decision screen says it alone: a refresh that lands on a
+  decision adds no red "Você não faz mais parte desta casa." unless edits were
+  discarded. The app offers "Apagar a casa" to the titular alone, in Ajustes
+  › Casa and from the titular's "Sair da casa", behind the house's name typed,
+  an ink button and a confirm alert, with the "Sua assinatura continua." card
+  for a subscriber. A deletion whose answer was lost reads `family_not_found`
+  on the retry, which the phone takes as done ("Casa apagada."), and any other
+  next read of the house (a pull, a return to the app, the realtime rejoin)
+  that finds it gone with no decision lands there too, never on the red
+  removal line
+  (`AppStoreAuthorizationTests.testADeletionWhoseAnswerWasLostReadsAsDeletedWhenAPullFindsTheHouseGone`);
+  the lost attempt itself reads "A resposta não chegou. Tente de novo."
+  (`RemoteWriteAnswer.mayHaveBeenLost`: a `URLError` or a gateway 5xx), and
+  "Não deu para apagar a casa agora." only follows an answer that arrived or a
+  request never sent. The phone says "Casa apagada." only when that reload
+  lands on no house and no decision: the server records none for the titular
+  who deletes, so a titular removed meanwhile (after handing the house over)
+  lands on the removal and never reads that a house which still stands was
+  deleted (`AppStoreAuthorizationTests.testATitularRemovedWithoutKnowingItIsNeverToldTheirHouseWasDeleted`).
+  A reply another adult reported and is still held for
+  review survives the deletion as a copy on its report (§4 AI, the child-safety
+  hold). On every other path `family_not_found` reads "Você não faz mais parte
+  desta casa.", because the server raises it for a removal as well as a
+  deletion.
 - **A claimed member's `household_role` is derived from age, never chosen by a
   client** (since 2026-09-29; it used to be forced to `'adult'`). The trigger
   `family_members_enforce_age` sets it from `private.effective_age`: adult →
@@ -585,6 +640,10 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
 - **AI consent is a server-side record, not a device flag.** `nina_ai_consents`
   holds one live grant per adult per home and keeps withdrawn rows — LGPD expects
   demonstrable consent, and a reinstall must not read as "never accepted".
+  Deleting a house withdraws its grants (`revoke_reason 'house_deleted'`) and
+  its foreign key sets `family_id` null instead of cascading (migration
+  `202610150001`), so a titular's deletion never erases another adult's grant
+  or transfer consent.
   `begin_nina_chat_run` and `get_nina_weekly_candidates` both require a live
   grant, so revoking on one phone actually stops the other adult's chat and stops
   the Sunday insight from shipping member display names to OpenAI. On the phone
@@ -642,11 +701,23 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   its preservation period (open, or receipt confirmed less than 6 months ago,
   UNVERIFIED pending the MJSP act) is first copied into the sealed
   `private.child_safety_preserved_accounts` (Apple `sub`, email, sign-in dates,
-  memberships, chat and memories); the deletion then completes, and the block
+  memberships, chat and memories); a house deletion takes the same copy first
+  for every account the house held or that wrote in it, and every later copy
+  of that account is merged into the first, never dropped (`202610150001`);
+  the deletion then completes, and the block
   follows a new account signed in with the same Apple ID while the hold stands.
   Retention drops a preserved account once its hold leaves the period, a false
   positive at once. The rest is `docs/child-safety-runbook.md`. A reported reply is kept past normal retention
-  through `held_for_review_until`, at most 90 days.
+  through `held_for_review_until`, at most 90 days. When the house is deleted
+  inside that window, `delete_household` first copies the reply and the
+  message that asked for it into the report (`nina_reply_reports.reply_text`
+  and `request_text`, migration `202610150001`), because the cascade takes
+  both messages and the run, and `run_nina_retention` clears the copies 90 days
+  after the report; only the reporter still erases a held reply early, and
+  once the house is gone that means deleting their account
+  (`prepare_account_deletion` clears the copies on the person's own reports).
+  The person whose action deletes the house gets no copy of their own
+  reports, since the deletion takes their conversation as clearing it would.
 - **Every `/v1/responses` call carries `safety_identifier`**, hex SHA-256 of
   `NINA_SAFETY_ID_SALT` ‖ user id. It is never logged, and a missing or short
   salt refuses the turn with `503 service_not_configured`.
@@ -898,7 +969,25 @@ after every `await`.** Four mechanisms, all of which you must preserve:
 3. **Local revision guard.** `refreshHomeFromRemote` snapshots `localStateRevision`
    and refuses to apply remote state if the user edited mid-flight.
 4. **Debounced realtime.** `AsyncStream<HomeRealtimeEvent>`, 2s reconnect,
-   180ms debounce, awaits pending mutations before refreshing.
+   180ms debounce, awaits pending mutations before refreshing. Each
+   subscription joins a topic of its own (`realtimeTopic`, family id plus a
+   UUID): supabase-swift hands back any channel still registered under a topic,
+   even one being torn down, and binds nothing to a channel already joining,
+   so the second activation of every cold launch used to get a dead channel
+   and Casa saw a join request only after a relaunch (fixed 2026-10-15). The
+   stream also ends when its channel leaves `.subscribed` or the socket leaves
+   `.connected`, because the client never rejoins a channel it still counts as
+   joined, and the 2s loop subscribes again. Two activations for one account at
+   once share one (`homeActivation`), a refresh asked for while another sync
+   runs is read when that sync ends (`refreshRequestedWhileSyncing`), and
+   Casa, Hoje and Tarefas pull to refresh through `refreshHome()`. Every join
+   yields `.subscribed`; the store ignores the first one (the activation just
+   read the house) and reads the house once on every rejoin, so a change made
+   while the last channel was down is never lost. A refresh that lands on a
+   house starts the listener again when none is running for it
+   (`realtimeFamilyID`): an unverifiable load stops it, and before that rule a
+   later good load (a return to the app, a pull) left the session with no
+   realtime at all, and a pending adult let in on a refresh never got any.
 
 Copy the standard method skeleton verbatim for anything new: capture token →
 clear `syncErrorMessage` → branch on backend availability → `isSyncingHome = true`
@@ -984,7 +1073,8 @@ step reads adult. The footnote is kept in `ProtectedLocalDataStore`
 (`PrivateLocalDataScope.termsFootnote`) until the server records it, so a kill
 or relaunch between Apple's sheet and the age answer keeps it; one read back
 after a relaunch counts only for Terms whose `current_terms_version` (a
-`yyyy-MM-dd` date; keep it one) is on or before the São Paulo day it was shown,
+`yyyy-MM-dd` date; keep it one, and since 2026-10-15 the date the Terms page
+shows) is on or before the São Paulo day it was shown,
 and it is dropped when the account changes or signs out. A restored session of
 an adult who has not accepted the current version lands on "Os Termos mudaram."
 (`AgeMajorityView`, reason `.termsChanged`) until they tap Aceitar; a footnote
@@ -1216,7 +1306,7 @@ is longer than a word budget, the legal text wins.
 
 ## 6. Database
 
-54 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+55 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order. The eight
 `202609290001`–`…0008` files (age assurance, minors and guardianship, adult-only
 RLS, join and house rules, the minor home view, the AI gates, the insight and
@@ -2337,6 +2427,67 @@ the project, not bugs to fix unprompted.
   `service_role` executes it. It went through the Supabase MCP
   `apply_migration`, and its `schema_migrations` row was set to
   `202610140001` (§12). It needs no new build.
+- **Migration `202610150001` (deleting a house) is written, not yet
+  applied.** Heitor asked on 2026-10-15, after build 14, that a titular alone
+  (or any titular) could delete the house instead of being told to pass it
+  first. It adds `family_access_decisions.house_deleted`, the private
+  `delete_household` and `settle_household_ai_runs`, and the client RPC
+  `delete_family(uuid, text)` (the authenticated grant map in
+  `rls_policies.test.sql` becomes 52 names), and redefines
+  `get_family_access_decision()` (adds `house_deleted`),
+  `prepare_account_deletion(uuid)` (its two house deletions now call
+  `delete_household`, and it clears the report copies on the person's own
+  reports; otherwise the `202609290004` body) and
+  `private.preserve_child_safety_account(uuid)` (a second copy merges into the
+  first instead of `on conflict do nothing`; otherwise the `202609290008`
+  body). On `nina_ai_consents` it drops `family_id`'s not-null, makes
+  `nina_ai_consents_family_id_fkey` `on delete set null` (it was `cascade`)
+  and adds `'house_deleted'` to `nina_ai_consents_revoke_reason_check`.
+  Read-only checks on 2026-10-15: production's `md5(prosrc)` was
+  `9dff4d97109e91ac13123982f9c59398` for `get_family_access_decision()` (the
+  `202608090007` body), `d61cf299c129e8a081c513112494cab1` for
+  `prepare_account_deletion(uuid)` (the `202609290004` body),
+  `5db1706b597dfd828b725c658df2dc55` for
+  `private.preserve_child_safety_account(uuid)` (the `202609290008` body) and
+  `4f0def6c5524d14f3eeb10d8ef087431` for `run_nina_retention()` (the
+  `202609290008` body); the consent foreign key read `ON DELETE CASCADE`,
+  `family_id` was not null, the reason check listed four reasons, the column
+  did not exist, `private.nina_reply_reports` had no `reply_text` or
+  `request_text`, and the newest version row was `202610140001`. The
+  migration also adds those two columns, which `delete_household` fills for a
+  reply still held for review, and redefines `run_nina_retention()` (the
+  `202609290008` body plus one statement clearing them 90 days after the
+  report). After the apply the bodies must read
+  `68a94e31814cf956b285f793cecd4b2d`, `9a956015a0ae0fd7dafc4f63db6c9348`,
+  `012635590a2240b8ad04e3e592c69ac8` (`preserve_child_safety_account`),
+  `9723c67ffb8e8fa013d2e0f0ade44280` (`delete_family`),
+  `f7b1d6693303b3e3a3bde61070efdf50` (`delete_household`),
+  `b40485125ad32a93f118120bab887d2b` (`settle_household_ai_runs`) and
+  `45b9504c349019282403b680102cb5e4` (`run_nina_retention`), the
+  foreign key must read `ON DELETE SET NULL`, and its version row must be set
+  to `202610150001` (§12). Build 14 ignores the new
+  key and never calls the RPC, so the migration may go first; "Apagar a casa"
+  reaches people with the next build. Terms §5 is rewritten in the working
+  tree (the titular leaves by passing or deleting the house, behind the
+  house's name typed; deleting erases what the house holds for everyone,
+  private memories included; it cancels no Apple subscription), and the page
+  reads "Atualizados em 15 de outubro de 2026". Heitor decided on 2026-10-15
+  that the recorded Terms version follows the page date, so once the
+  migration is applied and that page is live, an operator statement moves
+  `private.age_policy.current_terms_version` to `'2026-10-15'`
+  (`docs/production-launch-runbook.md` §3, "Deleting a house"); not run yet.
+  Every adult then meets "Os Termos mudaram." once and taps Aceitar, every
+  minor acknowledges the Terms again, and a welcome footnote shown before
+  that day no longer counts after a relaunch. No migration carries it, as
+  with `trusted_assurances`, so the local stack keeps `'2026-09-29'`.
+  `/familias/`, `/suporte/` and the in-app FAQ said nothing about how a
+  titular leaves, so they keep their 14 October text.
+- **Join requests reach Casa live from the next build (2026-10-15).** No
+  migration: the `families` bump already reached production's realtime; the
+  app had subscribed twice per cold launch and kept a dead channel, and a
+  refresh that regained the house after an unverifiable load never listened
+  again (§5, "Debounced realtime"). Builds up to 14 still see a request only
+  after a return to the app or a relaunch.
 - **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
   `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
   compares them) and Terms §4 reads the same constant. Apple's questionnaire

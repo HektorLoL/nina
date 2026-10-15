@@ -683,6 +683,7 @@ struct SettingsSheet: View {
     @State private var houseNameDraft = ""
     @State private var isConfirmingLeave = false
     @State private var isExplainingHandOver = false
+    @State private var isShowingHouseDeletion = false
     @State private var isConfirmingSignOut = false
     @State private var houseError: String?
 
@@ -719,6 +720,9 @@ struct SettingsSheet: View {
         }
         .ninaSheetBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $isShowingHouseDeletion) {
+            HouseDeletionView { dismiss() }
+        }
     }
 
     // Buying or managing Premium needs an account the server lets buy, so nobody else is ever routed to the paywall.
@@ -984,11 +988,30 @@ struct SettingsSheet: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .alert("Antes, passe a casa.", isPresented: $isExplainingHandOver) {
-                    Button("Entendi", role: .cancel) {}
+                .alert(ownerLeaveTitle, isPresented: $isExplainingHandOver) {
+                    if store.canDeleteFamily {
+                        Button("Apagar a casa", role: .destructive) {
+                            isShowingHouseDeletion = true
+                        }
+                    }
+                    Button(store.hasAdultToHoldTheHouse ? "Entendi" : "Cancelar", role: .cancel) {}
                 } message: {
                     Text(ownerLeaveExplanation)
                 }
+            }
+
+            if store.canDeleteFamily {
+                NinaDivider()
+
+                Button {
+                    Haptics.lightImpact()
+                    isShowingHouseDeletion = true
+                } label: {
+                    SettingsLinkRow(title: "Apagar a casa", systemName: "trash")
+                }
+                .buttonStyle(.plain)
+                .disabled(store.isSyncingHome)
+                .opacity(store.isSyncingHome ? 0.4 : 1)
             }
 
             // The sync toast sits under this sheet, so a failed rename or exit is told here.
@@ -1000,13 +1023,18 @@ struct SettingsSheet: View {
         }
     }
 
+    // With nobody to receive the house, leaving it means deleting it; with someone, either door stays open.
+    private var ownerLeaveTitle: String {
+        store.hasAdultToHoldTheHouse ? "Antes, passe a casa." : "Para sair, apague a casa."
+    }
+
     private var ownerLeaveExplanation: String {
         if let waiting = store.houseOfferRecipientName {
             return "Esperando \(waiting) aceitar a casa. Depois disso, você pode sair."
         }
         return store.hasAdultToHoldTheHouse
             ? "Em Casa, toque na pessoa, depois em Editar e em Passar a casa. Quando ela aceitar, você pode sair."
-            : "Só outro adulto com conta recebe a casa. Convide alguém primeiro."
+            : "Só outro adulto com conta recebe a casa. Para passar, convide alguém primeiro."
     }
 
     private var notificationStatusValue: String? {
@@ -1755,38 +1783,9 @@ struct AccountDeletionView: View {
     }
 
     private var subscriptionWarning: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Sua assinatura continua.")
-                .ninaText(.section)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Apagar a conta não cancela a cobrança. A Apple segue cobrando até você cancelar.")
-                .ninaText(.label, NinaTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            NinaButton(title: "Gerenciar assinatura", kind: .quiet) {
-                Haptics.selection()
-                manageSubscription()
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
-    }
-
-    private func manageSubscription() {
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }
-        guard let scene else {
-            openURL(NinaLegalLinks.manageSubscriptions)
-            return
-        }
-        Task {
-            do {
-                try await StoreKit.AppStore.showManageSubscriptions(in: scene)
-            } catch {
-                openURL(NinaLegalLinks.manageSubscriptions)
-            }
-        }
+        SubscriptionContinuesCard(
+            line: "Apagar a conta não cancela a cobrança. A Apple segue cobrando até você cancelar."
+        )
     }
 
     private func deleteAccount() {
@@ -1810,6 +1809,182 @@ struct AccountDeletionView: View {
                 dismiss()
             } else if authSession.deletionFailure == .guardianAccessDenied {
                 await store.refreshHomeFromRemote(for: authSession.currentUser)
+            }
+        }
+    }
+}
+
+// Deleting never looks like cancelling: only the person who subscribes manages the billing.
+private struct SubscriptionContinuesCard: View {
+    @Environment(\.openURL) private var openURL
+
+    var title = "Sua assinatura continua."
+    var line: String
+    var managesSubscription = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .ninaText(.section)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(line)
+                .ninaText(.label, NinaTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            if managesSubscription {
+                NinaButton(title: "Gerenciar assinatura", kind: .quiet) {
+                    Haptics.selection()
+                    manageSubscription()
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+    }
+
+    private func manageSubscription() {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        guard let scene else {
+            openURL(NinaLegalLinks.manageSubscriptions)
+            return
+        }
+        Task {
+            do {
+                try await StoreKit.AppStore.showManageSubscriptions(in: scene)
+            } catch {
+                openURL(NinaLegalLinks.manageSubscriptions)
+            }
+        }
+    }
+}
+
+// Only the titular reaches this screen; the server refuses anyone else and any name but the house's.
+struct HouseDeletionView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(PremiumSubscriptionStore.self) private var premiumStore
+    @Environment(\.dismiss) private var dismiss
+
+    var onDeleted: () -> Void = {}
+
+    @State private var confirmation = ""
+    @State private var isShowingConfirmation = false
+    @State private var isDeleting = false
+    @State private var failure: String?
+    @FocusState private var isConfirmationFocused: Bool
+
+    private var houseName: String {
+        store.familyGroup.name
+    }
+
+    static let disappearingItems = [
+        "Tarefas, sementes e compras",
+        "Memórias, compartilhadas e privadas",
+        "Conversas com a Nina",
+        "Perfis de crianças e pets",
+        "O convite e os pedidos",
+        "O acesso de todos"
+    ]
+
+    static func remainingItems(hasMinorAccounts: Bool) -> [String] {
+        var items = ["Sua conta", "A conta de cada adulto"]
+        if hasMinorAccounts {
+            items.append("Contas de menores, por 30 dias")
+        }
+        return items
+    }
+
+    private var hasMinorAccounts: Bool {
+        store.familyGroup.members.contains {
+            ($0.role == .child || $0.role == .teen) && $0.identityState == .claimed
+        }
+    }
+
+    private var isConfirmed: Bool {
+        AppStore.confirmsHouseName(confirmation, houseName: houseName)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            BackHeader { dismiss() }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Apagar a casa").ninaText(.screen)
+
+                    NounList(eyebrow: "Some para todos", items: Self.disappearingItems)
+                        .padding(16)
+                        .ninaCard()
+
+                    NounList(eyebrow: "Fica", items: Self.remainingItems(hasMinorAccounts: hasMinorAccounts))
+                        .padding(16)
+                        .ninaCard(fill: NinaTheme.grout, stroke: .clear)
+
+                    if premiumStore.showsSubscriptionContinuesWarning {
+                        SubscriptionContinuesCard(
+                            line: "Apagar a casa não cancela a cobrança. A Apple segue cobrando até você cancelar."
+                        )
+                    } else if store.householdPremium.isActive {
+                        SubscriptionContinuesCard(
+                            title: "A assinatura continua.",
+                            line: "Apagar a casa não cancela a cobrança de quem assina.",
+                            managesSubscription: false
+                        )
+                    }
+
+                    SheetField(label: "Escreva \(houseName) para confirmar") {
+                        TextField(houseName, text: $confirmation)
+                            .focused($isConfirmationFocused)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.done)
+                    }
+                    .padding(.top, 6)
+
+                    if let failure {
+                        NinaErrorNote(text: failure)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    InkButton(
+                        title: isDeleting ? "Apagando" : "Apagar a casa",
+                        isEnabled: isConfirmed && !isDeleting && !store.isSyncingHome
+                    ) {
+                        Haptics.warning()
+                        isConfirmationFocused = false
+                        isShowingConfirmation = true
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 34)
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .ninaSheetBackground()
+        .toolbar(.hidden, for: .navigationBar)
+        .alert("Apagar a casa?", isPresented: $isShowingConfirmation) {
+            Button("Cancelar", role: .cancel) {}
+            Button("Apagar", role: .destructive) {
+                deleteHouse()
+            }
+        } message: {
+            Text("Some para todos da casa. Não dá para desfazer.")
+        }
+    }
+
+    private func deleteHouse() {
+        guard !isDeleting else { return }
+        isDeleting = true
+        failure = nil
+        Task {
+            let deleted = await store.deleteFamily(confirmingName: confirmation)
+            isDeleting = false
+            if deleted {
+                onDeleted()
+            } else {
+                failure = store.syncErrorMessage ?? "Não deu para apagar a casa agora. Tente de novo."
             }
         }
     }

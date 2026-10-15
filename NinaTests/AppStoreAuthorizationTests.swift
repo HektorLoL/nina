@@ -601,6 +601,436 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testTheTitularDeletesTheHouseAndLandsOnHouseSetupWithItsCopyGone() async throws {
+        let suiteName = "nina.tests.deleteHouse.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "nina-delete-house-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Lúcia", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let state = makeRemoteState(familyName: "Casa da Lúcia", permissionRole: .owner, members: [me])
+        let backend = HouseDeletionBackend(state: state)
+        let scheduler = DeliveredReminderRecorder()
+        let store = AppStore(
+            defaults: defaults,
+            privateDataStore: privateDataStore,
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: scheduler
+        )
+        await store.activateHomeContext(for: user)
+        let householdScope = PrivateLocalDataScope.household(for: user.id)
+        let snapshotKey = "nina.home.appData.\(user.id).\(state.familyGroup.id.uuidString)"
+        XCTAssertNotNil(try privateDataStore.data(forKey: snapshotKey, ownerScope: householdScope))
+        XCTAssertTrue(store.canDeleteFamily)
+
+        let deleted = await store.deleteFamily(confirmingName: "  casa da lucia ")
+        let calls = await backend.recordedDeletions()
+
+        XCTAssertTrue(deleted)
+        XCTAssertEqual(calls, [HouseDeletionBackend.Deletion(familyID: state.familyGroup.id, confirmedName: "Casa da Lúcia")])
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertFalse(store.hasActiveHome)
+        XCTAssertEqual(store.deletedHouseName, "Casa da Lúcia")
+        XCTAssertNil(try privateDataStore.data(forKey: snapshotKey, ownerScope: householdScope))
+        XCTAssertEqual(scheduler.deliveredRemovals, 1)
+    }
+
+    @MainActor
+    func testOnlyTheTitularIsOfferedToDeleteTheHouse() async {
+        let user = makeUser()
+        let partner = HouseholdMember(userID: UUID().uuidString, name: "Ana", relationship: "Esposa", role: .adult, permissionRole: .member, tone: .sky, taskCount: 0, memoryNote: "")
+        var stores: [FamilyPermissionRole: AppStore] = [:]
+        for role in [FamilyPermissionRole.owner, .admin, .member] {
+            let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: role, tone: .mint, taskCount: 0, memoryNote: "")
+            let store = AppStore(
+                remoteHomeBackend: HouseDeletionBackend(state: makeRemoteState(permissionRole: role, members: [me, partner])),
+                ninaEngine: MockNinaEngine()
+            )
+            await store.activateHomeContext(for: user)
+            stores[role] = store
+        }
+
+        XCTAssertEqual(stores[.owner]?.canDeleteFamily, true)
+        XCTAssertEqual(stores[.admin]?.canDeleteFamily, false)
+        XCTAssertEqual(stores[.member]?.canDeleteFamily, false)
+        let adminDeleted = await stores[.admin]?.deleteFamily(confirmingName: "Test Home")
+        XCTAssertEqual(adminDeleted, false)
+        XCTAssertEqual(stores[.admin]?.homeAccessState, .authorized)
+    }
+
+    @MainActor
+    func testAHouseNameThatIsNotTheHousesDeletesNothing() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let backend = HouseDeletionBackend(state: makeRemoteState(familyName: "Casa da Lúcia", permissionRole: .owner, members: [me]))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let deleted = await store.deleteFamily(confirmingName: "Casa da Luci")
+        let calls = await backend.recordedDeletions()
+
+        XCTAssertFalse(deleted)
+        XCTAssertTrue(calls.isEmpty)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertTrue(AppStore.confirmsHouseName("CASA DA LUCIA", houseName: "Casa da Lúcia"))
+        XCTAssertFalse(AppStore.confirmsHouseName("Casa", houseName: "Casa da Lúcia"))
+        XCTAssertFalse(AppStore.confirmsHouseName("", houseName: "  "))
+    }
+
+    @MainActor
+    func testARefusedDeletionKeepsTheHouseAndSaysSo() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let backend = HouseDeletionBackend(
+            state: makeRemoteState(permissionRole: .owner, members: [me]),
+            refusal: RemoteRPCError(code: .familyDeleteNameMismatch)
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let deleted = await store.deleteFamily(confirmingName: "Test Home")
+
+        XCTAssertFalse(deleted)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertNil(store.deletedHouseName)
+        XCTAssertEqual(store.syncErrorMessage, "O nome da casa mudou. Confira e escreva de novo.")
+    }
+
+    @MainActor
+    func testADeletionWhoseAnswerWasLostCompletesOnTheRetryInsteadOfFailingForever() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let backend = HouseDeletionBackend(
+            state: makeRemoteState(familyName: "Casa da Lúcia", permissionRole: .owner, members: [me]),
+            answersLostAfterDeleting: [
+                URLError(.networkConnectionLost),
+                RemoteRPCError(code: .familyNotFound)
+            ]
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let firstAttempt = await store.deleteFamily(confirmingName: "Casa da Lúcia")
+        let messageAfterFirstAttempt = store.syncErrorMessage
+        let retry = await store.deleteFamily(confirmingName: "Casa da Lúcia")
+
+        XCTAssertFalse(firstAttempt)
+        XCTAssertEqual(messageAfterFirstAttempt, "A resposta não chegou. Tente de novo.")
+        XCTAssertTrue(retry)
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertEqual(store.deletedHouseName, "Casa da Lúcia")
+        XCTAssertNil(store.syncErrorMessage)
+    }
+
+    @MainActor
+    func testADeletionWhoseAnswerWasLostReadsAsDeletedWhenAPullFindsTheHouseGone() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let backend = HouseDeletionBackend(
+            state: makeRemoteState(familyName: "Casa da Lúcia", permissionRole: .owner, members: [me]),
+            answersLostAfterDeleting: [URLError(.networkConnectionLost)]
+        )
+        let scheduler = DeliveredReminderRecorder()
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: scheduler
+        )
+        await store.activateHomeContext(for: user)
+
+        let deleted = await store.deleteFamily(confirmingName: "Casa da Lúcia")
+        let messageAfterTheAttempt = store.syncErrorMessage
+        await store.refreshHome()
+
+        XCTAssertFalse(deleted)
+        XCTAssertEqual(messageAfterTheAttempt, "A resposta não chegou. Tente de novo.")
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertNil(store.familyAccessDecision)
+        XCTAssertEqual(store.deletedHouseName, "Casa da Lúcia")
+        XCTAssertNil(store.syncErrorMessage)
+        XCTAssertEqual(scheduler.deliveredRemovals, 1)
+    }
+
+    @MainActor
+    func testALostDeletionAnswerForAHouseThatStillStandsLeavesItOpenOnThePull() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let backend = HouseDeletionBackend(
+            state: makeRemoteState(familyName: "Casa da Lúcia", permissionRole: .owner, members: [me]),
+            refusal: URLError(.timedOut)
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let deleted = await store.deleteFamily(confirmingName: "Casa da Lúcia")
+        let messageAfterTheAttempt = store.syncErrorMessage
+        await store.refreshHome()
+
+        XCTAssertFalse(deleted)
+        XCTAssertEqual(messageAfterTheAttempt, "A resposta não chegou. Tente de novo.")
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertNil(store.deletedHouseName)
+    }
+
+    @MainActor
+    func testOnlyAnAnswerThatArrivedSaysTheHouseWasNotDeleted() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let lost = AppStore(
+            remoteHomeBackend: HouseDeletionBackend(
+                state: makeRemoteState(permissionRole: .owner, members: [me]),
+                refusal: URLError(.timedOut)
+            ),
+            ninaEngine: MockNinaEngine()
+        )
+        let refused = AppStore(
+            remoteHomeBackend: HouseDeletionBackend(
+                state: makeRemoteState(permissionRole: .owner, members: [me]),
+                refusal: RemoteHomeBackendError.operationUnavailable
+            ),
+            ninaEngine: MockNinaEngine()
+        )
+        await lost.activateHomeContext(for: user)
+        await refused.activateHomeContext(for: user)
+
+        let lostDeleted = await lost.deleteFamily(confirmingName: "Test Home")
+        let refusedDeleted = await refused.deleteFamily(confirmingName: "Test Home")
+
+        XCTAssertFalse(lostDeleted)
+        XCTAssertEqual(lost.syncErrorMessage, "A resposta não chegou. Tente de novo.")
+        XCTAssertFalse(refusedDeleted)
+        XCTAssertEqual(refused.syncErrorMessage, "Não deu para apagar a casa agora. Tente de novo.")
+        XCTAssertTrue(RemoteWriteAnswer.mayHaveBeenLost(URLError(.networkConnectionLost)))
+        XCTAssertFalse(RemoteWriteAnswer.mayHaveBeenLost(RemoteRPCError(code: .familyDeleteDenied)))
+    }
+
+    @MainActor
+    func testATitularRemovedWithoutKnowingItIsNeverToldTheirHouseWasDeleted() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let removal = FamilyAccessDecision(
+            id: UUID(),
+            familyName: "Casa da Lúcia",
+            outcome: .removed,
+            decidedAt: Date(timeIntervalSince1970: 1_792_000_000),
+            houseDeleted: false
+        )
+        let backend = HouseDeletionBackend(
+            state: makeRemoteState(familyName: "Casa da Lúcia", permissionRole: .owner, members: [me]),
+            removal: removal
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        _ = await store.deleteFamily(confirmingName: "Casa da Lúcia")
+        let stateAfterTheAttempt = store.homeAccessState
+        let nameAfterTheAttempt = store.deletedHouseName
+        let decisionAfterTheAttempt = store.familyAccessDecision
+        let acknowledged = await store.acknowledgeFamilyAccessDecision()
+
+        XCTAssertEqual(stateAfterTheAttempt, .accessDecision)
+        XCTAssertNil(nameAfterTheAttempt)
+        XCTAssertEqual(decisionAfterTheAttempt?.outcome, .removed)
+        XCTAssertEqual(decisionAfterTheAttempt?.houseDeleted, false)
+        XCTAssertTrue(acknowledged)
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertNil(store.deletedHouseName)
+    }
+
+    func testAHouseTheServerCannotFindIsReadAsLeavingItNotAsItsDeletion() {
+        XCTAssertEqual(RemoteRPCErrorCode.familyNotFound.userMessage(), "Você não faz mais parte desta casa.")
+    }
+
+    @MainActor
+    func testAHouseRegainedAfterAnUnverifiableLoadListensForChangesAgain() async {
+        let user = makeUser()
+        let backend = HouseDeletionBackend(
+            state: makeRemoteState(),
+            failingLoads: [2: URLError(.notConnectedToInternet)]
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        await backend.waitUntilRealtimeSubscribed()
+
+        await store.refreshHome()
+        let stateWhileUnreachable = store.homeAccessState
+        let subscriptionsWhileUnreachable = await backend.realtimeSubscriptionCount()
+        await store.refreshHome()
+        var subscriptionsAfterReturning = await backend.realtimeSubscriptionCount()
+        for _ in 0..<40 where subscriptionsAfterReturning < 2 {
+            try? await Task.sleep(for: .milliseconds(50))
+            subscriptionsAfterReturning = await backend.realtimeSubscriptionCount()
+        }
+        let loadsBeforeTheEvent = await backend.loadCount()
+
+        await backend.publishRealtimeEvent(.family)
+        var loads = await backend.loadCount()
+        for _ in 0..<40 where loads < 4 {
+            try? await Task.sleep(for: .milliseconds(50))
+            loads = await backend.loadCount()
+        }
+
+        XCTAssertEqual(stateWhileUnreachable, .unavailable)
+        XCTAssertEqual(subscriptionsWhileUnreachable, 1)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertEqual(subscriptionsAfterReturning, 2)
+        XCTAssertEqual(loadsBeforeTheEvent, 3)
+        XCTAssertEqual(loads, 4)
+    }
+
+    @MainActor
+    func testAnotherAdultWhoseHouseWasDeletedReadsItOnTheDecisionScreenWithoutARedLine() async {
+        let user = makeUser()
+        let decision = FamilyAccessDecision(
+            id: UUID(),
+            familyName: "Casa Aurora",
+            outcome: .removed,
+            decidedAt: Date(timeIntervalSince1970: 1_792_000_000),
+            houseDeleted: true
+        )
+        let backend = ControlledRefreshHomeBackend(
+            initialState: makeRemoteState(familyName: "Casa Aurora", permissionRole: .member),
+            accessDecision: decision
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let refreshTask = Task {
+            await store.refreshHome()
+        }
+        await backend.waitUntilRefreshStarted()
+        await backend.completeRefreshWithoutHome()
+        await refreshTask.value
+
+        XCTAssertEqual(store.homeAccessState, .accessDecision)
+        XCTAssertEqual(store.familyAccessDecision?.houseDeleted, true)
+        XCTAssertFalse(store.hasActiveHome)
+        XCTAssertNil(store.syncErrorMessage)
+    }
+
+    @MainActor
+    func testARealtimeRejoinReadsTheHouseOnceSoAChangeMadeWhileItWasDownIsSeen() async {
+        let user = makeUser()
+        let backend = HouseDeletionBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        await backend.waitUntilRealtimeSubscribed()
+        await backend.publishRealtimeEvent(.subscribed)
+        try? await Task.sleep(for: .milliseconds(400))
+        let loadsAfterTheFirstJoin = await backend.loadCount()
+
+        await backend.finishRealtimeStream()
+        await backend.waitUntilRealtimeSubscribed(2)
+        await backend.publishRealtimeEvent(.subscribed)
+        var loads = await backend.loadCount()
+        for _ in 0..<40 where loads < 2 {
+            try? await Task.sleep(for: .milliseconds(50))
+            loads = await backend.loadCount()
+        }
+
+        XCTAssertEqual(loadsAfterTheFirstJoin, 1)
+        XCTAssertEqual(loads, 2)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+    }
+
+    @MainActor
+    func testADeletedHouseIsNeverDescribedAsKeepingItsTasksAndLists() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let removedFromDeletedHouse = try decoder.decode(
+            FamilyAccessDecision.self,
+            from: Data("""
+            {"id":"3F1A0000-0000-4000-8000-00000000DEC2","family_name":"Casa Castello",
+             "outcome":"removed","decided_at":"2026-10-15T12:00:00Z","house_deleted":true}
+            """.utf8)
+        )
+        let waitingOnDeletedHouse = try decoder.decode(
+            FamilyAccessDecision.self,
+            from: Data("""
+            {"id":"3F1A0000-0000-4000-8000-00000000DEC3","family_name":"Casa Castello",
+             "outcome":"declined","decided_at":"2026-10-15T12:00:00Z","house_deleted":true}
+            """.utf8)
+        )
+
+        XCTAssertTrue(removedFromDeletedHouse.houseDeleted)
+        XCTAssertEqual(removedFromDeletedHouse.outcome, .removed)
+        XCTAssertEqual(FamilyAccessDecisionView.title(for: removedFromDeletedHouse), "Essa casa foi apagada.")
+        XCTAssertFalse(FamilyAccessDecisionView.message(for: removedFromDeletedHouse).contains("ficam com a casa"))
+        XCTAssertTrue(FamilyAccessDecisionView.message(for: removedFromDeletedHouse).contains("memórias"))
+        XCTAssertEqual(FamilyAccessDecisionView.title(for: waitingOnDeletedHouse), "Essa casa foi apagada.")
+        XCTAssertEqual(FamilyAccessDecisionView.message(for: waitingOnDeletedHouse), "Seu pedido de entrada não vale mais.")
+        XCTAssertEqual(
+            FamilyAccessDecisionView.message(for: makeAccessDecision(outcome: .removed)),
+            "As tarefas e as listas ficam com a casa."
+        )
+    }
+
+    @MainActor
+    func testARealtimeEventDuringAnInFlightSyncIsReadOnceThatSyncEnds() async {
+        let user = makeUser()
+        let backend = HouseDeletionBackend(state: makeRemoteState())
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        await backend.waitUntilRealtimeSubscribed()
+        await backend.hold(load: 2)
+
+        let refresh = Task { await store.refreshHomeFromRemote(for: user) }
+        await backend.waitUntilLoadStarted(2)
+        await backend.publishRealtimeEvent(.family)
+        try? await Task.sleep(for: .milliseconds(600))
+        let loadsWhileHeld = await backend.loadCount()
+        await backend.releaseHeldLoad()
+        await refresh.value
+
+        var loads = await backend.loadCount()
+        for _ in 0..<40 where loads < 3 {
+            try? await Task.sleep(for: .milliseconds(50))
+            loads = await backend.loadCount()
+        }
+
+        XCTAssertEqual(loadsWhileHeld, 2)
+        XCTAssertEqual(loads, 3)
+    }
+
+    @MainActor
+    func testTwoActivationsForOneAccountAtOnceShareOneLoadAndOneRealtimeSubscription() async {
+        let user = makeUser()
+        let backend = HouseDeletionBackend(state: makeRemoteState())
+        await backend.hold(load: 1)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        async let first: Void = store.activateHomeContext(for: user)
+        async let second: Void = store.activateHomeContext(for: user)
+        await backend.waitUntilLoadStarted(1)
+        await backend.releaseHeldLoad()
+        _ = await (first, second)
+        await backend.waitUntilRealtimeSubscribed()
+        try? await Task.sleep(for: .milliseconds(200))
+
+        let loads = await backend.loadCount()
+        let subscriptions = await backend.realtimeSubscriptionCount()
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertEqual(loads, 1)
+        XCTAssertEqual(subscriptions, 1)
+    }
+
+    func testEveryRealtimeSubscriptionJoinsATopicOfItsOwn() {
+        let familyID = UUID()
+        let first = SupabaseRemoteHomeBackend.realtimeTopic(familyID: familyID)
+        let second = SupabaseRemoteHomeBackend.realtimeTopic(familyID: familyID)
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertTrue(first.hasPrefix("home-\(familyID.uuidString)-"))
+        XCTAssertTrue(second.hasPrefix("home-\(familyID.uuidString)-"))
+    }
+
+    @MainActor
     func testSigningOutTakesTheHouseholdOffThePhoneButKeepsAMinorsLedger() async throws {
         let suiteName = "nina.tests.signout.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -805,8 +1235,9 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(shown.familyName, "Casa Castello")
         XCTAssertEqual(
             Mirror(reflecting: shown).children.compactMap(\.label).sorted(),
-            ["decidedAt", "familyName", "id", "outcome"]
+            ["decidedAt", "familyName", "houseDeleted", "id", "outcome"]
         )
+        XCTAssertFalse(shown.houseDeleted)
     }
 
     @MainActor
@@ -6345,6 +6776,148 @@ private actor ControlledRefreshHomeBackend: RemoteHomeBackend {
         initialState
     }
 
+    func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws {}
+    func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws {}
+    func createTask(_ task: TaskItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
+    func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
+}
+
+private actor HouseDeletionBackend: RemoteHomeBackend {
+    struct Deletion: Equatable {
+        var familyID: UUID
+        var confirmedName: String
+    }
+
+    private let state: RemoteHomeState
+    private let refusal: Error?
+    private let failingLoads: [Int: Error]
+    private let removal: FamilyAccessDecision?
+    private var answersLostAfterDeleting: [Error]
+    private var deletions: [Deletion] = []
+    private var removalSeen = false
+    private var acknowledgedDecisions: [UUID] = []
+    private var loads = 0
+    private var heldLoad: Int?
+    private var heldContinuation: CheckedContinuation<Void, Never>?
+    private var loadWaiters: [(number: Int, continuation: CheckedContinuation<Void, Never>)] = []
+    private var realtimeSubscriptions = 0
+    private var realtimeContinuation: AsyncStream<HomeRealtimeEvent>.Continuation?
+    private var realtimeWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
+
+    init(
+        state: RemoteHomeState,
+        refusal: Error? = nil,
+        answersLostAfterDeleting: [Error] = [],
+        failingLoads: [Int: Error] = [:],
+        removal: FamilyAccessDecision? = nil
+    ) {
+        self.state = state
+        self.refusal = refusal
+        self.answersLostAfterDeleting = answersLostAfterDeleting
+        self.failingLoads = failingLoads
+        self.removal = removal
+    }
+
+    func recordedDeletions() -> [Deletion] {
+        deletions
+    }
+
+    func loadCount() -> Int {
+        loads
+    }
+
+    func realtimeSubscriptionCount() -> Int {
+        realtimeSubscriptions
+    }
+
+    func hold(load number: Int) {
+        heldLoad = number
+    }
+
+    func releaseHeldLoad() {
+        heldLoad = nil
+        heldContinuation?.resume()
+        heldContinuation = nil
+    }
+
+    func waitUntilLoadStarted(_ number: Int) async {
+        if loads >= number { return }
+        await withCheckedContinuation { continuation in
+            loadWaiters.append((number, continuation))
+        }
+    }
+
+    func waitUntilRealtimeSubscribed(_ count: Int = 1) async {
+        if realtimeSubscriptions >= count { return }
+        await withCheckedContinuation { continuation in
+            realtimeWaiters.append((count, continuation))
+        }
+    }
+
+    func publishRealtimeEvent(_ event: HomeRealtimeEvent) {
+        realtimeContinuation?.yield(event)
+    }
+
+    func finishRealtimeStream() {
+        realtimeContinuation?.finish()
+    }
+
+    func loadHome(for user: AuthUser) async throws -> RemoteHomeState? {
+        loads += 1
+        let number = loads
+        let started = loadWaiters.filter { $0.number <= number }
+        loadWaiters.removeAll { $0.number <= number }
+        started.forEach { $0.continuation.resume() }
+        if heldLoad == number {
+            await withCheckedContinuation { continuation in
+                heldContinuation = continuation
+            }
+        }
+        if let failure = failingLoads[number] { throw failure }
+        return deletions.isEmpty && !removalSeen ? state : nil
+    }
+
+    func loadFamilyAccessDecision() async throws -> FamilyAccessDecision? {
+        guard removalSeen, let removal, !acknowledgedDecisions.contains(removal.id) else { return nil }
+        return removal
+    }
+
+    func acknowledgeFamilyAccessDecision(_ decisionID: UUID) async throws {
+        acknowledgedDecisions.append(decisionID)
+    }
+
+    func deleteFamily(familyID: UUID, confirmedName: String) async throws {
+        if removal != nil {
+            removalSeen = true
+            throw RemoteRPCError(code: .familyNotFound)
+        }
+        if let refusal { throw refusal }
+        if deletions.isEmpty {
+            deletions.append(Deletion(familyID: familyID, confirmedName: confirmedName))
+        }
+        if !answersLostAfterDeleting.isEmpty {
+            throw answersLostAfterDeleting.removeFirst()
+        }
+    }
+
+    func realtimeEvents(familyID: UUID) async -> AsyncStream<HomeRealtimeEvent> {
+        realtimeSubscriptions += 1
+        let count = realtimeSubscriptions
+        let joined = realtimeWaiters.filter { $0.count <= count }
+        realtimeWaiters.removeAll { $0.count <= count }
+        joined.forEach { $0.continuation.resume() }
+        return AsyncStream { continuation in
+            realtimeContinuation = continuation
+        }
+    }
+
+    func createHome(named name: String, owner: AuthUser?) async throws -> RemoteHomeState { state }
+    func joinHome(with inviteCode: String, member: AuthUser?) async throws -> RemoteHomeState { state }
+    func updateFamilySettings(familyID: UUID, name: String) async throws -> RemoteHomeState { state }
+    func addUnclaimedMember(_ member: HouseholdMember, familyID: UUID) async throws -> RemoteHomeState { state }
+    func updateFamilyMember(_ member: HouseholdMember) async throws -> RemoteHomeState { state }
     func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws {}
     func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws {}
     func createTask(_ task: TaskItem, familyID: UUID, currentUser: AuthUser) async throws {}

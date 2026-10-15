@@ -594,19 +594,28 @@ struct FamilyAccessDecision: Identifiable, Decodable, Hashable {
     var familyName: String
     var outcome: FamilyAccessOutcome
     var decidedAt: Date
+    var houseDeleted: Bool
 
     private enum CodingKeys: String, CodingKey {
         case id
         case familyName = "family_name"
         case outcome
         case decidedAt = "decided_at"
+        case houseDeleted = "house_deleted"
     }
 
-    init(id: UUID, familyName: String, outcome: FamilyAccessOutcome, decidedAt: Date) {
+    init(
+        id: UUID,
+        familyName: String,
+        outcome: FamilyAccessOutcome,
+        decidedAt: Date,
+        houseDeleted: Bool = false
+    ) {
         self.id = id
         self.familyName = familyName
         self.outcome = outcome
         self.decidedAt = decidedAt
+        self.houseDeleted = houseDeleted
     }
 
     init(from decoder: Decoder) throws {
@@ -616,6 +625,7 @@ struct FamilyAccessDecision: Identifiable, Decodable, Hashable {
         let rawOutcome = try container.decodeIfPresent(String.self, forKey: .outcome)
         outcome = rawOutcome.flatMap(FamilyAccessOutcome.init(rawValue:)) ?? .declined
         decidedAt = try container.decodeIfPresent(Date.self, forKey: .decidedAt) ?? .now
+        houseDeleted = try container.decodeIfPresent(Bool.self, forKey: .houseDeleted) ?? false
     }
 }
 

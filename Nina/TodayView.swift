@@ -119,6 +119,9 @@ struct TodayView: View {
                     .padding(.bottom, 104)
                     .frame(minHeight: showsZeroState ? proxy.size.height : nil, alignment: .top)
                 }
+                .refreshable {
+                    await store.refreshHome()
+                }
             }
 
             fab

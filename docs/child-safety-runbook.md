@@ -1,6 +1,6 @@
 # Child-safety runbook
 
-Last updated: 2026-09-29
+Last updated: 2026-10-15
 
 What the operator (Heitor) does with reports and child-safety holds. The law
 behind it: ECA Digital (Lei 15.211/2025) arts. 27–30 and 33, Decreto
@@ -14,7 +14,7 @@ below. This is not legal advice, and three points are UNVERIFIED (§5).
 | Source | Where it lands | Target to acknowledge |
 |---|---|---|
 | A child-safety hold: input moderation flagged `sexual/minors` in a chat message | `private.child_safety_holds`, plus a block in `private.nina_ai_blocks` | review within 48 hours, sooner when you can |
-| "Denunciar resposta" on a Nina reply (adults) | `private.nina_reply_reports`; the reply is kept past retention for up to 90 days (`chat_messages.held_for_review_until`) | 48 hours |
+| "Denunciar resposta" on a Nina reply (adults) | `private.nina_reply_reports`; the reply is kept past retention for up to 90 days (`chat_messages.held_for_review_until`), and copied into the report if its house is deleted first | 48 hours |
 | "Denunciar um problema" / "Escrever denúncia" (every age) | an identified email to the report mailbox, subject "Denúncia ECA Digital" | 48 hours |
 
 The 48-hour acknowledgement is Heitor's choice (the law sets none) and is
@@ -74,9 +74,17 @@ Then decide:
   `prepare_account_deletion` copies the account into the sealed
   `private.child_safety_preserved_accounts`: the Auth user id, the Apple `sub`,
   the email, the creation and last sign-in dates, the memberships, the chat and
-  the memories. The hold keeps its `user_id` and `family_id`, which carry no
-  foreign key, and while the hold is open or reported, a new account signed in
-  with the same Apple ID stays blocked from the chat. Retention keeps a
+  the memories. When the house itself is deleted (the titular's
+  `delete_family`, or an account deletion that leaves no adult, since
+  2026-10-15), the same copy is taken first for every account the house held
+  or that wrote in it (a person removed or gone from the house leaves their
+  chat and memories there), so the house's chat and memories survive in it. Every later copy is merged
+  into the first one, never dropped: when that account is deleted afterwards,
+  the houses it joined and what it wrote since are added to what was kept.
+  `preserved_at` stays the date of the first copy. The hold keeps its
+  `user_id` and `family_id`, which carry no foreign key, and while the hold is
+  open or reported, a new account signed in with the same Apple ID stays
+  blocked from the chat. Retention keeps a
   preserved account until six months after the authority confirmed receipt
   (Marco Civil art. 15, the period art. 27 §2 points to; UNVERIFIED until the
   MJSP act, §5):
@@ -113,12 +121,32 @@ keeps only its timestamps and identifiers.
 ## 3. A reported Nina reply
 
 ```sql
-select reports.id, reports.reason, reports.created_at, messages.text
+select
+  reports.id,
+  reports.reason,
+  reports.created_at,
+  coalesce(messages.text, reports.reply_text) as reply,
+  coalesce(requests.text, reports.request_text) as request
 from private.nina_reply_reports as reports
 left join public.chat_messages as messages on messages.id = reports.message_id
+left join public.nina_ai_runs as runs on runs.id = reports.run_id
+left join public.chat_messages as requests on requests.id = runs.request_message_id
 where reports.reviewed_at is null
 order by reports.created_at;
 ```
+
+When the house was deleted inside the review window (the titular's
+`delete_family`, or an account deletion that leaves no adult, since
+2026-10-15), the reply and the message that asked for it are gone from
+`chat_messages`, so the report carries its own copy in `reply_text` and
+`request_text`; `message_id`, `run_id` and `family_id` read null. Retention
+clears both copies ninety days after the report, as it would the reply. Only
+the reporter still erases a held reply early: while the house stands, by
+clearing their own conversation or deleting their own account; once the house
+is gone there is no conversation left to clear, so only the reporter's account
+deletion (`prepare_account_deletion`) clears the copy. A report by the person
+whose action deletes the house gets no copy, because the deletion takes their
+conversation as clearing it would.
 
 Read the reply in context only as far as the decision needs. Then record the
 outcome, one of `no_action`, `prompt_changed`, `account_blocked`,

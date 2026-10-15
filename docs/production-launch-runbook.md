@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -492,6 +492,140 @@ build. The Terms version does not change, so nobody sees "Os Termos mudaram.".
 **Revert** with `'{confirmed,operator}'`; the policy row can never drop those
 two. A revert makes the pages above untrue again, so they change back in the
 same release.
+
+### Deleting a house, and the Terms of 15 October (`202610150001`)
+
+Migration `202610150001_delete_family.sql` lets the titular delete the house
+(`delete_family`), routes every house deletion through
+`private.delete_household`, keeps each adult's AI consent as withdrawn proof
+when a house goes, and copies a reply still held for review onto its report.
+Build 14 never calls the new RPC and ignores the new `house_deleted` key, so
+the migration may go first. Terms §5 says the titular may now delete the
+house, and Heitor decided on 2026-10-15 that the recorded Terms version follows
+the date the Terms page shows, so the version moves once that page is live.
+Run the steps in this order, on one day.
+
+1. **Local gate.** From a clean export (`git archive` of the commit, `CLAUDE.md`
+   §12), `deno task db:reset && deno task db:test`.
+2. **Pre-check, read only, in the SQL editor.** Production must still run the
+   bodies the migration replaces:
+
+   ```sql
+   select routines.oid::regprocedure, md5(routines.prosrc)
+   from pg_proc as routines
+   join pg_namespace as namespaces on namespaces.oid = routines.pronamespace
+   where (namespaces.nspname, routines.proname) in (
+     ('public', 'get_family_access_decision'),
+     ('public', 'prepare_account_deletion'),
+     ('private', 'preserve_child_safety_account'),
+     ('public', 'run_nina_retention'),
+     ('public', 'delete_family'),
+     ('private', 'delete_household'),
+     ('private', 'settle_household_ai_runs')
+   )
+   order by 1;
+
+   select confdeltype from pg_constraint
+   where conname = 'nina_ai_consents_family_id_fkey';
+
+   select table_schema, table_name, column_name
+   from information_schema.columns
+   where (table_schema, table_name, column_name) in (
+     ('public', 'family_access_decisions', 'house_deleted'),
+     ('private', 'nina_reply_reports', 'reply_text'),
+     ('private', 'nina_reply_reports', 'request_text')
+   );
+
+   select max(version) from supabase_migrations.schema_migrations;
+   select current_terms_version from private.age_policy;
+   ```
+
+   Expect exactly four functions: `get_family_access_decision()`
+   `9dff4d97109e91ac13123982f9c59398`, `prepare_account_deletion(uuid)`
+   `d61cf299c129e8a081c513112494cab1`,
+   `private.preserve_child_safety_account(uuid)`
+   `5db1706b597dfd828b725c658df2dc55` and `run_nina_retention()`
+   `4f0def6c5524d14f3eeb10d8ef087431`; then `c` (cascade), no column rows,
+   `202610140001` and `2026-09-29`. Any other body means production drifted
+   from the repository: stop and compare before applying.
+3. **Apply the migration**, either with `npx supabase db push` from the clean
+   export (the dry run must list only `202610150001_delete_family`) or through
+   the Supabase MCP `apply_migration` named `delete_family` with the file's
+   body. The MCP records a 14-digit version, so repair it at once:
+
+   ```sql
+   update supabase_migrations.schema_migrations
+   set version = '202610150001'
+   where name = 'delete_family'
+     and version <> '202610150001';
+   ```
+
+4. **Read back.** Rerun the first query of step 2. Expect seven functions:
+   `get_family_access_decision()` `68a94e31814cf956b285f793cecd4b2d`,
+   `prepare_account_deletion(uuid)` `9a956015a0ae0fd7dafc4f63db6c9348`,
+   `private.preserve_child_safety_account(uuid)`
+   `012635590a2240b8ad04e3e592c69ac8`, `run_nina_retention()`
+   `45b9504c349019282403b680102cb5e4`, `delete_family(uuid, text)`
+   `9723c67ffb8e8fa013d2e0f0ade44280`, `private.delete_household(uuid, uuid)`
+   `f7b1d6693303b3e3a3bde61070efdf50` and
+   `private.settle_household_ai_runs(uuid)`
+   `b40485125ad32a93f118120bab887d2b`. Then:
+
+   ```sql
+   select
+     has_function_privilege('authenticated', 'public.delete_family(uuid, text)', 'execute'),
+     has_function_privilege('anon', 'public.delete_family(uuid, text)', 'execute'),
+     has_function_privilege('service_role', 'public.delete_family(uuid, text)', 'execute'),
+     has_function_privilege('authenticated', 'private.delete_household(uuid, uuid)', 'execute'),
+     has_function_privilege('service_role', 'private.delete_household(uuid, uuid)', 'execute');
+
+   select grantee, count(*)
+   from (values ('authenticated'), ('service_role')) as roles(grantee),
+     pg_proc as routines
+   where routines.pronamespace = 'public'::regnamespace
+     and routines.prorettype <> 'trigger'::regtype
+     and not exists (
+       select 1
+       from pg_depend as dependencies
+       where dependencies.classid = 'pg_proc'::regclass
+         and dependencies.objid = routines.oid
+         and dependencies.deptype = 'e'
+     )
+     and has_function_privilege(grantee, routines.oid, 'execute')
+   group by grantee
+   order by grantee;
+   ```
+
+   Expect `true, false, false, false, false`, then 52 for `authenticated` and
+   27 for `service_role` (the grant maps in `rls_policies.test.sql`). Rerun the
+   rest of step 2: `n` (set null), the three column rows, `202610150001` and
+   still `2026-09-29`.
+5. **Publish the Terms.** Commit and push; Cloudflare Workers Builds rebuilds
+   the site. `https://ninai.app/termos/` must read "Atualizados em 15 de
+   outubro de 2026", §5 must say the titular leaves by passing or deleting the
+   house, and the page must keep `data-legal-launch="ready"`.
+6. **Move the recorded Terms version**, only after step 5 is live:
+
+   ```sql
+   update private.age_policy
+   set current_terms_version = '2026-10-15', updated_at = now()
+   where singleton;
+
+   select current_terms_version, current_policy_version, current_minor_consent_version
+   from private.age_policy;
+   ```
+
+   Expect `2026-10-15`, `2026-09-29`, `2026-09-29`. The privacy policy and the
+   minors' consent text did not change, so their versions stay and no AI
+   consent is withdrawn.
+
+**What testers then see.** Every adult meets "Os Termos mudaram." once, on the
+next load, and taps Aceitar; every minor acknowledges the Terms again; a
+welcome footnote shown before 15 October and read back after a relaunch no
+longer counts, so that person sees the gate too. "Apagar a casa" itself reaches
+people with the first build after 14; until then the Terms describe a deletion
+only the server offers. The local stack keeps `2026-09-29`, because no
+migration carries the version.
 
 ### Age contests and child-safety holds
 

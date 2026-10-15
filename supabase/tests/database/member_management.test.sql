@@ -904,7 +904,7 @@ select is(
     select string_agg(decision_key, ',' order by decision_key)
     from jsonb_object_keys(public.get_family_access_decision()) as decision_key
   ),
-  'decided_at,family_name,id,outcome',
+  'decided_at,family_name,house_deleted,id,outcome',
   'a decision never carries the person who made it'
 );
 

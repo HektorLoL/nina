@@ -690,12 +690,17 @@ private struct MinorAccessDecisionView: View {
         store.familyAccessDecision?.outcome == .removed
     }
 
+    private var headline: String {
+        if store.familyAccessDecision?.houseDeleted == true { return "A casa foi apagada." }
+        return wasRemoved ? "Você saiu da casa." : "Seu pedido não foi aprovado."
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             MinorHeader(isShowingSettings: $isShowingSettings)
             Spacer(minLength: 24)
             ZeroState(
-                headline: wasRemoved ? "Você saiu da casa." : "Seu pedido não foi aprovado.",
+                headline: headline,
                 body_: wasRemoved ? "Sua conta é apagada em 30 dias." : "Peça o convite de novo para quem cuida de você.",
                 presence: .unavailable
             ) {

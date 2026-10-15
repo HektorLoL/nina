@@ -1256,6 +1256,55 @@ the build people install.
   nothing but draw a build warning. An iPad runs the app in iPhone mode,
   portrait.
 
+## 6s. Deleting a house, and join requests that arrive live (2026-10-15)
+
+Heitor's two requests after build 14. No board draws either.
+
+- **The titular can delete the house.** A titular alone used to be stuck:
+  "Sair da casa" said "Antes, passe a casa." and nobody could receive it. Now
+  Ajustes › Casa ends in "Apagar a casa ›" for the titular alone (an admin
+  never deletes over them), and the titular's "Sair da casa" offers "Apagar a
+  casa" in its alert, with or without someone to hand the house to.
+  `HouseDeletionView` (in `Sheets.swift`, beside `AccountDeletionView`, so the
+  pbxproj is untouched) follows the account-deletion shape: two noun lists, the
+  subscription card, a typed gate, one ink button that arms with
+  `Haptics.warning()`, and a confirm alert. The gate is the house's own name,
+  read without case or accents, and the phone sends the name it shows, so
+  `delete_family` refuses a house renamed meanwhile. The titular lands on house
+  setup with the moss "Casa apagada."; everyone else meets "Essa casa foi
+  apagada." on their next verified load, a pull included, with no red line
+  under it. The list says "Memórias, compartilhadas e privadas", because each
+  adult's private memories go with the house too, and the other adults read
+  "Tudo o que estava nela foi junto, memórias privadas também." for the same
+  reason: they did not choose the deletion, and a line naming only tasks,
+  lists and conversations read as if their private memories had survived. The removal line "As
+  tarefas e as listas ficam com a casa." is never shown for a deleted house.
+  The subscription card was lifted out of `AccountDeletionView` into
+  `SubscriptionContinuesCard`, so both screens draw the same one.
+- **Casa, Hoje and Tarefas reload on a pull.** Each tab's scroll view carries
+  `.refreshable`, through `AppStore.refreshHome()`, the same verified load a
+  return to the app runs, membership check included. A pull during another
+  sync is not lost: the store reads the house once that sync ends.
+- **A join request reaches Casa while the app stays open.** The request was
+  only ever seen after a relaunch: every cold launch activated the house twice,
+  and the second activation was handed the first, dying realtime channel under
+  the same topic, which then delivered nothing for the rest of the session.
+  Each subscription now joins a topic of its own, a channel the server closed
+  or whose socket dropped ends its stream so the store subscribes again and
+  reads the house once the new channel joins (so a request sent while the
+  phone switched networks still arrives), two activations for one account at
+  once share one load, and the launch's two callers share one home load. A
+  refresh that regains the house after a load that could not be verified (or
+  lets in an adult who was waiting) starts listening again; before, one failed
+  load during a network switch left Casa without live requests until a
+  relaunch.
+- **A lost answer never reads as a refusal.** If the connection drops while
+  the house is being deleted, the gate says "A resposta não chegou. Tente de
+  novo.", the account-deletion line, because the server may already have
+  deleted it; the next read of the house (the retry, a pull, a return to the
+  app) finds it gone and lands on "Casa apagada.", never on the red "Você não
+  faz mais parte desta casa.".
+
 ## 7. Verified
 
 - `xcodebuild build` — succeeds.

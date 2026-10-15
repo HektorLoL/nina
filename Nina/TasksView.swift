@@ -87,6 +87,9 @@ struct TasksView: View {
                     .padding(.bottom, isSelecting ? 16 : 104)
                     .frame(minHeight: showsZeroState ? proxy.size.height : nil, alignment: .top)
                 }
+                .refreshable {
+                    await store.refreshHome()
+                }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if isSelecting {
                         selectionBar
