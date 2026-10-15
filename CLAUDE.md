@@ -2244,6 +2244,17 @@ the project, not bugs to fix unprompted.
   names it by the given name alone; one that blanks the name sees the field.
   Build 10 asks adults for the email; the website privacy page names the
   builds, so it stays true while build 10 is still installed.
+- **Build 14 (2026-10-15) is the launch-audit polish.** Archived from the
+  sources tagged `testflight-1.0-14` with `CURRENT_PROJECT_VERSION` 14; the
+  online production preflight against the archive read 0 failures and 0
+  warnings. It carries the empty-space pass (fitted sheets, commits after
+  their fields, no wrapped labels) and batches 1-3 of the 2026-10-15 launch
+  plan: Perfil without phone, sex or birthday; alerts asked after the first
+  dated confirmation and on a minor's home; Release without `MockNinaEngine`
+  or `PreviewData`; refusals that keep the person's words and add no line in
+  Nina's name; the weekly-summary, portrait (adults only) and child-gate
+  lines. Heitor tests it before any test data is deleted (his order of
+  2026-10-15).
 - **Build 13 (2026-10-14) carries the tour and everything since build 12.**
   Archived from the sources tagged `testflight-1.0-13` with
   `CURRENT_PROJECT_VERSION` 13; the online production preflight against the
