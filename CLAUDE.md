@@ -2343,6 +2343,12 @@ the project, not bugs to fix unprompted.
   names it by the given name alone; one that blanks the name sees the field.
   Build 10 asks adults for the email; the website privacy page names the
   builds, so it stays true while build 10 is still installed.
+- **Build 16 (2026-10-15) adds the priority flag to build 15.** Archived
+  from the sources tagged `testflight-1.0-16` with `CURRENT_PROJECT_VERSION`
+  16; the online production preflight against the archive read 0 failures
+  and 0 warnings. Its one change is the ink flag on task rows (§5, "Priority
+  is an ink flag"), the last fix Heitor listed in his notes. Build 16 is the
+  build he tests before any test data is deleted, with build 15's checks.
 - **Build 15 (2026-10-15) is Heitor's two asks after testing build 14.**
   Archived from the sources tagged `testflight-1.0-15` with
   `CURRENT_PROJECT_VERSION` 15, after migration `202610150001` was applied
@@ -2351,8 +2357,7 @@ the project, not bugs to fix unprompted.
   casa" for the titular (Ajustes › Casa, and from "Sair da casa" when nobody
   else can take the house), join requests that reach Casa live, and pull to
   refresh on Casa, Hoje and Tarefas. Heitor's play test of build 14 found
-  everything else working, invites included. Build 15 is now the build he
-  tests before any test data is deleted (his order of 2026-10-15).
+  everything else working, invites included.
 - **Build 14 (2026-10-15) is the launch-audit polish.** Archived from the
   sources tagged `testflight-1.0-14` with `CURRENT_PROJECT_VERSION` 14; the
   online production preflight against the archive read 0 failures and 0
