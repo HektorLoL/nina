@@ -501,10 +501,15 @@ struct TaskRowView: View {
     }
 
     private var rowTitle: some View {
-        Text(task.title)
-            .ninaText(.body, task.isDone ? NinaTheme.muted : NinaTheme.ink, weight: .medium)
-            .strikethrough(task.isDone, color: NinaTheme.muted)
-            .multilineTextAlignment(.leading)
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if !task.isDone {
+                PriorityFlag(priority: task.priority)
+            }
+            Text(task.title)
+                .ninaText(.body, task.isDone ? NinaTheme.muted : NinaTheme.ink, weight: .medium)
+                .strikethrough(task.isDone, color: NinaTheme.muted)
+                .multilineTextAlignment(.leading)
+        }
     }
 
     @ViewBuilder

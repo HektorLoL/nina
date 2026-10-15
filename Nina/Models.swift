@@ -737,6 +737,23 @@ enum TaskPriority: String, CaseIterable, Identifiable, Codable, Hashable {
         case .urgent: 2
         }
     }
+
+    // On a list row priority is an ink flag, never a colour: terracotta already says late and red an error.
+    var rowFlagSymbol: String? {
+        switch self {
+        case .normal: nil
+        case .high: "flag"
+        case .urgent: "flag.fill"
+        }
+    }
+
+    var rowFlagLabel: String? {
+        switch self {
+        case .normal: nil
+        case .high: "Prioridade alta"
+        case .urgent: "Urgente"
+        }
+    }
 }
 
 enum TaskRecurrence: String, CaseIterable, Identifiable, Codable, Hashable {

@@ -842,10 +842,15 @@ private struct SelectableTaskRow: View {
                     .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(task.title)
-                        .ninaText(.body, NinaTheme.ink, weight: .medium)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if !task.isDone {
+                            PriorityFlag(priority: task.priority)
+                        }
+                        Text(task.title)
+                            .ninaText(.body, NinaTheme.ink, weight: .medium)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                    }
                     Text(task.effectiveDueLabel())
                         .ninaText(.meta, task.isOverdue() ? NinaTheme.terracotta : NinaTheme.muted)
                         .lineLimit(1)

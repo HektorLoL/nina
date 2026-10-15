@@ -1129,6 +1129,15 @@ branching anywhere.
 - **Category is a monochrome outline glyph, never a colour** (kids mode is the
   one exception, §4 "Kids mode is presentation only"). `MemberTone`'s case
   names are wire values that outlived their hues; they render as neutral ink tints.
+- **Priority is an ink flag before the title, never a colour** (since
+  2026-10-15, Heitor: "Urgente" and "Alta" changed nothing on the list).
+  `PriorityFlag` draws `TaskPriority.rowFlagSymbol` on every open task row in
+  Hoje, Tarefas (selection included) and a child's section: an outline flag
+  for Alta, a filled one for Urgente, nothing for Normal or a done task; it
+  is the same flag the editor chip and the detail row use, and VoiceOver reads
+  "Prioridade alta" or "Urgente". Terracotta already says late and red an
+  error, so neither may mark urgency
+  (`TaskAgendaTests.testAnUrgentOrHighTaskCarriesAnInkFlagOnItsRowAndANormalOneCarriesNone`).
 - **One regulated exception: the ClassInd rating pictogram.**
   `NinaTheme.classInd(_:)` / `classIndLivre` hold the official rating colours
   (Livre green, 10 blue, 12 yellow, 14 orange, 16 red, 18 black) because

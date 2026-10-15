@@ -44,6 +44,21 @@ struct CategoryGlyph: View {
     }
 }
 
+struct PriorityFlag: View {
+    var priority: TaskPriority
+
+    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 13
+
+    var body: some View {
+        if let symbol = priority.rowFlagSymbol, let label = priority.rowFlagLabel {
+            Image(systemName: symbol)
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(NinaTheme.ink)
+                .accessibilityLabel(label)
+        }
+    }
+}
+
 struct MemberAvatar: View {
     var initials: String
     var tone: MemberTone

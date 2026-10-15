@@ -640,6 +640,15 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertEqual(ordered.map(\.title), ["Urgente", "Primeira", "Segunda"])
     }
 
+    func testAnUrgentOrHighTaskCarriesAnInkFlagOnItsRowAndANormalOneCarriesNone() {
+        XCTAssertNil(TaskPriority.normal.rowFlagSymbol)
+        XCTAssertNil(TaskPriority.normal.rowFlagLabel)
+        XCTAssertEqual(TaskPriority.high.rowFlagSymbol, "flag")
+        XCTAssertEqual(TaskPriority.high.rowFlagLabel, "Prioridade alta")
+        XCTAssertEqual(TaskPriority.urgent.rowFlagSymbol, "flag.fill")
+        XCTAssertEqual(TaskPriority.urgent.rowFlagLabel, "Urgente")
+    }
+
     func testAProposalThatRepeatsSomethingStillOpenIsFlaggedAndADoneOneIsNot() {
         var gas = task(dueAt: nil)
         gas.title = "Comprar gás"
