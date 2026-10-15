@@ -479,24 +479,39 @@ private struct ProfileField<Field: View>: View {
 }
 
 private struct ProfileReadOnlyField: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var label: String
     var value: String
     var note: String?
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(label).ninaText(.meta, NinaTheme.muted)
-                Text(value)
-                    .ninaText(.body, NinaTheme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
+            if dynamicTypeSize.isAccessibilitySize {
+                // At accessibility sizes the note joins the label so the person's own address is never cut.
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(note.map { "\(label) · \($0)" } ?? label)
+                        .ninaText(.meta, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(value)
+                        .ninaText(.body, NinaTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 0)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(label).ninaText(.meta, NinaTheme.muted)
+                    Text(value)
+                        .ninaText(.body, NinaTheme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
 
-            if let note {
-                Text(note).ninaText(.meta, NinaTheme.muted)
+                Spacer(minLength: 8)
+
+                if let note {
+                    Text(note).ninaText(.meta, NinaTheme.muted)
+                }
             }
         }
         .padding(.horizontal, 14)

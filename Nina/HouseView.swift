@@ -3,6 +3,7 @@ import SwiftUI
 struct HouseView: View {
     @Environment(AppStore.self) private var store
     @Environment(RouterPath.self) private var router
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var isConfirmingRotation = false
     @State private var isRotatingInvite = false
@@ -270,7 +271,7 @@ struct HouseView: View {
     private var dormantPortrait: some View {
         VStack(alignment: .leading, spacing: 10) {
             Eyebrow(text: "Sinal de sobrecarga")
-            Text("Aparece quando o outro adulto entrar.")
+            Text("Aparece quando outro adulto entrar na casa.")
                 .ninaText(.title)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -324,7 +325,7 @@ struct HouseView: View {
             // The server writes a digest only for a house with two adults who accepted the notice, so the row says so instead of a date.
             NinaRow(
                 title: "Resumo semanal",
-                subtitle: "Com 2 adultos que aceitaram conversar com a Nina.",
+                subtitle: "Chega quando 2 adultos aceitarem conversar com a Nina.",
                 verticalPadding: 14
             ) {
                 CategoryGlyph(systemName: "calendar", size: 18, tint: NinaTheme.ink)
@@ -335,10 +336,16 @@ struct HouseView: View {
             .ninaCard()
             .accessibilityElement(children: .combine)
         } else if !store.canBuyPremium {
-            NinaRow(title: "Resumo semanal") {
+            NinaRow(
+                title: "Resumo semanal",
+                subtitle: premiumTagMovesUnderTitle ? "Premium" : nil,
+                verticalPadding: 14
+            ) {
                 CategoryGlyph(systemName: "lock", size: 18, tint: NinaTheme.ink)
             } trailing: {
-                premiumTag
+                if !premiumTagMovesUnderTitle {
+                    premiumTag
+                }
             }
             .padding(.horizontal, 18)
             .ninaCard()
@@ -348,11 +355,17 @@ struct HouseView: View {
                 Haptics.lightImpact()
                 router.presentedSheet = .premium
             } label: {
-                NinaRow(title: "Resumo semanal") {
+                NinaRow(
+                    title: "Resumo semanal",
+                    subtitle: premiumTagMovesUnderTitle ? "Premium" : nil,
+                    verticalPadding: 14
+                ) {
                     CategoryGlyph(systemName: "lock", size: 18, tint: NinaTheme.ink)
                 } trailing: {
                     HStack(spacing: 10) {
-                        premiumTag
+                        if !premiumTagMovesUnderTitle {
+                            premiumTag
+                        }
                         chevron
                     }
                 }
@@ -366,9 +379,16 @@ struct HouseView: View {
         }
     }
 
+    // A tag never breaks mid-word: at accessibility sizes it becomes the row's second line, as Perfil's count does.
+    private var premiumTagMovesUnderTitle: Bool {
+        dynamicTypeSize.isAccessibilitySize
+    }
+
     private var premiumTag: some View {
         Text("Premium")
             .ninaText(.eyebrow, NinaTheme.muted, weight: .bold)
+            .lineLimit(1)
+            .fixedSize()
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
             .background(NinaTheme.grout, in: Capsule())

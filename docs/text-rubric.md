@@ -376,9 +376,11 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
 - **C11. Notices are one line attached to the top of the composer**, 8 words or fewer, with at most one action. They are not cards in the thread. Precedent: [Claude's limit strip](https://mobbin.com/screens/e4c51fae-e8b6-4e42-8a4c-23d1ec12b06a).
   - A turn Nina never answered is a failure, not a notice (2026-10-15): no Nina reply, the person's words back in the composer, and an error note above it (G20): "Sem conexão. Tente de novo." only when the request found no network, otherwise "Não deu para a Nina responder agora. Tente de novo.". "Sem conexão. Esta resposta veio do aparelho." is gone with the on-device engine that wrote it.
   - "Modo local. Nada sai deste aparelho."
-  - "Ler foto e documento é do Premium." with the action "Ver o Premium"
-  - "No Premium, 50 mensagens por dia." with the action "Ver o Premium"
-  - "Conversa pausada. Anote pelo + em Hoje." after the shared budget pauses the chat, with no action: no purchase lifts it (2026-10-15).
+  - A refusal the server stored nothing of never reads as Nina's line (2026-10-15): the thread gets no line for the refused turn, the person's words and attachments go back to the composer, and the notice stays through any refresh until a turn is answered. No refusal adds a line in Nina's name, refused content included: its line becomes "Mensagem não enviada.", the words never come back, and the error note reads "A Nina não pode ajudar com esse conteúdo. Se houver risco imediato para alguém, procure uma pessoa de confiança ou o serviço de emergência." (third person, a refusal that names its reason under G20, with the server's safety pointer kept whole); it also ends any held notice, because moderation runs only after every ceiling let the turn through.
+  - "Ler foto e documento é do Premium." with the action "Ver o Premium", for an account that may buy in a house that is not covered; otherwise "Foto e documento são do Premium." with no action.
+  - "Limite de mensagens. No Premium, 50 por dia." with the action "Ver o Premium", on the same condition; otherwise (a covered house at its limit, or an account that may not buy) "Limite de mensagens. Anote pelo + em Hoje." with no action. Either ends when the house becomes covered.
+  - "Conversa pausada. Anote pelo + em Hoje." after the shared budget pauses the chat, with no action: no purchase lifts it.
+  - A message too large is a failure, not a notice: the error note "Essa mensagem ou anexo é grande demais para a Nina." (third person, like "A Nina ainda está lendo essa mensagem. Espere um instante.").
   - The withheld-proposals notice becomes "Confirmação ainda fechada nesta versão. Nada entrou na casa."
 - **C12. The typing indicator** is the mark in `.reading` presence, plus "Lendo" or no text at all.
 - **C13. Date correction hints.**
@@ -455,7 +457,7 @@ The invite row's trailing "5 vagas" follows [Duolingo's "4 spots left"](https://
   - The ceiling note becomes "Teto da casa: 100 conversas por dia." (protected).
   - The CTA becomes "Assinar". "Premium" appears on screen at most twice.
   - Show the "Fotos de documentos" row only when `NinaAttachmentGate` is on.
-  - "Resumo semanal" carries one `.meta` line under its title, "Com 2 adultos que aceitaram conversar com a Nina." (CDC art. 31: the condition is stated where the benefit is sold).
+  - "Resumo semanal" carries one `.meta` line under its title, "Quando 2 adultos aceitarem conversar com a Nina." (CDC art. 31: the condition is stated where the benefit is sold, as a condition and never as a fact already met).
   - Plans that do not load read "Não deu para carregar os planos agora." as an error note with a quiet "Tentar de novo" under it (2026-10-15; it was a grout card saying "Tente mais tarde." with no way to retry, and sandbox loads fail often during review).
 - **P5. The management state has a title, the plan, price and renewal rows, and one "Gerenciar na App Store" button.**
   - Show a "Situação" row only when the status differs from what the title says (grace period, expired, revoked).
@@ -483,9 +485,9 @@ Since 2026-09-29 a claimed minor's row reads "Acesso limitado" and an account-le
   - The invite approval line appears in the invite sheet only.
 - **H4. Actions on the Casa screen are rows, not cards.**
   - "Convidar alguém ›" joins the member list. Precedent: [Splitwise group](https://mobbin.com/screens/f0e6077c-afdf-4cc9-9993-c38a65ef982d); its toggle-description block below is the counter-example.
-  - A premium-gated item is one row: a lock glyph, the title, a "Premium" tag and a chevron. Example: "Resumo semanal".
-  - In a covered house the row carries the paywall's line, "Com 2 adultos que aceitaram conversar com a Nina." (2026-10-15; the server writes no digest for a house with fewer than two adults who accepted, and the line stays true once they have).
-- **H5. The solo portrait** is the eyebrow "Sinal de sobrecarga", the title "Aparece quando o outro adulto entrar.", and the button "Convidar". Delete `aloneReassurance`. It shows while the house has one adult, however many children or pets live there: only adults carry load in the portrait (2026-10-15).
+  - A premium-gated item is one row: a lock glyph, the title, a "Premium" tag and a chevron. Example: "Resumo semanal". The tag never breaks mid-word: at accessibility sizes it becomes the row's second line, as Perfil's "Memórias" count does, the chevron stays for a person who may buy, and the row keeps 14 pt above and below (2026-10-15).
+  - In a covered house the row carries "Chega quando 2 adultos aceitarem conversar com a Nina." (2026-10-15; the server writes no digest for a house with fewer than two adults who accepted, so the row names the condition the summary waits on, never a date).
+- **H5. The solo portrait** is the eyebrow "Sinal de sobrecarga", the title "Aparece quando outro adulto entrar na casa." (no article: a single parent has no "o outro adulto"), and the button "Convidar". Delete `aloneReassurance`. It shows while the house has one adult, however many children or pets live there: only adults carry load in the portrait (2026-10-15).
 - **H6. The portrait title never equals the eyebrow.**
   - The unbalanced headline "Sinal de sobrecarga" becomes "Pesando de um lado". Update `HouseholdWorkloadTests.swift:40` deliberately.
   - "A casa está parecida" and "Ainda sem retrato da casa" stay.

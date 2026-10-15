@@ -2421,7 +2421,7 @@ struct PremiumBenefitsSheet: View {
             // CDC art. 31: the condition the server keeps for the digest is stated where it is sold.
             comparisonRow(
                 "Resumo semanal",
-                note: "Com 2 adultos que aceitaram conversar com a Nina.",
+                note: "Quando 2 adultos aceitarem conversar com a Nina.",
                 free: nil,
                 premium: nil
             )

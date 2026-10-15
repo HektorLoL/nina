@@ -3669,6 +3669,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
             decision: .accept,
             editedPayload: beforeTheReading.confirmationPayload
         )
+        XCTAssertNil(store.notificationPromptTask)
         let askedBeforeTheReading = await scheduler.requestCount()
 
         await store.refreshNotificationAuthorizationStatus()
@@ -3687,6 +3688,34 @@ final class AppStoreAuthorizationTests: XCTestCase {
         let askedAfterTheReading = await scheduler.requestCount()
         XCTAssertEqual(askedAfterTheReading, 1)
         XCTAssertEqual(store.notificationAuthorizationStatus, .authorized)
+    }
+
+    @MainActor
+    func testSomeoneIOSAlreadyAnsweredIsNeverAskedBeforeThatAnswerIsRead() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        let scheduler = PermissionPromptRecorder(status: .denied)
+        let store = AppStore(
+            remoteHomeBackend: backend,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: scheduler
+        )
+        await store.activateHomeContext(for: user)
+        let proposal = datedProposal(kind: .reminder)
+        store.messages = [
+            ChatMessage(sender: .nina, text: "Confirme", timestamp: .now, proposals: [proposal])
+        ]
+
+        let didAccept = await store.resolveProposal(
+            proposal,
+            decision: .accept,
+            editedPayload: proposal.confirmationPayload
+        )
+
+        XCTAssertTrue(didAccept)
+        XCTAssertNil(store.notificationPromptTask)
+        let asked = await scheduler.requestCount()
+        XCTAssertEqual(asked, 0)
     }
 
     @MainActor
@@ -4377,6 +4406,184 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testALostTurnWhoseAnswerArrivesLaterClearsItsErrorAndIsNeverSentTwice() async throws {
+        let user = makeUser()
+        var state = makeChattingState(for: user)
+        let backend = RecordingHomeBackend(state: state)
+        let engine = ScriptedNinaEngine(failures: [.unconfirmed, .requestInProgress])
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: engine)
+        await store.activateHomeContext(for: user)
+        let words = "comprar pão amanhã"
+
+        await store.sendMessage(words)
+        let firstIDs = await engine.recordedMessageIDs()
+        let lostID = try XCTUnwrap(firstIDs.first)
+
+        let storedLine = ChatMessage(id: lostID, sender: .user, text: words, timestamp: .now)
+        state.snapshot?.messages = [storedLine]
+        await backend.setHomeState(state)
+        await store.refreshHomeFromRemote(for: user)
+
+        XCTAssertEqual(store.ninaSendFailure, NinaEngineError.unconfirmed.userMessage)
+
+        await store.sendMessage(words)
+
+        XCTAssertEqual(store.messages.filter { $0.id == lostID }.count, 1)
+        XCTAssertFalse(store.messages.contains { $0.sender == .nina })
+        XCTAssertEqual(store.ninaSendFailure, NinaEngineError.requestInProgress.userMessage)
+        XCTAssertFalse(NinaEngineError.requestInProgress.userMessage.contains("estou"))
+        XCTAssertEqual(store.restorableDraft, words)
+
+        state.snapshot?.messages = [storedLine, ChatMessage(sender: .nina, text: "Anotei o pão.", timestamp: .now)]
+        await backend.setHomeState(state)
+        await store.refreshHomeFromRemote(for: user)
+        let sentIDs = await engine.recordedMessageIDs()
+
+        XCTAssertNil(store.ninaSendFailure)
+        XCTAssertNil(store.restorableDraft)
+        XCTAssertEqual(store.answeredDraft, AppStore.AnsweredNinaDraft(text: words, attachments: []))
+        XCTAssertEqual(sentIDs, [lostID, lostID])
+    }
+
+    func testALostTurnIsReplayedOnlyWhileItsFirstRunCouldStillAnswer() {
+        let sentAt = Date(timeIntervalSince1970: 1_790_000_000)
+
+        XCTAssertTrue(AppStore.lostTurnMayStillBeRunning(sentAt: sentAt, now: sentAt.addingTimeInterval(200)))
+        XCTAssertFalse(AppStore.lostTurnMayStillBeRunning(sentAt: sentAt, now: sentAt.addingTimeInterval(241)))
+    }
+
+    @MainActor
+    func testALostTurnStillInProgressPastItsLastPossibleAnswerIsLetGoAndTheNextSendIsANewTurn() async throws {
+        let engine = ScriptedNinaEngine(failures: [.unconfirmed, .requestInProgress, .requestInProgress])
+        let store = await makeStoreForFailingTurn(engine: engine)
+        let before = store.messages
+        let firstSent = Date(timeIntervalSince1970: 1_790_000_000)
+        let words = "comprar pão amanhã"
+
+        store.now = { firstSent }
+        await store.sendMessage(words)
+        store.now = { firstSent.addingTimeInterval(200) }
+        await store.sendMessage(words)
+
+        XCTAssertEqual(store.ninaSendFailure, NinaEngineError.requestInProgress.userMessage)
+
+        store.now = { firstSent.addingTimeInterval(241) }
+        await store.sendMessage(words)
+
+        XCTAssertEqual(store.ninaSendFailure, NinaEngineError.unavailable.userMessage)
+        XCTAssertEqual(store.restorableDraft, words)
+        XCTAssertEqual(store.messages, before)
+
+        store.now = { firstSent.addingTimeInterval(250) }
+        await store.sendMessage(words)
+        let ids = await engine.recordedMessageIDs()
+        let lostID = try XCTUnwrap(ids.first)
+
+        XCTAssertEqual(ids.count, 4)
+        XCTAssertEqual(Array(ids.prefix(3)), [lostID, lostID, lostID])
+        XCTAssertNotEqual(ids.last, lostID)
+        XCTAssertNil(store.ninaSendFailure)
+        XCTAssertEqual(store.messages.last?.sender, .nina)
+        XCTAssertEqual(store.messages.last { $0.sender == .user }?.timestamp, firstSent.addingTimeInterval(250))
+    }
+
+    @MainActor
+    func testTheComposerLetsGoOfASettledLostTurnOnlyWhileItStillHoldsTheSameWords() async throws {
+        let user = makeUser()
+        var state = makeChattingState(for: user)
+        let backend = RecordingHomeBackend(state: state)
+        let engine = ScriptedNinaEngine(failures: [.unconfirmed])
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: engine)
+        await store.activateHomeContext(for: user)
+        let words = "comprar pão amanhã"
+        let photo = NinaAttachmentInput(
+            metadata: ChatAttachment(kind: .image, filename: "lista.jpg", mimeType: "image/jpeg", byteCount: 4),
+            data: Data("foto".utf8)
+        )
+        let addedSince = NinaAttachmentInput(
+            metadata: ChatAttachment(kind: .image, filename: "outra.jpg", mimeType: "image/jpeg", byteCount: 5),
+            data: Data("outra".utf8)
+        )
+        store.attachmentGate = NinaAttachmentGate(isEnabled: true)
+
+        await store.sendMessage(words, attachments: [photo])
+        let sentIDs = await engine.recordedMessageIDs()
+        let lostID = try XCTUnwrap(sentIDs.first)
+        let composer = try XCTUnwrap(store.restorableDraft) + " \n"
+
+        state.snapshot?.messages = [
+            ChatMessage(id: lostID, sender: .user, text: words, timestamp: .now),
+            ChatMessage(sender: .nina, text: "Anotei o pão.", timestamp: .now)
+        ]
+        await backend.setHomeState(state)
+        await store.refreshHomeFromRemote(for: user)
+        let answered = try XCTUnwrap(store.answeredDraft)
+        let released = try XCTUnwrap(NinaChatView.composerAfterAnsweredTurn(
+            draft: composer,
+            attachments: [photo, addedSince],
+            answered: answered
+        ))
+
+        XCTAssertEqual(released.draft, "")
+        XCTAssertEqual(released.attachments, [addedSince])
+        XCTAssertNil(NinaChatView.composerAfterAnsweredTurn(
+            draft: words + "\ne leite",
+            attachments: [photo],
+            answered: answered
+        ))
+        XCTAssertNil(NinaChatView.composerAfterAnsweredTurn(
+            draft: "comprar pães amanhã",
+            attachments: [photo],
+            answered: answered
+        ))
+    }
+
+    @MainActor
+    func testABudgetPauseKeepsTheWordsAndThePauseThroughARefreshUntilATurnIsAnswered() async {
+        let user = makeUser()
+        var state = makeChattingState(for: user)
+        let backend = RecordingHomeBackend(state: state)
+        let engine = ScriptedNinaEngine(failures: [.monthlyBudgetReached])
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: engine)
+        await store.activateHomeContext(for: user)
+        let before = store.messages
+        let words = "Me lembra de ligar para o pediatra amanhã"
+
+        await store.sendMessage(words)
+
+        XCTAssertEqual(store.messages, before)
+        XCTAssertEqual(store.restorableDraft, words)
+        XCTAssertTrue(store.isChatPausedForBudget)
+        XCTAssertNil(store.ninaSendFailure)
+
+        state.snapshot?.messages = [ChatMessage(sender: .nina, text: "Oi.", timestamp: .now)]
+        await backend.setHomeState(state)
+        await store.refreshHomeFromRemote(for: user)
+
+        XCTAssertEqual(store.messages.map(\.text), ["Oi."])
+        XCTAssertTrue(store.isChatPausedForBudget)
+        XCTAssertEqual(store.restorableDraft, words)
+
+        await store.sendMessage(words)
+
+        XCTAssertFalse(store.isChatPausedForBudget)
+        XCTAssertEqual(store.messages.last?.sender, .nina)
+    }
+
+    func testWordsTypedWhileNinaWasReadingStayAfterTheRestoredOnesAndNeverReplaceThem() {
+        let failed = "comprar pão"
+
+        XCTAssertEqual(NinaChatView.restoredComposerText(failed: failed, typedSince: ""), failed)
+        XCTAssertEqual(NinaChatView.restoredComposerText(failed: failed, typedSince: " \n"), failed)
+        XCTAssertEqual(NinaChatView.restoredComposerText(failed: failed, typedSince: "comprar pão"), failed)
+        XCTAssertEqual(
+            NinaChatView.restoredComposerText(failed: failed, typedSince: "e leite"),
+            "comprar pão\ne leite"
+        )
+        XCTAssertEqual(NinaChatView.restoredComposerText(failed: "", typedSince: "e leite"), "e leite")
+    }
+
+    @MainActor
     func testOnlyARequestThatFoundNoNetworkIsToldThereIsNoConnection() async {
         XCTAssertEqual(NinaEngineError(transportError: URLError(.notConnectedToInternet)), .offline)
         XCTAssertEqual(NinaEngineError(transportError: URLError(.cannotFindHost)), .offline)
@@ -4431,15 +4638,194 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
-    func testARefusalTheServerAnsweredStillReadsAsNinasLineInTheThread() async {
-        let store = await makeStoreForFailingTurn(error: .rateLimited)
+    func testRefusedContentAddsNoLineInNinasNameAndEndsTheCeilingItGotPast() async {
+        let heldRefusals: [NinaEngineError] = [.rateLimited, .monthlyBudgetReached]
+        let earlierWords = "Me lembra de comprar fralda amanhã"
+        let refusedWords = "texto recusado"
 
-        await store.sendMessage("mais uma")
+        for heldRefusal in heldRefusals {
+            let user = makeUser()
+            let backend = RecordingHomeBackend(state: makeChattingState(for: user))
+            let engine = ScriptedNinaEngine(failures: [heldRefusal, .inputNotSupported])
+            let store = AppStore(remoteHomeBackend: backend, ninaEngine: engine)
+            await store.activateHomeContext(for: user)
+            let before = store.messages
 
+            await store.sendMessage(earlierWords)
+
+            XCTAssertEqual(store.chatRefusal, heldRefusal, "\(heldRefusal)")
+            XCTAssertEqual(store.restorableDraft, earlierWords, "\(heldRefusal)")
+            store.restorableDraft = nil
+
+            await store.sendMessage(refusedWords)
+
+            XCTAssertEqual(
+                store.messages.filter { $0.sender == .nina },
+                before.filter { $0.sender == .nina },
+                "\(heldRefusal)"
+            )
+            XCTAssertEqual(store.messages.count, before.count + 1, "\(heldRefusal)")
+            XCTAssertEqual(store.messages.last?.sender, .user, "\(heldRefusal)")
+            XCTAssertEqual(store.messages.last?.text, AppStore.heldMessageMarker, "\(heldRefusal)")
+            XCTAssertFalse(store.messages.contains { $0.text == refusedWords }, "\(heldRefusal)")
+            XCTAssertEqual(store.ninaSendFailure, NinaEngineError.inputNotSupported.userMessage, "\(heldRefusal)")
+            XCTAssertTrue(store.ninaSendFailure?.contains("risco imediato") == true, "\(heldRefusal)")
+            XCTAssertFalse(NinaEngineError.inputNotSupported.userMessage.contains("consigo"))
+            XCTAssertNil(store.chatRefusal, "\(heldRefusal)")
+            XCTAssertFalse(store.isChatPausedForBudget, "\(heldRefusal)")
+            XCTAssertNil(composerNotice(for: store), "\(heldRefusal)")
+            XCTAssertNil(store.restorableDraft, "\(heldRefusal)")
+            XCTAssertEqual(store.restorableAttachments, [], "\(heldRefusal)")
+            XCTAssertFalse(store.isNinaResponding, "\(heldRefusal)")
+        }
+    }
+
+    @MainActor
+    func testARefusalTheServerKeptNothingOfLeavesNoLineInNinasNameAndPutsTheWordsAndAttachmentsBack() async {
+        let refusals: [NinaEngineError] = [
+            .rateLimited, .monthlyBudgetReached, .inputTooLarge,
+            .attachmentsRequirePremium, .adultAccessRequired, .aiConsentRequired
+        ]
+        let attachment = NinaAttachmentInput(
+            metadata: ChatAttachment(
+                kind: .document,
+                filename: "boleto.pdf",
+                mimeType: "application/pdf",
+                byteCount: 4
+            ),
+            data: Data("test".utf8)
+        )
+
+        for refusal in refusals {
+            let store = await makeStoreForFailingTurn(error: refusal)
+            store.attachmentGate = NinaAttachmentGate(isEnabled: true)
+            let before = store.messages
+
+            await store.sendMessage("pagar o boleto dia 20", attachments: [attachment])
+
+            XCTAssertEqual(store.messages, before, "\(refusal)")
+            XCTAssertEqual(store.restorableDraft, "pagar o boleto dia 20", "\(refusal)")
+            XCTAssertEqual(store.restorableAttachments, [attachment], "\(refusal)")
+            XCTAssertFalse(store.isNinaResponding, "\(refusal)")
+            switch refusal {
+            case .inputTooLarge:
+                XCTAssertEqual(store.ninaSendFailure, NinaEngineError.inputTooLarge.userMessage)
+                XCTAssertFalse(NinaEngineError.inputTooLarge.userMessage.contains("mim"))
+                XCTAssertNil(store.chatRefusal)
+            case .aiConsentRequired:
+                XCTAssertFalse(store.hasAIMemoryConsent)
+                XCTAssertFalse(store.canSendNinaMessages)
+                XCTAssertFalse(store.aiConsentNoticeChanged)
+                XCTAssertNil(store.ninaSendFailure)
+            case .adultAccessRequired:
+                XCTAssertFalse(store.canUseNinaAI)
+                XCTAssertFalse(store.canSendNinaMessages)
+                XCTAssertEqual(store.chatRefusal, refusal)
+                XCTAssertNil(store.ninaSendFailure)
+            default:
+                XCTAssertEqual(store.chatRefusal, refusal, "\(refusal)")
+                XCTAssertTrue(store.canSendNinaMessages, "\(refusal)")
+                XCTAssertNil(store.ninaSendFailure, "\(refusal)")
+            }
+        }
+    }
+
+    @MainActor
+    func testARateLimitKeepsTheWordsAndThePremiumRouteThroughARefresh() async {
+        let user = makeUser()
+        var state = makeChattingState(for: user)
+        let backend = RecordingHomeBackend(state: state)
+        let engine = ScriptedNinaEngine(failures: [.rateLimited])
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: engine)
+        await store.activateHomeContext(for: user)
+        let before = store.messages
+        let words = "Me lembra de comprar fralda amanhã"
+        let premiumRoute = ChatComposerNotice(
+            systemName: "lock",
+            text: "Limite de mensagens. No Premium, 50 por dia.",
+            opensPremium: true
+        )
+
+        await store.sendMessage(words)
+
+        XCTAssertEqual(store.messages, before)
+        XCTAssertEqual(store.restorableDraft, words)
+        XCTAssertEqual(store.chatRefusal, .rateLimited)
+        XCTAssertEqual(composerNotice(for: store), premiumRoute)
+
+        state.snapshot?.messages = [ChatMessage(sender: .nina, text: "Oi.", timestamp: .now)]
+        await backend.setHomeState(state)
+        await store.refreshHomeFromRemote(for: user)
+
+        XCTAssertEqual(store.messages.map(\.text), ["Oi."])
+        XCTAssertEqual(store.restorableDraft, words)
+        XCTAssertEqual(composerNotice(for: store), premiumRoute)
+
+        state.householdPremium = HouseholdPremium(isActive: true, status: .active, expiresAt: nil)
+        await backend.setHomeState(state)
+        await store.refreshHomeFromRemote(for: user)
+
+        XCTAssertNil(store.chatRefusal)
+        XCTAssertNil(composerNotice(for: store))
+
+        await store.sendMessage(words)
+
+        XCTAssertNil(store.chatRefusal)
         XCTAssertEqual(store.messages.last?.sender, .nina)
-        XCTAssertEqual(store.messages.last?.text, NinaEngineError.rateLimited.userMessage)
-        XCTAssertNil(store.ninaSendFailure)
-        XCTAssertNil(store.restorableDraft)
+    }
+
+    func testOnlyAPersonWhoMayBuyForAnUncoveredHouseIsOfferedPremiumForARefusal() {
+        let limit = ChatComposerNotice.refusal(.rateLimited, houseIsCovered: false, mayBuyPremium: true)
+        let coveredLimit = ChatComposerNotice.refusal(.rateLimited, houseIsCovered: true, mayBuyPremium: true)
+        let limitWithoutBuying = ChatComposerNotice.refusal(.rateLimited, houseIsCovered: false, mayBuyPremium: false)
+        let documents = ChatComposerNotice.refusal(.attachmentsRequirePremium, houseIsCovered: false, mayBuyPremium: true)
+        let documentsWithoutBuying = ChatComposerNotice.refusal(
+            .attachmentsRequirePremium,
+            houseIsCovered: false,
+            mayBuyPremium: false
+        )
+        let budget = ChatComposerNotice.refusal(.monthlyBudgetReached, houseIsCovered: false, mayBuyPremium: true)
+
+        XCTAssertEqual(limit?.text, "Limite de mensagens. No Premium, 50 por dia.")
+        XCTAssertEqual(limit?.opensPremium, true)
+        XCTAssertEqual(coveredLimit?.text, "Limite de mensagens. Anote pelo + em Hoje.")
+        XCTAssertEqual(coveredLimit?.opensPremium, false)
+        XCTAssertEqual(limitWithoutBuying, coveredLimit)
+        XCTAssertEqual(documents?.text, "Ler foto e documento é do Premium.")
+        XCTAssertEqual(documents?.opensPremium, true)
+        XCTAssertEqual(documentsWithoutBuying?.text, "Foto e documento são do Premium.")
+        XCTAssertEqual(documentsWithoutBuying?.opensPremium, false)
+        XCTAssertEqual(budget?.text, "Conversa pausada. Anote pelo + em Hoje.")
+        XCTAssertEqual(budget?.opensPremium, false)
+        XCTAssertNil(ChatComposerNotice.refusal(nil, houseIsCovered: false, mayBuyPremium: true))
+        XCTAssertNil(ChatComposerNotice.refusal(.adultAccessRequired, houseIsCovered: false, mayBuyPremium: true))
+        for notice in [limit, coveredLimit, documents, documentsWithoutBuying, budget].compactMap({ $0 }) {
+            XCTAssertLessThanOrEqual(notice.text.split(separator: " ").count, 8)
+            XCTAssertFalse(notice.text.contains("!"))
+        }
+    }
+
+    @MainActor
+    func testAnAdultRefusalShowsTheAdultGateUntilTheHouseIsReadAgain() async {
+        let user = makeUser()
+        let state = makeChattingState(for: user)
+        let backend = RecordingHomeBackend(state: state)
+        let engine = ScriptedNinaEngine(failures: [.adultAccessRequired])
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: engine)
+        await store.activateHomeContext(for: user)
+        let words = "Quem leva o lixo hoje"
+
+        await store.sendMessage(words)
+
+        XCTAssertFalse(store.canUseNinaAI)
+        XCTAssertFalse(store.needsConfirmedAgeForChat)
+        XCTAssertFalse(store.messages.contains { $0.text == words })
+
+        await store.refreshHomeFromRemote(for: user)
+
+        XCTAssertTrue(store.canUseNinaAI)
+        XCTAssertNil(store.chatRefusal)
+        XCTAssertEqual(store.restorableDraft, words)
     }
 
     @MainActor
@@ -4789,8 +5175,40 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    private func composerNotice(for store: AppStore) -> ChatComposerNotice? {
+        ChatComposerNotice.refusal(
+            store.chatRefusal,
+            houseIsCovered: store.householdPremium.isActive,
+            mayBuyPremium: store.canBuyPremium
+        )
+    }
+
+    @MainActor
     private func makeStoreForFailingTurn(error: NinaEngineError) async -> AppStore {
         await makeStoreForFailingTurn(engine: FailingNinaEngine(error: error))
+    }
+
+    private func makeChattingState(for user: AuthUser) -> RemoteHomeState {
+        makeRemoteState(
+            members: [
+                HouseholdMember(
+                    userID: user.id,
+                    name: user.displayName,
+                    relationship: "Você",
+                    role: .adult,
+                    tone: .mint,
+                    taskCount: 0,
+                    memoryNote: ""
+                )
+            ],
+            aiConsent: NinaAIConsent(
+                isGranted: true,
+                policyVersion: PrivacyPolicyVersion.current,
+                acceptedAt: Date(timeIntervalSince1970: 1_785_585_600),
+                transferConsented: true,
+                isCurrent: true
+            )
+        )
     }
 
     @MainActor

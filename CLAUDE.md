@@ -437,12 +437,14 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   `HouseholdWorkload` counts adults alone (`HouseholdRole.isWorkloadCarrier`):
   `.child`, `.teen`, `.unrecognized` and, since 2026-10-15, `.pet` carriers are
   left out at the `isConclusive` gate and in the entries, and Casa's dormant
-  "Aparece quando o outro adulto entrar." shows while the house has one adult,
-  however many children or pets live there (`waitsForAnotherAdult`). The weekly
-  insight counts only claimed adults with a live, current consent and skips a
-  house with fewer than 2 of them, so a covered house's "Resumo semanal" row on
-  Casa reads "Com 2 adultos que aceitaram conversar com a Nina.", the paywall's
-  own line, true before and after the condition is met.
+  "Aparece quando outro adulto entrar na casa." shows while the house has one
+  adult, however many children or pets live there (`waitsForAnotherAdult`), and
+  presumes no partner. The weekly insight counts only claimed adults with a
+  live, current consent and skips a house with fewer than 2 of them, so a
+  covered house's "Resumo semanal" row on Casa reads "Chega quando 2 adultos
+  aceitarem conversar com a Nina." and the paywall's note "Quando 2 adultos
+  aceitarem conversar com a Nina.": a condition, never a statement that it is
+  already met.
 
 ### AI
 
@@ -462,18 +464,70 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   the request found no network (`NinaEngineError(transportError:)`), otherwise
   "Não deu para a Nina responder agora. Tente de novo.", because a drop or a
   timeout may have reached the server. Words typed while Nina was reading stay
-  after the restored ones, never in place of them. A failure whose outcome is
-  unknown (`NinaEngineError.unconfirmed`: a timeout, a dropped connection, a
-  gateway answer with no code) keeps its message id in memory
-  (`unconfirmedTurn`), so the same words sent again replay that turn through
-  `begin_nina_chat_run`'s idempotency instead of running and charging it twice;
-  a failure the function reported with its own code gets a new id, because a
-  failed run answers its old id with `request_in_progress` forever (locked by
-  `…testResendingATurnWhoseAnswerWasLostReplaysItsIDSoTheServerNeverRunsItTwice`
-  and `…testATurnTheServerSaidFailedOrNewWordsAreSentAsANewTurn`). A refusal the
-  server answered (limit, budget, consent, block, refused content) still reads
-  as Nina's line; the budget one also sets "Conversa pausada. Anote pelo + em
-  Hoje." on the composer, with no Premium route.
+  after the restored ones, never in place of them
+  (`NinaChatView.restoredComposerText`, locked by
+  `…testWordsTypedWhileNinaWasReadingStayAfterTheRestoredOnesAndNeverReplaceThem`).
+  A failure whose outcome is unknown (`NinaEngineError.unconfirmed`: a timeout, a
+  dropped connection, a gateway answer with no code) keeps its message id in
+  memory (`unconfirmedTurn`), so the same words sent again replay that turn
+  through `begin_nina_chat_run`'s idempotency instead of running and charging it
+  twice, with no second bubble when a refresh already shows the server's copy of
+  the line; a failure the function reported with its own code gets a new id,
+  because a failed run answers its old id with `request_in_progress` forever. A
+  replay that meets `request_in_progress` keeps the id and shows "A Nina ainda
+  está lendo essa mensagem. Espere um instante." as the error note, never as
+  Nina's line, but only while the first run could still answer
+  (`AppStore.lostTurnMayStillBeRunning`: 240 s after the uncertain attempt,
+  longer than nina-chat's own timeouts let any run last, about 195 s with every
+  tool round); after that the next send is a new turn. The window reads
+  `AppStore.now`, the store's injectable clock, which also stamps the person's
+  line (locked by
+  `…testALostTurnStillInProgressPastItsLastPossibleAnswerIsLetGoAndTheNextSendIsANewTurn`).
+  When a refresh brings the lost id followed by a Nina line, the turn is
+  settled: the error note goes, an unconsumed restore is dropped, and
+  `answeredDraft` lets the composer let go of the same words and attachments if
+  the person has not changed them (`NinaChatView.composerAfterAnsweredTurn`:
+  the trimmed words must match, and only the turn's own attachments go), so an
+  answered turn is never sent twice (locked by
+  `…testResendingATurnWhoseAnswerWasLostReplaysItsIDSoTheServerNeverRunsItTwice`,
+  `…testATurnTheServerSaidFailedOrNewWordsAreSentAsANewTurn`,
+  `…testALostTurnWhoseAnswerArrivesLaterClearsItsErrorAndIsNeverSentTwice` and
+  `…testTheComposerLetsGoOfASettledLostTurnOnlyWhileItStillHoldsTheSameWords`).
+  No refusal adds a line in Nina's name, because the server stores no reply to
+  a refused turn and a line held only on the phone would vanish at the next
+  refresh (`apply(_:)` replaces the thread). Refused content
+  (`input_not_supported`) leaves only the person's line as the "Mensagem não
+  enviada." the server keeps, never the words or attachments back in the
+  composer, and the error note "A Nina não pode ajudar com esse conteúdo. Se
+  houver risco imediato para alguém, procure uma pessoa de confiança ou o
+  serviço de emergência.", which carries the safety pointer the server's own
+  refusal does; since moderation runs after `begin_nina_chat_run` passed every
+  ceiling, it also ends any refusal held in `AppStore.chatRefusal`. Every other
+  refusal is raised by `begin_nina_chat_run` (or the adult check before it)
+  before it stores anything: the person's line is withdrawn, the words and
+  attachments go back to the composer, and the store fires the error haptic.
+  The message limit, the shared budget, Premium-only attachments and the adult
+  check are held in `AppStore.chatRefusal` until the next answered turn, so no
+  refresh erases what the composer says (`ChatComposerNotice.refusal`): a
+  quota refusal reads "Limite de mensagens. No Premium, 50 por dia." with
+  "Ver o Premium" for an account that may buy in a house that is not covered,
+  otherwise "Limite de mensagens. Anote pelo + em Hoje."; attachments read "Ler
+  foto e documento é do Premium." with the same route, or "Foto e documento são
+  do Premium." without it; the budget reads "Conversa pausada. Anote pelo + em
+  Hoje." (`AppStore.isChatPausedForBudget`) with no Premium route, since no
+  purchase lifts a shared pause. A limit or attachment refusal ends when the
+  house becomes covered. An adult refusal closes the chat to the adult gate
+  (`canUseNinaAI`) until the house is read again. A missing consent
+  (`ai_consent_required`, withdrawn on another phone) brings back the consent
+  card, like an outdated one but without "Este aviso mudou.", and a message
+  too large shows "Essa mensagem ou anexo é grande demais para a Nina." as the
+  error note (locked by
+  `…testARefusalTheServerKeptNothingOfLeavesNoLineInNinasNameAndPutsTheWordsAndAttachmentsBack`,
+  `…testARateLimitKeepsTheWordsAndThePremiumRouteThroughARefresh`,
+  `…testABudgetPauseKeepsTheWordsAndThePauseThroughARefreshUntilATurnIsAnswered`,
+  `…testAnAdultRefusalShowsTheAdultGateUntilTheHouseIsReadAgain`,
+  `…testOnlyAPersonWhoMayBuyForAnUncoveredHouseIsOfferedPremiumForARefusal`
+  and `…testRefusedContentAddsNoLineInNinasNameAndEndsTheCeilingItGotPast`).
   `repository.debug-only-mock` fails the repository preflight if any of the
   three names appears outside an `#if DEBUG` branch of a tracked `Nina/`
   source, and `artifact.debug-chat-engine` fails the archive gate if the binary
@@ -1776,6 +1830,7 @@ main screen. A minor's "Avisos" value and the
 daily-limit line read the guardian's switch and iOS's answer together
 (`AppStore.minorAlertsValue`). Locked by
 `AppStoreAuthorizationTests.testConfirmingADatedProposalAsksIOSForAlertsOnceItsAnswerHasBeenRead`,
+`…testSomeoneIOSAlreadyAnsweredIsNeverAskedBeforeThatAnswerIsRead`,
 `…testAManualDatedTaskAsksOnceAndNeverAsksSomeoneWhoSwitchedAlertsOff`,
 `…testAMinorsPhoneIsAskedOnItsHomeOnlyWhileTheGuardianKeepsAlertsOn` and
 `…testAMinorsAvisosValueSaysWhatThisIPhoneWillActuallyDo`.
@@ -2375,23 +2430,24 @@ the project, not bugs to fix unprompted.
   day otherwise (migration `202610050004`, Heitor's call on 2026-10-05; it was
   30 an hour before), both under the house's 100 a day. Two undeliverable
   benefits were deleted rather than left on the sheet. A denial is routed, not
-  just told: `NinaChatView.premiumCeiling` turns a quota refusal into the
-  composer notice "No Premium, 50 mensagens por dia."
-  with "Ver o Premium", which opens `SheetDestination.premium` for an account
-  that may buy. Since 2026-09-06 the paywall shows a
-  moss activation state ("Premium ativo na casa", one cobalt "Pronto") the moment
-  the house is covered, reloads the home context after a recorded purchase or
-  restore — `householdPremium` comes from the server, so without that reload a
-  successful purchase looked like nothing happened — and Casa and Hoje carry a
-  `PremiumBadge` in their headers while the house is covered; once covered, the
-  same sheet is a management screen (plan, price, renewal, status, what is
-  unlocked, one cobalt "Gerenciar na App Store"), and the moss activation moment
-  shows only when the house became covered while the sheet was open. The first
-  TestFlight sandbox purchase (2026-09-06) was refused every time because Apple's
-  verifier cannot run in the edge runtime (§7); **premium was proven end to end
-  on 2026-09-07** when the pending receipt was redelivered, verified by the
-  WebCrypto path, recorded with `family_id`, and the phone read "Premium ativo
-  para a casa inteira". The whole flow, the failure, and the evidence per claim
+  just told: `ChatComposerNotice.refusal` turns a quota refusal held in
+  `AppStore.chatRefusal` into the composer notice "Limite de mensagens. No
+  Premium, 50 por dia." with "Ver o Premium", which opens
+  `SheetDestination.premium`, for an account that may buy. Since 2026-09-06 the
+  paywall shows a moss activation state ("Premium ativo na casa", one cobalt
+  "Pronto") the moment the house is covered, reloads the home context after a
+  recorded purchase or restore — `householdPremium` comes from the server, so
+  without that reload a successful purchase looked like nothing happened — and
+  Casa and Hoje carry a `PremiumBadge` in their headers while the house is
+  covered; once covered, the same sheet is a management screen (plan, price,
+  renewal, status, what is unlocked, one cobalt "Gerenciar na App Store"), and
+  the moss activation moment shows only when the house became covered while
+  the sheet was open. The first TestFlight sandbox purchase (2026-09-06) was
+  refused every time because Apple's verifier cannot run in the edge runtime
+  (§7); **premium was proven end to end on 2026-09-07** when the pending
+  receipt was redelivered, verified by the WebCrypto path, recorded with
+  `family_id`, and the phone read "Premium ativo para a casa inteira". The
+  whole flow, the failure, and the evidence per claim
   are in `docs/premium-flow.md`. Apple's server notifications arrive and are applied: on 2026-09-07 a
   `DID_CHANGE_RENEWAL_STATUS` and an `EXPIRED` notification were verified,
   stored, and the subscription row went to `expired` — the whole loop is

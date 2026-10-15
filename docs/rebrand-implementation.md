@@ -1085,15 +1085,21 @@ No board draws any of these; each reuses a part the app already has.
   it; a failed save keeps the card, the ticked box and the error above the
   button.
 - **The weekly summary states its condition.** A covered house's "Resumo
-  semanal" row on Casa reads "Com 2 adultos que aceitaram conversar com a
+  semanal" row on Casa reads "Chega quando 2 adultos aceitarem conversar com a
   Nina." (was "O primeiro chega em até 7 dias.", untrue for a single parent),
-  the paywall's own line under its title (CDC art. 31), which stays true once
-  both adults have accepted and the first summary is still on its way. The row
-  keeps 14 pt above and below its two lines.
+  and the paywall's note under its title reads "Quando 2 adultos aceitarem
+  conversar com a Nina." (CDC art. 31). Both are conditions: the first wording,
+  "Com 2 adultos que aceitaram…", read to a paying parent as if the condition
+  were already met. The row keeps 14 pt above and below its two lines, and
+  so do the locked rows of a house that is not covered. Their "Premium" tag
+  never breaks mid-word ("PREM / IUM" at accessibility3): at accessibility
+  sizes it becomes the row's second line, as Perfil's "Memórias" count does,
+  and the chevron stays for a person who may buy.
 - **The portrait compares adults.** A pet no longer carries load, the
-  inconclusive line says "entre 2 adultos", and "Aparece quando o outro adulto
-  entrar." shows while the house has one adult, however many children or pets
-  live there; the invite row and "Renovar o link" follow the same count.
+  inconclusive line says "entre 2 adultos", and "Aparece quando outro adulto
+  entrar na casa." shows while the house has one adult, however many children
+  or pets live there, with no article that presumes a partner; the invite row
+  and "Renovar o link" follow the same count.
 - **A self-declared adult at a child gate can share again.** Under "Só um
   responsável com idade confirmada pela Apple cadastra." (member editor and a
   legacy child's card) and "Isso pede idade confirmada pela Apple." (a minor's
@@ -1101,12 +1107,40 @@ No board draws any of these; each reuses a part the app already has.
   "Confirmada é a idade que a Apple verificou, não só a declarada." and a quiet
   "Tentar de novo" (`AgeCheckCoordinator.requestInline`, outcome in one line,
   M2). Parental controls keep the bare line, since no share opens those gates.
-- **The paused chat promises no month.** The budget refusal reads "A conversa
-  está pausada agora. Tarefas, compras e casa seguem normais." (was "Cheguei
-  ao limite mensal de conversa. Volto no mês que vem. …"), because the cap is
-  one pool for every house. While that line is the newest in the thread the
-  composer carries "Conversa pausada. Anote pelo + em Hoje." (C11), with no
-  Premium route, since no purchase lifts a shared pause.
+- **The paused chat promises no month.** The budget refusal no longer says
+  "Cheguei ao limite mensal de conversa. Volto no mês que vem. …", because the
+  cap is one pool for every house. The server keeps nothing of a refused turn,
+  so the thread gets no line at all (one held only on the phone vanished at the
+  next refresh): the person's words go back to the composer, and until a turn
+  is answered the composer carries "Conversa pausada. Anote pelo + em Hoje."
+  (C11, `AppStore.isChatPausedForBudget`), with no Premium route, since no
+  purchase lifts a shared pause.
+- **No refusal the server stored nothing of reads as Nina's line.** The same
+  holds for the message limit (the free plan's eleventh message of the day),
+  Premium-only attachments, the adult check and a missing consent, which used
+  to answer "Você chegou ao limite de mensagens. Tente mais tarde." or "Não
+  consigo ler anexos sem o Premium da casa." in her name and vanish, words
+  included, at the next refresh. The words and attachments go back to the
+  composer, and `AppStore.chatRefusal` keeps the notice through any refresh:
+  "Limite de mensagens. No Premium, 50 por dia." or "Ler foto e documento é do
+  Premium." with "Ver o Premium" for a person who may buy in a house that is
+  not covered, otherwise "Limite de mensagens. Anote pelo + em Hoje." or "Foto
+  e documento são do Premium." with no action. The limit notice names the
+  limit first, because the person's bubble is gone and the strip is the only
+  thing that says what happened. The adult check shows the adult-only gate
+  until the house is read again, a missing consent brings the consent card
+  back, and a message too large is the error note "Essa mensagem ou anexo é
+  grande demais para a Nina.".
+- **Refused content adds no line in Nina's name either.** It used to answer
+  "Não consigo ajudar com esse conteúdo." as her line, which the server never
+  stored, so it vanished at the next refresh, and it dropped the safety
+  pointer the server attaches to that refusal. Now the person's line becomes
+  "Mensagem não enviada.", as the server keeps it, the words never come back
+  to the composer, and the error note reads "A Nina não pode ajudar com esse
+  conteúdo. Se houver risco imediato para alguém, procure uma pessoa de
+  confiança ou o serviço de emergência.". Moderation runs only after every
+  ceiling let the turn through, so the refusal also clears a held limit or
+  pause notice, which VoiceOver would otherwise have announced in its place.
 - **FAQ.** "Por que um aviso não chegou?" adds that a reminder another person
   creates rings only after you open Nina; two entries are new: "Por que não
   consigo incluir uma criança?" and "O Compartilhamento Familiar libera o

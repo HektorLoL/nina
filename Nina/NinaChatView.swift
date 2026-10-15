@@ -127,16 +127,32 @@ struct NinaChatView: View {
         }
     }
 
-    // Words the chat dropped, or a turn Nina never answered, come back to the composer ahead of anything typed since.
     private func restoreDraftIfNeeded() {
         guard let draft = store.restorableDraft else { return }
         store.restorableDraft = nil
-        let typedSince = composerDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if typedSince.isEmpty || typedSince == draft {
-            composerDraft = draft
-        } else if !draft.isEmpty {
-            composerDraft = draft + "\n" + composerDraft
+        composerDraft = Self.restoredComposerText(failed: draft, typedSince: composerDraft)
+    }
+
+    // Words the chat dropped come back ahead of anything typed since, which stays after them and never in their place.
+    nonisolated static func restoredComposerText(failed: String, typedSince: String) -> String {
+        let typed = typedSince.trimmingCharacters(in: .whitespacesAndNewlines)
+        if typed.isEmpty || typed == failed {
+            return failed
         }
+        if failed.isEmpty {
+            return typedSince
+        }
+        return failed + "\n" + typedSince
+    }
+
+    // An answered turn leaves the composer only while it still holds exactly those words, and takes only its own attachments.
+    nonisolated static func composerAfterAnsweredTurn(
+        draft: String,
+        attachments: [NinaAttachmentInput],
+        answered: AppStore.AnsweredNinaDraft
+    ) -> (draft: String, attachments: [NinaAttachmentInput])? {
+        guard draft.trimmingCharacters(in: .whitespacesAndNewlines) == answered.text else { return nil }
+        return ("", attachments.filter { !answered.attachments.contains($0) })
     }
 
     // The intro stands in for a thread with nothing to decide yet: a greeting may hide
@@ -193,6 +209,7 @@ struct NinaChatView: View {
                 // Focus stays in the composer, so Nina's answer is spoken as it lands; a turn she never answered speaks no old reply.
                 .onChange(of: store.isNinaResponding) { wasResponding, isResponding in
                     guard wasResponding, !isResponding, store.ninaSendFailure == nil,
+                          store.chatRefusal == nil,
                           let reply = store.messages.last, reply.sender == .nina else { return }
                     AccessibilityNotification.Announcement("Nina: \(reply.text)").post()
                 }
@@ -443,6 +460,36 @@ struct AIMemoryConsentCard: View {
     }
 }
 
+// A refusal the server kept nothing of is told on the composer; only one this person can lift by buying carries the route.
+struct ChatComposerNotice: Equatable {
+    var systemName: String
+    var text: String
+    var opensPremium = false
+
+    static func refusal(
+        _ refusal: NinaEngineError?,
+        houseIsCovered: Bool,
+        mayBuyPremium: Bool
+    ) -> ChatComposerNotice? {
+        let offersPremium = !houseIsCovered && mayBuyPremium
+        switch refusal {
+        case .rateLimited?:
+            return offersPremium
+                ? ChatComposerNotice(systemName: "lock", text: "Limite de mensagens. No Premium, 50 por dia.", opensPremium: true)
+                : ChatComposerNotice(systemName: "pause.circle", text: "Limite de mensagens. Anote pelo + em Hoje.")
+        case .attachmentsRequirePremium?:
+            return offersPremium
+                ? ChatComposerNotice(systemName: "lock", text: "Ler foto e documento é do Premium.", opensPremium: true)
+                : ChatComposerNotice(systemName: "lock", text: "Foto e documento são do Premium.")
+        case .monthlyBudgetReached?:
+            // The shared budget pauses every house alike, so no purchase is offered for it.
+            return ChatComposerNotice(systemName: "pause.circle", text: "Conversa pausada. Anote pelo + em Hoje.")
+        default:
+            return nil
+        }
+    }
+}
+
 private struct ChatInputBar: View {
     @Environment(AppStore.self) private var store
     @Environment(RouterPath.self) private var router
@@ -489,7 +536,8 @@ private struct ChatInputBar: View {
                 }
 
                 // A house that lost Premium is a closed door, not a failure: grout and ink, never the error red.
-                if droppedAttachmentsForPremium, !canReadDocuments {
+                if droppedAttachmentsForPremium, !canReadDocuments,
+                   store.chatRefusal != .attachmentsRequirePremium {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "lock")
                             .font(.system(size: 13, weight: .regular))
@@ -564,9 +612,19 @@ private struct ChatInputBar: View {
             guard !items.isEmpty else { return }
             loadPhotos(items)
         }
-        .onAppear(perform: restoreAttachmentsIfNeeded)
+        .onAppear {
+            restoreAttachmentsIfNeeded()
+            releaseAnsweredDraftIfNeeded()
+        }
         .onChange(of: store.restorableAttachments) { _, _ in
             restoreAttachmentsIfNeeded()
+        }
+        .onChange(of: store.answeredDraft) { _, _ in
+            releaseAnsweredDraftIfNeeded()
+        }
+        .onChange(of: store.isNinaResponding) { wasResponding, isResponding in
+            guard wasResponding, !isResponding, store.ninaSendFailure == nil, let refusalNotice else { return }
+            AccessibilityNotification.Announcement(refusalNotice.text).post()
         }
         .onChange(of: canReadDocuments) { _, isAllowed in
             if isAllowed { droppedAttachmentsForPremium = false }
@@ -601,51 +659,27 @@ private struct ChatInputBar: View {
         .opacity(store.isNinaResponding ? 0.4 : 1)
     }
 
-    private struct ComposerNotice {
-        var systemName: String
-        var text: String
-        var opensPremium = false
-    }
-
     // An honesty state is never replaced by silence: whatever the thread cannot show about
     // where a reply came from, or which ceiling stopped it, sits on the composer.
-    private var notice: ComposerNotice? {
-        if let premiumCeiling {
-            return ComposerNotice(systemName: "lock", text: premiumCeiling, opensPremium: true)
-        }
-        if isPausedForBudget {
-            return ComposerNotice(systemName: "pause.circle", text: "Conversa pausada. Anote pelo + em Hoje.")
+    private var notice: ChatComposerNotice? {
+        if let refusalNotice {
+            return refusalNotice
         }
         if store.isUsingLocalNina {
-            return ComposerNotice(systemName: "iphone", text: "Modo local. Nada sai deste aparelho.")
+            return ChatComposerNotice(systemName: "iphone", text: "Modo local. Nada sai deste aparelho.")
         }
         return nil
     }
 
-    // A server denial arrives as an ordinary Nina line, so the ceiling it names is recovered here:
-    // a refusal this household can lift must carry the route, never end the conversation.
-    private var premiumCeiling: String? {
-        guard !store.householdPremium.isActive,
-              let latest = store.messages.last,
-              latest.sender == .nina else {
-            return nil
-        }
-        if latest.text == NinaEngineError.attachmentsRequirePremium.userMessage {
-            return "Ler foto e documento é do Premium."
-        }
-        if latest.text == NinaEngineError.rateLimited.userMessage {
-            return "No Premium, 50 mensagens por dia."
-        }
-        return nil
+    private var refusalNotice: ChatComposerNotice? {
+        ChatComposerNotice.refusal(
+            store.chatRefusal,
+            houseIsCovered: store.householdPremium.isActive,
+            mayBuyPremium: store.canBuyPremium
+        )
     }
 
-    // The shared budget pauses every house alike, so no purchase is offered for it.
-    private var isPausedForBudget: Bool {
-        guard let latest = store.messages.last, latest.sender == .nina else { return false }
-        return latest.text == NinaEngineError.monthlyBudgetReached.userMessage
-    }
-
-    private func noticeStrip(_ notice: ComposerNotice) -> some View {
+    private func noticeStrip(_ notice: ChatComposerNotice) -> some View {
         HStack(spacing: 10) {
             Image(systemName: notice.systemName)
                 .font(.system(size: 13, weight: .regular))
@@ -828,6 +862,19 @@ private struct ChatInputBar: View {
         if combined.count > ChatAttachmentLimits.maxCount {
             attachmentError = ChatAttachmentLimits.countError
         }
+    }
+
+    private func releaseAnsweredDraftIfNeeded() {
+        guard let answered = store.answeredDraft else { return }
+        store.answeredDraft = nil
+        guard let released = NinaChatView.composerAfterAnsweredTurn(
+            draft: draft,
+            attachments: pendingAttachments.map(\.input),
+            answered: answered
+        ) else { return }
+        draft = released.draft
+        pendingAttachments.removeAll { !released.attachments.contains($0.input) }
+        attachmentError = nil
     }
 
     private func removeAttachment(_ attachment: PendingChatAttachment) {

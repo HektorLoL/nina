@@ -287,11 +287,21 @@ final class AppStore {
     // What the person typed before the chat closed on them, kept in memory only and never in a snapshot.
     var restorableDraft: String?
     var restorableAttachments: [NinaAttachmentInput] = []
+    // The words of a lost turn the server answered after all, so the composer can let go of them.
+    var answeredDraft: AnsweredNinaDraft?
+    // The server keeps nothing of a turn it refused before reading it, so the refusal lives here and no refresh erases it.
+    private(set) var chatRefusal: NinaEngineError?
     // A turn whose answer was lost keeps its id, so the same words sent again replay it instead of running it twice.
     @ObservationIgnored private var unconfirmedTurn: UnconfirmedNinaTurn?
 
     private struct UnconfirmedNinaTurn {
         let messageID: UUID
+        let text: String
+        let attachments: [NinaAttachmentInput]
+        let sentAt: Date
+    }
+
+    struct AnsweredNinaDraft: Equatable {
         let text: String
         let attachments: [NinaAttachmentInput]
     }
@@ -305,6 +315,7 @@ final class AppStore {
     @ObservationIgnored private let remoteHomeBackend: (any RemoteHomeBackend)?
     @ObservationIgnored private let notificationScheduler: any HomeNotificationScheduling
     @ObservationIgnored var attachmentGate = NinaAttachmentGate.current
+    @ObservationIgnored var now: () -> Date = Date.init
     @ObservationIgnored private var activeHomeUserID: String?
     @ObservationIgnored private var activeUser: AuthUser?
     @ObservationIgnored private var homeContextGeneration: UInt64 = 0
@@ -384,6 +395,10 @@ final class AppStore {
         return familyGroup.members.first { $0.userID == activeHomeUserID }
     }
 
+    var isChatPausedForBudget: Bool {
+        chatRefusal == .monthlyBudgetReached
+    }
+
     var isUsingLocalNina: Bool {
         usesLocalDebugBackend(for: activeUser)
             || (remoteHomeBackend == nil && BackendServices.environment == .mock)
@@ -454,7 +469,7 @@ final class AppStore {
         guard activeUser != nil else {
             return remoteHomeBackend == nil
         }
-        return viewerAge.canUseAI && isAdultHouseholdMember
+        return viewerAge.canUseAI && isAdultHouseholdMember && chatRefusal != .adultAccessRequired
     }
 
     var requiresAIMemoryConsent: Bool {
@@ -642,8 +657,10 @@ final class AppStore {
             minorSessionStartedAt = nil
             restorableDraft = nil
             restorableAttachments = []
+            answeredDraft = nil
             unconfirmedTurn = nil
             ninaSendFailure = nil
+            chatRefusal = nil
             isRecordingFootnoteAcceptance = false
             if let previousUserID = activeHomeUserID {
                 removeStoredTermsFootnote(for: previousUserID)
@@ -2111,6 +2128,11 @@ final class AppStore {
         }
     }
 
+    // nina-chat's own timeouts end every run in under four minutes, so one still "in progress" after this never answers.
+    nonisolated static func lostTurnMayStillBeRunning(sentAt: Date, now: Date) -> Bool {
+        now.timeIntervalSince(sentAt) < 240
+    }
+
     func sendMessage(
         _ rawText: String,
         attachments requestedAttachments: [NinaAttachmentInput] = []
@@ -2125,23 +2147,28 @@ final class AppStore {
         let contextToken = currentHomeContextToken
         let familyID = familyGroup.id
         ninaSendFailure = nil
-        let replayedTurn = unconfirmedTurn.flatMap { turn -> UUID? in
-            guard turn.text == text,
-                  turn.attachments == attachments,
-                  !messages.contains(where: { $0.id == turn.messageID }) else { return nil }
-            return turn.messageID
+        let replayedTurn = unconfirmedTurn.flatMap { turn -> UnconfirmedNinaTurn? in
+            turn.text == text && turn.attachments == attachments ? turn : nil
         }
         unconfirmedTurn = nil
 
         let userMessage = ChatMessage(
-            id: replayedTurn ?? UUID(),
+            id: replayedTurn?.messageID ?? UUID(),
             sender: .user,
             text: text,
-            timestamp: .now,
+            timestamp: now(),
             attachments: attachments.map(\.metadata)
         )
-        messages.append(userMessage)
-        persistActivityLocally()
+        // A replayed turn the server already shows keeps its single line; only a line this send added is taken back.
+        let isAlreadyInThread = messages.contains { $0.id == userMessage.id }
+        if !isAlreadyInThread {
+            messages.append(userMessage)
+            persistActivityLocally()
+        }
+        func withdrawUserMessage() {
+            guard !isAlreadyInThread else { return }
+            messages.removeAll { $0.id == userMessage.id }
+        }
 
         isNinaResponding = true
         defer {
@@ -2167,30 +2194,67 @@ final class AppStore {
                 messageID: userMessage.id
             )
             guard isCurrentHomeContext(contextToken) else { return }
-        } catch let engineError as NinaEngineError where !engineError.leavesTurnUnanswered {
+            chatRefusal = nil
+        } catch {
             guard isCurrentHomeContext(contextToken) else { return }
+            let engineError = (error as? NinaEngineError) ?? .unconfirmed
             switch engineError {
-            case .consentOutdated:
+            case .consentOutdated, .aiConsentRequired:
                 // The server no longer counts this consent, so the card asks again and the unread message is dropped.
-                messages.removeAll { $0.id == userMessage.id }
+                withdrawUserMessage()
                 restorableDraft = text
+                restorableAttachments = attachments
                 applyAIMemoryConsent(nil)
-                aiConsentStatus.lastRevokeReason = "policy_changed"
+                if engineError == .consentOutdated {
+                    aiConsentStatus.lastRevokeReason = "policy_changed"
+                }
                 aiConsentStatus.isGranted = false
                 persistActivityLocally()
                 Haptics.error()
                 return
             case .ageConfirmationRequired:
-                messages.removeAll { $0.id == userMessage.id }
+                withdrawUserMessage()
                 restorableDraft = text
                 viewerAge = viewerAge.withoutAI()
                 persistActivityLocally()
                 Haptics.error()
                 return
             case .aiBlocked:
-                messages.removeAll { $0.id == userMessage.id }
+                withdrawUserMessage()
                 restorableDraft = text
                 viewerAge = viewerAge.blockingAI()
+                persistActivityLocally()
+                Haptics.error()
+                return
+            case .monthlyBudgetReached, .rateLimited, .attachmentsRequirePremium, .adultAccessRequired:
+                // Nothing of the turn reached the server, so no line answers in Nina's name and the words wait in the composer.
+                withdrawUserMessage()
+                restorableDraft = text
+                restorableAttachments = attachments
+                chatRefusal = engineError
+                persistActivityLocally()
+                Haptics.error()
+                return
+            case .inputTooLarge:
+                withdrawUserMessage()
+                restorableDraft = text
+                restorableAttachments = attachments
+                ninaSendFailure = engineError.userMessage
+                persistActivityLocally()
+                Haptics.error()
+                return
+            case .requestInProgress:
+                // The first run of this id may still answer: while it can, the same id is replayed and never run twice.
+                withdrawUserMessage()
+                restorableDraft = text
+                restorableAttachments = attachments
+                if let replayedTurn,
+                   Self.lostTurnMayStillBeRunning(sentAt: replayedTurn.sentAt, now: now()) {
+                    unconfirmedTurn = replayedTurn
+                    ninaSendFailure = engineError.userMessage
+                } else {
+                    ninaSendFailure = NinaEngineError.unavailable.userMessage
+                }
                 persistActivityLocally()
                 Haptics.error()
                 return
@@ -2200,31 +2264,30 @@ final class AppStore {
                     messages[index].text = Self.heldMessageMarker
                     messages[index].attachments = []
                 }
-            default:
-                break
+                // Moderation runs only after every ceiling let this turn through, and the server keeps no reply to it in Nina's name.
+                chatRefusal = nil
+                ninaSendFailure = engineError.userMessage
+                persistActivityLocally()
+                Haptics.error()
+                return
+            case .offline, .unconfirmed, .unavailable:
+                // Nothing answers in Nina's name when the server did not: the words go back to the composer.
+                withdrawUserMessage()
+                restorableDraft = text
+                restorableAttachments = attachments
+                if engineError != .unavailable {
+                    unconfirmedTurn = UnconfirmedNinaTurn(
+                        messageID: userMessage.id,
+                        text: text,
+                        attachments: attachments,
+                        sentAt: userMessage.timestamp
+                    )
+                }
+                ninaSendFailure = engineError.userMessage
+                persistActivityLocally()
+                Haptics.error()
+                return
             }
-            response = NinaEngineResponse(
-                reply: engineError.userMessage,
-                suggestion: nil
-            )
-        } catch {
-            guard isCurrentHomeContext(contextToken) else { return }
-            // Nothing answers in Nina's name when the server did not: the words go back to the composer.
-            messages.removeAll { $0.id == userMessage.id }
-            restorableDraft = text
-            restorableAttachments = attachments
-            let failure = (error as? NinaEngineError) ?? .unconfirmed
-            if failure != .unavailable {
-                unconfirmedTurn = UnconfirmedNinaTurn(
-                    messageID: userMessage.id,
-                    text: text,
-                    attachments: attachments
-                )
-            }
-            ninaSendFailure = failure.userMessage
-            persistActivityLocally()
-            Haptics.error()
-            return
         }
         guard isCurrentHomeContext(contextToken) else { return }
 
@@ -2238,8 +2301,11 @@ final class AppStore {
             proposals: gate.visibleProposals(response.proposals),
             hasWithheldProposals: gate.withholdsProposals(response.proposals)
         )
-        messages.append(ninaMessage)
-        persistActivityLocally()
+        // A replayed answer that a refresh already brought into the thread is never shown twice.
+        if !messages.contains(where: { $0.id == ninaMessage.id }) {
+            messages.append(ninaMessage)
+            persistActivityLocally()
+        }
 
         if response.serverPersisted {
             ninaThread = response.threadID.flatMap {
@@ -2645,7 +2711,9 @@ final class AppStore {
         isNinaResponding = false
         ninaSendFailure = nil
         restorableAttachments = []
+        answeredDraft = nil
         unconfirmedTurn = nil
+        chatRefusal = nil
         taskEditConflict = nil
         queuedTaskEditConflicts = []
         isSyncingHome = false
@@ -3652,8 +3720,27 @@ final class AppStore {
         }
     }
 
+    // A lost turn the server answered after all is settled: its error goes and its words are never sent again.
+    private func settleUnconfirmedTurnIfAnswered() {
+        guard let turn = unconfirmedTurn,
+              let index = messages.firstIndex(where: { $0.id == turn.messageID }),
+              messages[messages.index(after: index)...].contains(where: { $0.sender == .nina }) else {
+            return
+        }
+        unconfirmedTurn = nil
+        ninaSendFailure = nil
+        if restorableDraft == turn.text {
+            restorableDraft = nil
+        }
+        if restorableAttachments == turn.attachments {
+            restorableAttachments = []
+        }
+        answeredDraft = AnsweredNinaDraft(text: turn.text, attachments: turn.attachments)
+    }
+
     private func apply(_ snapshot: AppDataSnapshot) {
         messages = Self.messages(snapshot.messages, carryingImageryFrom: carriableAttachmentImagery)
+        settleUnconfirmedTurnIfAnswered()
         messagesContext = currentHomeContextToken
         taskSections = snapshot.taskSections.isEmpty ? PreviewData.taskSections : snapshot.taskSections
         customTaskCategories = snapshot.customTaskCategories
@@ -3680,6 +3767,12 @@ final class AppStore {
             resetActivityState()
         }
 
+        // A ceiling Premium lifts ends when the house becomes covered; the adult gate ends when the house is read again.
+        if chatRefusal == .adultAccessRequired
+            || (state.householdPremium.isActive && !householdPremium.isActive
+                && (chatRefusal == .rateLimited || chatRefusal == .attachmentsRequirePremium)) {
+            chatRefusal = nil
+        }
         householdPremium = state.householdPremium
         viewerAge = state.viewerAge
         aiConsentStatus = state.aiConsent

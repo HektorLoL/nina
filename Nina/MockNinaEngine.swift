@@ -91,11 +91,6 @@ enum NinaEngineError: Error, Equatable {
         }
     }
 
-    // A turn that ends here was never answered: the phone shows this line, never a reply in Nina's name.
-    var leavesTurnUnanswered: Bool {
-        self == .offline || self == .unconfirmed || self == .unavailable
-    }
-
     var userMessage: String {
         switch self {
         case .rateLimited:
@@ -103,7 +98,7 @@ enum NinaEngineError: Error, Equatable {
         case .monthlyBudgetReached:
             "A conversa está pausada agora. Tarefas, compras e casa seguem normais."
         case .inputTooLarge:
-            "Essa mensagem ou anexo é grande demais para mim."
+            "Essa mensagem ou anexo é grande demais para a Nina."
         case .adultAccessRequired:
             "A conversa é dos adultos da casa."
         case .aiConsentRequired:
@@ -111,9 +106,9 @@ enum NinaEngineError: Error, Equatable {
         case .attachmentsRequirePremium:
             "Não consigo ler anexos sem o Premium da casa."
         case .inputNotSupported:
-            "Não consigo ajudar com esse conteúdo."
+            "A Nina não pode ajudar com esse conteúdo. Se houver risco imediato para alguém, procure uma pessoa de confiança ou o serviço de emergência."
         case .requestInProgress:
-            "Ainda estou lendo essa mensagem. Espere um instante."
+            "A Nina ainda está lendo essa mensagem. Espere um instante."
         case .consentOutdated:
             "Este aviso mudou."
         case .ageConfirmationRequired:
