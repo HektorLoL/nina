@@ -173,7 +173,7 @@ product regression, not a refactor.
   guardian), and `create_family` no longer writes the masculine `'Criador'` as
   the creator's relationship.
 - **Only the titular deletes a house, and every house is deleted one way**
-  (since 2026-10-15, migration `202610150001`, written and not yet applied).
+  (since 2026-10-15, migration `202610150001`, applied to production that day).
   `delete_family(target_family_id, confirmed_family_name)` takes the family
   advisory lock first and refuses anyone but a member whose row says `owner`
   *and* for whom `can_manage_family` holds (`family_delete_denied`, 42501), so
@@ -2334,6 +2334,16 @@ the project, not bugs to fix unprompted.
   names it by the given name alone; one that blanks the name sees the field.
   Build 10 asks adults for the email; the website privacy page names the
   builds, so it stays true while build 10 is still installed.
+- **Build 15 (2026-10-15) is Heitor's two asks after testing build 14.**
+  Archived from the sources tagged `testflight-1.0-15` with
+  `CURRENT_PROJECT_VERSION` 15, after migration `202610150001` was applied
+  and the Terms of 15 October went live; the online production preflight
+  against the archive read 0 failures and 0 warnings. It carries "Apagar a
+  casa" for the titular (Ajustes › Casa, and from "Sair da casa" when nobody
+  else can take the house), join requests that reach Casa live, and pull to
+  refresh on Casa, Hoje and Tarefas. Heitor's play test of build 14 found
+  everything else working, invites included. Build 15 is now the build he
+  tests before any test data is deleted (his order of 2026-10-15).
 - **Build 14 (2026-10-15) is the launch-audit polish.** Archived from the
   sources tagged `testflight-1.0-14` with `CURRENT_PROJECT_VERSION` 14; the
   online production preflight against the archive read 0 failures and 0
@@ -2427,8 +2437,8 @@ the project, not bugs to fix unprompted.
   `service_role` executes it. It went through the Supabase MCP
   `apply_migration`, and its `schema_migrations` row was set to
   `202610140001` (§12). It needs no new build.
-- **Migration `202610150001` (deleting a house) is written, not yet
-  applied.** Heitor asked on 2026-10-15, after build 14, that a titular alone
+- **Migration `202610150001` (deleting a house) is applied to production
+  (2026-10-15, Heitor's "go database").** Heitor asked on 2026-10-15, after build 14, that a titular alone
   (or any titular) could delete the house instead of being told to pass it
   first. It adds `family_access_decisions.house_deleted`, the private
   `delete_household` and `settle_household_ai_runs`, and the client RPC
@@ -2457,32 +2467,40 @@ the project, not bugs to fix unprompted.
   migration also adds those two columns, which `delete_household` fills for a
   reply still held for review, and redefines `run_nina_retention()` (the
   `202609290008` body plus one statement clearing them 90 days after the
-  report). After the apply the bodies must read
+  report). Those pre-checks were run again right before the apply and still
+  matched. It went through the Supabase MCP `apply_migration` with the
+  committed file's body, and its `schema_migrations` row was set to
+  `202610150001` (§12). Read back the same day: the bodies read
   `68a94e31814cf956b285f793cecd4b2d`, `9a956015a0ae0fd7dafc4f63db6c9348`,
   `012635590a2240b8ad04e3e592c69ac8` (`preserve_child_safety_account`),
   `9723c67ffb8e8fa013d2e0f0ade44280` (`delete_family`),
   `f7b1d6693303b3e3a3bde61070efdf50` (`delete_household`),
   `b40485125ad32a93f118120bab887d2b` (`settle_household_ai_runs`) and
-  `45b9504c349019282403b680102cb5e4` (`run_nina_retention`), the
-  foreign key must read `ON DELETE SET NULL`, and its version row must be set
-  to `202610150001` (§12). Build 14 ignores the new
-  key and never calls the RPC, so the migration may go first; "Apagar a casa"
-  reaches people with the next build. Terms §5 is rewritten in the working
-  tree (the titular leaves by passing or deleting the house, behind the
-  house's name typed; deleting erases what the house holds for everyone,
-  private memories included; it cancels no Apple subscription), and the page
+  `45b9504c349019282403b680102cb5e4` (`run_nina_retention`), the local
+  bodies; `delete_family` is executable by `authenticated` alone and the two
+  private functions by no API role; the runbook's grant count reads 52
+  `authenticated` and 27 `service_role`; the foreign key reads `ON DELETE SET
+  NULL` with `family_id` nullable; the reason check lists `'house_deleted'`;
+  the three new columns exist; and the foreign-key index canary reads 0.
+  Build 14 ignores the new key and never calls the RPC; "Apagar a casa"
+  reaches people with build 15. Terms §5 (the titular leaves by passing or
+  deleting the house, behind the house's name typed; deleting erases what the
+  house holds for everyone, private memories included; it cancels no Apple
+  subscription) was pushed after the apply, in commit 4382db9, and the page
   reads "Atualizados em 15 de outubro de 2026". Heitor decided on 2026-10-15
-  that the recorded Terms version follows the page date, so once the
-  migration is applied and that page is live, an operator statement moves
-  `private.age_policy.current_terms_version` to `'2026-10-15'`
-  (`docs/production-launch-runbook.md` §3, "Deleting a house"); not run yet.
-  Every adult then meets "Os Termos mudaram." once and taps Aceitar, every
+  that the recorded Terms version follows the page date, so once that page was
+  live the operator statement
+  `update private.age_policy set current_terms_version = '2026-10-15', updated_at = now() where singleton;`
+  ran on 2026-10-15 (`docs/production-launch-runbook.md` §3, "Deleting a
+  house"); read back: Terms `2026-10-15`, policy and minor consent still
+  `2026-09-29`, so no AI consent was withdrawn.
+  Every adult now meets "Os Termos mudaram." once and taps Aceitar, every
   minor acknowledges the Terms again, and a welcome footnote shown before
   that day no longer counts after a relaunch. No migration carries it, as
   with `trusted_assurances`, so the local stack keeps `'2026-09-29'`.
   `/familias/`, `/suporte/` and the in-app FAQ said nothing about how a
   titular leaves, so they keep their 14 October text.
-- **Join requests reach Casa live from the next build (2026-10-15).** No
+- **Join requests reach Casa live from build 15 (2026-10-15).** No
   migration: the `families` bump already reached production's realtime; the
   app had subscribed twice per cold launch and kept a dead channel, and a
   refresh that regained the house after an unverifiable load never listened
