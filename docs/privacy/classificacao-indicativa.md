@@ -1,6 +1,6 @@
 # Age Rating (Classificação Indicativa) - Nina
 
-Last updated: 2026-10-14
+Last updated: 2026-10-18
 
 Nina aims for an all-ages rating: "Livre" in Brazil, AL on Apple's Brazil
 self-rating. That is a target, not a guarantee: Apple computes the App Store
@@ -273,5 +273,18 @@ Written so far:
   company and its CNPJ, so it lives outside this public repository, in
   Heitor's notes.
 - 2026-10-14: Heitor sent it by email to classificacaoindicativa@mj.gov.br.
-  No protocol number came back with the email. If there is no answer by
-  2026-11-13, call (61) 2025-9061 with the date of the email.
+  No protocol number came back with the email.
+- 2026-10-15: ClassInd answered by email (an analyst of the
+  Coordenação-Geral de Política de Classificação Indicativa, copying the
+  coordination's mailbox; Heitor read it on 2026-10-18). Its reading of the
+  description: Nina presents tendency D.5.1 (purchases) and also D.5.3
+  (generative AI of broad content), so it "tende" to "Não recomendado para
+  menores de 14 anos", and no attenuator applies to interactive elements.
+  The route is the voluntary análise prévia through the Sistema ClassInd,
+  because the App Store is outside IARC; the filing needs a video showing
+  every feature open to classification, plus an access link, login and
+  password when they are needed for full access. It did not say whether an
+  Inova Simples company files through its titular. This closes §6's open
+  question: neither Apple's purchase controls nor the age gate attenuate
+  D.5.1, and §6's D.5.3 reading ("AI in a secondary role") is not ClassInd's.
+  14 is outside D1, so the product question is Heitor's (§8).
