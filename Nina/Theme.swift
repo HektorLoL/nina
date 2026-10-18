@@ -16,10 +16,14 @@ enum NinaTheme {
     static let terracottaWash = Color(hex: 0xFBEAE1)
     static let moss = Color(hex: 0x3F6B4A)
     static let mossWash = Color(hex: 0xE8F1EA)
-    // Red is errors only and always travels with its glyph: never lateness (terracotta) and never destruction (ink).
+    // Red is errors and the Urgente flag only, and always travels with a glyph: never lateness (terracotta) and never destruction (ink).
     static let alert = Color(hex: 0xD92D20)
     static let alertInk = Color(hex: 0xB42318)
     static let alertWash = Color(hex: 0xFDECEA)
+    // A light yellow alone reads 1.5:1 on the ground, so the Alta flag keeps a darker yellow edge above 3:1.
+    static let priorityHigh = Color(hex: 0xFACC15)
+    static let priorityHighEdge = Color(hex: 0xA16207)
+    static let priorityUrgent = alert
     /// Stroke for unfilled controls. Lighter than muted, but above the 3:1
     /// non-text contrast floor that `line` fails at 1.24:1.
     static let control = Color(hex: 0x848E9D)

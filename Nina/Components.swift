@@ -44,17 +44,38 @@ struct CategoryGlyph: View {
     }
 }
 
+// Urgency is told by colour and by weight together: a red flag for Urgente, a light yellow one with a darker edge for Alta.
 struct PriorityFlag: View {
     var priority: TaskPriority
+    var baseSize: CGFloat = 13
 
-    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 13
+    @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
+
+    static func fill(for priority: TaskPriority) -> Color? {
+        switch priority {
+        case .normal: nil
+        case .high: NinaTheme.priorityHigh
+        case .urgent: NinaTheme.priorityUrgent
+        }
+    }
+
+    static func edge(for priority: TaskPriority) -> Color? {
+        priority == .high ? NinaTheme.priorityHighEdge : nil
+    }
 
     var body: some View {
-        if let symbol = priority.rowFlagSymbol, let label = priority.rowFlagLabel {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(NinaTheme.ink)
-                .accessibilityLabel(label)
+        if let fill = Self.fill(for: priority), let label = priority.rowFlagLabel {
+            ZStack {
+                Image(systemName: "flag.fill")
+                    .foregroundStyle(fill)
+                if let edge = Self.edge(for: priority) {
+                    Image(systemName: "flag")
+                        .foregroundStyle(edge)
+                }
+            }
+            .font(.system(size: baseSize * scale, weight: .semibold))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
         }
     }
 }

@@ -167,7 +167,9 @@ struct TaskDetailView: View {
             if task.priority != .normal {
                 NinaDivider(inset: 36)
                 metaRow("Prioridade", value: task.priority.title) {
-                    metaGlyph("flag")
+                    PriorityFlag(priority: task.priority, baseSize: 17)
+                        .frame(width: 21, height: 21)
+                        .accessibilityHidden(true)
                 }
             }
 

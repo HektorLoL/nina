@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-10-15
+Last updated: 2026-10-18
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -1120,6 +1120,8 @@ branching anywhere.
   since 2026-10-04 (Heitor: an error reads red, a success green): a failed
   write, a refused step, a field to fix. Always through `NinaErrorNote` or the
   sync toast, so the `exclamationmark.circle.fill` glyph travels with it.
+  The one other use is the Urgente flag (`priorityUrgent`, below), which is a
+  flag glyph and never text or a ground.
   Never lateness, never destruction, never a blocked or empty state. A step a
   person completed may answer in moss (`NinaSuccessNote`, the undo toast).
   A failure line opens one way, "Não deu para ‹ação› agora. Tente de novo."
@@ -1129,15 +1131,20 @@ branching anywhere.
 - **Category is a monochrome outline glyph, never a colour** (kids mode is the
   one exception, §4 "Kids mode is presentation only"). `MemberTone`'s case
   names are wire values that outlived their hues; they render as neutral ink tints.
-- **Priority is an ink flag before the title, never a colour** (since
-  2026-10-15, Heitor: "Urgente" and "Alta" changed nothing on the list).
-  `PriorityFlag` draws `TaskPriority.rowFlagSymbol` on every open task row in
-  Hoje, Tarefas (selection included) and a child's section: an outline flag
-  for Alta, a filled one for Urgente, nothing for Normal or a done task; it
-  is the same flag the editor chip and the detail row use, and VoiceOver reads
-  "Prioridade alta" or "Urgente". Terracotta already says late and red an
-  error, so neither may mark urgency
-  (`TaskAgendaTests.testAnUrgentOrHighTaskCarriesAnInkFlagOnItsRowAndANormalOneCarriesNone`).
+- **Priority is a coloured flag before the title** (since 2026-10-15,
+  Heitor: "Urgente" and "Alta" changed nothing on the list). `PriorityFlag`
+  draws on every open task row in Hoje, Tarefas (selection included) and a
+  child's section, and beside "Prioridade" on the task's detail: a red filled
+  flag for Urgente (`priorityUrgent`, the `alert` red), a light yellow filled
+  flag with a darker yellow edge for Alta (`priorityHigh #FACC15`,
+  `priorityHighEdge #A16207`), nothing for Normal or a done task. VoiceOver
+  reads "Prioridade alta" or "Urgente". Build 16 drew both in ink, outline
+  and filled; Heitor tested it on 2026-10-18 and decided people could not
+  tell which was more urgent, so he asked for yellow and red. The yellow
+  keeps its edge because a light yellow alone reads 1.5:1 on the ground; the
+  edge reads 4.8:1. Colour stays off the category glyph, the date and the
+  title: lateness is still terracotta and only the date says it
+  (`TaskAgendaTests.testAnUrgentTaskCarriesARedFlagAHighOneAYellowFlagWithAnEdgeAndANormalOneNone`).
 - **One regulated exception: the ClassInd rating pictogram.**
   `NinaTheme.classInd(_:)` / `classIndLivre` hold the official rating colours
   (Livre green, 10 blue, 12 yellow, 14 orange, 16 red, 18 black) because
@@ -2346,9 +2353,9 @@ the project, not bugs to fix unprompted.
 - **Build 16 (2026-10-15) adds the priority flag to build 15.** Archived
   from the sources tagged `testflight-1.0-16` with `CURRENT_PROJECT_VERSION`
   16; the online production preflight against the archive read 0 failures
-  and 0 warnings. Its one change is the ink flag on task rows (§5, "Priority
-  is an ink flag"), the last fix Heitor listed in his notes. Build 16 is the
-  build he tests before any test data is deleted, with build 15's checks.
+  and 0 warnings. Its one change is the ink flag on task rows, the last fix
+  Heitor listed in his notes. He tested it on 2026-10-18: everything worked,
+  and the flags became yellow and red in build 17.
 - **Build 15 (2026-10-15) is Heitor's two asks after testing build 14.**
   Archived from the sources tagged `testflight-1.0-15` with
   `CURRENT_PROJECT_VERSION` 15, after migration `202610150001` was applied

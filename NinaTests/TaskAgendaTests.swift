@@ -640,12 +640,15 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertEqual(ordered.map(\.title), ["Urgente", "Primeira", "Segunda"])
     }
 
-    func testAnUrgentOrHighTaskCarriesAnInkFlagOnItsRowAndANormalOneCarriesNone() {
-        XCTAssertNil(TaskPriority.normal.rowFlagSymbol)
+    func testAnUrgentTaskCarriesARedFlagAHighOneAYellowFlagWithAnEdgeAndANormalOneNone() {
+        XCTAssertNil(PriorityFlag.fill(for: .normal))
+        XCTAssertNil(PriorityFlag.edge(for: .normal))
         XCTAssertNil(TaskPriority.normal.rowFlagLabel)
-        XCTAssertEqual(TaskPriority.high.rowFlagSymbol, "flag")
+        XCTAssertEqual(PriorityFlag.fill(for: .high), NinaTheme.priorityHigh)
+        XCTAssertEqual(PriorityFlag.edge(for: .high), NinaTheme.priorityHighEdge)
         XCTAssertEqual(TaskPriority.high.rowFlagLabel, "Prioridade alta")
-        XCTAssertEqual(TaskPriority.urgent.rowFlagSymbol, "flag.fill")
+        XCTAssertEqual(PriorityFlag.fill(for: .urgent), NinaTheme.alert)
+        XCTAssertNil(PriorityFlag.edge(for: .urgent))
         XCTAssertEqual(TaskPriority.urgent.rowFlagLabel, "Urgente")
     }
 
