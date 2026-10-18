@@ -2350,6 +2350,13 @@ the project, not bugs to fix unprompted.
   names it by the given name alone; one that blanks the name sees the field.
   Build 10 asks adults for the email; the website privacy page names the
   builds, so it stays true while build 10 is still installed.
+- **Build 17 (2026-10-18) colours the priority flags.** Archived from the
+  sources tagged `testflight-1.0-17` with `CURRENT_PROJECT_VERSION` 17; the
+  online production preflight against the archive read 0 failures and 0
+  warnings. Its one change: Urgente is a red flag and Alta a yellow one, on
+  the rows and the task's detail (§5, "Priority is a coloured flag"). Build
+  17 is the build Heitor tests before any test data is deleted (his order of
+  2026-10-15).
 - **Build 16 (2026-10-15) adds the priority flag to build 15.** Archived
   from the sources tagged `testflight-1.0-16` with `CURRENT_PROJECT_VERSION`
   16; the online production preflight against the archive read 0 failures
