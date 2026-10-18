@@ -209,7 +209,7 @@ deve ser `data-legal-status="complete"` e `data-legal-launch="ready"`. Um
 A classificação fica numa constante só, em `src/rating.ts`:
 
 ```ts
-export const ninaRatingCode: NinaRatingCode = "L";
+export const ninaRatingCode: NinaRatingCode = "14";
 ```
 
 O rodapé de todas as páginas (`src/components/SiteFooter.astro`) mostra o
@@ -217,9 +217,15 @@ símbolo (`src/components/RatingMark.astro`, SVG sem estilo embutido), os Termos
 §4 dizem a classificação por `ninaRating.termsPhrase` e `/familias/` a explica.
 A linha acima precisa ser igual a `NinaRating.currentCode` em
 `Nina/NinaRating.swift`; o preflight `repository.rating-constant-consistency`
-compara as duas. Se a Apple ou o Ministério da Justiça atribuírem 10 ou 12, mude
-as duas constantes no mesmo commit. As cores do símbolo ainda não foram
-conferidas com a arte oficial do gov.br/mj.
+compara as duas. A constante é `"14"` desde 18/10/2026: é a leitura da
+coordenação da ClassInd de 15/10/2026, que Heitor aceitou; antes era `"L"`. Se a
+análise prévia ou o Ministério da Justiça classificarem a Nina abaixo de 14, a
+constante volta a descer; mude as duas constantes no mesmo commit, troque a data
+dos Termos e, com a página no ar, a versão registrada dos Termos
+(`docs/privacy/classificacao-indicativa.md` §8). Os Termos §4 e `/familias/`
+§11 só dizem o motivo da classificação (`ratingReason`) enquanto ela é `"14"`;
+com outra constante essa frase some, então escreva o motivo novo se houver um.
+As cores do símbolo ainda não foram conferidas com a arte oficial do gov.br/mj.
 
 ## Páginas para famílias e denúncia
 

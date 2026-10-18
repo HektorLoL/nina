@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-10-15
+Last updated: 2026-10-18
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -627,6 +627,67 @@ people with the first build after 14; until then the Terms describe a deletion
 only the server offers. The local stack keeps `2026-09-29`, because no
 migration carries the version.
 
+### The rating of 14, and the Terms of 18 October
+
+On 2026-10-15 the ClassInd coordination read Nina as tending to 14 (D.5.1 and
+D.5.3, no attenuator for interactive elements), and on 2026-10-18 Heitor
+accepted it (`docs/privacy/classificacao-indicativa.md` §9). Nothing on the
+database changes but the recorded Terms version: the rating is one constant in
+the app and the website, and the chat and Premium stay as they are. Terms §4
+now names the rating as 14, so by Heitor's rule of 2026-10-15 the recorded
+version follows the date the page shows.
+
+1. **Repository gate.** `NinaRating.currentCode` and `ninaRatingCode` read
+   `"14"` in the same commit, and `repository.rating-constant-consistency`
+   passes:
+
+   ```sh
+   npx deno task preflight:repo
+   ```
+
+2. **Publish the site.** Commit and push; Cloudflare Workers Builds rebuilds
+   it. `https://ninai.app/termos/` must read "Atualizados em 18 de outubro de
+   2026", and its §4 must name the rating as "não recomendada para menores de
+   14 anos"; the footer mark on every page and `/familias/` §11 must say 14;
+   every page keeps `data-legal-launch="ready"`; `https://ninai.app/familias/`
+   must read "Atualizada em 18 de outubro de 2026", and its §11 must give the
+   reason (the Premium subscription and the chat, both adults only).
+3. **Pre-check, read only, in the SQL editor:**
+
+   ```sql
+   select current_terms_version, current_policy_version, current_minor_consent_version
+   from private.age_policy;
+   ```
+
+   Expect `2026-10-15`, `2026-09-29`, `2026-09-29`. Anything else means
+   production moved since 2026-10-15: stop and find out why.
+4. **Move the recorded Terms version**, only after step 2 is live (not run as
+   of 2026-10-18):
+
+   ```sql
+   update private.age_policy
+   set current_terms_version = '2026-10-18', updated_at = now()
+   where singleton;
+
+   select current_terms_version, current_policy_version, current_minor_consent_version
+   from private.age_policy;
+   ```
+
+   Expect `2026-10-18`, `2026-09-29`, `2026-09-29`. The privacy policy and the
+   minors' consent text did not change, so their versions stay and no AI
+   consent is withdrawn.
+5. **Ship build 18**, the first build whose welcome and startup marks draw 14.
+   Builds up to 17 draw "L" until people update; nothing is released, so only
+   TestFlight testers see the old mark.
+6. **App Store Connect** carries 14 for Brazil when the age questionnaire is
+   answered (§6); how is UNVERIFIED.
+
+**What testers then see.** Every adult meets "Os Termos mudaram." once, on the
+next load, and taps Aceitar; every minor acknowledges the Terms again; a
+welcome footnote shown before 18 October and read back after a relaunch no
+longer counts. The local stack keeps `2026-09-29`, because no migration carries
+the version.
+
 ### Age contests and child-safety holds
 
 An age contest (Decreto 12.880 art. 27) follows `docs/age-contest-runbook.md`; a
@@ -822,9 +883,9 @@ one supported older device. Exercise:
   cancelled Apple sheet sends nothing and reads "A Apple não confirmou. Nada foi
   apagado.", and a second cancellation adds the same mail line; the "Antes, sua
   faixa de idade." prompt carries "Sair da conta" and "Apagar conta";
-- the welcome and the startup screen show the rating mark in the same spot, and
-  no other screen (settings, the app switcher) shows it; the "Só um instante."
-  wait is centred with a round disc.
+- the welcome and the startup screen show the rating mark in the same spot (14
+  from build 18), and no other screen (settings, the app switcher) shows it;
+  the "Só um instante." wait is centred with a round disc.
 
 Record the tested build number, devices, OS versions, tester, date, and result.
 Do not promote a different build number without rerunning the affected gates.
@@ -846,7 +907,9 @@ answers, the rationale per item and the review note are in
 1. **Ask the four questions in writing, in the App Review notes of the
    submission** (decided 2026-09-29). Apple answers in the submission's
    messages in App Store Connect; a disagreement costs one rejection round, and
-   D1 already accepts a 10 or 12. The App Review page cannot start a
+   since 2026-10-18 the rating Nina publishes is already 14 (how the App Store
+   listing reads 14 is UNVERIFIED, item 2), so only a reading above 14 moves
+   it. The App Review page cannot start a
    conversation without a submission (checked 2026-09-29), and the "Contact us"
    form is for rejections. A free 30-minute App Review appointment (Meet with
    Apple, Tuesdays and Thursdays:
@@ -867,11 +930,14 @@ answers, the rationale per item and the review note are in
       the review device shares no age?
 
    Record the answers in the rating document. The first submission carries the
-   "Livre" (AL) answers with these questions beside them in the notes, so the
-   reviewer sees both at once. If the answers push the rating to 10 or 12, keep the
-   chat (D1) and change `NinaRating.currentCode`, `web/src/rating.ts` and the
-   Terms together; `repository.rating-constant-consistency` fails until they
-   agree.
+   honest answers, with the Brazil listing raised to 14, and these questions
+   beside them in the notes, so the reviewer sees both at once; the notes also
+   carry the age-rating sentence in `docs/app-store-listing.md` §6. All four
+   questions stay after the 2026-10-18 decision (the rating document's §3 says
+   why). If the answers push the rating above 14, the product question goes
+   back to Heitor first; any change moves `NinaRating.currentCode`,
+   `web/src/rating.ts` and the Terms together, and
+   `repository.rating-constant-consistency` fails until they agree.
 
    The notes also carry this paragraph about Sign in with Apple, word for word
    (Guideline 4.0 has refused apps that ask for a name after Sign in with Apple;
@@ -890,15 +956,25 @@ answers, the rationale per item and the review note are in
    > a first name, filled in from Apple's when shared, only when asking a
    > guardian to let them join a household.
 2. **Age Suitability URL:** `https://ninai.app/familias/`. Made for Kids: No.
-   Override to a higher rating: none — the Terms set no minimum age.
+   Override to a higher rating: whatever makes the Brazil listing read 14,
+   ClassInd's reading (how App Store Connect maps an override onto Brazil is
+   UNVERIFIED; read it there and record it in the rating document's §9). Never
+   for a minimum age: the Terms set none.
 3. **Metadata:** no "para crianças" in the name, subtitle, icon, screenshots or
    description, and screenshots that suit every age. The listing is "Nina:
    rotina da casa" since 2026-10-05; the old name said "amiga".
-4. **ClassInd (MJSP):** self-classify against Portaria 1.048 and the Guia
-   Prático, map each feature to its tendency and the on-by-default attenuator,
-   and file the voluntary análise prévia (Portaria art. 46) as soon as build 10
-   is feature-complete. The procedure, cost and required identity are
-   UNVERIFIED; the company from D2 may be needed to file.
+4. **ClassInd (MJSP):** the coordination answered on 2026-10-15 that Nina
+   tends to 14 (D.5.1 and D.5.3, no attenuator for interactive elements), and
+   Heitor accepted 14 on 2026-10-18. Next, file the voluntary análise prévia
+   (Portaria art. 46) through the Sistema ClassInd, the route ClassInd named
+   (the App Store is not part of IARC); not filed yet. The filing needs a
+   video demonstrating every feature open to classification, plus an access
+   link, login and password when full access needs them; Sign in with Apple
+   is the only sign-in, so how the analyst reaches the adult features is open.
+   Whether an Inova Simples company files through its titular was not
+   answered, and the cost is UNVERIFIED. If the Ministry rates Nina lower,
+   the constant goes back down (the rating document's §8). The company's name
+   and CNPJ go into the filing, never into this repository.
 5. **Before release, read from the official source and correct if needed:** the
    ClassInd pictogram artwork and colours (gov.br/mj; `Nina/Theme.swift` and
    `web/src/rating.ts`), the CVV number 188 (cvv.org.br; `MinorViews.swift`,

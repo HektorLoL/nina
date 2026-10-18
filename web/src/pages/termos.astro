@@ -5,7 +5,10 @@ import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
 import { ninaRating } from "../rating";
 
-const updatedAt = "15 de outubro de 2026";
+const updatedAt = "18 de outubro de 2026";
+const ratingReason = ninaRating.code === "14"
+  ? ", por causa da assinatura do Nina Premium e da conversa com a Nina, mesmo que as duas sejam só para maiores de 18 anos"
+  : "";
 const contactMailto = `mailto:${legalIdentity.privacyContactEmail}`;
 const reportMailto = `mailto:${legalIdentity.reportContactEmail}`;
 const { legalEntityName, legalEntityDocument } = legalIdentity;
@@ -106,7 +109,7 @@ const addressClause = legalIdentity.legalEntityAddress
 
       <h2>4. Idade, contas de menores e responsáveis</h2>
       <p>
-        A Nina não tem idade mínima. A classificação indicativa da Nina é {ninaRating.termsPhrase}.
+        A Nina não tem idade mínima. Pela classificação indicativa, a Nina é {ninaRating.termsPhrase}{ratingReason}.
         O que cada pessoa pode fazer depende da faixa de idade que a Apple informa ao app. A Nina
         recebe só a faixa, nunca a data de nascimento, e usa essa informação apenas para decidir o
         que cada conta pode fazer.

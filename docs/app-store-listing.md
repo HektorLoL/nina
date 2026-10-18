@@ -1,6 +1,6 @@
 # App Store listing — draft for version 1.0
 
-Last updated: 2026-10-14
+Last updated: 2026-10-18
 
 The text to paste into App Store Connect for the first submission. It is a
 draft: Heitor approves every line before it is pasted. The name was decided on
@@ -26,6 +26,7 @@ in the metadata (runbook §6.3).
 | Marketing URL | https://ninai.app | |
 | Privacy Policy URL | https://ninai.app/privacidade | |
 | Age Suitability URL | https://ninai.app/familias/ | |
+| Age rating, Brazil | 14 ("Não recomendado para menores de 14 anos"; ClassInd's reading of 2026-10-15, accepted 2026-10-18). "A14" in the rating document is its own notation, not an App Store Connect value; how App Store Connect sets it is UNVERIFIED (`docs/privacy/classificacao-indicativa.md` §2) | |
 | Copyright | 2026 Heitor Castello Gomes França | |
 
 Why this name: it drops "amiga", which the app no longer says anywhere
@@ -130,7 +131,7 @@ Each subscription also needs its own review screenshot of the paywall.
 >
 > Subscriptions are verified with Apple in production first, then in the sandbox, so purchases made by App Review in the sandbox work.
 >
-> Questions about the age rating (we answered "Livre"):
+> Age rating: on 15 October 2026 Brazil's Ministry of Justice rating coordination (ClassInd) told us Nina tends to "not recommended for under 14" because of the in-app subscription and the generative AI chat. We accept that rating and set the Brazil age rating to 14; if its formal prior analysis (análise prévia) rates Nina lower, we will lower it. Our questionnaire answers are what we believe is true of the app. Our questions:
 > 1. Does content shared inside a closed household of up to 8 approved people count as User-Generated Content or as Messaging?
 > 2. Do features that the server gates to users the Declared Age Range API reports as 18+, self-declared or confirmed, count toward the questionnaire answers?
 > 3. Does "some features are only for adults" in the Terms count as a minimum age requirement?
@@ -139,7 +140,16 @@ Each subscription also needs its own review screenshot of the paywall.
 > Age Suitability URL: https://ninai.app/familias/ — Support: https://ninai.app/suporte/
 
 The four questions are word for word the ones in
-`docs/production-launch-runbook.md` §6. Marking the reviewer's account uses
+`docs/production-launch-runbook.md` §6. All four stay after the 2026-10-18
+decision to publish 14: questions 2 and 3 can still lift Apple's rating above
+14, question 1 still decides whether "No" is the honest answer, and question 4
+is how the reviewer reaches the adult features
+(`docs/privacy/classificacao-indicativa.md` §3). Re-check the age-rating
+sentence before submitting: if the análise prévia has been filed or decided by
+then, say so. If App Store Connect could not set the Brazil rating to 14
+directly, replace "set the Brazil age rating to 14" with what it actually
+allowed (UNVERIFIED until then; `docs/privacy/classificacao-indicativa.md` §2).
+Marking the reviewer's account uses
 `private.operator_set_age_status(…, 'adult', null, true, 'app_review')` in the
 SQL editor, the same operator path testers use.
 

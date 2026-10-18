@@ -6,7 +6,10 @@ import RatingMark from "../components/RatingMark.astro";
 import { legalIdentity } from "../legal";
 import { ninaRating } from "../rating";
 
-const updatedAt = "14 de outubro de 2026";
+const updatedAt = "18 de outubro de 2026";
+const ratingReason = ninaRating.code === "14"
+  ? " Essa classificação vem da assinatura do Nina Premium e da conversa com a inteligência artificial, mesmo que as duas sejam só para adultos: contas de menores não assinam e não conversam com a Nina."
+  : "";
 const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
 const reportMailto = `mailto:${legalIdentity.reportContactEmail}`;
 
@@ -423,9 +426,9 @@ const capabilities: ReadonlyArray<{
       <div class="rating-statement">
         <RatingMark size={56} />
         <p>
-          A classificação indicativa da Nina é {ninaRating.termsPhrase}. A Nina se autoclassifica
-          pelos critérios do Ministério da Justiça. Se o Ministério atribuir outra classificação,
-          esta página, os Termos de Uso e o app mudam juntos.
+          Pela classificação indicativa, a Nina é {ninaRating.termsPhrase}.{ratingReason} Seguimos os
+          critérios do Ministério da Justiça e vamos pedir a ele uma análise prévia. Se o Ministério
+          atribuir outra classificação, esta página, os Termos de Uso e o app mudam juntos.
         </p>
       </div>
 

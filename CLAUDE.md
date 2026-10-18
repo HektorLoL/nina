@@ -52,8 +52,9 @@ measures who is carrying more of the house.**
   the *primary domestic manager* in a two-adult household. Children and pets are
   profiles managed by adults. A person under 18 may hold a guardian-approved
   account that shows only their own tasks; nothing else in the product is
-  theirs. Nina has no minimum age and aims for the "Livre" rating (decided
-  2026-09-29, §4 "Age and minors").
+  theirs. Nina has no minimum age; its rating is 14, "Não recomendado para
+  menores de 14 anos" (ClassInd's reading of 2026-10-15, accepted by Heitor on
+  2026-10-18; it aimed for "Livre" from 2026-09-29 until then, §13).
 - **The real problem.** Not task tracking — *the negotiation cost of task
   tracking*. Routing coordination through a neutral third party so assigning
   work stops being an interpersonal act. Secondary: reading Brazilian household
@@ -345,7 +346,9 @@ product regression, not a refactor.
 ### Age and minors
 
 Built 2026-09-29 from the all-ages spec (Heitor's decisions D1–D4: aim for
-"Livre" and keep the chat if the rating comes back 10 or 12; a company and an
+"Livre" and keep the chat if the rating comes back 10 or 12, which ended on
+2026-10-18 when Heitor accepted ClassInd's 14 with the chat and Premium
+unchanged, §13; a company and an
 independent encarregado before launch; only Apple-confirmed adults act for
 minors, and D3, decided again on 2026-10-14, lets self-declared adults also
 chat and buy Premium; iOS 26.4 everywhere). The research and the capability
@@ -1589,6 +1592,10 @@ CI's `npm audit --audit-level=high`. Every deviation from the Paper boards is in
   must equal `NinaRating.currentCode` (`repository.rating-constant-consistency`),
   and Terms §4, the footer mark and `/familias/` read it; `RatingMark.astro` is
   an inline SVG with presentation attributes only, so CSP stays strict.
+  Terms §4 and `/familias/` §11 add a reason clause (`ratingReason`) only
+  while the code is `"14"`, so any other code drops the reason silently and
+  needs its own sentence (`docs/privacy/classificacao-indicativa.md` §8 step
+  2).
   `/familias/` is the App Store Age Suitability URL and `/denuncia/` the
   published report procedure (ECA Digital arts. 16 and 29–33); neither page
   may state a capability the server does not enforce.
@@ -2527,20 +2534,41 @@ the project, not bugs to fix unprompted.
   that day no longer counts after a relaunch. No migration carries it, as
   with `trusted_assurances`, so the local stack keeps `'2026-09-29'`.
   `/familias/`, `/suporte/` and the in-app FAQ said nothing about how a
-  titular leaves, so they keep their 14 October text.
+  titular leaves, so they kept their 14 October text (until `/familias/` moved
+  to 18 October with the rating).
 - **Join requests reach Casa live from build 15 (2026-10-15).** No
   migration: the `families` bump already reached production's realtime; the
   app had subscribed twice per cold launch and kept a dead channel, and a
   refresh that regained the house after an unverifiable load never listened
   again (§5, "Debounced realtime"). Builds up to 14 still see a request only
   after a return to the app or a relaunch.
-- **The rating is a target, not a result (D1).** `NinaRating.currentCode` and
-  `web/src/rating.ts` both say `"L"` (`repository.rating-constant-consistency`
-  compares them) and Terms §4 reads the same constant. Apple's questionnaire
-  answers, their rationale and the four questions to ask App Review first are
-  in `docs/privacy/classificacao-indicativa.md`; ClassInd's voluntary análise
-  prévia is not filed. If Apple or the MJSP assign 10 or 12, the chat stays and
-  one constant changes in the app, the website and the Terms together. The
+- **The rating is 14 since 2026-10-18 (ClassInd's reading; D1 is over).**
+  `NinaRating.currentCode` and `web/src/rating.ts` both say `"14"`
+  (`repository.rating-constant-consistency` compares them), and Terms §4
+  ("não recomendada para menores de 14 anos"), `/familias/` §11 and the marks
+  read the same constant. D1 aimed for "Livre" and accepted 10 or 12. On
+  2026-10-15 the ClassInd coordination answered Heitor's written question by
+  email: Nina presents D.5.1 (purchases) and D.5.3 (generative AI of broad
+  content), so it tends to 14, and no attenuator applies to interactive
+  elements. Heitor accepted 14 on 2026-10-18 (option A): the chat and Premium
+  stay exactly as they are, for adults only; the next step is the voluntary
+  análise prévia through the Sistema ClassInd (the App Store is not part of
+  IARC; the filing needs a video of every feature open to classification, plus
+  an access link, login and password when full access needs them), not filed
+  yet; and if the Ministry rates Nina lower, the constant goes back down. Build
+  18, not archived yet (`CURRENT_PROJECT_VERSION` is 17 on 2026-10-18), is the
+  first to carry the 14 mark on the welcome and the startup screen; builds up
+  to 17 still draw "L". The Terms page reads "Atualizados em 18 de outubro de
+  2026" and `/familias/` "Atualizada em 18 de outubro de 2026", and once the
+  Terms page is live the operator moves
+  `private.age_policy.current_terms_version` to `'2026-10-18'`
+  (`docs/production-launch-runbook.md` §3, "The rating of 14, and the Terms of
+  18 October"); not run yet. Then every adult meets "Os Termos mudaram." once
+  and every minor acknowledges the Terms again. The answer, the decision,
+  Apple's questionnaire answers and the four questions to ask App Review are
+  in `docs/privacy/classificacao-indicativa.md`; how Apple shows a Brazil
+  rating of 14 (a direct setting, an override, or only an MJSP assignment) is
+  UNVERIFIED. The
   ClassInd pictogram colours and drawing, the CVV number (188), the Polícia
   Federal intake for the child-safety hold and the OpenAI sub-processor link
   are UNVERIFIED and must be read from their official sources before release.
@@ -2577,15 +2605,19 @@ the project, not bugs to fix unprompted.
   `premium_requires_adult` ("Isso pede idade confirmada pela Apple.",
   `PremiumSubscriptionStore`); `age_confirmation_required` on the minor paths
   keeps that line because it is true there. Acting for a minor stays
-  `confirmed` or `operator`. The Terms version stays `2026-09-29` (the change
-  only widens what an adult may do and adds no obligation), and so does the AI
-  consent version. The cost is the
+  `confirmed` or `operator`. The Terms version stayed `2026-09-29` for D3 (the
+  change only widens what an adult may do and adds no obligation; it moved to
+  `2026-10-15` for the house deletion and is due to move to `2026-10-18` for
+  the rating), and the AI consent version stays `2026-09-29`. The expected
+  cost was the
   ClassInd self-classification: a self-declared gate is "facilmente burlável"
-  for attenuator E.1.10, so purchases (D.5.1) may lift the rating to 14,
-  outside D1; the written question to the ClassInd coordination on Ask to Buy
-  and Screen Time is in `docs/privacy/classificacao-indicativa.md` §6, with
-  the basis for keeping "Livre" published until it answers and the latest
-  point to revisit that (before the first submission's age questionnaire).
+  for attenuator E.1.10, so purchases (D.5.1) might lift the rating to 14,
+  outside D1, and "Livre" stayed published while the written question to the
+  ClassInd coordination on Ask to Buy and Screen Time was open. Its answer of
+  2026-10-15 read 14 from D.5.1 and D.5.3 and counted no attenuator for
+  interactive elements, so the 14 does not rest on the self-declared gate
+  alone; Heitor accepted it on 2026-10-18 and kept D3 as it is (the rating
+  entry above).
   `private.age_assurance_distribution()` is still read after each round.
 - **Not built:** the guardian's "{nome} agora tem conta de adulto." notice (no
   server field says a ward turned 18; the ex-minor does see "Agora a conta é

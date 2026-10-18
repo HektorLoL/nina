@@ -967,7 +967,7 @@ Deno.test("a Swift or web string claiming nothing is kept fails the retention ch
 
 Deno.test("the Terms must state the rating and require no minimum age, and the families and report pages must exist", () => {
   const terms =
-    "A classificação indicativa da Nina é {ninaRating.termsPhrase}.";
+    "Pela classificação indicativa, a Nina é {ninaRating.termsPhrase}.";
   assert(legalAgeRuleHolds({
     terms,
     familiesPageExists: true,

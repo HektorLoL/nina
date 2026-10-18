@@ -1,6 +1,6 @@
 # LGPD Launch Posture - Nina
 
-Last updated: 2026-10-15
+Last updated: 2026-10-18
 
 This is an engineering/privacy operations checklist for launch readiness. It is
 not a substitute for Brazilian legal review, but it documents the product
@@ -182,18 +182,24 @@ What does not change:
 - Active parental controls still mean not trusted, for anything.
 - Minor and unknown accounts stay as they are.
 
-The cost is the ClassInd self-classification. A self-declared gate is
-"facilmente burlável" for attenuator E.1.10, so purchases (D.5.1, rated 14)
-may lift the rating to 14, which is outside D1. The plan is in
-`docs/privacy/classificacao-indicativa.md` §6.
+The expected cost was the ClassInd self-classification. A self-declared gate
+is "facilmente burlável" for attenuator E.1.10, so purchases (D.5.1, rated 14)
+might lift the rating to 14, which is outside D1. The ClassInd coordination
+answered on 2026-10-15: Nina presents D.5.1 and D.5.3 (generative AI of broad
+content), tends to 14, and no attenuator applies to interactive elements, so
+the 14 does not rest on the self-declared gate alone. Heitor accepted 14 on
+2026-10-18 and kept D3 as it is: the chat and Premium are unchanged
+(`docs/privacy/classificacao-indicativa.md` §§6 and 9).
 
 **Versions.** Terms §4, privacy §3A and §5, `/familias/` and `/suporte/` now
 say that the chat and Premium need 18+ by Apple's range, declared or
-confirmed, and that deciding for a minor needs an age Apple confirmed. The
-pages show "14 de outubro de 2026" as their date. `current_terms_version`
-stays `2026-09-29`: the change only widens what an adult may do and adds no
-obligation, so acceptances recorded at `2026-09-29` stay valid and nobody sees
-"Os Termos mudaram."; git keeps the earlier text. `PrivacyPolicyVersion.current`
+confirmed, and that deciding for a minor needs an age Apple confirmed. On
+2026-10-14 the pages showed "14 de outubro de 2026" as their date (the Terms
+have since moved to 15 and then 18 October, and `/familias/` to 18 October).
+`current_terms_version` stayed `2026-09-29` for that change: it only widened
+what an adult may do and added no obligation, so acceptances recorded at
+`2026-09-29` stayed valid and nobody saw "Os Termos mudaram."; git keeps the
+earlier text. `PrivacyPolicyVersion.current`
 and `current_policy_version` also stay `2026-09-29`: the consent card's text
 did not change, and the policy changed only in who may give the consent, not
 in what happens to the data, so no consent is withdrawn.
@@ -207,10 +213,20 @@ people's data, so this time the version moves: Heitor decided on 2026-10-15
 that the recorded Terms version follows the date the Terms page shows. The
 page reads "15 de outubro de 2026", and once it is live and migration
 `202610150001` is applied, the operator sets `current_terms_version` to
-`2026-10-15` (`docs/production-launch-runbook.md` §3, "Deleting a house");
-every adult accepts again on "Os Termos mudaram." and every minor
-acknowledges again. `current_policy_version` and the minors' consent version
-stay `2026-09-29`.
+`2026-10-15` (`docs/production-launch-runbook.md` §3, "Deleting a house";
+it ran that day); every adult accepts again on "Os Termos mudaram." and every
+minor acknowledges again. `current_policy_version` and the minors' consent
+version stay `2026-09-29`.
+
+**The Terms of 18 October.** Terms §4 names the rating, and on 2026-10-18 it
+became 14 ("não recomendada para menores de 14 anos"; see "Minors" below).
+The page reads "18 de outubro de 2026", so by the same rule the operator sets
+`current_terms_version` to `2026-10-18` once that page is live
+(`docs/production-launch-runbook.md` §3, "The rating of 14, and the Terms of
+18 October"); not run as of 2026-10-18. Every adult accepts again on "Os
+Termos mudaram." and every minor acknowledges again. `current_policy_version`
+and the minors' consent version stay `2026-09-29`: nothing changes in what
+happens to the data, so no consent is withdrawn.
 
 Revert with `'{confirmed,operator}'`; the CHECK on `private.age_policy` never
 lets the row drop those two. A revert makes the pages above untrue again, so
@@ -220,7 +236,14 @@ they change back in the same release.
 
 Decided 2026-09-29 (D1): Nina aims for the "Livre" rating; if Apple or the
 Ministério da Justiça assign 10 or 12, the app keeps the AI chat for adults and
-changes the one rating constant. The regime:
+changes the one rating constant. D1 ended on 2026-10-18: the ClassInd
+coordination read Nina as tending to 14 (2026-10-15), and Heitor accepted 14
+with the chat and Premium unchanged, for adults only. The voluntary análise
+prévia through the Sistema ClassInd is the next step (not filed yet), and if
+the Ministry rates Nina lower the constant goes back down
+(`docs/privacy/classificacao-indicativa.md`). A 14 is a recommendation, not a
+minimum age: the Terms still set none, and nothing below changes with it. The
+regime:
 
 - **No minimum age in the Terms.** Adult-only features are named; age comes from
   Apple's Declared Age Range (iOS 26.4 and later), recorded only through an App
@@ -459,8 +482,9 @@ automatically. See `docs/production-launch-runbook.md` for ownership and order.
   that the 48-hour acknowledgement on `/denuncia/` can be met.
 - Confirm the Polícia Federal intake channel for child-safety reports and the
   CVV number (188) shown on `/familias/` before launch; both are UNVERIFIED.
-- Confirm the ClassInd symbol colours and artwork against gov.br/mj, and settle
-  the App Review questions in `docs/privacy/classificacao-indicativa.md`.
+- Confirm the ClassInd symbol colours and artwork against gov.br/mj, settle
+  the App Review questions in `docs/privacy/classificacao-indicativa.md`, and
+  file the análise prévia through the Sistema ClassInd (its §6).
 - Create a dedicated Supabase `sb_secret_...` key for the Cloudflare Worker,
   configure `NINA_SUPABASE_SECRET_KEY` and `NINA_WAITLIST_HASH_SALT` as Worker
   secrets, then confirm `/api/health` returns `200`.

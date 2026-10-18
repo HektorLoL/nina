@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-10-15
+Last updated: 2026-10-18
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -458,7 +458,8 @@ the welcome and Ajustes lose surfaces earlier passes had added.
 Heitor's decisions D1–D4 (aim for "Livre", a company before launch, only
 Apple-confirmed adults act for AI, money and minors, iOS 26.4; D3 changed on
 2026-10-14, so self-declared adults now chat and buy, and only acting for a
-minor needs Apple's confirmation) plus the build-10 Apple fixes. No board draws any of this; every screen below is built from the
+minor needs Apple's confirmation; D1 ended on 2026-10-18, when Heitor accepted
+ClassInd's 14, so the mark draws 14 from build 18) plus the build-10 Apple fixes. No board draws any of this; every screen below is built from the
 existing parts (`NinaMark`, `NinaButton`, `.ninaCard`, `NinaRow`, `Eyebrow`) and
 its strings are in `docs/text-rubric.md` §3, most of them Law-text-gated.
 
@@ -569,7 +570,7 @@ draws them; they reuse existing parts.
 - **The rating mark only at login and startup, quieter.** `ClassIndMark`'s
   default is 22pt (was 28 on the welcome and 30 on startup), and both screens
   use it: 16pt above the safe-area bottom on both, so the startup cover fades
-  into the welcome without the "L" moving. The "Classificação indicativa" rows in
+  into the welcome without the mark moving. The "Classificação indicativa" rows in
   adult and minor settings are deleted, and the app-switcher covers
   (`AppLoadingScreen(showsRating: false)`, the root's and `ChildDayView`'s) no
   longer draw it, because resuming is not startup. The colour stays the official

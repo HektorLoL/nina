@@ -2,7 +2,7 @@ import SwiftUI
 
 // One constant for the whole app; web/src/rating.ts holds the same code and the preflight fails when they differ.
 enum NinaRating {
-    static let currentCode = "L"
+    static let currentCode = "14"
 
     static let knownCodes = ["L", "10", "12", "14", "16", "18"]
 

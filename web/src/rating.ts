@@ -10,7 +10,7 @@ export interface NinaRatingDescription {
 }
 
 // This line must equal `NinaRating.currentCode` in `Nina/NinaRating.swift`; the preflight compares them.
-export const ninaRatingCode: NinaRatingCode = "L";
+export const ninaRatingCode: NinaRatingCode = "14";
 
 const colorHexByCode: Readonly<Record<NinaRatingCode, string>> = {
   L: "#00A859",

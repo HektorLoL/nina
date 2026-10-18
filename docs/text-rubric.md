@@ -1,6 +1,6 @@
 # Nina: rubric for cutting on-screen text
 
-Last updated: 2026-10-15
+Last updated: 2026-10-18
 
 This rubric applies to every screen of the iOS app. A screen passes when it meets every rule in §1 and every rule in its surface section (§2), and when none of the text listed in §3 has been lost. The rules come from Mobbin research on about 90 iOS screens across six surfaces. The strongest references are cited inline.
 
@@ -139,7 +139,7 @@ These count authored words only, as defined in §0 step 4.
 │ Ao continuar, você aceita os   │  .meta muted, centered, 14pt below
 │ Termos e a Política de Priv.   │  links tinted
 │ Menores de 18 anos entram…     │  protected age line
-│             [ L ]              │  ClassIndMark() (22pt)
+│             [ 14 ]             │  ClassIndMark() (22pt)
 │ 16pt bottom inset              │
 └────────────────────────────────┘
 ```
@@ -570,7 +570,7 @@ These strings may be shortened to the minimum form shown. Every element listed m
 | 19 | Why chat is unavailable, and what still works: adult-only, age not confirmed by Apple, suspended | Adult-only, declared-adult and blocked gates | C14 | — |
 | 20 | Irreversibility on every irreversible action | Destructive alerts | "Não dá para desfazer." | — |
 | 21 | Only the subscriber manages a shared plan | Premium management | "Só quem assina muda o plano." | — |
-| 22 | The rating | Welcome, startup loading screen, web footer | The ClassInd mark from `NinaRating.current`, accessibility label "Classificação indicativa: livre" | Law-text-gated (Portaria MJSP 1.048 art. 50) |
+| 22 | The rating | Welcome, startup loading screen, web footer | The ClassInd mark from `NinaRating.current`, accessibility label "Classificação indicativa: não recomendado para menores de 14 anos" (14 since 2026-10-18, build 18; "livre" before) | Law-text-gated (Portaria MJSP 1.048 art. 50) |
 | 23 | Apple gives only a range, never a birth date | `AgeCheckView` | "A Apple informa só a faixa, nunca a data de nascimento." | Law-text-gated (ECA Digital art. 13; Decreto 12.880 art. 25 §1) |
 | 24 | What a minor sees and does not; that their tasks do not go to the AI and their name goes as a code; the guardian's controls | Guardian sheet card | The five card lines | Law-text-gated (LGPD art. 14 §§3, 6; ECA Digital arts. 7 and 17–18) |
 | 25 | The guardian's declaration, the account consent with Terms acceptance on the minor's behalf, and the separate optional health consent | Guardian sheet | The two required checkboxes and the optional one, whole | Law-text-gated (LGPD arts. 8 §2, 11 I, 14 §§1, 4, 5; Código Civil arts. 3 and 1.634 VII) |

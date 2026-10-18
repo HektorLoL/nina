@@ -1,6 +1,6 @@
 # Children's Impact Assessment - Nina
 
-Last updated: 2026-10-14
+Last updated: 2026-10-18
 
 One document for every assessment the law asks of a product that children and
 adolescents are likely to use. It was written by the controller, without a
@@ -36,7 +36,10 @@ ECA Digital applies to every IT product "direcionado a crianças e a
 adolescentes no País ou de acesso provável por eles" (art. 1). Nina is treated
 as in scope from the first all-ages build:
 
-- it has no minimum age and aims for the "Livre" rating;
+- it has no minimum age; its rating is 14 since 2026-10-18 (ClassInd's reading
+  of 2026-10-15, accepted by Heitor; it aimed for "Livre" until then), and a
+  rating is a recommendation, not a bar, so people under 14 may still use it,
+  and every person under 18 enters through a guardian's approval;
 - it holds child and teen profiles, and a minor may hold an account;
 - the child's day list (`ChildDayView`) is shown to a child on purpose;
 - an ANPD draft guide reportedly reads age notices and terms as formal barriers
@@ -206,7 +209,7 @@ rewrite is allowed only if it still says what the cited article asks.
 | Surface | String (pt-BR) | Article |
 | --- | --- | --- |
 | LoginView footnote | "Ao continuar, você aceita os Termos e a Política de Privacidade. Menores de 18 anos entram numa casa com aprovação de um responsável." | LGPD arts. 8 and 14 §1; ECA Digital art. 24 |
-| Rating mark, app and web | accessibility label "Classificação indicativa: livre" | Portaria MJSP 1.048/2025 art. 50; ECA Digital art. 8 V |
+| Rating mark, app and web | accessibility label "Classificação indicativa: não recomendado para menores de 14 anos" (from `NinaRating.current`; "livre" until 2026-10-18) | Portaria MJSP 1.048/2025 art. 50; ECA Digital art. 8 V |
 | AgeCheckView | "A Apple informa só a faixa, nunca a data de nascimento." | Decreto 12.880 art. 25 §1; ECA Digital art. 13 |
 | Guardian sheet title | "Você é responsável por {nome}?" | LGPD art. 14 §5 |
 | Guardian sheet card | "{nome} vai ver só as próprias tarefas e marcar o que fez." / "Não conversa com a Nina, não compra nada e não vê o resto da casa." | LGPD art. 14 §6; ECA Digital art. 7 §1 |
@@ -226,7 +229,7 @@ rewrite is allowed only if it still says what the cited article asks.
 | Report channel | "A denúncia não é anônima: ela sai do seu email." | ECA Digital art. 29 §2 |
 | AI consent card | the lead naming OpenAI and the house details, and line 1 on the 30-day abuse logs | LGPD arts. 8 and 9 §1 |
 | AI consent card | "Autorizo enviar o que eu escrever e os detalhes da casa para a OpenAI, empresa dos Estados Unidos." | LGPD art. 33 VIII; Apple Guideline 5.1.2(i) |
-| Terms §4 | "A Nina não tem idade mínima. A classificação indicativa da Nina é {classificação}." | Decreto 12.880 art. 12 §4; Portaria MJSP 1.048 art. 55 |
+| Terms §4 | "A Nina não tem idade mínima. Pela classificação indicativa, a Nina é {classificação}, por causa da assinatura do Nina Premium e da conversa com a Nina, mesmo que as duas sejam só para maiores de 18 anos." (the clause after {classificação} shows only while the code is "14"; until 2026-10-18 the sentence read "A classificação indicativa da Nina é {classificação}.") | Decreto 12.880 art. 12 §4; Portaria MJSP 1.048 art. 55 |
 | Privacy §6A | "Envio para fora do Brasil", its form, duration, purpose, destination and rights | Res. CD/ANPD 19/2024 Anexo I art. 2 V and art. 17 §§2-3 |
 | `/familias/` | the whole page | ECA Digital art. 16; LGPD art. 14 §2; Decreto 12.880 art. 47 §1 |
 | `/denuncia/` | the whole page | ECA Digital arts. 29 §3, 30 and 33; Decreto 12.880 arts. 39 and 41 |
@@ -258,7 +261,9 @@ completa fica disponível para a ANPD quando ela pedir."
 
 ## 11. Residual risks accepted without a lawyer
 
-- The rating outcome (Apple and the MJSP decide; see the rating document).
+- The rating outcome. Nina publishes 14, ClassInd's reading, since
+  2026-10-18; the análise prévia (not filed yet), Apple and the MJSP decide
+  it formally (see the rating document).
 - The age signal is attested by the client device, not proven by a document.
 - Guardianship is declared, not proven.
 - Apple does not confirm adult ages in Brazil, so since D3 (2026-10-14) a
@@ -285,7 +290,11 @@ The controller reviews this document, and its public summary, whenever:
 - the chat model, the prompt, or the moderation changes (run the local eval);
 - photo or PDF reading is considered again (a privacy review of its own);
 - the ANPD publishes its final scope or age-assurance guides;
-- Apple or the MJSP assign a rating other than "Livre";
+- the análise prévia, Apple or the MJSP assign a rating other than 14 (it was
+  "Livre" until 2026-10-18; this document was reviewed for the change that
+  day: nothing a minor may do changed, and a minor sees the 14 mark from
+  build 18 and acknowledges the Terms of 18 October once the operator moves
+  `current_terms_version` to `2026-10-18`, not run as of 2026-10-18);
 - the operator changes `trusted_assurances` (widened to `self_declared` under
   D3; this document was reviewed for it on 2026-10-14).
 
