@@ -70,7 +70,7 @@ the Terms):
 - LoginView and the startup loading screen (`AppLoadingScreen`; not its
   app-switcher cover), both at 22pt in the same spot (build 11; the settings
   rows were removed, and `repository.rating-mark-placement` keeps it there).
-  Build 18 (not archived yet) is the first to draw 14; builds up to 17 still
+  Build 18 (uploaded 2026-10-18) is the first to draw 14; builds up to 17 still
   draw "L" until people update;
 - the footer of every page of `ninai.app`;
 - Terms §4, through `ninaRating.termsPhrase`;
@@ -262,9 +262,9 @@ recomendada para menores de 14 anos"), `/familias/` §11, the footer mark on
 every page and the welcome and startup marks (build 18) all say 14, and the
 Terms page reads "Atualizados em 18 de outubro de 2026". Following Heitor's
 rule of 2026-10-15 (the recorded Terms version follows the page date), once
-that page is live the operator moves `private.age_policy.current_terms_version`
+that page was live the operator moved `private.age_policy.current_terms_version`
 to `'2026-10-18'` (`docs/production-launch-runbook.md` §3, "The rating of 14,
-and the Terms of 18 October"); not run yet. Every adult then meets "Os Termos
+and the Terms of 18 October"), on 2026-10-18. Every adult now meets "Os Termos
 mudaram." once and every minor acknowledges the Terms again. The AI chat and
 Premium are unchanged: adults only, by Apple's 18+ range, declared or confirmed
 (D3), and acting for a minor still needs a confirmed age. The App Store answers
@@ -389,9 +389,9 @@ Written so far:
   together, so Terms §4, `/familias/` §11, the footer mark on every page and
   the welcome and startup marks say 14; build 18 is the first build that
   draws it. The Terms page
-  reads "Atualizados em 18 de outubro de 2026", and once it is live the
-  operator moves `current_terms_version` to `'2026-10-18'`
-  (`docs/production-launch-runbook.md` §3); not run yet. The AI chat and
+  reads "Atualizados em 18 de outubro de 2026", and once it was live the
+  operator moved `current_terms_version` to `'2026-10-18'`
+  (`docs/production-launch-runbook.md` §3), the same day. The AI chat and
   Premium stay exactly as they are, for adults only (D3 unchanged; acting for
   a minor still needs a confirmed age). Next: file the análise prévia through
   the Sistema ClassInd (§6); not filed yet. If the Ministry later rates Nina

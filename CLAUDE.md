@@ -2361,9 +2361,14 @@ the project, not bugs to fix unprompted.
   sources tagged `testflight-1.0-17` with `CURRENT_PROJECT_VERSION` 17; the
   online production preflight against the archive read 0 failures and 0
   warnings. Its one change: Urgente is a red flag and Alta a yellow one, on
-  the rows and the task's detail (§5, "Priority is a coloured flag"). Build
-  17 is the build Heitor tests before any test data is deleted (his order of
-  2026-10-15).
+  the rows and the task's detail (§5, "Priority is a coloured flag"). Heitor
+  chose to keep the yellow flag's edge on 2026-10-18.
+- **Build 18 (2026-10-18) carries the 14 rating mark.** Archived from the
+  sources tagged `testflight-1.0-18` with `CURRENT_PROJECT_VERSION` 18; the
+  online production preflight against the archive read 0 failures and 0
+  warnings. Its one change is the orange "14" on the welcome and the startup
+  screen (§13, "The rating is 14"). Build 18 is the build Heitor tests before
+  any test data is deleted (his order of 2026-10-15).
 - **Build 16 (2026-10-15) adds the priority flag to build 15.** Archived
   from the sources tagged `testflight-1.0-16` with `CURRENT_PROJECT_VERSION`
   16; the online production preflight against the archive read 0 failures
@@ -2556,14 +2561,15 @@ the project, not bugs to fix unprompted.
   IARC; the filing needs a video of every feature open to classification, plus
   an access link, login and password when full access needs them), not filed
   yet; and if the Ministry rates Nina lower, the constant goes back down. Build
-  18, not archived yet (`CURRENT_PROJECT_VERSION` is 17 on 2026-10-18), is the
+  18 (2026-10-18, tagged `testflight-1.0-18`) is the
   first to carry the 14 mark on the welcome and the startup screen; builds up
   to 17 still draw "L". The Terms page reads "Atualizados em 18 de outubro de
   2026" and `/familias/` "Atualizada em 18 de outubro de 2026", and once the
-  Terms page is live the operator moves
-  `private.age_policy.current_terms_version` to `'2026-10-18'`
+  Terms page was live the operator statement moved
+  `private.age_policy.current_terms_version` to `'2026-10-18'` on 2026-10-18
   (`docs/production-launch-runbook.md` §3, "The rating of 14, and the Terms of
-  18 October"); not run yet. Then every adult meets "Os Termos mudaram." once
+  18 October"; read back: Terms `2026-10-18`, policy and minor consent still
+  `2026-09-29`). Every adult now meets "Os Termos mudaram." once
   and every minor acknowledges the Terms again. The answer, the decision,
   Apple's questionnaire answers and the four questions to ask App Review are
   in `docs/privacy/classificacao-indicativa.md`; how Apple shows a Brazil
@@ -2607,8 +2613,7 @@ the project, not bugs to fix unprompted.
   keeps that line because it is true there. Acting for a minor stays
   `confirmed` or `operator`. The Terms version stayed `2026-09-29` for D3 (the
   change only widens what an adult may do and adds no obligation; it moved to
-  `2026-10-15` for the house deletion and is due to move to `2026-10-18` for
-  the rating), and the AI consent version stays `2026-09-29`. The expected
+  `2026-10-15` for the house deletion and to `2026-10-18` for the rating), and the AI consent version stays `2026-09-29`. The expected
   cost was the
   ClassInd self-classification: a self-declared gate is "facilmente burlável"
   for attenuator E.1.10, so purchases (D.5.1) might lift the rating to 14,
