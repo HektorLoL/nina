@@ -126,6 +126,25 @@ Deno.test("a box ticked by hand with inner spaces still reads as done", () => {
   ]);
 });
 
+Deno.test("a plain numbered or bulleted checklist line reads as an item", () => {
+  const items = parseYours([
+    "## 1. Choose",
+    "1. **A choice, not a step**",
+    "   - A (my pick): go now.",
+    "## 2. Your steps",
+    "1. [ ] Test the build.",
+    "2. [x] Send the emails.",
+    "## 3. Company dates",
+    "- [ ] Check the mailboxes.",
+  ].join("\n"));
+
+  assertEquals(items.map((item) => [item.title, item.section, item.done]), [
+    ["Test the build.", "Your steps", false],
+    ["Send the emails.", "Your steps", true],
+    ["Check the mailboxes.", "Company dates", false],
+  ]);
+});
+
 Deno.test("informational sections are not counted as work", () => {
   const items = parseYours([
     "## 1. Blocks launch completely",

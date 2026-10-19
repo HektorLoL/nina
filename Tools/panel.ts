@@ -128,8 +128,11 @@ export function parseYours(source: string): YoursItem[] {
       continue;
     }
 
-    // Heitor ticks by hand as "[ X ]", so the box tolerates inner spaces.
-    const item = line.match(/^### \[\s*([xX]?)\s*\]\s*(.+)$/);
+    // Heitor ticks by hand as "[ X ]", so the box tolerates inner spaces; since
+    // 2026-10-19 the note may list items as plain "1. [ ]" or "- [ ]" lines.
+    const item = line.match(
+      /^(?:### |\d+\.\s+|-\s+)\[\s*([xX]?)\s*\]\s*(.+)$/,
+    );
     if (item) {
       if (!inScope) {
         current = undefined;

@@ -2381,6 +2381,12 @@ the project, not bugs to fix unprompted.
   online production preflight against the archive read 0 failures and 0
   warnings. Its one change is the orange "14" on the welcome and the startup
   screen (§13, "The rating is 14"). Heitor tested it on 2026-10-18.
+- **Build 20 (2026-10-19) centres the gates' message.** Archived from the
+  sources tagged `testflight-1.0-20` with `CURRENT_PROJECT_VERSION` 20; the
+  online production preflight against the archive read 0 failures and 0
+  warnings. Its one change: the Nina mark, the headline and the line of the
+  Terms and age gates sit centred, like the welcome. Build 20 is the release
+  candidate Heitor tests before any test data is deleted.
 - **Build 19 (2026-10-19) is Heitor's last fixes.** Archived from the sources
   tagged `testflight-1.0-19` with `CURRENT_PROJECT_VERSION` 19; the online
   production preflight against the archive read 0 failures and 0 warnings.
@@ -2390,8 +2396,7 @@ the project, not bugs to fix unprompted.
   leading whole number, so a unit Nina or a person wrote is never lost), the
   gates rebuilt on LoginView's skeleton (`GateLayout`: the message above, the
   Terms card, the commit and the exits at the foot), and no rating mark in
-  the app (§5). Build 19 is the build Heitor tests before any test data is
-  deleted (his order of 2026-10-15).
+  the app (§5).
 - **Build 16 (2026-10-15) adds the priority flag to build 15.** Archived
   from the sources tagged `testflight-1.0-16` with `CURRENT_PROJECT_VERSION`
   16; the online production preflight against the archive read 0 failures
