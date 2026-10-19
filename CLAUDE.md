@@ -1510,7 +1510,17 @@ because iCloud leaves ignored "… 2" copies of source files in the working tree
 carries the chain-signature fix below. `nina-chat` v19 (2026-10-05, commit
 4125c7b, same clean-export route) carries the search over up to 500 ordered
 candidates with accents folded, the workload summary without sementes, and a
-pet's species and breed in the member context. Before that, `nina-maintenance` was redeployed on 2026-09-23 with the
+pet's species and breed in the member context. `nina-chat` v20 and
+`nina-maintenance` v11 (2026-10-19, commit 962baee, same clean-export route,
+CLI 2.110.0) carry Heitor's choice 6: whole-word refusals, attachments off on
+the server unless `NINA_ATTACHMENTS_ENABLED` is true (`attachments_disabled`),
+one retry on a busy OpenAI under a 50 s turn cap with fixed log codes, and the
+insight's `safety_identifier` and output moderation; after the deploy both
+answered with their own codes (400 `invalid_request` to an empty body with
+the publishable key, 401 `not_authenticated` without the secret header). The
+same commit's `age-signal` change (the App Attest root override honoured only
+on a loopback project) is NOT deployed: it waits for the Deno 2.1.4 run of
+`app-attest.test.ts` below. Before that, `nina-maintenance` was redeployed on 2026-09-23 with the
 GPT-6 Luna switch, and `nina-chat` v14 (2026-09-28) carried the bounded body
 reader and v12 (2026-09-26) the spoken-dates fix, commit 84ef7c9.
 Until 2026-09-23 both still ran the 2026-06-15 build, so check `list_edge_functions` dates against
@@ -2656,6 +2666,19 @@ the project, not bugs to fix unprompted.
   `/familias/`, `/suporte/` and the in-app FAQ said nothing about how a
   titular leaves, so they kept their 14 October text (until `/familias/` moved
   to 18 October with the rating).
+- **Migration `202610190001` (the AI budget) is applied to production
+  (2026-10-19, Heitor's choice 5).** The read-only pre-check matched all nine
+  bodies the runbook lists (`docs/production-launch-runbook.md` §3, "The AI
+  budget of 19 October") with 0 open runs; it went through the Supabase MCP
+  `apply_migration` with the committed body and its version row was set to
+  `202610190001` (§12). Read back the same day: all eleven bodies match the
+  runbook's post-change md5s, the settings row holds 50,000,000 / 10,000,000
+  / 5,000,000 µUSD, October's interactive pool reads cap 50,000,000 (spent
+  2,457), one house share row (spent 2,457), the five privilege checks read
+  false, the daily job is unchanged, the insight week reads 2026-10-12 to
+  2026-10-18, the grant counts stay 52 and 27, and the foreign-key canary
+  reads 0. No build is needed: a house past its share reads
+  `monthly_budget_reached`, which every build shows as a paused chat.
 - **Join requests reach Casa live from build 15 (2026-10-15).** No
   migration: the `families` bump already reached production's realtime; the
   app had subscribed twice per cold launch and kept a dead channel, and a
