@@ -79,20 +79,22 @@ struct AgeCheckView: View {
     }
 
     private var prompt: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .center, spacing: 0) {
             NinaMark(size: 48)
                 .padding(.bottom, 16)
 
             Text("Antes, sua faixa de idade.")
                 .ninaText(.screen)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text("A Apple informa só a faixa, nunca a data de nascimento.")
                 .ninaText(.label, NinaTheme.muted)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 8)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private func failure(headline: String, line: String, retryTitle: String) -> some View {
@@ -155,27 +157,30 @@ struct AgeMajorityView: View {
 
     var body: some View {
         GateLayout {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .center, spacing: 0) {
                 NinaMark(size: 48)
                     .padding(.bottom, 16)
 
                 Text(reason.headline)
                     .ninaText(.screen)
+                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(reason.line)
                     .ninaText(.label, NinaTheme.muted)
+                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 8)
 
                 if reason == .majority, let guardian = store.viewerAge.terms.firstFormerGuardianName {
                     Text("\(guardian) não acompanha mais sua conta.")
                         .ninaText(.label, NinaTheme.muted)
+                        .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 6)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
         } decision: {
             VStack(spacing: 12) {
                 TermsDocumentCard(
