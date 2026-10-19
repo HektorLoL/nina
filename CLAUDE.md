@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -1134,32 +1134,44 @@ branching anywhere.
 - **Category is a monochrome outline glyph, never a colour** (kids mode is the
   one exception, §4 "Kids mode is presentation only"). `MemberTone`'s case
   names are wire values that outlived their hues; they render as neutral ink tints.
-- **Priority is a coloured flag before the title** (since 2026-10-15,
-  Heitor: "Urgente" and "Alta" changed nothing on the list). `PriorityFlag`
-  draws on every open task row in Hoje, Tarefas (selection included) and a
-  child's section, and beside "Prioridade" on the task's detail: a red filled
-  flag for Urgente (`priorityUrgent`, the `alert` red), a light yellow filled
-  flag with a darker yellow edge for Alta (`priorityHigh #FACC15`,
-  `priorityHighEdge #A16207`), nothing for Normal or a done task. VoiceOver
-  reads "Prioridade alta" or "Urgente". Build 16 drew both in ink, outline
-  and filled; Heitor tested it on 2026-10-18 and decided people could not
-  tell which was more urgent, so he asked for yellow and red. The yellow
-  keeps its edge because a light yellow alone reads 1.5:1 on the ground; the
-  edge reads 4.8:1. Colour stays off the category glyph, the date and the
+- **Priority is a tinted row on a list and a coloured flag on the detail**
+  (since 2026-10-15, Heitor: "Urgente" and "Alta" changed nothing on the
+  list). Every open task row in Hoje, Tarefas (selection included) and a
+  child's section sits on a rounded ground (`PriorityFlag.rowTint`, radius
+  12, 10 pt past the row's sides, 2 pt in from its top and foot): light red
+  `priorityUrgentWash #FDE2E0` for Urgente, light yellow `priorityHighWash
+  #FEF6C7` for Alta, none for Normal or a done task. No hairline runs along a
+  tinted row (`PriorityFlag.showsDivider`), and VoiceOver reads the title as
+  "Urgente, …" or "Prioridade alta, …". Beside "Prioridade" on the task's
+  detail `PriorityFlag` still draws a red filled flag for Urgente
+  (`priorityUrgent`, the `alert` red) and a light yellow one with a darker
+  edge for Alta (`priorityHigh #FACC15`, `priorityHighEdge #A16207`; a light
+  yellow alone reads 1.5:1 on the ground, the edge 4.8:1). Build 16 put an
+  ink flag before the title and build 17 coloured it; Heitor tested build 18
+  and on 2026-10-19 chose the tinted row from two mockups (tinted row, flag
+  after the title). Colour stays off the category glyph, the date and the
   title: lateness is still terracotta and only the date says it
-  (`TaskAgendaTests.testAnUrgentTaskCarriesARedFlagAHighOneAYellowFlagWithAnEdgeAndANormalOneNone`).
-- **One regulated exception: the ClassInd rating pictogram.**
-  `NinaTheme.classInd(_:)` / `classIndLivre` hold the official rating colours
-  (Livre green, 10 blue, 12 yellow, 14 orange, 16 red, 18 black) because
-  Portaria MJSP 1.048 art. 50 requires the symbol at install, login and
-  loading; `ClassIndMark` shows it only on `LoginView` and the startup
-  `AppLoadingScreen`, at its 22pt default and in the same spot on both (build
-  11, 2026-10-04: no settings row, and the app-switcher cover is
-  `AppLoadingScreen(showsRating: false)`), and draws only what
-  `NinaRating.currentCode` says; `repository.rating-mark-placement` fails the
-  preflight if a call appears anywhere else or leaves either screen. The hexes,
-  the drawing and any minimum size are UNVERIFIED against the gov.br/mj artwork
-  (`docs/rebrand-implementation.md` §6i).
+  (`TaskAgendaTests.testAnOpenUrgentOrHighRowIsTintedWithNoHairlineAlongItAndADoneOrNormalRowIsNot`,
+  `…testAnUrgentTaskCarriesARedFlagAHighOneAYellowFlagWithAnEdgeAndANormalOneNone`).
+- **The app draws no ClassInd rating pictogram (since 2026-10-19, build 19).**
+  `NinaTheme.classInd(_:)` / `classIndLivre` and `ClassIndMark` still hold the
+  official colours and the drawing, so putting it back is one call on each
+  screen, but nothing in `Nina/` calls `ClassIndMark` and
+  `repository.rating-mark-placement` fails the preflight if anything does.
+  From build 11 to build 18 the mark sat on `LoginView` and the startup
+  `AppLoadingScreen`, because Portaria MJSP 1.048 art. 50 reads: "A exibição
+  das indicações etárias e dos descritores de conteúdo nos aplicativos e
+  navegadores deverá ocorrer nas páginas de instalação, login e inicialização
+  ou carregamento" (in force since 2026-03-17; art. 48 V plausibly covers
+  Nina's chat, and Lei 15.211 art. 8 V asks the same of a service minors may
+  reach). Heitor removed it on 2026-10-19 after a search found no app,
+  Brazilian or not, that shows its own rating on a login, splash or settings
+  screen (stores show it on the listing; streaming apps show it per title).
+  The risk he took: an ECA administrative infraction (Portaria art. 13), with
+  no enforcement found, while the análise prévia's analyst will open the app.
+  Terms §4, `/familias/` §11, the site's footer and the App Store listing
+  still carry the rating. The hexes and the drawing are UNVERIFIED against the
+  gov.br/mj artwork (`docs/rebrand-implementation.md` §6i).
 - **A wait is `AppWaitingScreen`**: the 64pt `.rest` mark and "Só um instante.",
   centred on the whole screen, breathing only without Reduce Motion. `.reading`
   (the disc stretched to a bar) belongs only to the chat's "Lendo" bubble; used
@@ -1240,7 +1252,8 @@ household is what this product refuses.
   person types first is focused (not under VoiceOver), so the keyboard fills the
   rest. House setup is the one exception: it opens on a choice with no field, and
   the chosen path's field takes focus (rubric O9). The `Spacer` plus viewport `minHeight` pair is only for a single centered
-  block whose exits sit at the foot (the welcome, the gates, the zero states).
+  block whose exits sit at the foot (the welcome, the gates, the zero states); a
+  gate's commit joins its exits at the foot, as on the welcome.
   A short page ends at its last control (rubric G15).
 - **`NinaChip` holds one line** below accessibility sizes; a chip row that does
   not scroll horizontally is a `ViewThatFits(in: .horizontal)` with a stacked
@@ -2367,8 +2380,15 @@ the project, not bugs to fix unprompted.
   sources tagged `testflight-1.0-18` with `CURRENT_PROJECT_VERSION` 18; the
   online production preflight against the archive read 0 failures and 0
   warnings. Its one change is the orange "14" on the welcome and the startup
-  screen (§13, "The rating is 14"). Build 18 is the build Heitor tests before
-  any test data is deleted (his order of 2026-10-15).
+  screen (§13, "The rating is 14"). Heitor tested it on 2026-10-18.
+- **Build 19 (2026-10-19) is Heitor's last fixes.** The tinted priority rows
+  (§5, "Priority is a tinted row"), the shopping quantity with −1, +1 and +10
+  steps (`ShoppingAmount`, `ShoppingAmountField`; a step moves only the
+  leading whole number, so a unit Nina or a person wrote is never lost), the
+  gates rebuilt on LoginView's skeleton (`GateLayout`: the message above, the
+  Terms card, the commit and the exits at the foot), and no rating mark in
+  the app (§5). Build 19 is the build Heitor tests before any test data is
+  deleted (his order of 2026-10-15).
 - **Build 16 (2026-10-15) adds the priority flag to build 15.** Archived
   from the sources tagged `testflight-1.0-16` with `CURRENT_PROJECT_VERSION`
   16; the online production preflight against the archive read 0 failures
@@ -2563,7 +2583,7 @@ the project, not bugs to fix unprompted.
   yet; and if the Ministry rates Nina lower, the constant goes back down. Build
   18 (2026-10-18, tagged `testflight-1.0-18`) is the
   first to carry the 14 mark on the welcome and the startup screen; builds up
-  to 17 still draw "L". The Terms page reads "Atualizados em 18 de outubro de
+  to 17 still draw "L", and from build 19 the app draws no mark at all (§5). The Terms page reads "Atualizados em 18 de outubro de
   2026" and `/familias/` "Atualizada em 18 de outubro de 2026", and once the
   Terms page was live the operator statement moved
   `private.age_policy.current_terms_version` to `'2026-10-18'` on 2026-10-18

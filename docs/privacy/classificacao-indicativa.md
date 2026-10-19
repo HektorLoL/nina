@@ -1,6 +1,6 @@
 # Age Rating (Classificação Indicativa) - Nina
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 Nina's rating is 14, "Não recomendado para menores de 14 anos", since
 2026-10-18. That is the ClassInd coordination's reading of 2026-10-15 (§9):
@@ -67,11 +67,11 @@ login and startup; Decreto 12.880/2026 art. 12 §4 and Portaria art. 55 ask for
 the Terms):
 
 - the App Store listing (Apple; §2 says how far it can be made to read 14);
-- LoginView and the startup loading screen (`AppLoadingScreen`; not its
-  app-switcher cover), both at 22pt in the same spot (build 11; the settings
-  rows were removed, and `repository.rating-mark-placement` keeps it there).
-  Build 18 (uploaded 2026-10-18) is the first to draw 14; builds up to 17 still
-  draw "L" until people update;
+- not in the app, since build 19 (2026-10-19, Heitor's decision; §9). From
+  build 11 to build 18 the mark sat on LoginView and the startup loading
+  screen at 22pt, and build 18 drew 14; `repository.rating-mark-placement`
+  now fails if `Nina/` draws it anywhere. This departs from the "login e
+  inicialização ou carregamento" line of art. 50;
 - the footer of every page of `ninai.app`;
 - Terms §4, through `ninaRating.termsPhrase`;
 - `/familias/` §11.
@@ -384,6 +384,26 @@ Written so far:
   question: neither Apple's purchase controls nor the age gate attenuate
   D.5.1, and §6's D.5.3 reading ("AI in a secondary role") is not ClassInd's.
   14 is outside D1, so the product question is Heitor's (§8).
+- 2026-10-19: Heitor removed the rating mark from the app (build 19), after
+  testing build 18 and asking for examples of apps that show their own
+  rating on screen. A search (web, news, the government's FAQ, Mobbin) found
+  none: stores show the rating on the listing (Instagram's "16" on Google
+  Play), and streaming apps show it per title. The rule still reads, in
+  Portaria MJSP 1.048/2025 art. 50 sole paragraph, "A exibição das indicações
+  etárias e dos descritores de conteúdo nos aplicativos e navegadores deverá
+  ocorrer nas páginas de instalação, login e inicialização ou carregamento",
+  in force since 2026-03-17 (art. 95 I) for the providers of art. 48 I to V,
+  where V (AI that generates content) plausibly covers Nina; Lei 15.211 art.
+  8 V asks a service minors may reach to state the rating "no momento do
+  acesso"; the Guia (5th ed., p. 20 and O.3) asks for more (descriptors, a
+  centred box at every access, settings). The risk accepted: an ECA
+  administrative infraction (Portaria art. 13), no enforcement found, and an
+  análise prévia whose analyst opens the app without a mark. The search also
+  found that a self-classified work should show the provisional symbol (A14)
+  until the rating is published in the DOU (art. 14 §2, art. 18; Guia H.1),
+  and that the repo's L, 12, 16 and 18 hexes differ slightly from the Guia's
+  (p. 125); neither matters while the app draws no mark. Restoring it is one
+  `ClassIndMark()` call on each of the two screens plus the preflight check.
 - 2026-10-18: Heitor decided (option A) to accept 14 now.
   `NinaRating.currentCode` and `ninaRatingCode` move from `"L"` to `"14"`
   together, so Terms §4, `/familias/` §11, the footer mark on every page and

@@ -424,7 +424,7 @@ struct TasksView: View {
                         } else {
                             TaskRowView(task: task)
                         }
-                        if task.id != items.last?.id {
+                        if PriorityFlag.showsDivider(after: task, in: items) {
                             NinaDivider(inset: 36)
                         }
                     }
@@ -458,7 +458,7 @@ struct TasksView: View {
             if isShowingCompleted {
                 ForEach(completedToday) { task in
                     TaskRowView(task: task)
-                    if task.id != completedToday.last?.id {
+                    if PriorityFlag.showsDivider(after: task, in: completedToday) {
                         NinaDivider(inset: 36)
                     }
                 }
@@ -509,7 +509,7 @@ struct TasksView: View {
             VStack(spacing: 0) {
                 ForEach(store.openSeeds) { seed in
                     TaskRowView(task: seed)
-                    if seed.id != store.openSeeds.last?.id {
+                    if PriorityFlag.showsDivider(after: seed, in: store.openSeeds) {
                         NinaDivider(inset: 36)
                     }
                 }
@@ -677,7 +677,9 @@ struct TasksView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(searchResults) { task in
                             TaskRowView(task: task)
-                            NinaDivider(inset: 36)
+                            if PriorityFlag.showsDivider(after: task, in: searchResults, dividesLast: true) {
+                                NinaDivider(inset: 36)
+                            }
                         }
 
                         if !shoppingResults.isEmpty {
@@ -842,15 +844,11 @@ private struct SelectableTaskRow: View {
                     .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        if !task.isDone {
-                            PriorityFlag(priority: task.priority)
-                        }
-                        Text(task.title)
-                            .ninaText(.body, NinaTheme.ink, weight: .medium)
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(2)
-                    }
+                    Text(task.title)
+                        .ninaText(.body, NinaTheme.ink, weight: .medium)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                        .accessibilityLabel(PriorityFlag.rowAccessibilityTitle(for: task))
                     Text(task.effectiveDueLabel())
                         .ninaText(.meta, task.isOverdue() ? NinaTheme.terracotta : NinaTheme.muted)
                         .lineLimit(1)
@@ -862,6 +860,14 @@ private struct SelectableTaskRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .background {
+            if let tint = PriorityFlag.rowTint(for: task) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(tint)
+                    .padding(.horizontal, -10)
+                    .padding(.vertical, 2)
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }

@@ -1678,7 +1678,17 @@ private struct NinaProposalCard: View {
                         }
                     }
                     if proposal.kind == .shopping {
-                        proposalField("Quantidade", text: $draftAmount)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Quantidade")
+                                .ninaText(.caption, NinaTheme.muted)
+
+                            ShoppingAmountField(
+                                amount: $draftAmount,
+                                textStyle: .label,
+                                weight: .regular,
+                                inset: 12
+                            )
+                        }
                     }
                 }
             }

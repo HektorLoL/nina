@@ -101,7 +101,6 @@ private struct MinorHeader: View {
 
 struct MinorWelcomeView: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.openURL) private var openURL
 
     let home: MinorHome
 
@@ -146,6 +145,12 @@ struct MinorWelcomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .ninaCard(fill: NinaTheme.grout, stroke: .clear)
 
+                    if isJointAcceptance {
+                        TermsDocumentCard(
+                            versionLabel: AppStore.termsVersionLabel(store.viewerAge.terms.currentTermsVersion)
+                        )
+                    }
+
                     if let error = store.syncErrorMessage {
                         NinaErrorNote(text: error)
                     }
@@ -164,11 +169,6 @@ struct MinorWelcomeView: View {
                         Text("Você aceita os Termos junto com \(guardian).")
                             .ninaText(.meta, NinaTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
-
-                        NinaButton(title: "Ler os Termos", kind: .quiet) {
-                            Haptics.selection()
-                            openURL(NinaLegalLinks.termsOfUse)
-                        }
                     }
 
                     Spacer(minLength: 24)

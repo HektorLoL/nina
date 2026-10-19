@@ -302,7 +302,7 @@ struct TodayView: View {
             ForEach(tasks) { task in
                 VStack(spacing: 0) {
                     TaskRowView(task: task)
-                    if task.id != tasks.last?.id {
+                    if PriorityFlag.showsDivider(after: task, in: tasks) {
                         NinaDivider(inset: 36)
                     }
                 }
@@ -501,15 +501,11 @@ struct TaskRowView: View {
     }
 
     private var rowTitle: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            if !task.isDone {
-                PriorityFlag(priority: task.priority)
-            }
-            Text(task.title)
-                .ninaText(.body, task.isDone ? NinaTheme.muted : NinaTheme.ink, weight: .medium)
-                .strikethrough(task.isDone, color: NinaTheme.muted)
-                .multilineTextAlignment(.leading)
-        }
+        Text(task.title)
+            .ninaText(.body, task.isDone ? NinaTheme.muted : NinaTheme.ink, weight: .medium)
+            .strikethrough(task.isDone, color: NinaTheme.muted)
+            .multilineTextAlignment(.leading)
+            .accessibilityLabel(PriorityFlag.rowAccessibilityTitle(for: task))
     }
 
     @ViewBuilder
@@ -602,6 +598,14 @@ struct TaskRowView: View {
         }
         .padding(.vertical, 5)
         .frame(minHeight: 48)
+        .background {
+            if let tint = PriorityFlag.rowTint(for: task) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(tint)
+                    .padding(.horizontal, -10)
+                    .padding(.vertical, 2)
+            }
+        }
         // Rows live in a ScrollView, not a List, so there are no swipe actions:
         // long-press is the substitute, and it must be simultaneous or the row's
         // own buttons swallow it.

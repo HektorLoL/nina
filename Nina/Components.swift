@@ -44,7 +44,7 @@ struct CategoryGlyph: View {
     }
 }
 
-// Urgency is told by colour and by weight together: a red flag for Urgente, a light yellow one with a darker edge for Alta.
+// On the task's detail a red flag says Urgente and a light yellow one with a darker edge says Alta.
 struct PriorityFlag: View {
     var priority: TaskPriority
     var baseSize: CGFloat = 13
@@ -61,6 +61,29 @@ struct PriorityFlag: View {
 
     static func edge(for priority: TaskPriority) -> Color? {
         priority == .high ? NinaTheme.priorityHighEdge : nil
+    }
+
+    // On a list an open task's priority is its row's ground; a done task's priority no longer asks for anything.
+    static func rowTint(for task: TaskItem) -> Color? {
+        guard !task.isDone else { return nil }
+        switch task.priority {
+        case .normal: return nil
+        case .high: return NinaTheme.priorityHighWash
+        case .urgent: return NinaTheme.priorityUrgentWash
+        }
+    }
+
+    static func rowAccessibilityTitle(for task: TaskItem) -> String {
+        guard !task.isDone, let label = task.priority.rowFlagLabel else { return task.title }
+        return "\(label), \(task.title)"
+    }
+
+    // A tinted row is its own boundary, so no hairline runs along its edge.
+    static func showsDivider(after task: TaskItem, in list: [TaskItem], dividesLast: Bool = false) -> Bool {
+        guard let index = list.firstIndex(where: { $0.id == task.id }) else { return false }
+        guard rowTint(for: task) == nil else { return false }
+        guard index + 1 < list.count else { return dividesLast }
+        return rowTint(for: list[index + 1]) == nil
     }
 
     var body: some View {

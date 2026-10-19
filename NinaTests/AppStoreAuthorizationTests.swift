@@ -5552,6 +5552,20 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testTheTermsGateNamesTheVersionItAsksToAcceptByItsDay() {
+        XCTAssertEqual(AppStore.termsVersionLabel("2026-10-18"), "Versão de 18 de outubro\u{00A0}de\u{00A0}2026")
+        XCTAssertEqual(AppStore.termsVersionLabel("2026-09-29"), "Versão de 29 de setembro\u{00A0}de\u{00A0}2026")
+        XCTAssertEqual(AppStore.termsVersionLabel("2026-10-01"), "Versão de 1º de outubro\u{00A0}de\u{00A0}2026")
+    }
+
+    @MainActor
+    func testAnUnreadableTermsVersionNamesNoDayRatherThanAWrongOne() {
+        for version in ["", "v3", "2026-13-40", "2026-02-30", "2026-10-18T00:00:00Z"] {
+            XCTAssertNil(AppStore.termsVersionLabel(version), version)
+        }
+    }
+
+    @MainActor
     func testTheWordsOfAMessageTheChatClosedOnAreKeptOnlyInMemoryUntilTheChatReopens() async {
         let store = await makeStoreForFailingTurn(error: .consentOutdated)
 

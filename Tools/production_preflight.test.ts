@@ -1015,7 +1015,7 @@ Deno.test("the app and the website rating constants must agree", () => {
   );
 });
 
-Deno.test("the rating mark is drawn on the welcome and the startup screen and nowhere else in the app", async () => {
+Deno.test("the app draws the rating mark nowhere", async () => {
   const shipped = await Promise.all(
     [
       "Nina/LoginView.swift",
@@ -1032,8 +1032,7 @@ Deno.test("the rating mark is drawn on the welcome and the startup screen and no
   assertEquals(ratingMarkOffenders(shipped), []);
 
   const passing = [
-    { path: "Nina/LoginView.swift", text: "ClassIndMark()" },
-    { path: "Nina/AppRootView.swift", text: "ClassIndMark()" },
+    { path: "Nina/LoginView.swift", text: 'Text("Nina")' },
     { path: "Nina/NinaRating.swift", text: "struct ClassIndMark: View {}" },
     { path: "web/src/components/RatingMark.astro", text: "ClassIndMark(" },
   ];
@@ -1042,16 +1041,10 @@ Deno.test("the rating mark is drawn on the welcome and the startup screen and no
   assertEquals(
     ratingMarkOffenders([
       ...passing,
+      { path: "Nina/AppRootView.swift", text: "ClassIndMark()" },
       { path: "Nina/Sheets.swift", text: "ClassIndMark(size: 24)" },
     ]),
-    ["Nina/Sheets.swift"],
-  );
-  assertEquals(
-    ratingMarkOffenders([
-      { path: "Nina/LoginView.swift", text: 'Text("Nina")' },
-      { path: "Nina/AppRootView.swift", text: "ClassIndMark()" },
-    ]),
-    ["Nina/LoginView.swift (missing)"],
+    ["Nina/AppRootView.swift", "Nina/Sheets.swift"],
   );
 });
 

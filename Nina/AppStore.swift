@@ -1910,6 +1910,19 @@ final class AppStore {
         return termsVersionDayFormatter.string(from: shownAt) >= termsVersion
     }
 
+    // The gate names the version by its day alone; what changed lives on the Terms page, never in the binary.
+    static func termsVersionLabel(_ version: String) -> String? {
+        guard version.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil,
+              let date = termsVersionDayFormatter.date(from: version),
+              termsVersionDayFormatter.string(from: date) == version,
+              let day = Int(version.suffix(2)) else {
+            return nil
+        }
+        let month = termsVersionMonthFormatter.string(from: date)
+            .lowercased(with: termsVersionMonthFormatter.locale)
+        return "Versão de \(day == 1 ? "1º" : String(day)) de \(month)\u{00A0}de\u{00A0}\(version.prefix(4))"
+    }
+
     private func recordTermsAcceptanceIfNeeded() {
         guard viewerAge.isAdult,
               !viewerAge.terms.acceptedCurrent,
@@ -1987,6 +2000,15 @@ final class AppStore {
         return formatter
     }()
 
+    private static let termsVersionMonthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.timeZone = TimeZone(identifier: "America/Sao_Paulo")
+        formatter.dateFormat = "MMMM"
+        return formatter
+    }()
+
     @discardableResult
     func acceptTermsAsAdult() async -> Bool {
         let contextToken = currentHomeContextToken
@@ -2011,7 +2033,8 @@ final class AppStore {
             return true
         } catch {
             guard isCurrentHomeContext(contextToken) else { return false }
-            syncErrorMessage = RemoteRPCErrorCode.from(error)?.userMessage() ?? "Não deu para salvar agora."
+            syncErrorMessage = RemoteRPCErrorCode.from(error)?.userMessage()
+                ?? "Não deu para aceitar agora. Tente de novo."
             Haptics.error()
             return false
         }
@@ -2134,7 +2157,8 @@ final class AppStore {
             return true
         } catch {
             guard isCurrentHomeContext(contextToken) else { return false }
-            syncErrorMessage = RemoteRPCErrorCode.from(error)?.userMessage() ?? "Não deu para salvar agora."
+            syncErrorMessage = RemoteRPCErrorCode.from(error)?.userMessage()
+                ?? (kind == .aceitar ? "Não deu para aceitar agora. Tente de novo." : "Não deu para confirmar agora. Tente de novo.")
             Haptics.error()
             return false
         }

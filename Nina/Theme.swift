@@ -24,6 +24,8 @@ enum NinaTheme {
     static let priorityHigh = Color(hex: 0xFACC15)
     static let priorityHighEdge = Color(hex: 0xA16207)
     static let priorityUrgent = alert
+    static let priorityHighWash = Color(hex: 0xFEF6C7)
+    static let priorityUrgentWash = Color(hex: 0xFDE2E0)
     /// Stroke for unfilled controls. Lighter than muted, but above the 3:1
     /// non-text contrast floor that `line` fails at 1.24:1.
     static let control = Color(hex: 0x848E9D)

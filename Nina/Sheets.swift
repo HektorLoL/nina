@@ -3792,6 +3792,116 @@ enum ShoppingEditorMode: Hashable {
     case edit(UUID)
 }
 
+struct ShoppingAmountField: View {
+    @Binding var amount: String
+    var textStyle: NinaText = .body
+    var weight: Font.Weight = .medium
+    var inset: CGFloat = 14
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var fieldFloor: CGFloat = 116
+
+    var body: some View {
+        Group {
+            if dynamicTypeSize >= .xxxLarge {
+                stacked
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        field
+                            .frame(minWidth: fieldFloor, idealWidth: fieldFloor, maxWidth: .infinity)
+                        chipRow
+                    }
+
+                    stacked
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            field
+                .frame(maxWidth: .infinity)
+            steps
+        }
+    }
+
+    private var field: some View {
+        TextField("Quantidade", text: $amount)
+            .monospacedDigit()
+            .ninaText(textStyle, NinaTheme.ink, weight: weight)
+            .tint(NinaTheme.cobalt)
+            .textFieldStyle(.plain)
+            .keyboardType(.numbersAndPunctuation)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .submitLabel(.done)
+            .padding(.horizontal, inset)
+            .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
+            .frame(minHeight: 44)
+            .background(
+                NinaTheme.grout,
+                in: RoundedRectangle(cornerRadius: NinaTheme.Radius.field, style: .continuous)
+            )
+            .accessibilityLabel("Quantidade")
+            .accessibilityValue(spokenAmount)
+    }
+
+    private var steps: some View {
+        ViewThatFits(in: .horizontal) {
+            chipRow
+
+            VStack(alignment: .leading, spacing: 8) {
+                chips
+            }
+        }
+    }
+
+    private var chipRow: some View {
+        HStack(spacing: 8) {
+            chips
+        }
+    }
+
+    @ViewBuilder
+    private var chips: some View {
+        stepChip("\u{2212}1", spoken: "Menos 1", delta: -1)
+        stepChip("+1", spoken: "Mais 1", delta: 1)
+        stepChip("+10", spoken: "Mais 10", delta: 10)
+    }
+
+    private var spokenAmount: String {
+        let trimmed = amount.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Sem quantidade" : trimmed
+    }
+
+    private func stepChip(_ text: String, spoken: String, delta: Int) -> some View {
+        let isEnabled = ShoppingAmount.stepped(amount, by: delta) != nil
+
+        return Button {
+            step(delta)
+        } label: {
+            NinaChip(text: text, isDisabled: !isEnabled)
+                .frame(minWidth: 44, minHeight: 44)
+                .fixedSize(horizontal: true, vertical: false)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel(spoken)
+        .accessibilityValue(spokenAmount)
+    }
+
+    private func step(_ delta: Int) {
+        guard let next = ShoppingAmount.stepped(amount, by: delta) else { return }
+        Haptics.selection()
+        amount = next
+        AccessibilityNotification.Announcement(next.isEmpty ? "Sem quantidade" : next).post()
+    }
+}
+
 struct ShoppingEditorSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -3884,10 +3994,7 @@ struct ShoppingEditorSheet: View {
                     .focused($isTitleFocused)
                     .submitLabel(.done)
 
-                TextField("Quantidade", text: $amount)
-                    .ninaText(.body, NinaTheme.muted)
-                    .tint(NinaTheme.cobalt)
-                    .textFieldStyle(.plain)
+                ShoppingAmountField(amount: $amount)
 
                 if !isEditing, addedCount > 0 {
                     Text(

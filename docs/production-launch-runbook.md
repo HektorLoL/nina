@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -883,9 +883,9 @@ one supported older device. Exercise:
   cancelled Apple sheet sends nothing and reads "A Apple não confirmou. Nada foi
   apagado.", and a second cancellation adds the same mail line; the "Antes, sua
   faixa de idade." prompt carries "Sair da conta" and "Apagar conta";
-- the welcome and the startup screen show the rating mark in the same spot (14
-  from build 18), and no other screen (settings, the app switcher) shows it;
-  the "Só um instante." wait is centred with a round disc.
+- no screen shows the rating mark (removed in build 19, 2026-10-19; builds
+  11 to 18 showed it on the welcome and the startup screen); the "Só um
+  instante." wait is centred with a round disc.
 
 Record the tested build number, devices, OS versions, tester, date, and result.
 Do not promote a different build number without rerunning the affected gates.

@@ -5,7 +5,6 @@ struct AgeCheckView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(AgeCheckCoordinator.self) private var ageCheck
-    @Environment(OnboardingStore.self) private var onboardingStore
 
     @State private var isShowingDeletion = false
 
@@ -13,42 +12,13 @@ struct AgeCheckView: View {
         if isWaiting {
             AppWaitingScreen()
         } else {
-            GeometryReader { proxy in
-                ScrollView {
-                    VStack(spacing: 0) {
-                        Spacer(minLength: 32)
-                        content
-                        Spacer(minLength: 32)
-                        accountExits
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 16)
-                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
-                }
-                .scrollBounceBehavior(.basedOnSize)
+            GateLayout {
+                message
+            } decision: {
+                decision
             }
-            .ninaScreenBackground()
             .accountDeletionSheet(isPresented: $isShowingDeletion)
         }
-    }
-
-    // The first screen after sign-in still lets a person leave or delete before answering Apple.
-    private var accountExits: some View {
-        VStack(spacing: 4) {
-            NinaButton(title: "Sair da conta", kind: .quiet) {
-                Haptics.selection()
-                Task {
-                    onboardingStore.cancelReplay()
-                    await authSession.signOut()
-                }
-            }
-
-            NinaButton(title: "Apagar conta", kind: .quiet) {
-                Haptics.lightImpact()
-                isShowingDeletion = true
-            }
-        }
-        .frame(maxWidth: .infinity)
     }
 
     private var isWaiting: Bool {
@@ -58,8 +28,15 @@ struct AgeCheckView: View {
         }
     }
 
+    private var isPrompting: Bool {
+        switch ageCheck.phase {
+        case .idle, .prompt, .requesting, .recording: true
+        case .declined, .appleError, .attestFailure: false
+        }
+    }
+
     @ViewBuilder
-    private var content: some View {
+    private var message: some View {
         switch ageCheck.phase {
         case .idle, .prompt, .requesting, .recording:
             prompt
@@ -84,9 +61,27 @@ struct AgeCheckView: View {
         }
     }
 
+    @ViewBuilder
+    private var decision: some View {
+        if isPrompting {
+            VStack(spacing: 12) {
+                NinaButton(title: "Continuar", fillsWidth: true) {
+                    Haptics.lightImpact()
+                    share()
+                }
+
+                GateAccountExits(isShowingDeletion: $isShowingDeletion)
+                    .padding(.top, 2)
+            }
+        } else {
+            GateAccountExits(isShowingDeletion: $isShowingDeletion)
+        }
+    }
+
     private var prompt: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 0) {
             NinaMark(size: 48)
+                .padding(.bottom, 16)
 
             Text("Antes, sua faixa de idade.")
                 .ninaText(.screen)
@@ -95,12 +90,7 @@ struct AgeCheckView: View {
             Text("A Apple informa só a faixa, nunca a data de nascimento.")
                 .ninaText(.label, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
-
-            NinaButton(title: "Continuar", fillsWidth: true) {
-                Haptics.lightImpact()
-                share()
-            }
-            .padding(.top, 8)
+                .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -158,74 +148,143 @@ struct AgeMajorityView: View {
     }
 
     @Environment(AppStore.self) private var store
-    @Environment(AuthSessionStore.self) private var authSession
-    @Environment(OnboardingStore.self) private var onboardingStore
-    @Environment(\.openURL) private var openURL
 
     var reason: Reason = .majority
 
     @State private var isShowingDeletion = false
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Spacer(minLength: 32)
+        GateLayout {
+            VStack(alignment: .leading, spacing: 0) {
+                NinaMark(size: 48)
+                    .padding(.bottom, 16)
 
-                    NinaMark(size: 48)
+                Text(reason.headline)
+                    .ninaText(.screen)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Text(reason.headline)
-                        .ninaText(.screen)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text(reason.line)
-                        .ninaText(.label, NinaTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if reason == .majority, let guardian = store.viewerAge.terms.firstFormerGuardianName {
-                        Text("\(guardian) não acompanha mais sua conta.")
-                            .ninaText(.label, NinaTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if let message = store.syncErrorMessage {
-                        NinaErrorNote(text: message)
-                    }
-
-                    NinaButton(title: "Aceitar", fillsWidth: true, isPending: store.isSyncingHome) {
-                        Haptics.lightImpact()
-                        Task { _ = await store.acceptTermsAsAdult() }
-                    }
+                Text(reason.line)
+                    .ninaText(.label, NinaTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 8)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        NinaButton(title: "Ler os Termos", kind: .quiet) {
-                            Haptics.selection()
-                            openURL(NinaLegalLinks.termsOfUse)
-                        }
+                if reason == .majority, let guardian = store.viewerAge.terms.firstFormerGuardianName {
+                    Text("\(guardian) não acompanha mais sua conta.")
+                        .ninaText(.label, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 6)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } decision: {
+            VStack(spacing: 12) {
+                TermsDocumentCard(
+                    versionLabel: AppStore.termsVersionLabel(store.viewerAge.terms.currentTermsVersion)
+                )
 
-                        NinaButton(title: "Sair da conta", kind: .quiet) {
-                            Haptics.selection()
-                            Task {
-                                onboardingStore.cancelReplay()
-                                await authSession.signOut()
-                            }
-                        }
+                if let message = store.syncErrorMessage {
+                    NinaErrorNote(text: message)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
-                        NinaButton(title: "Apagar conta", kind: .quiet) {
-                            Haptics.lightImpact()
-                            isShowingDeletion = true
-                        }
-                    }
+                NinaButton(title: "Aceitar", fillsWidth: true, isPending: store.isSyncingHome) {
+                    Haptics.lightImpact()
+                    Task { _ = await store.acceptTermsAsAdult() }
+                }
 
+                GateAccountExits(isShowingDeletion: $isShowingDeletion)
+                    .padding(.top, 2)
+            }
+        }
+        .accountDeletionSheet(isPresented: $isShowingDeletion)
+    }
+}
+
+// Ink, never cobalt: the commit beside it stays the screen's only cobalt control.
+struct TermsDocumentCard: View {
+    var versionLabel: String?
+
+    @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        Button {
+            Haptics.selection()
+            openURL(NinaLegalLinks.termsOfUse)
+        } label: {
+            NinaRow(
+                title: "Termos de uso",
+                subtitle: versionLabel,
+                verticalPadding: dynamicTypeSize.isAccessibilitySize ? 14 : 8
+            ) {
+                CategoryGlyph(systemName: "text.book.closed", size: 18, tint: NinaTheme.ink)
+            } trailing: {
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NinaTheme.faint)
+            }
+            .padding(.leading, 6)
+            .padding(.trailing, 16)
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(versionLabel.map { "Termos de uso, \($0)" } ?? "Termos de uso")
+        }
+        .buttonStyle(.plain)
+        .ninaCard()
+    }
+}
+
+private struct GateLayout<Message: View, Decision: View>: View {
+    @ViewBuilder var message: Message
+    @ViewBuilder var decision: Decision
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
                     Spacer(minLength: 32)
+                    message
+                    Spacer(minLength: 32)
+                    decision
                 }
                 .padding(.horizontal, 20)
-                .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .leading)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
         .ninaScreenBackground()
-        .accountDeletionSheet(isPresented: $isShowingDeletion)
+    }
+}
+
+// A gate always leaves a way out: leaving and deleting stay reachable before anything is accepted.
+private struct GateAccountExits: View {
+    @Environment(AuthSessionStore.self) private var authSession
+    @Environment(OnboardingStore.self) private var onboardingStore
+
+    @Binding var isShowingDeletion: Bool
+
+    var body: some View {
+        VStack(spacing: 4) {
+            if let message = authSession.errorMessage {
+                NinaErrorNote(text: message, alignment: .center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 6)
+            }
+
+            NinaButton(title: "Sair da conta", kind: .quiet) {
+                Haptics.selection()
+                Task {
+                    onboardingStore.cancelReplay()
+                    await authSession.signOut()
+                }
+            }
+
+            NinaButton(title: "Apagar conta", kind: .quiet) {
+                Haptics.lightImpact()
+                isShowingDeletion = true
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 }

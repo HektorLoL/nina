@@ -32,7 +32,7 @@ struct ChildTodaySection: View {
                 VStack(spacing: 0) {
                     ForEach(dayTasks) { task in
                         TaskRowView(task: task)
-                        if task.id != dayTasks.last?.id {
+                        if PriorityFlag.showsDivider(after: task, in: dayTasks) {
                             NinaDivider(inset: 36)
                         }
                     }
@@ -212,7 +212,7 @@ struct ChildDayView: View {
         .overlay {
             // The root app-switcher cover sits under every full-screen cover, so this list draws its own.
             if isCoveredForPrivacy {
-                AppLoadingScreen(showsRating: false)
+                AppLoadingScreen()
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }

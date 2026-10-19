@@ -1163,6 +1163,105 @@ struct ShoppingItem: Identifiable, Codable, Hashable {
     }
 }
 
+// A step moves only the leading whole number, so a unit Nina or a person wrote is never lost to a tap.
+enum ShoppingAmount {
+    static let stepCeiling = 999
+
+    private static let countedWords: [(singular: String, plural: String)] = [
+        ("pacote", "pacotes"), ("pacotinho", "pacotinhos"), ("caixa", "caixas"),
+        ("lata", "latas"), ("garrafa", "garrafas"), ("unidade", "unidades"),
+        ("dúzia", "dúzias"), ("botijão", "botijões"), ("galão", "galões"),
+        ("pão", "pães"), ("rolo", "rolos"), ("saco", "sacos"), ("pote", "potes"),
+        ("vidro", "vidros"), ("frasco", "frascos"), ("tubo", "tubos"),
+        ("bisnaga", "bisnagas"), ("maço", "maços"), ("fardo", "fardos"),
+        ("bandeja", "bandejas"), ("cartela", "cartelas"), ("sachê", "sachês"),
+        ("litro", "litros"), ("quilo", "quilos"), ("kit", "kits"),
+        ("cacho", "cachos"), ("pé", "pés"),
+        ("caixinha", "caixinhas"), ("latinha", "latinhas"), ("garrafinha", "garrafinhas"),
+        ("potinho", "potinhos"), ("embalagem", "embalagens"), ("barra", "barras"),
+        ("tablete", "tabletes"), ("refil", "refis"),
+    ]
+
+    static func stepped(_ amount: String, by delta: Int) -> String? {
+        guard delta != 0 else { return nil }
+        let trimmed = amount.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmed.isEmpty else {
+            return delta > 0 ? String(min(delta, stepCeiling)) : nil
+        }
+
+        let digits = trimmed.prefix(while: isASCIIDigit)
+        guard !digits.isEmpty, let count = Int(digits) else { return nil }
+        let rest = String(trimmed[digits.endIndex...])
+
+        guard !leadsIntoAnotherNumber(rest) else { return nil }
+
+        let target: Int
+        if delta > 0 {
+            guard count < stepCeiling else { return nil }
+            target = min(count + delta, stepCeiling)
+        } else {
+            let lowered = count + delta
+            if lowered >= 1 {
+                target = lowered
+            } else if rest.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return ""
+            } else {
+                return nil
+            }
+        }
+
+        return String(target) + inflected(rest, for: target)
+    }
+
+    private static func isASCIIDigit(_ character: Character) -> Bool {
+        guard let value = character.asciiValue else { return false }
+        return value >= 48 && value <= 57
+    }
+
+    private static func leadsIntoAnotherNumber(_ rest: String) -> Bool {
+        if let first = rest.first(where: { !$0.isWhitespace }), !first.isLetter {
+            let beforeFirstLetter = rest.prefix(while: { !$0.isLetter })
+            if beforeFirstLetter.contains(where: isASCIIDigit) {
+                return true
+            }
+        }
+
+        guard let word = firstWordRange(in: rest) else { return false }
+        let folded = rest[word].lowercased()
+        guard folded == "a" || folded == "ou" else { return false }
+        let next = rest[word.upperBound...].first(where: { !$0.isWhitespace })
+        return next.map(isASCIIDigit) ?? false
+    }
+
+    private static func firstWordRange(in rest: String) -> Range<String.Index>? {
+        guard let start = rest.firstIndex(where: { $0.isLetter }) else { return nil }
+        let end = rest[start...].firstIndex(where: { !$0.isLetter }) ?? rest.endIndex
+        return start..<end
+    }
+
+    private static func inflected(_ rest: String, for target: Int) -> String {
+        guard let range = firstWordRange(in: rest) else { return rest }
+        let word = String(rest[range])
+        guard let entry = countedWords.first(where: {
+            word.compare($0.singular, options: .caseInsensitive) == .orderedSame
+                || word.compare($0.plural, options: .caseInsensitive) == .orderedSame
+        }) else { return rest }
+
+        let form = target == 1 ? entry.singular : entry.plural
+        let cased: String
+        if word == word.uppercased(), word != word.lowercased() {
+            cased = form.uppercased()
+        } else if let first = word.first, first.isUppercase {
+            cased = form.prefix(1).uppercased() + form.dropFirst()
+        } else {
+            cased = form
+        }
+
+        return rest.replacingCharacters(in: range, with: cased)
+    }
+}
+
 enum MessageSender: String, Codable, Hashable {
     case user
     case nina

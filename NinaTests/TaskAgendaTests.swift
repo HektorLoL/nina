@@ -340,6 +340,77 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertTrue(MemberEditorSheet.hasUnsavedInput(mode: .edit(id), loaded: person, current: retoned))
     }
 
+    func testAStepMovesOnlyTheLeadingNumberAndKeepsTheWordsAfterIt() {
+        let cases: [(amount: String, delta: Int, expected: String)] = [
+            ("", 1, "1"),
+            ("", 10, "10"),
+            ("3", 1, "4"),
+            ("3 kg", 1, "4 kg"),
+            ("3kg", 10, "13kg"),
+            ("  3 kg ", 1, "4 kg"),
+            ("2 pacotes de café", 1, "3 pacotes de café"),
+            ("1 garrafa de 2 litros", 1, "2 garrafas de 2 litros"),
+            ("05", 1, "6"),
+        ]
+
+        for (amount, delta, expected) in cases {
+            XCTAssertEqual(ShoppingAmount.stepped(amount, by: delta), expected, "\"\(amount)\" \(delta)")
+        }
+    }
+
+    func testAStepNeverDropsAUnitAndNeverGuessesAtAFractionARangeOrAWord() {
+        let cases: [(amount: String, delta: Int, expected: String?)] = [
+            ("", -1, nil),
+            ("1", -1, ""),
+            ("0", -1, ""),
+            ("0", 1, "1"),
+            ("1 kg", -1, nil),
+            ("1 botijão", -1, nil),
+            ("meio quilo", 1, nil),
+            ("uma dúzia", 1, nil),
+            ("1,5 kg", 1, nil),
+            ("1.000 g", 1, nil),
+            ("1/2 kg", 1, nil),
+            ("2-3", 1, nil),
+            ("2 a 3", 1, nil),
+            ("2 ou 3 latas", 1, nil),
+            ("-3", 1, nil),
+        ]
+
+        for (amount, delta, expected) in cases {
+            XCTAssertEqual(ShoppingAmount.stepped(amount, by: delta), expected, "\"\(amount)\" \(delta)")
+        }
+    }
+
+    func testAPackTurnsIntoPacksAndBackAndAnAbbreviationStaysAsWritten() {
+        let cases: [(amount: String, delta: Int, expected: String)] = [
+            ("1 botijão", 1, "2 botijões"),
+            ("2 botijões", -1, "1 botijão"),
+            ("2 pacotes", -1, "1 pacote"),
+            ("2 pacotes de 500 g", -1, "1 pacote de 500 g"),
+            ("3 pacotes", 1, "4 pacotes"),
+            ("0 pacotes", 1, "1 pacote"),
+            ("1 pão", 1, "2 pães"),
+            ("1 Caixa", 1, "2 Caixas"),
+            ("1 bisnaga", 1, "2 bisnagas"),
+            ("1 kg", 1, "2 kg"),
+            ("3 un.", 1, "4 un."),
+        ]
+
+        for (amount, delta, expected) in cases {
+            XCTAssertEqual(ShoppingAmount.stepped(amount, by: delta), expected, "\"\(amount)\" \(delta)")
+        }
+    }
+
+    func testTheQuickStepsStopAt999() {
+        XCTAssertEqual(ShoppingAmount.stepCeiling, 999)
+        XCTAssertEqual(ShoppingAmount.stepped("995", by: 10), "999")
+        XCTAssertNil(ShoppingAmount.stepped("999", by: 1))
+        XCTAssertNil(ShoppingAmount.stepped("999", by: 10))
+        XCTAssertNil(ShoppingAmount.stepped("1200 g", by: 1))
+        XCTAssertEqual(ShoppingAmount.stepped("1200 g", by: -1), "1199 g")
+    }
+
     func testABarsCommitSitsTwentyPointsAboveACardsFootOnAPhoneWithoutAHomeIndicator() {
         let commitRowBottom: CGFloat = 8
 
@@ -650,6 +721,38 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertEqual(PriorityFlag.fill(for: .urgent), NinaTheme.alert)
         XCTAssertNil(PriorityFlag.edge(for: .urgent))
         XCTAssertEqual(TaskPriority.urgent.rowFlagLabel, "Urgente")
+    }
+
+    func testAnOpenUrgentOrHighRowIsTintedWithNoHairlineAlongItAndADoneOrNormalRowIsNot() {
+        var plain = task(dueAt: nil)
+        plain.title = "Varrer"
+        var high = task(dueAt: nil)
+        high.title = "Comprar gás"
+        high.priority = .high
+        var urgent = task(dueAt: nil)
+        urgent.title = "Pagar a luz"
+        urgent.priority = .urgent
+        var doneUrgent = urgent
+        doneUrgent.id = UUID()
+        doneUrgent.isDone = true
+        var last = task(dueAt: nil)
+        last.title = "Lavar a louça"
+
+        XCTAssertNil(PriorityFlag.rowTint(for: plain))
+        XCTAssertEqual(PriorityFlag.rowTint(for: high), NinaTheme.priorityHighWash)
+        XCTAssertEqual(PriorityFlag.rowTint(for: urgent), NinaTheme.priorityUrgentWash)
+        XCTAssertNil(PriorityFlag.rowTint(for: doneUrgent))
+
+        XCTAssertEqual(PriorityFlag.rowAccessibilityTitle(for: urgent), "Urgente, Pagar a luz")
+        XCTAssertEqual(PriorityFlag.rowAccessibilityTitle(for: high), "Prioridade alta, Comprar gás")
+        XCTAssertEqual(PriorityFlag.rowAccessibilityTitle(for: doneUrgent), "Pagar a luz")
+
+        let list = [plain, high, doneUrgent, last]
+        XCTAssertFalse(PriorityFlag.showsDivider(after: plain, in: list))
+        XCTAssertFalse(PriorityFlag.showsDivider(after: high, in: list))
+        XCTAssertTrue(PriorityFlag.showsDivider(after: doneUrgent, in: list))
+        XCTAssertFalse(PriorityFlag.showsDivider(after: last, in: list))
+        XCTAssertTrue(PriorityFlag.showsDivider(after: last, in: list, dividesLast: true))
     }
 
     func testAProposalThatRepeatsSomethingStillOpenIsFlaggedAndADoneOneIsNot() {

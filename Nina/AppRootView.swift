@@ -210,7 +210,7 @@ struct AppRootView: View {
             }
 
             if isCoveringForPrivacy {
-                AppLoadingScreen(showsRating: false)
+                AppLoadingScreen()
                     .transition(.opacity)
                     .zIndex(4)
             }
@@ -968,7 +968,6 @@ private struct KeyboardAwareBottomTabBar: View {
 
 struct AppLoadingScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var showsRating = true
     @State private var isBreathing = false
 
     var body: some View {
@@ -985,13 +984,6 @@ struct AppLoadingScreen: View {
             .accessibilityLabel("Nina")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
-
-            // The rating is shown at login and startup, and nowhere else in the app.
-            if showsRating {
-                ClassIndMark()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, 16)
-            }
         }
         .task {
             guard !reduceMotion else { return }

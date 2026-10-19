@@ -106,8 +106,6 @@ struct LoginView: View {
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity)
-
-            ClassIndMark()
         }
     }
 

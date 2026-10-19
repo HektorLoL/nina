@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -481,7 +481,9 @@ its strings are in `docs/text-rubric.md` §3, most of them Law-text-gated.
   and on the startup `AppLoadingScreen`, as Portaria MJSP 1.048 art. 50 asks
   ("instalação, login e inicialização"); since build 11 there is no settings
   row and it is smaller (§6j). It is
-  a named regulated exception to "`Theme.swift` is the only palette": it never
+  a named regulated exception to "`Theme.swift` is the only palette" (and since
+  build 19, 2026-10-19, Heitor's decision, the app draws it nowhere; the
+  component stays for a quick return): it never
   tints anything else, and the code inside uses `.font(.system(size:weight:))`
   because the pictogram is artwork, not copy. **UNVERIFIED:** the hexes (L
   `#00A859`, 10 `#0095DA`, 12 `#FDC300`, 14 `#F58220`, 16 `#E3001B`, 18
@@ -489,10 +491,21 @@ its strings are in `docs/text-rubric.md` §3, most of them Law-text-gated.
   both from the official files before release, in `Theme.swift` and
   `web/src/rating.ts` together.
 - **`AgeCheckView`** is a centred gate (G15): the 48pt mark, "Antes, sua faixa
-  de idade.", the protected Apple line, one cobalt "Continuar". Declined, Apple
-  error and App Attest failure each swap in one headline, one line, a cobalt
-  retry and a quiet "Continuar assim". **`AgeMajorityView`** ("Agora a conta é
-  sua.") has the same shape with "Aceitar" and a quiet "Ler os Termos".
+  de idade." and the protected Apple line in a block between spacers, and at
+  the foot one cobalt "Continuar" directly above the quiet "Sair da conta" and
+  "Apagar conta". Declined, Apple error and App Attest failure each swap in one
+  headline, one line, a cobalt retry and a quiet "Continuar assim", over the
+  same exits. **`AgeMajorityView`** ("Agora a conta é sua.", "Os Termos
+  mudaram.", "Antes, os Termos.") shares its private `GateLayout`, LoginView's
+  skeleton (2026-10-18, after Heitor's build-18 test): the title and line
+  between `Spacer(minLength: 32)` pairs, and at the foot one tray, the
+  `TermsDocumentCard` ("Termos de uso", "Versão de ‹d› de ‹mês› de ‹aaaa›",
+  ↗, a stroked card in ink with Ajustes' `.external` glyph), then "Aceitar",
+  then the centred exits, so "Continuar" and "Aceitar" sit at the same height
+  and re-accepting the Terms looks like the welcome where they were first
+  accepted. The old quiet "Ler os Termos" is gone. `MinorWelcomeView`'s joint
+  acceptance (16–17) uses the same Terms card between the welcome card and
+  "Aceitar".
 - **A minor never sees the four tabs.** `MinorRootView` is a single stack:
   `MinorHeader` (the title "Suas tarefas" and the protected second line
   "Responsável: {nome}", G1 live data), then "Hoje" and "Próximos dias" rows
@@ -1305,6 +1318,36 @@ Heitor's two requests after build 14. No board draws either.
   deleted it; the next read of the house (the retry, a pull, a return to the
   app) finds it gone and lands on "Casa apagada.", never on the red "Você não
   faz mais parte desta casa.".
+
+## 6t. Quantity steps in Compras (2026-10-18)
+
+- **"Quantidade" is a tray with steps.** The boards drew a plain quantity line
+  under the item's title, and in the build it read as an empty grey line.
+  Heitor's build-18 note asked for a number input with +1 and +10, after
+  Mobbin references (Gojek, Bevel, timespent, Vipps). `ShoppingAmountField`
+  (in `Sheets.swift`, so the pbxproj is untouched) is a grout tray (radius 14,
+  44 pt, 8 pt more above and below its text at accessibility sizes, like a
+  chip) with the system placeholder "Quantidade", the same light grey as the
+  title's prompt, so an empty amount never reads as a value, and three stroked
+  chips "−1" "+1" "+10" beside it. Each chip keeps its drawn width, so a row
+  that only just fits narrows the tray and never squeezes "+10" past the
+  column. The chips go under the tray when the row does not fit, and from
+  xxxLarge on. When the three chips do not fit across either, they stack in
+  one column. The amount stays one free string on the wire, in the cache
+  and in the proposal payload. `ShoppingAmount.stepped` (in `Models.swift`)
+  moves only the leading whole number, up to 999, keeps every word after it,
+  and fixes the singular or plural of a counted word ("1 botijão" →
+  "2 botijões"). A word, a decimal, a fraction or a range ("meia dúzia",
+  "1,5 kg", "2-3") dims every chip, so a tap never rewrites what Nina or a
+  person wrote. "−1" clears a bare "1" back to no quantity and is dimmed at
+  "1 kg", so a unit is never lost to a tap. The keyboard opens on its digits
+  page with letters one tap away. Each applied step fires `Haptics.selection()`
+  and VoiceOver speaks the new amount ("Sem quantidade" when cleared).
+  Not built: the system `Stepper` (it does not scale with Dynamic Type and is
+  off-palette), a unit picker, and an adjustable action on the field (it
+  fights VoiceOver's text editing; the labelled chips are VoiceOver's path).
+  Nina's shopping card uses the same control in "Corrigir", and its meta line
+  follows each step.
 
 ## 7. Verified
 

@@ -1,6 +1,6 @@
 # Children's Impact Assessment - Nina
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 One document for every assessment the law asks of a product that children and
 adolescents are likely to use. It was written by the controller, without a
@@ -209,7 +209,7 @@ rewrite is allowed only if it still says what the cited article asks.
 | Surface | String (pt-BR) | Article |
 | --- | --- | --- |
 | LoginView footnote | "Ao continuar, você aceita os Termos e a Política de Privacidade. Menores de 18 anos entram numa casa com aprovação de um responsável." | LGPD arts. 8 and 14 §1; ECA Digital art. 24 |
-| Rating mark, app and web | accessibility label "Classificação indicativa: não recomendado para menores de 14 anos" (from `NinaRating.current`; "livre" until 2026-10-18) | Portaria MJSP 1.048/2025 art. 50; ECA Digital art. 8 V |
+| Rating mark, web (the app draws none since build 19, 2026-10-19, Heitor's decision; `docs/privacy/classificacao-indicativa.md` §9) | accessibility label "Classificação indicativa: não recomendado para menores de 14 anos" (from `ninaRating`; "livre" until 2026-10-18) | Portaria MJSP 1.048/2025 art. 50; ECA Digital art. 8 V |
 | AgeCheckView | "A Apple informa só a faixa, nunca a data de nascimento." | Decreto 12.880 art. 25 §1; ECA Digital art. 13 |
 | Guardian sheet title | "Você é responsável por {nome}?" | LGPD art. 14 §5 |
 | Guardian sheet card | "{nome} vai ver só as próprias tarefas e marcar o que fez." / "Não conversa com a Nina, não compra nada e não vê o resto da casa." | LGPD art. 14 §6; ECA Digital art. 7 §1 |
