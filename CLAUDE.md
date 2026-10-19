@@ -2381,7 +2381,10 @@ the project, not bugs to fix unprompted.
   online production preflight against the archive read 0 failures and 0
   warnings. Its one change is the orange "14" on the welcome and the startup
   screen (§13, "The rating is 14"). Heitor tested it on 2026-10-18.
-- **Build 19 (2026-10-19) is Heitor's last fixes.** The tinted priority rows
+- **Build 19 (2026-10-19) is Heitor's last fixes.** Archived from the sources
+  tagged `testflight-1.0-19` with `CURRENT_PROJECT_VERSION` 19; the online
+  production preflight against the archive read 0 failures and 0 warnings.
+  The tinted priority rows
   (§5, "Priority is a tinted row"), the shopping quantity with −1, +1 and +10
   steps (`ShoppingAmount`, `ShoppingAmountField`; a step moves only the
   leading whole number, so a unit Nina or a person wrote is never lost), the
