@@ -1519,8 +1519,11 @@ insight's `safety_identifier` and output moderation; after the deploy both
 answered with their own codes (400 `invalid_request` to an empty body with
 the publishable key, 401 `not_authenticated` without the secret header). The
 same commit's `age-signal` change (the App Attest root override honoured only
-on a loopback project) is NOT deployed: it waits for the Deno 2.1.4 run of
-`app-attest.test.ts` below. Before that, `nina-maintenance` was redeployed on 2026-09-23 with the
+on a loopback project) went out as `age-signal` v3 the same day (Heitor's
+choice 1A), from a clean export of e2e7f04, after `app-attest.test.ts` passed
+22 of 22 under Deno 2.1.4; the deployed files read back byte-identical to the
+repo, and it answered 400 `invalid_request` to an empty body and 405
+`method_not_allowed` to a GET. Before that, `nina-maintenance` was redeployed on 2026-09-23 with the
 GPT-6 Luna switch, and `nina-chat` v14 (2026-09-28) carried the bounded body
 reader and v12 (2026-09-26) the spoken-dates fix, commit 84ef7c9.
 Until 2026-09-23 both still ran the 2026-06-15 build, so check `list_edge_functions` dates against
@@ -1604,7 +1607,12 @@ platform bundler cannot resolve the import and the deploy fails with 400.
   real Apple attestations (production and development, from
   `uebelack/node-app-attest`) now verify against the embedded root in
   `app-attest.test.ts`; run that file under a Deno 2.1.4 binary too before
-  deploying, because CI never does.
+  deploying, because CI never does. That Deno cannot read `deno.lock` v5 or
+  type-check `Uint8Array<ArrayBuffer>`, so run it from a clean export with
+  `deno test --no-lock --no-check --allow-read --allow-env
+  supabase/functions/_shared/app-attest.test.ts` (the runtime strips types
+  too); the binary is `deno-aarch64-apple-darwin.zip` from the v2.1.4 GitHub
+  release, checked against its `.sha256sum`.
 - **`premium-subscription-sync`** refuses a new original transaction from an
   account that may not buy with `403 premium_requires_adult`
   (`premium_buyer_is_eligible`).
