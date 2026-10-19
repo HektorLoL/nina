@@ -297,7 +297,7 @@ values
     '61000000-0000-0000-0000-000000000001',
     'shared',
     'confirmed',
-    now(),
+    now() - interval '7 days',
     '61000000-0000-0000-0000-000000000001'
   );
 
@@ -828,18 +828,21 @@ values (
   now() - interval '60 days'
 );
 
+insert into public.tasks (id, family_id, title, is_done, completed_at)
+values (
+  '6b000000-0000-0000-0000-000000000002',
+  '62000000-0000-0000-0000-000000000001',
+  'Tarefa concluída na semana passada',
+  true,
+  now() - interval '7 days'
+);
+
 insert into public.tasks (id, family_id, title)
-values
-  (
-    '6b000000-0000-0000-0000-000000000002',
-    '62000000-0000-0000-0000-000000000001',
-    'Tarefa concluída esta semana'
-  ),
-  (
-    '6b000000-0000-0000-0000-000000000003',
-    '62000000-0000-0000-0000-000000000001',
-    'Tarefa reaberta'
-  );
+values (
+  '6b000000-0000-0000-0000-000000000003',
+  '62000000-0000-0000-0000-000000000001',
+  'Tarefa reaberta'
+);
 
 insert into public.tasks (id, family_id, title, recurrence_rule, due_at)
 values (
@@ -1045,7 +1048,7 @@ select is(
     where id = '6b000000-0000-0000-0000-000000000002'
   ),
   null::timestamptz,
-  'retention leaves a task completed this week in the active list'
+  'retention leaves a task completed last week in the active list'
 );
 
 select is(
@@ -1337,10 +1340,11 @@ values (
   'signed-transaction-info-example'
 );
 
-insert into public.tasks (family_id, title)
+insert into public.tasks (family_id, title, created_at)
 select
   '62000000-0000-0000-0000-000000000001'::uuid,
-  'Tarefa da semana ' || slot::text
+  'Tarefa da semana ' || slot::text,
+  now() - interval '7 days'
 from generate_series(1, 5) as slot;
 
 set local role service_role;

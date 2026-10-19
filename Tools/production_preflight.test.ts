@@ -11,6 +11,7 @@ import {
   demonstrationOffenders,
   deploymentChecks,
   deploymentTargetsAtLeast,
+  iCloudConflictCopies,
   iosArtifactChecks,
   type IOSArtifactSnapshot,
   isAppleOnlySignIn,
@@ -31,6 +32,8 @@ import {
   retentionClaimOffenders,
   signInProviderCheck,
   versionAtLeast,
+  type WorkingTreeEntry,
+  workingTreePaths,
 } from "./production_preflight.ts";
 
 const facts: RepositoryFacts = {
@@ -1132,4 +1135,52 @@ Deno.test("a private-key header around a key built at run time is not a secret",
   const template =
     "privateKey: `-----BEGIN PRIVATE KEY-----\\n${body}\\n-----END PRIVATE KEY-----`,";
   assertFalse(looksLikeSecret(template));
+});
+
+Deno.test("an iCloud conflict copy anywhere in the working tree fails the repository gate, and node_modules and .git are never read", async () => {
+  const tree: Record<string, WorkingTreeEntry[]> = {
+    "/repo/": [
+      { name: "deno.json", isDirectory: false },
+      { name: "supabase", isDirectory: true },
+      { name: "web", isDirectory: true },
+      { name: "docs 2", isDirectory: true },
+      { name: ".git", isDirectory: true },
+    ],
+    "/repo/supabase": [
+      { name: "migrations", isDirectory: true },
+    ],
+    "/repo/supabase/migrations": [
+      { name: "202609290001_age_assurance.sql", isDirectory: false },
+      { name: "202609290001_age_assurance 2.sql", isDirectory: false },
+    ],
+    "/repo/web": [
+      { name: "node_modules", isDirectory: true },
+      { name: "index 2.ts", isDirectory: false },
+      { name: "build 12 notes.md", isDirectory: false },
+    ],
+    "/repo/docs 2": [],
+  };
+  const visited: string[] = [];
+  const readDirectory = (path: string): AsyncIterable<WorkingTreeEntry> => {
+    visited.push(path);
+    const entries = tree[path];
+    if (!entries) throw new Error(`unexpected read of ${path}`);
+    return (async function* () {
+      yield* entries;
+    })();
+  };
+
+  const paths = await workingTreePaths("/repo", readDirectory);
+
+  assertEquals(iCloudConflictCopies(paths), [
+    "docs 2",
+    "supabase/migrations/202609290001_age_assurance 2.sql",
+    "web/index 2.ts",
+  ]);
+  assertFalse(visited.some((path) => /node_modules|\.git/.test(path)));
+  assertFalse(paths.some((path) => /node_modules|\.git/.test(path)));
+  assertEquals(
+    iCloudConflictCopies(["Nina/Theme.swift", "web/src/landing.ts"]),
+    [],
+  );
 });

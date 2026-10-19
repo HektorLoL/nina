@@ -217,6 +217,7 @@ Deno.serve((request: Request) => {
   try {
     rootCertificates = rootCertificatesFrom(
       Deno.env.get("APPLE_APP_ATTEST_ROOT_CA_PEM"),
+      supabaseURL,
     );
   } catch {
     rootCertificates = undefined;

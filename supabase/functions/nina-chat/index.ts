@@ -14,32 +14,41 @@ import {
   legacySuggestionFromProposals,
   maxInputTokens,
   maxInteractiveOutputTokens,
-  maxToolCalls,
   maxToolRounds,
   type ModerationVerdict,
-  moderationVerdict,
   OpenAIResponsePayload,
   pricingForModel,
   pricingVersion,
   proposalResponseSchema,
-  safeErrorCode,
   safetyIdentifier,
   usageFromResponse,
 } from "../_shared/nina-ai.ts";
 import {
   attachmentMetadata,
+  attachmentsEnabled,
   NinaChatAttachment,
   NinaChatRequest,
   readNinaChatRequest,
 } from "../_shared/nina-chat-request.ts";
 import {
-  asksForMedicalGuidance,
+  deterministicSensitiveReply,
   ninaInputRefusal,
-  ninaMedicalRefusal,
   ninaOutputRefusal,
   ninaSupportReply,
   ninaSystemPrompt,
 } from "../_shared/nina-chat-policy.ts";
+import {
+  failureCode,
+  moderate,
+  moderationTexts,
+  type NinaDeadline,
+  ninaDeadline,
+  NinaFailure,
+  type OpenAIAnswer,
+  postOpenAI,
+  upstreamFailure,
+  upstreamStatus,
+} from "../_shared/nina-openai.ts";
 import { fillMissingDueAt, ninaLocalNow } from "../_shared/nina-due-date.ts";
 import { houseWorkloadKey, summarizeWorkload } from "../_shared/nina-workload.ts";
 import { minimizeMembersForModel } from "../_shared/nina-member-context.ts";
@@ -182,51 +191,14 @@ function buildUserContent(
   return content;
 }
 
-async function openAIJSON(
+function openAIJSON(
   path: string,
   apiKey: string,
   body: Record<string, unknown>,
+  deadline: NinaDeadline,
   timeoutMs = 35_000,
-): Promise<{ response: Response; payload: OpenAIResponsePayload }> {
-  const response = await fetch(`https://api.openai.com${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const payload = await response.json() as OpenAIResponsePayload;
-  return { response, payload };
-}
-
-async function moderate(
-  apiKey: string,
-  inputs: Array<Record<string, unknown>>,
-): Promise<ModerationVerdict> {
-  if (inputs.length === 0) {
-    return { flagged: false, sexualMinors: false, selfHarm: false };
-  }
-
-  const response = await fetch("https://api.openai.com/v1/moderations", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "omni-moderation-latest",
-      input: inputs,
-    }),
-    signal: AbortSignal.timeout(15_000),
-  });
-
-  if (!response.ok) {
-    throw new Error("moderation_unavailable");
-  }
-
-  return moderationVerdict(await response.json());
+): Promise<OpenAIAnswer> {
+  return postOpenAI(path, apiKey, body, { timeoutMs, deadline });
 }
 
 // The moderation input is the pseudonymized text, so no name the model may
@@ -235,6 +207,7 @@ async function moderateInput(
   apiKey: string,
   pseudonymizedMessage: string,
   body: NinaChatRequest,
+  deadline: NinaDeadline,
 ): Promise<ModerationVerdict> {
   const inputs: Array<Record<string, unknown>> = [];
 
@@ -252,12 +225,13 @@ async function moderateInput(
     });
   }
 
-  return await moderate(apiKey, inputs);
+  return await moderate(apiKey, inputs, { deadline });
 }
 
 async function moderateOutput(
   apiKey: string,
   modelOutput: { reply: string; proposals: unknown[] },
+  deadline: NinaDeadline,
 ): Promise<ModerationVerdict> {
   const texts = [modelOutput.reply];
   for (const proposal of modelOutput.proposals) {
@@ -277,10 +251,7 @@ async function moderateOutput(
       if (typeof value === "string" && value.trim()) texts.push(value);
     }
   }
-  return await moderate(
-    apiKey,
-    texts.filter((text) => text.trim()).map((text) => ({ type: "text", text })),
-  );
+  return await moderate(apiKey, moderationTexts(texts), { deadline });
 }
 
 function minorOwnerFilter(names: Pseudonymizer): string | null {
@@ -426,29 +397,6 @@ function normalizedText(value: string): string {
     .toLocaleLowerCase("pt-BR");
 }
 
-function deterministicSensitiveReply(message: string): string | null {
-  const text = normalizedText(message);
-  if (asksForMedicalGuidance(message)) {
-    return ninaMedicalRefusal;
-  }
-
-  const asksLegalConclusion =
-    /(contrato|processo|juridic|legal|lei)/.test(text)
-    && /(e legal|assine|assinar|validade|valido|decida por mim)/.test(text);
-  if (asksLegalConclusion) {
-    return "Não posso concluir validade jurídica nem assinar por você. Posso ajudar a listar pontos para revisar, mas a decisão deve passar por um profissional qualificado.";
-  }
-
-  const asksInvestmentDecision =
-    /(invista|investir|acao|acoes|cripto|bitcoin|dinheiro)/.test(text)
-    && /(todo|melhor|compre agora|venda agora|garantid)/.test(text);
-  if (asksInvestmentDecision) {
-    return "Não posso decidir investimento nem movimentar dinheiro da casa. Posso ajudar a organizar critérios e perguntas para avaliar com um profissional financeiro.";
-  }
-
-  return null;
-}
-
 function deterministicWorkloadOutput(message: string) {
   const text = normalizedText(message);
   const asksRedistribution =
@@ -512,6 +460,7 @@ Deno.serve(async (request: Request) => {
   }
 
   const startedAt = performance.now();
+  const turnDeadline = ninaDeadline(startedAt);
   const authorization = request.headers.get("Authorization");
   const supabaseURL = Deno.env.get("SUPABASE_URL") ?? "";
   const publishableKey = parseConfiguredKey(
@@ -524,6 +473,9 @@ Deno.serve(async (request: Request) => {
   );
   const openAIKey = Deno.env.get("OPENAI_API_KEY") ?? "";
   const safetySalt = Deno.env.get("NINA_SAFETY_ID_SALT");
+  const acceptsAttachments = attachmentsEnabled(
+    Deno.env.get("NINA_ATTACHMENTS_ENABLED"),
+  );
 
   if (
     !authorization?.startsWith("Bearer ")
@@ -574,6 +526,12 @@ Deno.serve(async (request: Request) => {
   }
   if (membership?.household_role !== "adult") {
     return jsonResponse({ error: "adult_access_required" }, 403);
+  }
+
+  // A document is never moderated, so no attachment is read or stored until
+  // the server's own switch says exactly "true".
+  if ((body.attachments ?? []).length > 0 && !acceptsAttachments) {
+    return jsonResponse({ error: "attachments_disabled" }, 403);
   }
 
   const model = interactiveModel;
@@ -710,7 +668,7 @@ Deno.serve(async (request: Request) => {
 
   let needsSupport = false;
   try {
-    const verdict = await moderateInput(openAIKey, modelMessage, body);
+    const verdict = await moderateInput(openAIKey, modelMessage, body, turnDeadline);
     if (verdict.sexualMinors) {
       const { error: holdError } = await adminClient.rpc(
         "hold_nina_chat_run_for_child_safety",
@@ -922,13 +880,14 @@ Deno.serve(async (request: Request) => {
 
   let inputTokenCount: number;
   try {
-    const { response, payload } = await openAIJSON(
+    const { ok, payload } = await openAIJSON(
       "/v1/responses/input_tokens",
       openAIKey,
       baseRequest,
+      turnDeadline,
       20_000,
     );
-    if (!response.ok || typeof (payload as { input_tokens?: unknown }).input_tokens !== "number") {
+    if (!ok || typeof (payload as { input_tokens?: unknown }).input_tokens !== "number") {
       await recordFailedRun(
         adminClient,
         run.run_id,
@@ -979,7 +938,7 @@ Deno.serve(async (request: Request) => {
   try {
     for (let round = 0; round <= maxToolRounds; round += 1) {
       if (round > 0) {
-        const { response: countResponse, payload: countPayload } =
+        const { ok: countOK, payload: countPayload } =
           await openAIJSON(
             "/v1/responses/input_tokens",
             openAIKey,
@@ -987,19 +946,20 @@ Deno.serve(async (request: Request) => {
               ...baseRequest,
               input: conversationInput,
             },
+            turnDeadline,
             20_000,
           );
         const roundInputTokens =
           (countPayload as unknown as { input_tokens?: number }).input_tokens;
-        if (!countResponse.ok || typeof roundInputTokens !== "number") {
-          throw new Error("token_count_unavailable");
+        if (!countOK || typeof roundInputTokens !== "number") {
+          throw new NinaFailure("token_count_unavailable");
         }
         if (roundInputTokens > maxInputTokens) {
-          throw new Error("input_too_large");
+          throw new NinaFailure("input_too_large");
         }
       }
 
-      const { response, payload } = await openAIJSON(
+      const answer = await openAIJSON(
         "/v1/responses",
         openAIKey,
         {
@@ -1012,15 +972,20 @@ Deno.serve(async (request: Request) => {
           prompt_cache_options: { mode: "explicit" },
           safety_identifier: requesterSafetyIdentifier,
         },
+        turnDeadline,
       );
 
-      const responseUsage = usageFromResponse(payload);
-      aggregateUsage = addUsage(aggregateUsage, responseUsage);
-      actualCost += calculateActualCostMicrousd(responseUsage, pricing);
-
-      if (!response.ok) {
-        throw new Error(safeErrorCode(payload));
+      // A retried answer is booked too, so a failed attempt is still paid for.
+      for (const received of answer.answers) {
+        const responseUsage = usageFromResponse(received);
+        aggregateUsage = addUsage(aggregateUsage, responseUsage);
+        actualCost += calculateActualCostMicrousd(responseUsage, pricing);
       }
+
+      if (!answer.ok) {
+        throw upstreamFailure(answer.status);
+      }
+      const payload = answer.payload;
 
       const calls = functionCalls(payload);
       if (calls.length === 0) {
@@ -1029,7 +994,7 @@ Deno.serve(async (request: Request) => {
       }
 
       if (!isToolCallBatchAllowed(round, totalToolCalls, calls.length)) {
-        throw new Error("tool_limit_exceeded");
+        throw new NinaFailure("tool_limit_exceeded");
       }
 
       const toolOutputs = [];
@@ -1057,14 +1022,19 @@ Deno.serve(async (request: Request) => {
       ];
     }
 
-    if (!finalPayload) throw new Error("missing_final_response");
+    if (!finalPayload) throw new NinaFailure("missing_final_response");
 
     const outputText = extractOutputText(finalPayload);
-    if (!outputText) throw new Error("invalid_assistant_response");
+    if (!outputText) throw new NinaFailure("invalid_assistant_response");
 
-    const structured = JSON.parse(outputText) as unknown;
+    let structured: unknown;
+    try {
+      structured = JSON.parse(outputText);
+    } catch {
+      throw new NinaFailure("invalid_assistant_response");
+    }
     if (!isStructuredOutput(structured)) {
-      throw new Error("invalid_assistant_response");
+      throw new NinaFailure("invalid_assistant_response");
     }
 
     const datedProposals = fillMissingDueAt(structured.proposals, body.message, turnClock);
@@ -1076,7 +1046,7 @@ Deno.serve(async (request: Request) => {
     const outputVerdict = await moderateOutput(openAIKey, {
       reply: structured.reply,
       proposals: datedProposals.proposals,
-    });
+    }, turnDeadline);
     const assistantReply = outputVerdict.flagged ? ninaOutputRefusal : restoredReply;
     if (outputVerdict.flagged) {
       console.error(JSON.stringify({
@@ -1109,7 +1079,7 @@ Deno.serve(async (request: Request) => {
     );
 
     if (completeError || !completed) {
-      throw new Error("persistence_failed");
+      throw new NinaFailure("persistence_failed");
     }
 
     console.info(JSON.stringify({
@@ -1133,9 +1103,7 @@ Deno.serve(async (request: Request) => {
     );
   } catch (error) {
     const latency = Math.round(performance.now() - startedAt);
-    const code = error instanceof Error
-      ? error.message.slice(0, 120)
-      : "unknown_error";
+    const code = failureCode(error);
     await recordFailedRun(
       adminClient,
       run.run_id,
@@ -1148,6 +1116,7 @@ Deno.serve(async (request: Request) => {
       event: "nina_run_failed",
       run_id: run.run_id,
       code,
+      upstream_status: upstreamStatus(error),
       latency_ms: latency,
     }));
     return jsonResponse({ error: "assistant_unavailable" }, 502);

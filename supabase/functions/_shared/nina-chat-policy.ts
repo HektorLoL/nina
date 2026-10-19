@@ -35,6 +35,12 @@ Regras:
 export const ninaMedicalRefusal =
   "Isso é com um profissional de saúde. Posso lembrar você de ligar ou marcar a consulta.";
 
+export const ninaLegalRefusal =
+  "Não posso concluir validade jurídica nem assinar por você. Posso ajudar a listar pontos para revisar, mas a decisão deve passar por um profissional qualificado.";
+
+export const ninaInvestmentRefusal =
+  "Não posso decidir investimento nem movimentar dinheiro da casa. Posso ajudar a organizar critérios e perguntas para avaliar com um profissional financeiro.";
+
 export const ninaOutputRefusal = "Não consigo ajudar com isso aqui.";
 
 export const ninaInputRefusal =
@@ -52,6 +58,40 @@ const medicationTerms =
 const healthTerms =
   "(dor|dores|febre|tosse|mancha|coceira|enjoo|vomito|vomitando|diarreia|pressao|glicose|machucado|alergia|garganta|barriga|cabeca|sangramento|falta de ar|tontura|sintoma|sintomas)";
 
+const doseSubjects = /\b(doses?|dosagem|medicamentos?|remedios?)\b/;
+const medicationChanges =
+  /\b(reduz\w*|aument\w*|altere|alterar|mude|mudar|metade|troque|suspenda|pare)\b/;
+const prescriptionWords = /^receitas?$/;
+const prescriptionContext =
+  /^(remedios?|medicamentos?|medic\w*|doses?|dosagem|mg|ml|comprimidos?|capsulas?|dipirona|paracetamol|ibuprofeno|antibioticos?|amoxicilina|xaropes?|analgesicos?|antitermicos?|antialergicos?|anti-inflamatorios?|pomadas?)$/;
+const prescriptionReach = 4;
+
+const legalSubjects = /\b(contratos?|processos?|juridic\w*|leis?|clausulas?)\b/;
+const legalConclusions =
+  /\b(e legal|e ilegal|e valid[oa]s?|tem validade|validade juridica|assine|decida por mim)\b/;
+
+const investmentSubjects =
+  /\b(invista|investir|investe|invisto|investimentos?|cripto\w*|bitcoins?)\b/;
+const stockWords = /\b(acao|acoes)\b/;
+const stockMarketWords =
+  /\b(bolsa|compre|comprar|compra|comprei|venda|vender|vendi|invest\w*|dividendos?|corretora)\b/;
+const allOfTheMoney =
+  /\b(todo|toda|todos|todas) (o |a |os |as )?((meu|minha|meus|minhas|nosso|nossa|nossos|nossas|seu|sua|seus|suas) )?(dinheiro|saldo|salario|poupanca|reserva|grana|patrimonio|heranca|economias|fgts|acoes|bitcoins?|cripto\w*)\b/;
+const everythingInto =
+  /\btudo (em|no|na|nos|nas|pra|para) (a |o |as |os )?(bolsa|acao|acoes|bitcoins?|cripto\w*|fundos?|tesouro|cdbs?|dolar|dolares)\b/;
+const ordersAnInvestment =
+  /\b(invista|invistam|compre agora|venda agora)\b|\b(compre|comprem|venda|vendam)\b[^.?!]{0,20}\b(acao|acoes|bitcoins?|cripto\w*)\b/;
+const promisedReturn =
+  /\b(investimentos?|rendimentos?|retornos?|lucros?|ganhos?) garantid\w*\b/;
+const bestInvestment =
+  /\bmelhor(es)? (investir|aplicar|investimentos?|aplicac\w*|acao|acoes|fundos?|cripto\w*|bitcoins?|opc\w* de investimento)\b/;
+const asksForAPick =
+  /^\s*(qual|quais|onde)\b|\b(indique|indica|recomende|recomenda|sugira|sugere|escolha|escolhe)\b/;
+
+const remindsOrNotes = /\b(lembr\w*|lembrete|anot\w*|agend\w*)\b/;
+const asksToOrganize =
+  /\b(crie|cria|criar|adicione|adiciona|adicionar|inclua|inclui|incluir|marque|marca|marcar|coloque|coloca|colocar|ponha|poe|por|bote|bota|botar|anote|anota|anotar|agende|agenda|agendar)( [a-z]+){0,2} (tarefas?|listas?|lembretes?|reuniao|reunioes|consultas?|compromissos?|agenda)\b/;
+
 function normalizedPolicyText(value: string): string {
   return value
     .normalize("NFD")
@@ -59,19 +99,50 @@ function normalizedPolicyText(value: string): string {
     .toLocaleLowerCase("pt-BR");
 }
 
+function policyWords(text: string): string[] {
+  return text.match(/[a-z0-9]+(?:-[a-z0-9]+)*/g) ?? [];
+}
+
+// A recipe is medical only beside a medicine or a dose: "a receita do bolo"
+// never reads as a prescription.
+function namesAPrescription(text: string): boolean {
+  const words = policyWords(text);
+  return words.some((word, index) =>
+    prescriptionWords.test(word) &&
+    words
+      .slice(
+        Math.max(0, index - prescriptionReach),
+        index + prescriptionReach + 1,
+      )
+      .some((neighbor) => prescriptionContext.test(neighbor))
+  );
+}
+
+function isAQuestion(message: string): boolean {
+  return /\?\s*$/.test(message.trim());
+}
+
+function remindsOrNotesWithoutAsking(message: string, text: string): boolean {
+  return remindsOrNotes.test(text) && !isAQuestion(message);
+}
+
+// An explicit task, list, reminder or meeting is organizing, whatever it
+// names; "Coloque tudo em bitcoin" names no such thing and stays a decision.
+function organizesWithoutAsking(message: string, text: string): boolean {
+  return (remindsOrNotes.test(text) || asksToOrganize.test(text)) &&
+    !isAQuestion(message);
+}
+
 // Nina organizes care and never guides it: a change of dose, even beside a
 // reminder, or a question about symptoms, a diagnosis, which medicine or how
 // much is answered here, before any model.
 export function asksForMedicalGuidance(message: string): boolean {
   const text = normalizedPolicyText(message);
-  const asksAQuestion = /\?\s*$/.test(message.trim());
   const changesMedication =
-    /(dose|dosagem|medicamento|remedio|receita)/.test(text) &&
-    /(reduz|reduza|aument|altere|alterar|mude|mudar|metade|troque|suspenda|pare)/
-      .test(text);
+    (doseSubjects.test(text) || namesAPrescription(text)) &&
+    medicationChanges.test(text);
   if (changesMedication) return true;
-  const organizes = /\b(lembr\w*|lembrete|anot\w*|agend\w*)\b/.test(text);
-  if (organizes && !asksAQuestion) return false;
+  if (remindsOrNotesWithoutAsking(message, text)) return false;
 
   const asksDose = new RegExp(
     `\\b(qual|quanto|quantas|quantos)\\b[^.?!]{0,40}\\b(dose|dosagem|mg|ml|gotas?|comprimidos?|capsulas?)\\b`,
@@ -93,4 +164,36 @@ export function asksForMedicalGuidance(message: string): boolean {
   const asksForSymptoms = /\bsintomas? d[eoa]s?\b/.test(text);
 
   return asksDose || asksWhichMedicine || asksDiagnosis || asksForSymptoms;
+}
+
+// Words match whole and with accents folded, so "leite" never reads as "lei",
+// "educação" as "ação" or "separe" as "pare".
+export function asksForLegalConclusion(message: string): boolean {
+  const text = normalizedPolicyText(message);
+  return legalSubjects.test(text) && legalConclusions.test(text) &&
+    !organizesWithoutAsking(message, text);
+}
+
+// Naming an investment is not asking for one: only an all-in, a pick asked of
+// Nina, an order to invest, buy or sell, or a promised return is a decision.
+export function asksForInvestmentDecision(message: string): boolean {
+  const text = normalizedPolicyText(message);
+  const namesAnInvestment = investmentSubjects.test(text) ||
+    (stockWords.test(text) && stockMarketWords.test(text));
+  if (!namesAnInvestment || organizesWithoutAsking(message, text)) {
+    return false;
+  }
+  const asksForTheBest = bestInvestment.test(text) &&
+    (isAQuestion(message) || asksForAPick.test(text)) &&
+    !asksToOrganize.test(text);
+  return allOfTheMoney.test(text) || everythingInto.test(text) ||
+    ordersAnInvestment.test(text) || promisedReturn.test(text) ||
+    asksForTheBest;
+}
+
+export function deterministicSensitiveReply(message: string): string | null {
+  if (asksForMedicalGuidance(message)) return ninaMedicalRefusal;
+  if (asksForLegalConclusion(message)) return ninaLegalRefusal;
+  if (asksForInvestmentDecision(message)) return ninaInvestmentRefusal;
+  return null;
 }

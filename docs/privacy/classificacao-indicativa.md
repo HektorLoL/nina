@@ -31,6 +31,11 @@ exactly as they are, for adults only; the análise prévia gets filed (not yet,
 §6); and if the Ministry later rates Nina lower, the constant changes back (§8,
 §9).
 
+Heitor decided on 2026-10-19 (choice 4): the version is submitted with
+"Manually release this version", and Release is pressed only after the
+análise prévia's result or a written yes from ClassInd (§9;
+`docs/production-launch-runbook.md` §8).
+
 Answer the questionnaire only with the all-ages work live end to end:
 migrations, functions, the build, the web pages and the production preflight
 (live since 2026-09-29; `CLAUDE.md` §13). A build without the age step makes
@@ -117,70 +122,45 @@ appointment). Record each answer with its date here. If an answer moves the
 rating above 14, change the answers and `NinaRating.currentCode` together and
 resubmit, after Heitor decides (§8).
 
-All four stay useful after the 2026-10-18 decision, for different reasons.
-Questions 2 and 3 can still lift Apple's rating above 14 (mature themes risk
-A16, and a minimum-age reading of the Terms would force an override Nina did
-not choose). Question 1's worst reading,
-A12, no longer changes the Brazil listing, but the answer still decides
-whether "No" is the honest answer, and a wrong one costs a rejection round
-(Guideline 2.3.6). Question 4 is how the reviewer reaches the adult features,
-whatever the rating.
+The four questions were reworded on 2026-10-19 for the rating of 14 and for
+D3; these are the words in the final review notes
+(`docs/app-store-listing.md` §6). All four stay useful, for different reasons.
+Question 2 can still lift Apple's rating above 14 (mature themes risk A16).
+Question 3 decides whether the Terms force an override Nina did not choose.
+Question 1's worst reading, A12, no longer changes the Brazil listing, but the
+answer still decides whether "No" is the honest answer, and a wrong one costs a
+rejection round (Guideline 2.3.6). Question 4 is how the reviewer reaches the
+adult features, whatever the rating.
 
 1. Does content shared inside a closed household of up to 8 approved people
    count as User-Generated Content or as Messaging?
    Answer: pending.
-2. Do features that the server gates to users the Declared Age Range API
-   reports as 18+, self-declared or confirmed, count toward the questionnaire
-   answers?
+2. The AI chat and the subscription open only for accounts the Declared Age
+   Range API reports as 18+, self-declared or confirmed. Do these adult-only
+   features count toward the questionnaire answers, and could they lift
+   Brazil's rating above 14?
    Answer: pending.
-3. Does "some features are only for adults" in the Terms count as a minimum age
-   requirement that forces an override?
+3. Our Terms say some features are only for adults and set no minimum age.
+   Does that count as a minimum age requirement?
    Answer: pending.
-4. Sign in with Apple is the only sign-in. The chat and the subscription open
-   only for an account whose Declared Age Range answer is 18+, self-declared or
-   confirmed, and decisions about children only for an adult Apple confirmed.
-   How should the reviewer reach these features if the review device shares no
-   age?
+4. If a review device shares no age range, is marking the review account as a
+   self-declared adult on our server, as described above, the way you prefer
+   to reach the adult features?
    Answer: pending.
 
 ## 4. Review note (English)
 
-> Nina is a household organizer with no minimum age. Everything that raised the
-> previous 18+ rating is unreachable for anyone the server has not recorded as
-> an adult: the assistant chat, subscriptions, the full household view, and
-> decisions about children. Age comes from the Declared Age Range API and is
-> recorded server-side only through an App Attest-verified endpoint. Unknown age
-> is treated as a child. A person under 18 holds an account only after a parent
-> or legal guardian already in the household approves it in the app. That
-> account shows only the person's own chores, with guardian controls for
-> notifications, quiet hours and a daily time limit. The chat and
-> subscriptions open for an adult whether Apple reports the age as
-> self-declared or confirmed; decisions about children need Apple's
-> confirmation. There is no user-to-user messaging, feed, web view or
-> advertising. Age rating: on 15 October 2026 Brazil's Ministry of Justice
-> rating coordination (ClassInd) told us Nina tends to "not recommended for
-> under 14" because of the in-app subscription and the generative AI chat. We
-> accept that rating and set the Brazil age rating to 14; if its formal prior
-> analysis (análise prévia) rates Nina lower, we will lower it. Test accounts:
-> [trusted adult], [declared adult], [minor], [unknown].
-
-The age-rating sentence is word for word the one in `docs/app-store-listing.md`
-§6, which also says what to change in it if App Store Connect could not set the
-Brazil rating to 14 directly.
-
-Test accounts are marked with `private.operator_set_age_status`, because App
-Attest and Declared Age Range do not run on the Simulator or on a reviewer's
-device in the expected way. Sign in with Apple is the only sign-in, so there is
-no password to hand the reviewer, and the "Test accounts" line above has no
-working form yet: how the reviewer reaches the adult features is question 4 of
-`docs/production-launch-runbook.md` §6, open until App Review answers it. The
-notes also carry that section's Sign in with Apple paragraph, word for word
-(build 12): Nina asks Apple for the name alone, keeps only the first name and
-never asks for the email, so an adult sees a name field only when Apple shared
-no first name (Guideline 4.0). A person under 18, or anyone whose age Apple
-has not shared (Nina treats that account as a minor's until it does, and the
-reviewer starts there), confirms a first name, filled in from Apple's when
-shared, where they ask to join a household; the paragraph says so.
+The one review note is in `docs/app-store-listing.md` §6, final as of
+2026-10-19, with its character count. The earlier draft that stood here
+(written before D3 and the rating of 14, with a "Test accounts" line that had
+no working form) was deleted that day so that only one text exists. The note
+names the rating of 14, asks §3's questions, carries the Sign in with Apple
+paragraph of `docs/production-launch-runbook.md` §6.1 word for word, and says
+how the reviewer reaches the adult features: if the review device shares no
+age, the operator marks the reviewer's account with `trusted = false`, a
+self-declared adult that chats and buys Premium but never acts for a child
+(Heitor's choice 3 of 2026-10-19; the statements are in the runbook's §6, "The
+reviewer's account").
 
 ## 5. Metadata
 
@@ -279,7 +259,7 @@ Also:
   filing needs a video demonstrating every feature open to classification,
   plus an access link, login and password when they are needed for full
   access. This document's reading of what the video must show, UNVERIFIED
-  against the Sistema's own form: the welcome with its mark, the age step,
+  against the Sistema's own form: the welcome, the age step,
   house setup and an invite, Hoje, Tarefas and Casa, a proposal from the chat
   and its confirmation, the paywall and its Apple sheet, the guardian's
   approval and supervision, a minor's home, kids mode, the child's day list,
@@ -354,7 +334,8 @@ Heitor. The 14 that came back was ClassInd's (§9), and Heitor accepted it.
   attenuator for purchases (D.5.1), with its date (written below, 2026-10-15).
 - Heitor's decision on the published rating (written below, 2026-10-18).
 - What App Store Connect offered for a Brazil rating of 14 (§2).
-- The análise prévia protocol number and outcome.
+- The análise prévia protocol number and outcome, which Release waits for
+  (choice 4, below).
 - The ClassInd registration of representative details.
 - The rating Apple shows after submission, and any MJSP assignment.
 
@@ -404,6 +385,13 @@ Written so far:
   and that the repo's L, 12, 16 and 18 hexes differ slightly from the Guia's
   (p. 125); neither matters while the app draws no mark. Restoring it is one
   `ClassIndMark()` call on each of the two screens plus the preflight check.
+- 2026-10-19: Heitor decided (choice 4) that the App Store version waits for
+  the Ministry: it goes to App Review with "Manually release this version",
+  and Release is pressed only after the análise prévia's result or a written
+  yes from ClassInd, so the public listing never runs ahead of the rating the
+  Ministry reads. App Review can approve meanwhile; the approved version waits
+  in "Pending Developer Release". The launch-day steps start there
+  (`docs/production-launch-runbook.md` §8). Not filed yet, so not released.
 - 2026-10-18: Heitor decided (option A) to accept 14 now.
   `NinaRating.currentCode` and `ninaRatingCode` move from `"L"` to `"14"`
   together, so Terms §4, `/familias/` §11, the footer mark on every page and

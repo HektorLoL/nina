@@ -917,10 +917,6 @@ a:focus-visible {
   min-width: 0;
 }
 
-.split-top {
-  align-items: start;
-}
-
 /* Scoped to a class, never `.split p`, which would out-specify every class on the drawn trays. */
 .split-lede {
   color: var(--muted);
@@ -1308,12 +1304,6 @@ a:focus-visible {
   font-size: 0.9375rem;
 }
 
-.tour-meta {
-  margin: 12px 4px 0;
-  color: var(--muted);
-  font-size: 0.8125rem;
-}
-
 /* --- Sinal de sobrecarga: three qualitative bands, household order, no number anywhere ---- */
 
 .workload-example .tour-legend {
@@ -1444,14 +1434,6 @@ a:focus-visible {
   margin: 22px 0 0;
   color: var(--muted);
   font-size: 0.9375rem;
-}
-
-/* --- Crianças ------------------------------------------------------------ */
-
-.children-example {
-  justify-self: center;
-  width: 100%;
-  max-width: 440px;
 }
 
 /* --- Preço --------------------------------------------------------------- */
@@ -2807,8 +2789,7 @@ details p {
     grid-row: auto;
   }
 
-  .tour-tray,
-  .children-example {
+  .tour-tray {
     max-width: none;
   }
 

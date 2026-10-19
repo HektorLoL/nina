@@ -301,4 +301,5 @@ The controller reviews this document, and its public summary, whenever:
 Signals to read each month on TestFlight and after launch: the assurance
 distribution (`private.age_assurance_distribution()`), the number of minor
 accounts, reports received and their outcomes, child-safety holds, and AI
-blocks.
+blocks. Open holds and unreviewed reports are read every day until an alert
+exists (`docs/child-safety-runbook.md` §6, since 2026-10-19).

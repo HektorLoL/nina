@@ -56,6 +56,12 @@ const documentMimeTypes = new Set([
   "text/xml",
 ]);
 
+// Photos and documents stay off unless the switch reads exactly "true":
+// unset, empty or any other spelling is off.
+export function attachmentsEnabled(flag: string | undefined): boolean {
+  return flag?.trim() === "true";
+}
+
 export function isNinaChatRequest(value: unknown): value is NinaChatRequest {
   if (!value || typeof value !== "object") return false;
 

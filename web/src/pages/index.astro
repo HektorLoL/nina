@@ -9,8 +9,6 @@ import { appStoreListing } from "../appStore";
 import {
   availabilityLine,
   avatarTone,
-  childDayDescription,
-  childDayExample,
   closingHeadline,
   closingLine,
   exampleDescription,
@@ -30,7 +28,6 @@ import { waitlistConsentVersion } from "../waitlist";
 
 const navLinks = [
   { href: "#como-funciona", label: "Como funciona" },
-  { href: "#criancas", label: "Crianças" },
   { href: "#preco", label: "Preço" },
   { href: "#privacidade", label: "Privacidade" },
   { href: "#duvidas", label: "Dúvidas" },
@@ -42,16 +39,6 @@ const balancePoints = [
   "Ninguém recebe aviso de que o outro terminou alguma coisa.",
   "Criança e adolescente nunca entram no retrato.",
   workloadExample.method,
-];
-
-const childPoints = [
-  "Quem tem menos de 18 anos entra numa casa só com a aprovação de um responsável.",
-  "Decidir por uma criança ou um adolescente pede idade confirmada pela Apple.",
-  "Na conta de um menor aparecem só as tarefas dele: o título, a hora e o ícone.",
-  "Para quem tem menos de 12 anos, as tarefas ficam grandes e coloridas.",
-  "Na conta de um menor, o silêncio à noite fica sempre ligado e o limite de uso começa em 30 minutos por dia.",
-  "Com a autorização do responsável, o dia de uma criança ou de um adolescente sem conta pode aparecer no celular de um adulto da casa. Só o responsável imprime ou compartilha como imagem ou PDF.",
-  "Nome de criança ou adolescente vai para a OpenAI trocado por um código.",
 ];
 
 const privacyCards = [
@@ -350,35 +337,6 @@ const availability = availabilityLine(appStoreListing);
           </div>
           <p class="workload-caption">{workloadExample.caption}</p>
         </div>
-      </div>
-    </section>
-
-    <section id="criancas" class="section panel page-shell split split-top" aria-labelledby="criancas-title">
-      <div>
-        <p class="eyebrow">Crianças e adolescentes</p>
-        <h2 id="criancas-title">Criança entra com um responsável.</h2>
-        <p class="split-lede">
-          A conversa com a Nina é só dos adultos. Uma criança ou um adolescente com conta vê só as
-          próprias tarefas.
-        </p>
-        <ul class="check-list">
-          {childPoints.map((point) => <li><Glyph name="check" size={20} />{point}</li>)}
-        </ul>
-        <a class="text-link section-link" href="/familias/">Como a Nina cuida de crianças e adolescentes</a>
-      </div>
-      <div class="children-example">
-        <div class="tour-tray" role="img" aria-label={childDayDescription()}>
-          <p class="tour-legend" aria-hidden="true">Exemplo</p>
-          <div class="tour-card" aria-hidden="true">
-            <p class="tour-group">{childDayExample.eyebrow}</p>
-            {
-              childDayExample.rows.map((row) => (
-                <TourRow title={row.title} label={row.time} glyph={row.glyph} />
-              ))
-            }
-          </div>
-        </div>
-        <p class="tour-meta">{childDayExample.meta}</p>
       </div>
     </section>
 

@@ -22,8 +22,10 @@ calls no sign-in but Apple's, legal-metadata wiring, the all-ages rules (no
 string claims nothing is kept at the model provider, the Terms state the rating
 and set no minimum age, `/familias/` and `/denuncia/` exist, the app and the
 website show the same rating, the Declared Age Range and production App Attest
-entitlements, iOS 26.4 on every configuration), and CI enforcement. It never
-prints credential values.
+entitlements, iOS 26.4 on every configuration), no iCloud conflict copy (a
+`… 2.ext` file or a `… 2` folder) anywhere in the working tree outside
+`node_modules` and `.git` (`repository.icloud-conflict-copies`, since
+2026-10-19), and CI enforcement. It never prints credential values.
 CI runs the same gate on every pull request and push to `main`.
 
 ## 2. Prepare the release environment
@@ -247,8 +249,69 @@ never enough. Answer within the 15 days the privacy policy promises:
    an in-app deletion. The person's Apple token is not revoked on this path
    (there is no authorization code); say so in the answer.
 6. **Record** the date, the reference, which proof passed (step 2 or 3) and the
-   outcome in the request log (`docs/privacy/lgpd-launch-posture.md`), and
-   answer the person. Keep no copy of the code beyond the thread.
+   outcome in the request log, and answer the person. Keep no copy of the code
+   beyond the thread. **The request log is kept privately, never in this
+   repository**, which is public on GitHub: in Heitor's private notes or a
+   private spreadsheet, never in `docs/`, a commit, an issue, a pull request or
+   a chat with an agent. What it holds is listed in
+   `docs/privacy/lgpd-launch-posture.md` ("Recommended request handling"); an
+   account reference is personal data even without a name.
+
+### OpenAI dashboard
+
+`OPENAI_API_KEY` reaches OpenAI from `nina-chat` and `nina-maintenance` only.
+Check the account at platform.openai.com before launch and after any change to
+it. The dashboard renames its pages; where a label below no longer matches,
+record what it is called now (the labels are UNVERIFIED as of 2026-10-19).
+
+- [ ] **One project for production.** `OPENAI_API_KEY` in the Edge Function
+  secrets is a key of a project used by nothing else. The local eval's key
+  (`supabase/.env.local`) belongs to another project, so revoking one never
+  stops the other, and the eval's spend never reads as production's.
+- [ ] **A restricted key.** It may call `/v1/responses` (with
+  `/v1/responses/input_tokens`) and `/v1/moderations`, and nothing that writes
+  files, fine-tunes, or manages the organization. After any change, send one
+  chat turn on a test account: a key that refuses one endpoint fails every turn.
+- [ ] **Models.** If the project limits models, it allows `gpt-6-luna`,
+  `gpt-5.4-mini` (the insight's fallback) and `omni-moderation-latest`.
+- [ ] **No training on Nina's data.** Organization › Data controls: sharing
+  inputs and outputs with OpenAI is off, with no free-token programme. The
+  privacy policy says OpenAI does not train on what Nina sends.
+- [ ] **Nothing stored beyond abuse monitoring.** Every call sends `store:
+  false`, so the project's logs of responses show no Nina conversation. Zero
+  Data Retention is not on and is not claimed anywhere: the privacy policy
+  publishes OpenAI's abuse logs of up to 30 days, and claiming less fails
+  `repository.retention-claims`.
+- [ ] **A monthly budget above the database's caps.** The database refuses a
+  turn at its own caps (`private.nina_ai_budget_settings`: US$50 chat and
+  US$10 insight since Heitor's choice 5 of 2026-10-19; §3, "The AI budget of
+  19 October"). Set the project's monthly budget
+  a little above their sum, with an email alert at the sum, so the database
+  binds first and the dashboard is the backstop for an accounting bug. Whether
+  the project budget stops requests or only alerts is UNVERIFIED; read it there.
+- [ ] **Billing.** Enough prepaid credit for a month at the caps, or automatic
+  recharge with a monthly ceiling. An empty balance fails every turn and every
+  insight, whatever the database allows.
+- [ ] **Rate-limit tier.** The Limits page lists all three models with room for
+  the house ceiling (100 messages per house per day).
+- [ ] **People.** Heitor is the only member, with two-factor sign-in on.
+- [ ] **Data Processing Addendum** accepted for the organization (LGPD art. 39:
+  the operator follows the controller's instructions). Record the date in the
+  private records, not here. Where the dashboard offers it is UNVERIFIED.
+- [ ] **The month's spend agrees with the database.** The Usage page for the
+  production project should be close to what the database booked:
+
+  ```sql
+  select month_start, purpose, cap_microusd / 1e6 as cap_usd,
+         spent_microusd / 1e6 as spent_usd, reserved_microusd / 1e6 as reserved_usd
+  from public.nina_ai_budget_months
+  order by month_start desc, purpose
+  limit 4;
+  ```
+
+  OpenAI's figure well above `spent_usd` means a cost the accounting misses
+  (an unpriced token kind, a call outside the reservation); stop and find it
+  before the month ends.
 
 ## 3. Database and Edge Functions
 
@@ -688,6 +751,193 @@ welcome footnote shown before 18 October and read back after a relaunch no
 longer counts. The local stack keeps `2026-09-29`, because no migration carries
 the version.
 
+### The AI budget of 19 October (`202610190001`)
+
+Heitor's choice 5 of 2026-10-19 raises the AI budget to US$50 a month for
+conversations and US$10 for insights. Migration
+`202610190001_ai_budget_settings.sql` takes the caps out of the function
+bodies into one row, `private.nina_ai_budget_settings`, which every
+reservation reads; adds each house's share of the conversation pool,
+`private.nina_ai_household_budget_months`, capped at US$5 (a tenth of the
+pool, enforced by a CHECK on the settings row) and reserved, settled and
+month-pinned exactly like the pool under the same `reserved + spent <= cap`
+CHECK; gives this month's pool rows the new caps and fills each house's share
+for this month from its runs; makes the weekly insight describe the last whole
+Monday-to-Sunday week in São Paulo, in a stable order; settles every run left
+open for more than fifteen minutes from the daily retention; and revokes
+PUBLIC's execute on `private.current_month_start()` and
+`private.invoke_nina_maintenance()`. A house past its share is refused with
+`nina_budget_exceeded`, the code `nina-chat` already answers as 429
+`monthly_budget_reached` and every build already shows as "Conversa pausada.
+Anote pelo + em Hoje.", so the migration needs no function deploy and no
+build. Run it at a quiet hour: a turn that begins on the old body and settles
+on the new one is booked on the house share without its reservation, which can
+only under-count that house by one turn.
+
+1. **Local gate.** From a clean export (`git archive` of the commit, `CLAUDE.md`
+   §12), `deno task db:reset && deno task db:test` (852 assertions on
+   2026-10-19).
+2. **Pre-check, read only, in the SQL editor.** Production must still run the
+   bodies the migration replaces:
+
+   ```sql
+   select routines.oid::regprocedure, md5(routines.prosrc)
+   from pg_proc as routines
+   join pg_namespace as namespaces on namespaces.oid = routines.pronamespace
+   where (namespaces.nspname, routines.proname) in (
+     ('public', 'begin_nina_chat_run'),
+     ('public', 'complete_nina_chat_run'),
+     ('public', 'record_failed_nina_ai_run'),
+     ('public', 'reserve_nina_insight_run'),
+     ('public', 'complete_nina_insight_run'),
+     ('private', 'settle_household_ai_runs'),
+     ('private', 'nina_weekly_metrics'),
+     ('public', 'get_nina_weekly_candidates'),
+     ('public', 'run_nina_retention'),
+     ('private', 'nina_insight_period_start'),
+     ('private', 'settle_abandoned_ai_runs')
+   )
+   order by 1;
+
+   select
+     to_regclass('private.nina_ai_budget_settings'),
+     to_regclass('private.nina_ai_household_budget_months');
+
+   select month_start, purpose, cap_microusd, reserved_microusd, spent_microusd
+   from public.nina_ai_budget_months
+   where month_start = date_trunc('month', now())::date
+   order by purpose;
+
+   select max(version) from supabase_migrations.schema_migrations;
+   ```
+
+   Expect exactly nine functions: `begin_nina_chat_run(…)`
+   `aeebbfa060c94d07d637815b1acd318b`, `complete_nina_chat_run(…)`
+   `5382e2fd7916df4136d2276373bebfc2`, `complete_nina_insight_run(…)`
+   `5151924bfabe8868a18272ffcabf7068`, `get_nina_weekly_candidates()`
+   `e95ded4bb34d6f8bbda5ea9d157666d3`, `private.nina_weekly_metrics(uuid)`
+   `dd1f9f647ecd68b838f166a2fdd4b153`, `private.settle_household_ai_runs(uuid)`
+   `b40485125ad32a93f118120bab887d2b`, `record_failed_nina_ai_run(…)`
+   `43c3bc9bf6760a9648e90278119c80f7`, `reserve_nina_insight_run(…)`
+   `2fe59a3bb7102b392a770f7b3ed72809` and `run_nina_retention()`
+   `45b9504c349019282403b680102cb5e4`; then two nulls; this month's pool rows
+   at caps `20000000` (interactive) and `5000000` (insights), or no row for a
+   purpose nothing spent on this month (write down their reserved and spent);
+   and `202610150001`, or the migration of 19 October applied just before this
+   one. Any other body means production drifted from the repository: stop and
+   compare before applying.
+3. **Apply the migration**, either with `npx supabase db push` from the clean
+   export (the dry run must list only `202610190001_ai_budget_settings`) or
+   through the Supabase MCP `apply_migration` named `ai_budget_settings` with
+   the file's body. The MCP records a 14-digit version, so repair it at once:
+
+   ```sql
+   update supabase_migrations.schema_migrations
+   set version = '202610190001'
+   where name = 'ai_budget_settings'
+     and version <> '202610190001';
+   ```
+
+4. **Read back.** Rerun the first query of step 2. Expect eleven functions:
+   `begin_nina_chat_run(…)` `84b84c82a056703be563206915c34102`,
+   `complete_nina_chat_run(…)` `7fda278312aaf8f225378fd0951b33c2`,
+   `complete_nina_insight_run(…)` `f010e6696f4c653ba300420fb7b1759b`,
+   `get_nina_weekly_candidates()` `469f5b55bd4dc78d4975532ae63dc98e`,
+   `private.nina_insight_period_start(timestamp with time zone)`
+   `096a4809f0ba658faf9420f09cd0e8e8`, `private.nina_weekly_metrics(uuid)`
+   `fe2011c8a4e397c9f6e5a074bd800d16`, `private.settle_abandoned_ai_runs()`
+   `fb1f919447eae54b1cbd51dc0c9b912c`, `private.settle_household_ai_runs(uuid)`
+   `5b145882bc1488103c76952052731720`, `record_failed_nina_ai_run(…)`
+   `ef6a27ebee06a432996415ce4f02b7fc`, `reserve_nina_insight_run(…)`
+   `463e2b230fd367aeec2650b9dde00281` and `run_nina_retention()`
+   `a8b3e5e8649eb1df1fd997c029f3fd2b`. Then:
+
+   ```sql
+   select singleton, interactive_cap_microusd, insights_cap_microusd,
+          household_interactive_cap_microusd
+   from private.nina_ai_budget_settings;
+
+   select month_start, purpose, cap_microusd, reserved_microusd, spent_microusd
+   from public.nina_ai_budget_months
+   where month_start = date_trunc('month', now())::date
+   order by purpose;
+
+   select count(*), sum(reserved_microusd), sum(spent_microusd),
+          max(reserved_microusd + spent_microusd)
+   from private.nina_ai_household_budget_months
+   where month_start = date_trunc('month', now())::date;
+
+   select
+     has_function_privilege('public', 'private.current_month_start()', 'execute'),
+     has_function_privilege('public', 'private.invoke_nina_maintenance()', 'execute'),
+     has_function_privilege('service_role', 'private.settle_abandoned_ai_runs()', 'execute'),
+     has_table_privilege('service_role', 'private.nina_ai_budget_settings', 'select'),
+     has_table_privilege('service_role', 'private.nina_ai_household_budget_months', 'select');
+
+   select jobname, schedule, command, active
+   from cron.job
+   where jobname = 'nina-daily-maintenance';
+
+   select private.nina_insight_period_start(now()),
+          private.nina_insight_period_start(now()) + 6;
+
+   select max(version) from supabase_migrations.schema_migrations;
+   ```
+
+   Expect `true, 50000000, 10000000, 5000000`; this month's pool rows at
+   `50000000` and `10000000` with the reserved and spent written down in step
+   2; one share row per house that talked to Nina this month, its reserved and
+   spent equal to that house's runs (the pool's spent also holds what deleted
+   houses spent, so the sums may be lower), and a largest total of at most
+   `5000000` (a house above it is already over its share and pauses until
+   November); five `false`; the job at `15 6 * * *` running
+   `select private.invoke_nina_maintenance()`, active (pg_cron runs it as its
+   owner, whom the revoke leaves alone); the last whole Monday-to-Sunday week;
+   and `202610190001`. Rerun the grant count of the house deletion's step 4:
+   still 52 for `authenticated` and 27 for `service_role`. Then the
+   foreign-key canary of `foreign_key_indexes.test.sql`, which must read 0:
+
+   ```sql
+   select count(*)
+   from pg_constraint as constraints
+   join pg_namespace as namespaces on namespaces.oid = constraints.connamespace
+   where constraints.contype = 'f'
+     and namespaces.nspname in ('public', 'private')
+     and not exists (
+       select 1
+       from pg_index as indexes
+       where indexes.indrelid = constraints.conrelid
+         and (indexes.indkey::int2[])[0:array_length(constraints.conkey, 1) - 1]
+           = constraints.conkey
+     );
+   ```
+5. **The next morning**, the maintenance answer carries
+   `retention.abandoned_runs` (the runs it settled), and an insight is written
+   at most once per house per week.
+
+**Raising a cap later** is one statement; the next reservation copies the row
+onto this month's pool row and house share, so it takes effect the same month:
+
+```sql
+update private.nina_ai_budget_settings
+set interactive_cap_microusd = 80000000,
+    household_interactive_cap_microusd = 8000000
+where singleton;
+```
+
+The house share can never be more than a tenth of the pool, so raising the
+share alone past that is refused (`23514`); move both in the one statement.
+`insights_cap_microusd` moves the same way. A lowered cap holds what was
+already spent and reserves nothing more past it that month. Keep the OpenAI
+project budget above the new sum (§2, "OpenAI dashboard").
+
+**What testers then see.** Nothing, until a house spends US$5 of
+conversations in a month: from then on that house reads "Conversa pausada.
+Anote pelo + em Hoje." until the month turns, while every other house keeps
+talking. The weekly summary covers the last whole Monday-to-Sunday week and
+comes at most once a week; before, a covered house with five events in the
+last seven days was chosen again every night.
+
 ### Age contests and child-safety holds
 
 An age contest (Decreto 12.880 art. 27) follows `docs/age-contest-runbook.md`; a
@@ -742,10 +992,18 @@ privacy page reads `data-legal-launch="ready"`.
 
 `PUBLIC_NINA_APP_STORE_ID` is read at build time, exactly like the legal
 identity. Until it holds the numeric App Store ID, `/invite/` hides the install
-badge and offers the waitlist instead. Once the app exists in App Store Connect,
-set the variable, then rebuild and redeploy the website — a Cloudflare variable
-change alone leaves the install path hidden forever, and every invited person
-keeps landing on a page that cannot get them the app.
+badge and offers the waitlist instead, and the landing says "Ainda em teste,
+fora da App Store.". **Set it in the Cloudflare build variables only once the
+app is live on the App Store** (§8, launch day), never when the record merely
+exists in App Store Connect: the record has existed since 2026-09-03, but
+until Release is pressed and Apple's lookup finds the app, the store page does
+not exist, and a badge built earlier links to nothing (`CLAUDE.md` §13). The
+inventory in `config/production.env` already carries the same number, because
+the preflight's `environment.app-store-id-parity` compares it with
+`NINA_APP_APPLE_ID`; only the Cloudflare build variable decides what the site
+shows. After setting it, rebuild through Cloudflare Workers Builds from git: a
+Cloudflare variable change alone leaves the install path hidden, and a local
+`wrangler deploy` builds without the legal values.
 
 The waitlist hears from Nina exactly once, after the app is live and the site
 above is rebuilt with the store id. From the repository root, with
@@ -915,26 +1173,16 @@ answers, the rationale per item and the review note are in
    Apple, Tuesdays and Thursdays:
    `https://developer.apple.com/events/view/upcoming-events?search=Review`)
    gets the answers before submitting, if that ever matters more than the call.
-   The four questions, word for word:
-   1. Does content shared inside a closed household of up to 8 approved people
-      count as User-Generated Content or as Messaging?
-   2. Do features that the server gates to users the Declared Age Range API
-      reports as 18+, self-declared or confirmed, count toward the
-      questionnaire answers?
-   3. Does "some features are only for adults" in the Terms count as a minimum
-      age requirement?
-   4. Sign in with Apple is the only sign-in. The chat and the subscription
-      open only for an account whose Declared Age Range answer is 18+,
-      self-declared or confirmed, and decisions about children only for an
-      adult Apple confirmed. How should the reviewer reach these features if
-      the review device shares no age?
+   The four questions, reworded on 2026-10-19 for the rating of 14 and for D3,
+   are in the one final review note, `docs/app-store-listing.md` §6, and in
+   the rating document's §3, word for word in both; this runbook no longer
+   carries a third copy.
 
    Record the answers in the rating document. The first submission carries the
    honest answers, with the Brazil listing raised to 14, and these questions
    beside them in the notes, so the reviewer sees both at once; the notes also
-   carry the age-rating sentence in `docs/app-store-listing.md` §6. All four
-   questions stay after the 2026-10-18 decision (the rating document's §3 says
-   why). If the answers push the rating above 14, the product question goes
+   carry the age-rating sentence. All four questions stay after the 2026-10-18
+   decision (the rating document's §3 says why). If the answers push the rating above 14, the product question goes
    back to Heitor first; any change moves `NinaRating.currentCode`,
    `web/src/rating.ts` and the Terms together, and
    `repository.rating-constant-consistency` fails until they agree.
@@ -977,12 +1225,161 @@ answers, the rationale per item and the review note are in
    and CNPJ go into the filing, never into this repository.
 5. **Before release, read from the official source and correct if needed:** the
    ClassInd pictogram artwork and colours (gov.br/mj; `Nina/Theme.swift` and
-   `web/src/rating.ts`), the CVV number 188 (cvv.org.br; `MinorViews.swift`,
-   `/familias/`, the prompt), the Polícia Federal intake for child-safety
-   reports (`docs/child-safety-runbook.md`), the OpenAI sub-processor link
-   (`privacidade.astro`), Apple's App Attestation Root CA (compare with the
-   embedded copy in `_shared/app-attest.ts`), and the 190 and Disque 100 numbers
-   on `/denuncia/`.
+   `web/src/rating.ts`), the Polícia Federal intake for child-safety reports
+   (the MJSP act is Portaria MJSP 1.312/2026, but its NIDUS system takes no
+   reports yet and the interim channel is undecided:
+   `docs/child-safety-runbook.md` §5), and Apple's App Attestation Root CA
+   (compare with the embedded copy in `_shared/app-attest.ts`). Read on
+   2026-10-19 and right, so nothing changes: the CVV number 188 (cvv.org.br;
+   `MinorViews.swift`, `/familias/`, the prompt), the 190 and Disque 100
+   numbers on `/denuncia/` (the federal government's Secom guide), and the
+   OpenAI sub-processor link in `privacidade.astro`,
+   `https://platform.openai.com/subprocessors`. OpenAI's Data Processing
+   Addendum v.010126 defines its "Sub-Processor List" as "the list available
+   at the following address https://platform.openai.com/subprocessors"
+   (cdn.openai.com/pdf/openai-data-processing-addendum.pdf), and in a browser
+   that address redirects to `https://openai.com/policies/sub-processor-list/`
+   (curl gets a Cloudflare challenge). The DPA's own address stays.
+
+### App Store Connect settings
+
+Set once for version 1.0 and read again before every submission. The words
+(name, subtitle, description, keywords, subscription names, review notes) are
+in `docs/app-store-listing.md`; this is everything else. App Store Connect
+renames its pages; where a label differs, record what it is called now.
+
+- [ ] **Availability: Brazil only.** Pricing and Availability › Countries or
+  Regions lists Brazil and nothing else. The app is in Brazilian Portuguese,
+  its servers and its law are Brazil's, and both subscriptions are priced in
+  reais.
+- [ ] **iPhone only.** Untick availability on Apple Silicon Macs and on Apple
+  Vision Pro (both are on by default for an iPhone app). Nina is
+  `TARGETED_DEVICE_FAMILY = 1`, was never tested on either, and leans on App
+  Attest and Declared Age Range, which behave differently there.
+- [ ] **Age Rating.** Answer as `docs/privacy/classificacao-indicativa.md` §2
+  says, so the Brazil listing reads 14, and record there (§9) what App Store
+  Connect offered for it. Made for Kids: No. Age Suitability URL:
+  `https://ninai.app/familias/`.
+- [ ] **App Privacy.** The answers in `docs/privacy/app-store-privacy-labels.md`,
+  Purchase History, Health and Photos or Videos included.
+- [ ] **Every URL with its trailing slash** (the slashless form answers a 307
+  first): Support `https://ninai.app/suporte/`, Marketing
+  `https://ninai.app/`, Privacy Policy `https://ninai.app/privacidade/`, Age
+  Suitability `https://ninai.app/familias/`, and the Terms link in the
+  description `https://ninai.app/termos/`.
+- [ ] **Categories:** primary Productivity (Produtividade), secondary Lifestyle
+  (Estilo de vida).
+- [ ] **App Review Information.** "Sign-in required" off: Sign in with Apple is
+  the only door and there is no user name or password to give. Contact name,
+  phone and email are typed there and never into this repository. Notes: the
+  text in `docs/app-store-listing.md` §6, as it stands.
+- [ ] **Export compliance.** `ITSAppUsesNonExemptEncryption` is `false` in
+  `Nina/Info.plist`, so no build asks.
+- [ ] **The subscription group "Nina Premium"** (Monetization ›
+  Subscriptions), as in `Nina/Nina.storekit`:
+  - group display name "Nina Premium", in Portuguese (Brazil);
+  - `com.heitor.nina.premium.monthly`: reference name "Nina Premium mensal",
+    duration 1 month, Brazil price R$ 24,90, available in Brazil only;
+  - `com.heitor.nina.premium.yearly`: reference name "Nina Premium anual",
+    duration 1 year, Brazil price R$ 249,90, available in Brazil only;
+  - both on the same level of the group (the same Premium, two durations), no
+    introductory or promotional offer;
+  - each with the display name and description of `docs/app-store-listing.md`
+    §5 in Portuguese (Brazil), its own review screenshot of the paywall and a
+    one-line review note;
+  - Family Sharing on, as it has been since 2026-09-03 (Apple never lets it be
+    turned off); the description says it does not unlock Premium;
+  - App Store Server Notifications, version 2, for Production and Sandbox:
+    `https://apemftmlsjocvifbptum.supabase.co/functions/v1/app-store-server-notifications`
+    (set and confirmed 2026-09-09);
+  - both added to the version under "In-App Purchases and Subscriptions", so
+    they go to review with the app's first version.
+- [ ] **Version Release: "Manually release this version"** (Heitor's choice 4
+  of 2026-10-19). An approved version then waits in "Pending Developer
+  Release" until §8.
+- [ ] **TestFlight.** The public link carries a tester limit (§2), and is
+  turned off on launch day (§8).
+
+### The reviewer's account
+
+The reviewer signs in with their own Apple Account, so nothing can be prepared
+before the review. A reviewer whose device shares an 18+ range needs nothing
+from the operator. One whose device shares no age reads as unknown, sees a
+minor's screens, and is asked in the review notes to reply with the time they
+signed in. Mark only that account, and only with `trusted = false` (Heitor's
+choice 3 of 2026-10-19): `private.operator_set_age_status` then records a
+self-declared adult, which chats and buys Premium under D3's policy row but is
+never trusted for a minor (`private.is_trusted_adult` takes `confirmed` or
+`operator` only). `true` would record `operator`, which approves, adds and
+answers for children; never use it for the reviewer.
+
+1. **Find the account** from the time the reviewer gives (an account made since
+   build 11 carries no email):
+
+   ```sql
+   select users.id, users.created_at, users.last_sign_in_at,
+          ages.status, ages.band_source, ages.assurance,
+          ages.minor_since, ages.household_marked, ages.has_record
+   from auth.users as users
+   cross join lateral private.effective_age(users.id) as ages
+   where users.created_at between timestamptz '<UTC time>' - interval '15 minutes'
+                              and timestamptz '<UTC time>' + interval '15 minutes'
+   order by users.created_at;
+   ```
+
+   Expect one row whose status is `unknown`. More than one, or none: ask the
+   reviewer for a closer time in the submission's messages; never mark a
+   guess. **If the row's status is `minor`, or `minor_since` is not null, or
+   `household_marked` is true, mark nothing** and answer the reviewer that
+   this account cannot be used: it holds a minor record (Apple's band, a
+   guardian's approval or a child's profile in a house), and marking it adult
+   would end that minor's guardianships and consents.
+2. **Mark it**, with step 1's check repeated in the statement:
+
+   ```sql
+   select private.operator_set_age_status(users.id, 'adult', null, false, 'app_review')
+   from auth.users as users
+   cross join lateral private.effective_age(users.id) as ages
+   where users.id = '<reviewer auth user id>'
+     and ages.status = 'unknown'
+     and ages.minor_since is null
+     and not ages.household_marked;
+   ```
+
+   It must return one row. The operator path enforces no ratchet
+   (`private.operator_set_age_status` calls `private.store_age_status` with
+   `enforce_ratchet` false, so `age_signal_rejected` never comes back from
+   it): a minor's account marked adult is released as if it had reached
+   majority. Step 1's check, repeated in this `where`, is the only guard; no
+   row returned means nothing was marked, so go back to step 1.
+3. **Read it back:**
+
+   ```sql
+   select private.may_use_ai('<reviewer auth user id>') as may_use_ai,
+          public.premium_buyer_is_eligible('<reviewer auth user id>') as may_buy,
+          private.is_trusted_adult('<reviewer auth user id>') as acts_for_minors;
+   ```
+
+   Expect `true`, `true`, `false`, then answer in the submission's messages
+   that the account is ready. The reviewer refreshes the house (pull to
+   refresh, or leave and return to the app). This mark is a self-declared
+   record, so unlike an `operator` mark (`202610140001`) it does not outlive
+   the reviewer's phone: a later declined or minor signal from that device
+   replaces it. If the reviewer writes that the chat closed again, read the
+   row and mark it again.
+4. **Unmark it** on launch day (§8), or when a review ends without a release:
+
+   ```sql
+   select private.operator_set_age_status('<reviewer auth user id>', 'unknown', null, false, 'app_review_ended');
+
+   select status, assurance from private.account_age_status
+   where user_id = '<reviewer auth user id>';
+   ```
+
+   Expect `unknown` and `none`. The ratchet applies at once: the account's AI
+   consent is withdrawn and it can no longer chat or buy; a house it created
+   keeps its rows, and its titular keeps the role without the powers. A later
+   review (an update) starts again at step 1.
 
 ## 7. Human approvals
 
@@ -1001,4 +1398,477 @@ The technical gate cannot substitute for these approvals:
 - Transactional email has SPF, DKIM, DMARC, consent-at-send filtering, the Nina
   unsubscribe fragment link, and provider-side suppression synchronization.
 - On-call ownership exists for website health, Edge Functions, database
-  maintenance, subscription notifications, AI budget, and crash diagnostics.
+  maintenance, subscription notifications, AI budget, and crash diagnostics,
+  and that person has read `docs/incident-runbook.md` and run the restore drill
+  (§9) once.
+
+## 8. Launch day
+
+**Release waits for the Ministry: press Release only after the análise
+prévia's result or a written yes from ClassInd** (Heitor's choice 4 of
+2026-10-19; `docs/privacy/classificacao-indicativa.md` §9). The version went to
+App Review with "Manually release this version" (§6), so an approved version
+waits in "Pending Developer Release" for as long as that takes. Record the
+result or the yes in the rating document's §9 first; then, in order:
+
+1. **Press Release** on the version in App Store Connect.
+2. **Wait until Apple's lookup finds the app.** The store page and the badge
+   link work only from then on, and the delay after Release is UNVERIFIED
+   (often hours):
+
+   ```sh
+   curl -s 'https://itunes.apple.com/lookup?id=6808423946&country=br' | grep -o '"resultCount":[0-9]*'
+   ```
+
+   It must print `"resultCount":1`. While it prints `0`, stop here.
+3. **Set `PUBLIC_NINA_APP_STORE_ID=6808423946`** in the Cloudflare build
+   variables of the site's Worker (Workers Builds, beside the legal values;
+   build variables, not runtime ones). `config/production.env` already holds
+   the same number (§4).
+4. **Rebuild only through Cloudflare, from git**: retry the latest Workers
+   Builds build in the dashboard, or push a commit to `main`. Never
+   `wrangler deploy` from the Mac: a local build has none of the legal build
+   variables and publishes `data-legal-status="incomplete"` (`CLAUDE.md` §13).
+5. **Check the live site**:
+
+   ```sh
+   curl -s https://ninai.app/ | grep -c 'apps.apple.com/br/app/id6808423946'
+   curl -s https://ninai.app/ | grep -c -E 'quase pronta|Ainda em teste|data-waitlist-dialog'
+   curl -s https://ninai.app/ | grep -c 'name="apple-itunes-app"'
+   curl -s https://ninai.app/join/ | grep -c 'apps.apple.com/br/app/id6808423946'
+   curl -s https://ninai.app/termos/ | grep -o 'data-legal-launch="[a-z]*"'
+   ```
+
+   Expect at least 1, then 0, 1, at least 1, and `data-legal-launch="ready"`.
+   Then, on an iPhone, tap the landing's badge and an invite link's badge: both
+   open Nina's page in the App Store. Run the online gate:
+
+   ```sh
+   npx deno task preflight:production --env-file config/production.env --online
+   ```
+
+6. **Turn off the public TestFlight link** (App Store Connect › TestFlight ›
+   the external group › Public Link). Every sandbox purchase covers a house for
+   free (§2), and nobody needs the link once the app is in the store.
+7. **Remove the reviewer's mark** (§6, "The reviewer's account", step 4).
+8. **Read the service every day for the first 48 hours** (on day 1 and day 2,
+   morning and evening):
+   - the daily maintenance ran: one `2xx` from `nina-maintenance` after 06:15
+     UTC in its function logs, no `minor_account_deletion_failed` or retention
+     error, and
+
+     ```sql
+     select status, start_time, return_message
+     from cron.job_run_details
+     where jobid = (select jobid from cron.job where jobname = 'nina-daily-maintenance')
+     order by start_time desc
+     limit 3;
+     ```
+
+   - every function's logs for non-2xx answers and their stable codes
+     (`monthly_budget_reached`, `age_signal_failed`,
+     `apple_token_revocation_failed`, `service_not_configured`);
+   - the AI budget (the query in §2, "OpenAI dashboard") against OpenAI's
+     Usage page;
+   - how real iPhones come back, and how many people arrived:
+
+     ```sql
+     select * from private.age_assurance_distribution();
+
+     select count(*) as accounts,
+            count(*) filter (where created_at > now() - interval '1 day') as new_today
+     from auth.users;
+
+     select count(*) as houses from public.families;
+
+     select environment, status, count(*)
+     from public.premium_subscriptions
+     group by 1, 2
+     order by 1, 2;
+     ```
+
+   - the child-safety reads (`docs/child-safety-runbook.md` §6) and the
+     privacy and report mailbox (48-hour acknowledgement);
+   - `curl -s -o /dev/null -w '%{http_code}\n' https://ninai.app/api/health`
+     prints `200`;
+   - App Store Connect's ratings and reviews, and crashes in Xcode's
+     Organizer.
+
+   Anything that reads wrong goes to `docs/incident-runbook.md`. The one
+   waitlist email (§4) may go once the badge is live; when is Heitor's call.
+
+## 9. Restore
+
+**What a backup holds.** Supabase keeps daily backups on the Pro plan and
+above, seven days of them on Pro; a project on the Free plan has none, so
+production must be on Pro before launch. A backup is the Postgres database
+only: every schema, `auth` (the accounts), `private` (ages, guardianships,
+holds) and `cron` included. It does not hold the files in Storage (profile
+photos: the `storage.objects` rows come back, files deleted since do not), the
+Edge Functions or their secrets, the Auth provider settings, or the API keys.
+Restoring in place replaces the whole database with the backup, takes the
+project offline while it runs, and loses everything written after the backup's
+time. How long it takes for Nina's size is UNVERIFIED until the first drill.
+
+Restore only when the data itself is lost or corrupted and nothing narrower
+repairs it. A broken migration or function is fixed forward (§3), never by a
+restore.
+
+### Restoring production from a daily backup
+
+1. **Pick the backup.** Dashboard › Database › Backups lists the daily backups
+   with their times (UTC). Choose the newest one from before the damage and
+   write its time down.
+2. **Save what the restore would undo.** The restore puts every row back as it
+   stood at the backup's time, so whatever people did since that protected
+   someone (a removal, a departure, a withdrawal, a deletion, a hold closed) is
+   undone with the rest, and only these values let step 4 do it again. Run each
+   statement on production and save each value as printed (one `{…}` array or
+   JSON object per statement, rows for the ages and the last query: ids,
+   roles, reasons, bands and times only) under its column's name, into a
+   private folder outside this repository and
+   outside iCloud (`~/nina-restore/`, mode 700), deleted at step 6:
+
+   ```sql
+   select coalesce(array_agg(id order by id), '{}') as accounts from auth.users;
+   select coalesce(array_agg(id order by id), '{}') as houses from public.families;
+   select coalesce(array_agg(id order by id), '{}') as members from public.family_members;
+   select coalesce(jsonb_object_agg(id, permission_role), '{}') as owners_and_admins
+   from public.family_members where permission_role in ('owner', 'admin');
+   select coalesce(array_agg(id order by id), '{}') as withdrawn_ai_consents
+   from public.nina_ai_consents where revoked_at is not null;
+   select coalesce(array_agg(id order by id), '{}') as withdrawn_minor_consents
+   from private.minor_data_consents where withdrawn_at is not null;
+   select coalesce(jsonb_object_agg(id, end_reason), '{}') as ended_guardianships
+   from private.minor_guardianships where ended_at is not null;
+   select coalesce(array_agg(id order by id), '{}') as health_tasks
+   from public.tasks where category_id = 'health';
+   select user_id, status, minor_band from private.account_age_status
+   where status <> 'adult' order by user_id;
+   select coalesce(jsonb_object_agg(id, jsonb_build_object(
+            'reported_at', reported_at,
+            'authority_receipt_at', authority_receipt_at,
+            'deleted_at', deleted_at)), '{}') as closed_holds
+   from private.child_safety_holds
+   where reported_at is not null or authority_receipt_at is not null or deleted_at is not null;
+   select coalesce(array_agg(hold_id order by hold_id), '{}') as preserved_accounts
+   from private.child_safety_preserved_accounts;
+   select coalesce(jsonb_object_agg(user_id, reason_code), '{}') as active_blocks
+   from private.nina_ai_blocks where lifted_at is null;
+   select coalesce(array_agg(id order by id), '{}') as memories from public.memory_items;
+   select coalesce(array_agg(id order by id), '{}') as private_memories
+   from public.memory_items where visibility = 'private';
+   select coalesce(array_agg(id order by id), '{}') as proposals from public.nina_proposals;
+   select coalesce(jsonb_object_agg(thread_id, oldest), '{}') as oldest_message_per_thread
+   from (
+     select thread_id, min(created_at) as oldest
+     from public.chat_messages
+     where thread_id is not null
+     group by thread_id
+   ) as threads;
+   select id, created_at from private.child_safety_holds
+   where deleted_at is null and created_at > timestamptz '<backup time>';
+   ```
+
+   A hold the last query lists exists only in the live database, and the
+   restore erases it: finish `docs/child-safety-runbook.md` §2 for it (decide,
+   and report it if it is to be reported) before going on; its block survives
+   through `active_blocks`.
+
+   **If production does not answer**, nothing can be saved, and step 4 cannot
+   undo what people did since the backup. Stop: it is an incident
+   (`docs/incident-runbook.md` §1). Heitor decides with the encarregado whether
+   to restore anyway, and the Data API stays off (step 3) until what came back
+   has been found and undone some other way.
+3. **Restore, and keep the service closed.** On the chosen backup, Restore,
+   confirm, and wait until the project answers again. Then turn the Data API
+   off at once (Project Settings › Data API, "Enable Data API"; the drill
+   proves the switch): until step 4 is done, the restored database lets a
+   removed member read the house again and a deleted account answer to its
+   Apple ID, so no phone may reach it. Auth, Storage and the SQL editor keep
+   working, which is all step 4 needs; every app request and every Edge
+   Function fails until step 5.
+4. **Undo what the backup brought back**, in this order, in the SQL editor,
+   pasting each saved value of step 2 whole where its name appears in angle
+   brackets. **If a saved value is missing, or any statement fails or reads
+   otherwise than this step says, stop with the Data API still off**: it is an
+   incident (`docs/incident-runbook.md` §1), and Heitor decides with the
+   encarregado before anything reopens.
+   - **Child-safety holds closed after the backup are open again**, their
+     content back in the database, which the law allows holding only to report
+     it (ECA art. 241-B §2 III); an account copy retention had dropped is back,
+     and so is a block that was lifted. Close, drop and lift them again, and
+     block again what was blocked since:
+
+     ```sql
+     update private.child_safety_holds as holds
+     set reported_at = (saved.value ->> 'reported_at')::timestamptz,
+         authority_receipt_at = (saved.value ->> 'authority_receipt_at')::timestamptz,
+         deleted_at = (saved.value ->> 'deleted_at')::timestamptz,
+         content = case when saved.value ->> 'deleted_at' is null then holds.content else '' end
+     from jsonb_each('<closed_holds>'::jsonb) as saved
+     where holds.id = saved.key::uuid;
+
+     delete from private.child_safety_preserved_accounts
+     where hold_id <> all ('<preserved_accounts>'::uuid[]);
+
+     select private.operator_lift_ai_block(blocks.user_id, 'restore_replay')
+     from private.nina_ai_blocks as blocks
+     where blocks.lifted_at is null
+       and not ('<active_blocks>'::jsonb ? blocks.user_id::text);
+
+     insert into private.nina_ai_blocks (user_id, reason_code)
+     select saved.key::uuid, saved.value
+     from jsonb_each_text('<active_blocks>'::jsonb) as saved
+     where exists (select 1 from auth.users where users.id = saved.key::uuid)
+     on conflict (user_id) do update
+     set reason_code = excluded.reason_code, created_at = now(),
+         lifted_at = null, lift_reason_code = null
+     where nina_ai_blocks.lifted_at is not null;
+     ```
+
+   - **Accounts deleted after the backup are back.** List them:
+
+     ```sql
+     select id, created_at from auth.users
+     where id <> all ('<accounts>'::uuid[]);
+     ```
+
+     Delete each again exactly as §2, "Deletion requests by mail", step 5 does
+     (Storage `profile-photos/<uid>/` first, then the Auth user; the trigger
+     runs `prepare_account_deletion`). A person who deleted their account was
+     told it was gone, so this is not optional (LGPD art. 18 VI). Accounts
+     created after the backup are lost instead; their owners sign in again and
+     get a new account.
+   - **Houses deleted after the backup are back.** The same comparison on
+     `public.families` with `<houses>`, after the accounts above are deleted
+     (an account deletion that left no adult deletes its house too). For each
+     house still listed, read its titular and delete it the way `delete_family`
+     does:
+
+     ```sql
+     select user_id from public.family_members
+     where family_id = '<family id>' and permission_role = 'owner';
+
+     select private.delete_household('<family id>', '<titular auth user id>');
+     ```
+
+   - **Titulars and admins read as they did at the backup**: a house handed
+     over since is its former titular's again, and an admin demoted since has
+     the powers back. List every row whose role differs from the saved one (a
+     row production no longer has counts as `member`; the next item removes
+     it):
+
+     ```sql
+     select members.id, members.family_id, members.user_id, members.permission_role,
+            coalesce('<owners_and_admins>'::jsonb ->> members.id::text, 'member') as saved_role
+     from public.family_members as members
+     where members.household_role <> 'assistant'
+       and members.permission_role
+         <> coalesce('<owners_and_admins>'::jsonb ->> members.id::text, 'member')
+     order by members.family_id;
+     ```
+
+     For each house listed, set each row to its saved role, the demotions
+     first and the titular last, then move the house's `created_by` to the
+     titular's user id, as `accept_family_ownership_offer` does:
+
+     ```sql
+     update public.family_members set permission_role = '<saved_role>'
+     where id = '<member id>';
+
+     update public.families set created_by = '<titular auth user id>', updated_at = now()
+     where id = '<family id>';
+     ```
+
+     A row that refuses `admin` or `owner` belongs to someone whose majority
+     came after the backup and whose restored age reads minor again: leave it
+     `member`, and if that leaves the house without a titular, stop.
+   - **People removed from a house, or gone from it, after the backup are back
+     in it**, and membership is the authorization boundary (`CLAUDE.md` §4).
+     List them:
+
+     ```sql
+     select id, family_id, user_id, household_role, permission_role
+     from public.family_members
+     where id <> all ('<members>'::uuid[]);
+     ```
+
+     After the accounts, houses and roles above, every row listed came back
+     after its person was removed or left. An `assistant` row, or one still
+     `owner`, cannot have: stop. Otherwise remove them again, and take the
+     house off their profiles, where a Premium bound to it would go on
+     covering it:
+
+     ```sql
+     delete from public.family_members
+     where id <> all ('<members>'::uuid[])
+       and household_role <> 'assistant'
+       and permission_role <> 'owner';
+
+     update public.profiles as profiles
+     set active_family_id = null
+     where profiles.active_family_id is not null
+       and not exists (
+         select 1 from public.family_members as members
+         where members.user_id = profiles.id
+           and members.family_id = profiles.active_family_id
+       );
+     ```
+
+     The `BEFORE DELETE` trigger on `family_members` closes a removed child's
+     or teen's links and consents again; what a removed adult held comes next.
+     Their removal notice is lost with the rest, and people who joined after
+     the backup are lost too and ask to join again.
+   - **Guardianships ended and minor consents withdrawn after the backup are
+     live again**: an adult who left the ward's house would act for the child
+     again, and a withdrawn health consent would allow health reminders. End
+     and withdraw them again, and delete again every health reminder deleted
+     since, the ones a withdrawal deleted (`set_minor_health_consent`)
+     included:
+
+     ```sql
+     update private.minor_guardianships as links
+     set ended_at = now(), end_reason = saved.value
+     from jsonb_each_text('<ended_guardianships>'::jsonb) as saved
+     where links.id = saved.key::uuid
+       and links.ended_at is null;
+
+     update private.minor_data_consents
+     set withdrawn_at = now()
+     where id = any ('<withdrawn_minor_consents>'::uuid[])
+       and withdrawn_at is null;
+
+     delete from public.tasks
+     where category_id = 'health'
+       and id <> all ('<health_tasks>'::uuid[]);
+     ```
+
+     A replayed row carries the replay's time, not the original one.
+   - **AI consents withdrawn after the backup read live again**, so the chat
+     would send that adult's words to OpenAI without consent. Withdraw them
+     again:
+
+     ```sql
+     update public.nina_ai_consents
+     set revoked_at = now(), revoke_reason = 'withdrawn'
+     where id = any ('<withdrawn_ai_consents>'::uuid[])
+       and revoked_at is null;
+     ```
+
+   - **Ages that moved toward protection after the backup read as before.**
+     For each saved row whose restored status now reads `adult`, set it back
+     with `private.operator_set_age_status('<user id>', '<saved status>',
+     '<saved band or null>', false, 'restore_replay')` and read the row back.
+   - **Memories, proposals and conversations erased after the backup are
+     back**, and would reach the model again; a memory made private since reads
+     shared again. Erase them again and make that memory private:
+
+     ```sql
+     delete from public.memory_items
+     where id <> all ('<memories>'::uuid[]);
+
+     update public.memory_items
+     set visibility = 'private', updated_at = now()
+     where id = any ('<private_memories>'::uuid[])
+       and visibility <> 'private';
+
+     delete from public.nina_proposals
+     where id <> all ('<proposals>'::uuid[]);
+
+     delete from public.chat_messages as messages
+     where messages.thread_id is not null
+       and messages.created_at < coalesce(
+         ('<oldest_message_per_thread>'::jsonb ->> messages.thread_id::text)::timestamptz,
+         'infinity'
+       );
+     ```
+
+     A conversation is erased whole (`delete_current_nina_chat_history`) and
+     retention takes the oldest messages first, so each thread keeps only what
+     is at least as new as its oldest message in production; the next
+     retention run takes anything older this leaves.
+   - **Subscriptions recorded after the backup are gone.** The subscriber's
+     phone may not send its transaction again on its own (it remembers having
+     sent it); "Restaurar compras" on the Premium sheet sends it, and so does
+     Apple's next notification for that subscription.
+   - **The month's AI budget undercounts** what OpenAI billed since the
+     backup, in the pool (`public.nina_ai_budget_months`) and in each house's
+     share (`private.nina_ai_household_budget_months`). Compare the pool with
+     OpenAI's Usage page (§2) and tell Heitor before raising anything.
+   - **Everything else reads as it stood at the backup**: tasks, lists, edits,
+     invites, join requests and their answers. The house does it again in the
+     app.
+5. **Check, then reopen.** The newest row of
+   `supabase_migrations.schema_migrations` must equal the newest migration
+   applied before the backup's time; a migration applied after it is applied
+   again (§3) while the Data API is still off. Then turn the Data API back on,
+   and run the online gate (§4), one chat turn on a test account, and the next
+   morning's maintenance run (§8, step 8).
+6. **Close.** Delete `~/nina-restore/` and empty the Trash. Record the date,
+   the backup's time and what step 4 replayed in the private records, never
+   here. A restore that lost people's data is a security incident of
+   availability: `docs/incident-runbook.md` decides whether the ANPD and the
+   people are told.
+
+### Restore drill
+
+Once before launch and then every three months, prove that a backup restores
+and how long it takes, without touching production.
+
+1. **Only with nothing sealed in the database.** A copy of a sealed
+   child-safety hold is possession of what the law allows holding only to
+   report it (ECA art. 241-B §2 III). Postpone the drill while either count is
+   above 0:
+
+   ```sql
+   select (select count(*) from private.child_safety_holds where deleted_at is null) as holds,
+          (select count(*) from private.child_safety_preserved_accounts) as preserved;
+   ```
+
+2. **Restore the newest daily backup into a new project**, never over
+   production: Dashboard › Database › Backups, "Restore to a new project", in
+   the same organization and in `sa-east-1`. If the plan does not offer it for
+   daily backups (UNVERIFIED), create an empty project `nina-restore-drill` in
+   `sa-east-1`, download the newest daily backup from the same page into
+   `~/nina-restore/` (mode 700, outside iCloud and this repository), and load
+   it with `psql --dbname '<drill connection string>' --file <backup file>`
+   (unzip it first if it ends in `.gz`; the file's exact form is UNVERIFIED).
+   Note the minutes from start to a project that answers.
+3. **Cut the copy off from production at once.** The copy carries
+   production's maintenance URL and secret, and its pg_cron would call
+   production's `nina-maintenance` at 06:15 UTC, a second run with a second
+   bill for the insights:
+
+   ```sql
+   select cron.unschedule('nina-daily-maintenance');
+   delete from private.nina_maintenance_config;
+   ```
+
+   The copy has no Edge Functions and no Auth providers configured, so nobody
+   signs in to it and nothing else calls out.
+4. **Read it, counts only:**
+
+   ```sql
+   select max(version) from supabase_migrations.schema_migrations;
+   select count(*) from auth.users;
+   select count(*) from public.families;
+   select count(*) from public.tasks;
+   select count(*) from private.account_age_status;
+   ```
+
+   The version must equal production's at the backup's time, and the counts
+   must be close to production's (it has moved on since).
+5. **Prove the restore's own steps on the copy.** Run every statement of the
+   restore's step 2 there (the values stay in the SQL editor, never saved):
+   each must answer, and each value must copy whole out of the result. Then
+   turn the copy's Data API off (Project Settings › Data API), check that
+   `curl -s -o /dev/null -w '%{http_code}\n' 'https://<drill project ref>.supabase.co/rest/v1/' -H 'apikey: <drill publishable key>'`
+   prints another code than with it on while the SQL editor still answers,
+   and turn it on again. A switch that is not there, or a statement that
+   fails, is fixed in the restore steps before the drill is recorded.
+6. **Delete the drill project** (Settings › General › Delete project) and
+   `~/nina-restore/`, and empty the Trash. Record the date, the minutes and the
+   counts in the private records; record here only the date and the minutes:
+
+   Drills: none yet.

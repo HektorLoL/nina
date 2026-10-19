@@ -1,6 +1,6 @@
 # LGPD Launch Posture - Nina
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 This is an engineering/privacy operations checklist for launch readiness. It is
 not a substitute for Brazilian legal review, but it documents the product
@@ -340,7 +340,10 @@ Recommended request handling:
   ‹auth user id›" the same way, and the same proof rules hold before any move
   (`docs/age-contest-runbook.md`).
 - Log request date, requester, verified account and the proof that verified it,
-  action taken, completion date, and retained exceptions.
+  action taken, completion date, and retained exceptions. The log is kept
+  privately (Heitor's private notes or a private spreadsheet), never in this
+  repository, which is public: an account reference is personal data even
+  without a name.
 
 ## Retention
 

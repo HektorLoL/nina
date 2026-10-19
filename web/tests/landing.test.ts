@@ -2,7 +2,6 @@ import { assert, assertEquals } from "@std/assert";
 import { resolveAppStoreListing } from "../src/appStore.ts";
 import {
   availabilityLine,
-  childDayExample,
   closingHeadline,
   exampleDescription,
   heroExample,
@@ -104,7 +103,6 @@ Deno.test("the site's examples come from the app's tour", async () => {
       todayStop.rows[1].title,
       todayStop.rows[2].title,
       tasksStop.group.rows[0].title,
-      childDayExample.rows[0].title,
     ]
   ) {
     assert(tour.includes(`"${title}"`), title);
@@ -176,7 +174,6 @@ Deno.test("no landing string shouts, uses emoji, or calls Nina an AI", async () 
       heroExample,
       tabStops,
       workloadExample,
-      childDayExample,
       landingFaq,
       proposalCopy,
       tabStops.map(exampleDescription),
@@ -219,9 +216,6 @@ Deno.test("no example screen carries a calendar date that can go stale", async (
   ];
   for (const label of labels) {
     assert(/^(Hoje|Amanhã), \d{2}:\d{2}$/.test(label), label);
-  }
-  for (const row of childDayExample.rows) {
-    assert(/^\d{2}:\d{2}$/.test(row.time), row.time);
   }
   assertEquals(ninaStop.proposal.when, "Plante depois");
   assertEquals(tasksStop.seed.label, "Plante depois");
@@ -391,13 +385,26 @@ Deno.test("every landing link lands on a section that exists, and the waitlist h
   const join = await read("../src/pages/join/index.astro");
 
   for (
-    const id of ["como-funciona", "criancas", "preco", "privacidade", "duvidas"]
+    const id of ["como-funciona", "preco", "privacidade", "duvidas"]
   ) {
     assert(page.includes(`href: "#${id}"`), id);
     assert(page.includes(`id="${id}"`), id);
   }
   assert(script.includes('window.location.hash === "#lista"'));
   assert(join.includes('href="/#lista"'));
+});
+
+Deno.test("the landing markets nothing for children, and /familias/ still describes what the app does for them", async () => {
+  const page = await landingPage();
+  const families = await read("../src/pages/familias.astro");
+
+  assertEquals(page.includes("criancas"), false);
+  assertEquals(
+    /Crianças e adolescentes|Modo criança|coloridas/.test(page),
+    false,
+  );
+  assert(families.includes("O Modo criança liga sozinho"));
+  assert(families.includes("aprovação"));
 });
 
 Deno.test("/join/ calls Nina a computer program exactly once and never asks a 'responsável' to approve", async () => {

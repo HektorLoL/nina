@@ -349,7 +349,9 @@ Nina AI V2 keeps OpenAI access in Edge Functions and adds:
 - 30-day chat and resolved-proposal retention;
 - 90-day operational-log and insight retention;
 - 50 requests per user/day in a Premium household, 10 otherwise, and 100 requests per family/day;
-- a hard monthly application budget of US$20 for chat and US$5 for insights;
+- a hard monthly application budget of US$50 for chat and US$10 for insights,
+  with at most US$5 a month of chat for any one house, set in
+  `private.nina_ai_budget_settings`;
 - daily maintenance and weekly family insights;
 - content-free run logs with token, latency, status, and cost metadata.
 

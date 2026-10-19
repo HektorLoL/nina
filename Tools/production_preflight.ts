@@ -167,6 +167,45 @@ export function ratingMarkOffenders(
     .map((source) => source.path);
 }
 
+// iCloud leaves "name 2.ext" and "folder 2" copies beside the originals, and the Supabase CLI applies or deploys them as if they were real.
+export function iCloudConflictCopies(paths: readonly string[]): string[] {
+  return paths.filter((path) => {
+    const name = path.split("/").pop() ?? "";
+    return / 2\./.test(name) || / 2$/.test(name);
+  });
+}
+
+export interface WorkingTreeEntry {
+  name: string;
+  isDirectory: boolean;
+}
+
+export const workingTreeSkippedFolders = ["node_modules", ".git"];
+
+export async function workingTreePaths(
+  root: string,
+  readDirectory: (path: string) => AsyncIterable<WorkingTreeEntry> =
+    Deno.readDir,
+): Promise<string[]> {
+  const paths: string[] = [];
+  const visit = async (relative: string): Promise<void> => {
+    const entries: WorkingTreeEntry[] = [];
+    for await (const entry of readDirectory(joinPath(root, relative))) {
+      entries.push(entry);
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory && workingTreeSkippedFolders.includes(entry.name)) {
+        continue;
+      }
+      const path = relative ? `${relative}/${entry.name}` : entry.name;
+      paths.push(path);
+      if (entry.isDirectory) await visit(path);
+    }
+  };
+  await visit("");
+  return paths.sort();
+}
+
 function isDebugCondition(condition: string): boolean {
   const trimmed = condition.trim();
   if (trimmed.includes("||")) return false;
@@ -1221,6 +1260,7 @@ export async function repositoryChecks(
   ) ?? [];
   const premiumFinishes = premiumTransactionFinishes(premiumSubscriptionStore);
   const files = await trackedFiles(root);
+  const conflictCopies = iCloudConflictCopies(await workingTreePaths(root));
   const trackedLocalSecrets = localSecretPaths.filter((path) =>
     files.includes(path)
   );
@@ -1453,6 +1493,18 @@ export async function repositoryChecks(
       deploymentTargetsAtLeast(project),
       `Every build configuration targets iOS ${minimumDeploymentTarget} or later.`,
       `Set IPHONEOS_DEPLOYMENT_TARGET to ${minimumDeploymentTarget} or later in every build configuration.`,
+    ),
+    check(
+      "repository.icloud-conflict-copies",
+      conflictCopies.length === 0,
+      'No iCloud conflict copy ("… 2" or "… 2.ext") sits in the working tree.',
+      `Delete the iCloud conflict copies before any db push, deploy or local database gate: ${
+        conflictCopies.slice(0, 10).join(", ")
+      }${
+        conflictCopies.length > 10
+          ? ` and ${conflictCopies.length - 10} more`
+          : ""
+      }`,
     ),
     check(
       "repository.ci-preflight",

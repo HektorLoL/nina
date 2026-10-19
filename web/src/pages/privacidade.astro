@@ -4,7 +4,7 @@ import Brand from "../components/Brand.astro";
 import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
 
-const updatedAt = "14 de outubro de 2026";
+const updatedAt = "19 de outubro de 2026";
 const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
 const reportMailto = `mailto:${legalIdentity.reportContactEmail}`;
 const dpoMailto = legalIdentity.dpoContactEmail
@@ -234,11 +234,13 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
 
       <h2>6. Compartilhamento e operadores</h2>
       <p>
-        Compartilhamos dados apenas com operadores necessários para operar a Nina, como Supabase
-        para autenticação, banco de dados, storage e funções de backend, em servidores em São Paulo;
-        OpenAI para processamento de IA; Apple para autenticação, verificação de idade e
-        distribuição do app; um provedor de envio de email para o aviso de lançamento; e provedores
-        de hospedagem do site. Esses operadores devem tratar dados conforme nossas instruções e
+        Compartilhamos dados apenas com operadores necessários para operar a Nina: a Supabase, para
+        autenticação, banco de dados, storage e funções de backend, em servidores em São Paulo; a
+        OpenAI, para processamento de IA (seção 6A); a Apple, para autenticação, verificação de
+        idade e distribuição do app; a Cloudflare, que hospeda este site, recebe as inscrições na
+        lista de lançamento e encaminha os emails enviados ao endereço de privacidade; os provedores
+        de email do encarregado e da controladora, que recebem esses emails; e a Resend, que envia o
+        único email do aviso de lançamento. Esses operadores devem tratar dados conforme nossas instruções e
         medidas de segurança.
       </p>
 
@@ -352,8 +354,10 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
         </li>
         <li>
           Conteúdo de aparente abuso sexual de crianças ou adolescentes fica lacrado só para
-          comunicar às autoridades e é apagado quando a Polícia Federal confirma o recebimento. Os
-          dados da conta e os metadados ficam pelo prazo que a lei exige.
+          comunicar às autoridades. Ele é apagado quando a Polícia Federal valida a comunicação, ou,
+          enquanto o sistema dela para essas comunicações não estiver aberto, quando a autoridade
+          que recebeu o caso confirma o recebimento. Se a autoridade pedir, ele fica por mais tempo.
+          Os dados da conta e os metadados ficam pelo prazo que a lei exige.
         </li>
         <li>
           Os dados de uma conta ligada a esse conteúdo ficam guardados, mesmo depois de a conta ser

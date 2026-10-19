@@ -607,7 +607,7 @@ Deno.test("insecure local mode refuses a non-loopback project URL", () => {
 });
 
 Deno.test("the embedded root is Apple's self-signed App Attestation Root CA", async () => {
-  const [root] = rootCertificatesFrom(undefined);
+  const [root] = rootCertificatesFrom(undefined, "");
   assertEquals(
     root.subject,
     "CN=Apple App Attestation Root CA, O=Apple Inc., ST=California",
@@ -615,7 +615,91 @@ Deno.test("the embedded root is Apple's self-signed App Attestation Root CA", as
   assert(await root.verify({ publicKey: root.publicKey, signatureOnly: true }));
   const rootDER = new Uint8Array(root.rawData);
   assert(await certificateSignedBy(rootDER, rootDER));
-  assertEquals(rootCertificatesFrom(appleAppAttestRootPEM).length, 1);
+  assertEquals(rootCertificatesFrom(appleAppAttestRootPEM, "").length, 1);
+});
+
+Deno.test("a root other than Apple's is trusted only on a loopback project", async () => {
+  const device = await testDevice(appleChain);
+  const overridePEM = device.root.toString("pem");
+  const appleRoot =
+    "CN=Apple App Attestation Root CA, O=Apple Inc., ST=California";
+  const testRoot = "CN=Test App Attestation Root, O=Nina Tests";
+
+  for (
+    const url of [
+      "https://apemftmlsjocvifbptum.supabase.co",
+      "https://localhost:54321",
+      "http://10.0.0.5:54321",
+      "not a url",
+      "",
+    ]
+  ) {
+    assertEquals(
+      rootCertificatesFrom(overridePEM, url).map((root) => root.subject),
+      [appleRoot],
+      url,
+    );
+  }
+  for (
+    const url of [
+      "http://127.0.0.1:54321",
+      "http://localhost:54321",
+      "http://kong:8000",
+    ]
+  ) {
+    assertEquals(
+      rootCertificatesFrom(overridePEM, url).map((root) => root.subject),
+      [testRoot],
+      url,
+    );
+  }
+  for (const blank of [undefined, "", "  \n"]) {
+    assertEquals(
+      rootCertificatesFrom(blank, "http://127.0.0.1:54321").map((root) =>
+        root.subject
+      ),
+      [appleRoot],
+    );
+  }
+
+  const clientDataHash = await registrationClientDataHash(challenge(1), userID);
+  const attestation = await device.attestation(clientDataHash);
+  await assertRejects(
+    () =>
+      verifyAttestation({
+        attestation,
+        keyID: device.keyID,
+        clientDataHash,
+        mode: "production",
+        rootCertificates: rootCertificatesFrom(
+          overridePEM,
+          "https://apemftmlsjocvifbptum.supabase.co",
+        ),
+        now,
+      }),
+    AppAttestError,
+  );
+  const local = await verifyAttestation({
+    attestation,
+    keyID: device.keyID,
+    clientDataHash,
+    mode: "production",
+    rootCertificates: rootCertificatesFrom(
+      overridePEM,
+      "http://127.0.0.1:54321",
+    ),
+    now,
+  });
+  assertEquals(local.environment, "production");
+
+  const source = await Deno.readTextFile(
+    new URL("../age-signal/index.ts", import.meta.url),
+  );
+  assert(
+    source.includes(
+      'Deno.env.get("APPLE_APP_ATTEST_ROOT_CA_PEM"),\n      supabaseURL,',
+    ),
+  );
 });
 
 Deno.test("a device certificate a P-384 CA signs over SHA-256, as Apple's CA does, registers end to end", async () => {
@@ -856,7 +940,7 @@ async function appleSample(
       decodeBase64(sample.challenge) ?? new Uint8Array(),
     ),
     mode,
-    rootCertificates: rootCertificatesFrom(undefined),
+    rootCertificates: rootCertificatesFrom(undefined, ""),
     now: new Date(at),
     appID: nodeAppAttestAppID as string | undefined,
   };

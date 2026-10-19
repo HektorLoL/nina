@@ -1,6 +1,6 @@
 # Nina web — the azulejo pass
 
-Last updated: 2026-10-14
+Last updated: 2026-10-19
 
 The site was rebuilt onto the azulejo system on 2026-08-14, three days after the
 iOS app. Sources: the `Advertisement` page of the Paper file (`A1` hero, `A2`
@@ -337,8 +337,9 @@ azulejo system, with every example now read from the app.
   "Hoje, 08:00": in the tour it falls due yesterday at 18:00, which the app
   writes as a calendar date ("13 out., 18:00") because `taskDueLabel` has no
   "Ontem", and a calendar date on a marketing page goes stale. "Vacina" is
-  tomorrow, not two days out, for the same reason. "Dar água para o Paçoca" in the
-  child's day and both Nina bubbles exist only on the site; the hero's message is
+  tomorrow, not two days out, for the same reason. Both Nina bubbles exist only
+  on the site (the child's day example went with the Crianças section on
+  2026-10-19); the hero's message is
   `TourSample.message` with "sexta" changed to "amanhã". No example carries a
   date that can age, and a test fails on one.
 - **Avatars use the app's MemberTone tints** (ink, `#5C6675`, `#B4BDC9`), the
@@ -349,11 +350,15 @@ azulejo system, with every example now read from the app.
   "Sem dono" light (5, 1 and 1 open tasks, an average of 3, which the app would
   draw exactly so). Where the axis cannot fit three equal thirds, each row says
   its band, as `TourHouseExample` does.
-- **Two new sections, Crianças and Preço.** Crianças states what the server
-  enforces for minors and links `/familias/`; the nav says "Crianças"
-  (`#criancas`) so it never shares a name with the footer's "Famílias". Preço
-  carries the prices `Nina/Nina.storekit` sells, the house ceiling the app
-  prints, "até 24 horas antes da renovação" and a link to the Terms.
+- **Two new sections, Crianças and Preço.** Crianças stated what the server
+  enforces for minors and linked `/familias/`; it was cut on 2026-10-19
+  (Heitor's choice 2), with its nav link and the kids-mode line, as the App
+  Store description's children block had been on 2026-10-15. The features
+  are unchanged in the app; `/familias/`, reached from the footer's
+  "Famílias", still describes them, and a landing test fails if the section
+  returns. Preço carries the prices `Nina/Nina.storekit` sells, the house
+  ceiling the app prints, "até 24 horas antes da renovação" and a link to the
+  Terms.
 - **Type and colour.** Every eyebrow is faint; the cobalt slogans are gone, and
   cobalt is left for the primary action, the mark, the bands and text links.
   Landing sections share one H2 size (`.section h2`); the policy pages, the

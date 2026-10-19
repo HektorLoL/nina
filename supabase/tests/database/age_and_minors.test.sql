@@ -331,16 +331,17 @@ select set_config('test.member_owner', (select id::text from public.family_membe
 select set_config('test.member_ana', (select id::text from public.family_members where user_id = 'a1000000-0000-4000-8000-000000000005'), true);
 select set_config('test.member_davi', (select id::text from public.family_members where user_id = 'a1000000-0000-4000-8000-000000000002'), true);
 
-insert into public.tasks (id, family_id, title, subtitle, owner_member_id, category_id)
+-- Written a week ago, so the weekly insight's last whole week counts them.
+insert into public.tasks (id, family_id, title, subtitle, owner_member_id, category_id, created_at)
 values
-  ('a3000000-0000-4000-8000-000000000001', current_setting('test.family')::uuid, 'Levar a mochila', 'BOLETO-SECRETO 23793.38128', current_setting('test.member_minor')::uuid, 'school'),
-  ('a3000000-0000-4000-8000-000000000002', current_setting('test.family')::uuid, 'Pagar a luz', 'Vence dia 12', current_setting('test.member_owner')::uuid, 'bills'),
-  ('a3000000-0000-4000-8000-000000000003', current_setting('test.family')::uuid, 'Consertar a pia', '', current_setting('test.member_davi')::uuid, 'home'),
-  ('a3000000-0000-4000-8000-000000000004', current_setting('test.family')::uuid, 'Comprar tinta', '', current_setting('test.member_ana')::uuid, 'home'),
-  ('a3000000-0000-4000-8000-000000000005', current_setting('test.family')::uuid, 'Lixo', '', null, 'home'),
-  ('a3000000-0000-4000-8000-000000000006', current_setting('test.family')::uuid, 'Varrer', '', current_setting('test.member_owner')::uuid, 'home');
+  ('a3000000-0000-4000-8000-000000000001', current_setting('test.family')::uuid, 'Levar a mochila', 'BOLETO-SECRETO 23793.38128', current_setting('test.member_minor')::uuid, 'school', now() - interval '7 days'),
+  ('a3000000-0000-4000-8000-000000000002', current_setting('test.family')::uuid, 'Pagar a luz', 'Vence dia 12', current_setting('test.member_owner')::uuid, 'bills', now() - interval '7 days'),
+  ('a3000000-0000-4000-8000-000000000003', current_setting('test.family')::uuid, 'Consertar a pia', '', current_setting('test.member_davi')::uuid, 'home', now() - interval '7 days'),
+  ('a3000000-0000-4000-8000-000000000004', current_setting('test.family')::uuid, 'Comprar tinta', '', current_setting('test.member_ana')::uuid, 'home', now() - interval '7 days'),
+  ('a3000000-0000-4000-8000-000000000005', current_setting('test.family')::uuid, 'Lixo', '', null, 'home', now() - interval '7 days'),
+  ('a3000000-0000-4000-8000-000000000006', current_setting('test.family')::uuid, 'Varrer', '', current_setting('test.member_owner')::uuid, 'home', now() - interval '7 days');
 
-insert into public.shopping_items (family_id, title) values (current_setting('test.family')::uuid, 'Cerveja');
+insert into public.shopping_items (family_id, title, created_at) values (current_setting('test.family')::uuid, 'Cerveja', now() - interval '7 days');
 insert into public.memory_items (family_id, title, visibility) values (current_setting('test.family')::uuid, 'Memória da casa', 'shared');
 insert into public.household_insights (family_id, title) values (current_setting('test.family')::uuid, 'Resumo');
 insert into public.family_snapshots (family_id, data) values (current_setting('test.family')::uuid, '{}');

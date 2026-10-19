@@ -121,6 +121,15 @@ export function encodeBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+export function isLoopbackProject(supabaseURL: string): boolean {
+  try {
+    const url = new URL(supabaseURL);
+    return url.protocol === "http:" && loopbackHosts.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 // Development and insecure-local attestations are refused unless the project
 // itself is a loopback stack, so a misconfigured production cannot relax.
 export function resolveAppAttestMode(
@@ -130,14 +139,7 @@ export function resolveAppAttestMode(
   const mode = rawMode?.trim();
   if (mode === "production") return "production";
   if (mode !== "development" && mode !== "insecure-local") return null;
-  try {
-    const url = new URL(supabaseURL);
-    return url.protocol === "http:" && loopbackHosts.has(url.hostname)
-      ? mode
-      : null;
-  } catch {
-    return null;
-  }
+  return isLoopbackProject(supabaseURL) ? mode : null;
 }
 
 type CBORValue =
@@ -458,10 +460,15 @@ async function signedBy(
   );
 }
 
+// A root other than Apple's is trusted only on a loopback stack, so a secret
+// set on the hosted project can never let a forged attestation chain in.
 export function rootCertificatesFrom(
   override: string | undefined,
+  supabaseURL: string,
 ): x509.X509Certificate[] {
-  const source = override?.trim() ? override : appleAppAttestRootPEM;
+  const source = override?.trim() && isLoopbackProject(supabaseURL)
+    ? override
+    : appleAppAttestRootPEM;
   return source
     .split(/(?=-----BEGIN CERTIFICATE-----)/)
     .map((pem) => pem.trim())
@@ -878,7 +885,7 @@ export async function handleAgeSignalRequest(
           ),
           mode,
           rootCertificates: dependencies.rootCertificates ??
-            rootCertificatesFrom(undefined),
+            rootCertificatesFrom(undefined, ""),
           now: dependencies.now?.() ?? new Date(),
         });
       } catch {

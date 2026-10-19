@@ -536,8 +536,11 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   está lendo essa mensagem. Espere um instante." as the error note, never as
   Nina's line, but only while the first run could still answer
   (`AppStore.lostTurnMayStillBeRunning`: 240 s after the uncertain attempt,
-  longer than nina-chat's own timeouts let any run last, about 195 s with every
-  tool round); after that the next send is a new turn. The window reads
+  longer than any nina-chat turn may spend on OpenAI: 50 s since 2026-10-19,
+  `ninaTurnBudgetMs` in §7, and about 195 s with every tool round before; the
+  Deno "the turn budget ends well before the app lets go of a lost turn" fails
+  unless the budget stays under half the window); after that the next send is
+  a new turn. The window reads
   `AppStore.now`, the store's injectable clock, which also stamps the person's
   line (locked by
   `…testALostTurnStillInProgressPastItsLastPossibleAnswerIsLetGoAndTheNextSendIsANewTurn`).
@@ -676,12 +679,33 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   `moderateOutput` runs `omni-moderation-latest` on the reply and the proposal
   text before `complete_nina_chat_run`; a flag replaces the reply with "Não
   consigo ajudar com isso aqui.", drops the proposals and logs
-  `nina_output_moderated` with no content. A request for diagnosis, symptoms,
-  medication choice or dose is answered before any model call by
-  `asksForMedicalGuidance` ("Isso é com um profissional de saúde. Posso lembrar
-  você de ligar ou marcar a consulta."); a reminder is not a request, but a
-  change of dose is refused even when it mentions a reminder ("Acho a dose alta.
-  Reduza pela metade e atualize os lembretes." never reaches the model). The
+  `nina_output_moderated` with no content. The weekly insight's words are
+  moderated the same way since 2026-10-19: `nina-maintenance` runs each
+  insight's title, message and metric through moderation before
+  `complete_nina_insight_run`, and a flagged insight is never stored
+  (`insight_moderated`, its spend booked as a failed run). A request for
+  diagnosis, symptoms, medication choice or dose is answered before any model
+  call by `asksForMedicalGuidance` ("Isso é com um profissional de saúde. Posso
+  lembrar você de ligar ou marcar a consulta."); a reminder is not a request,
+  but a change of dose is refused even when it mentions a reminder ("Acho a dose
+  alta. Reduza pela metade e atualize os lembretes." never reaches the model).
+  Every deterministic shortcut (`deterministicSensitiveReply` in
+  `_shared/nina-chat-policy.ts`: the medical refusal, a legal conclusion, an
+  investment decision) matches whole words with accents folded since
+  2026-10-19; until then substrings refused "leite" ("lei" with "validade"),
+  "educação" ("ação"), "separe" ("pare"), "a receita do bolo" and "o dinheiro
+  da mesada todo sábado". "Receita" is a prescription only within four words
+  of a medicine or dose word, "dinheiro" alone is no investment and "ação" is
+  one only beside a market word (bolsa, comprar, vender, investir). Naming an
+  investment is not asking for one: only an all-in ("todo o dinheiro", "tudo
+  em bitcoin"), a pick asked of Nina ("Qual o melhor investimento?"), an order
+  to invest, buy or sell, or a promised return meets the investment refusal.
+  A request that is not a question and reminds, notes, schedules, or creates a
+  task, list, reminder or meeting meets neither the legal nor the investment
+  refusal, as a reminder never met the medical one short of a change of dose.
+  The eval's six `false-refusal-*` cases prove
+  those turns answered, and the Deno "the eval proves the false refusals
+  answered and the true ones refused" ties the fixture to the code. The
   prompt forbids sexual, violent, discriminatory, profane and drug content,
   offering a romantic or sensual version of it, and medical or emotional
   guidance, and tells Nina the aliases are people of the house — each line
@@ -723,7 +747,10 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   reports, since the deletion takes their conversation as clearing it would.
 - **Every `/v1/responses` call carries `safety_identifier`**, hex SHA-256 of
   `NINA_SAFETY_ID_SALT` ‖ user id. It is never logged, and a missing or short
-  salt refuses the turn with `503 service_not_configured`.
+  salt refuses the turn with `503 service_not_configured`. The weekly insight's
+  calls carry the same hash of the salt ‖ the family id since 2026-10-19, and
+  without the salt `nina-maintenance` runs retention and skips every insight
+  (`nina_insights_skipped`, `safety_salt_not_configured`).
 - **Chat threads are per-adult, not per-family.** `nina_threads` is unique on
   (family_id, owner_user_id); one adult's private conversation must never reach
   another adult's context, tools, or weekly insight.
@@ -758,9 +785,32 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   send it and keeps that model's older in-memory cache (minutes). Asserted by
   source-scanning tests.
 - **The monthly budget is a database CHECK**, not application logic:
-  `reserved_microusd + spent_microusd <= cap_microusd`, US$20/mo interactive +
-  US$5/mo insights. Reserve-then-settle: failed runs must still book actual
-  spend (`record_failed_nina_ai_run`), or induced failures run past the cap.
+  `reserved_microusd + spent_microusd <= cap_microusd`, on the pool
+  (`nina_ai_budget_months`) and on each house's share of it
+  (`private.nina_ai_household_budget_months`). The caps live in one row,
+  `private.nina_ai_budget_settings` (since 2026-10-19, migration
+  `202610190001`; before, each reservation hard-coded US$20 and US$5):
+  US$50/mo interactive, US$10/mo insights and US$5/mo of conversation for any
+  one house, which a CHECK keeps at no more than a tenth of the pool. Every
+  reservation reads the row and copies it onto the month's rows, so one
+  `update` moves a cap the same month (runbook §3, "The AI budget of 19
+  October"). A turn reserves on its house's share, then on the pool, and
+  nothing ever locks a house share after a pool row: every settle books all
+  the house shares it touches before any pool row, and pool rows in month
+  order. `private.settle_abandoned_ai_runs` and `settle_household_ai_runs` sum
+  their runs per row to keep it, because settling run by run took one house's
+  share, the pool, then another house's share, and deadlocked against a turn
+  holding that share (reproduced locally on 2026-10-19). A house past its share
+  is refused with `nina_budget_exceeded`, like a spent pool, so `nina-chat`
+  answers 429 `monthly_budget_reached` and every build shows the paused
+  conversation.
+  Reserve-then-settle: failed runs must still book actual spend
+  (`record_failed_nina_ai_run`), or induced failures run past the cap, and a
+  run nothing settled within fifteen minutes is booked at its whole
+  reservation by `private.settle_abandoned_ai_runs`, which the daily
+  `run_nina_retention` runs first. A daily sweep is enough: it moves money from
+  reserved to spent and frees nothing, so running it more often would change
+  no refusal.
   A reservation must never be smaller than the run it covers: GPT-5.6 and later
   bill prompt-cache writes (`cache_write_tokens`) at 1.25× input, so
   `estimateMaximumCostMicrousd` prices every input token at the higher of the
@@ -775,7 +825,12 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
 - **Logs are content-free.** Only run ids, model, token counts, cost, latency,
   and stable codes. A test greps every `console.info(JSON.stringify({…}))` and
   fails if it references `body.message`, `assistant_reply`, `attachments`, or
-  `structured.reply`.
+  `structured.reply`. A failed chat turn or insight is logged and stored in
+  `nina_ai_runs.error_code` only as a code from the closed list in
+  `_shared/nina-openai.ts` (`failureCode`; anything else reads `unknown_error`)
+  plus the upstream HTTP status as a number, never an error's message: a
+  `JSON.parse` error quotes the model's output. Until 2026-10-19 both functions
+  logged and stored `error.message`.
 - **Insight prompt constraint:** *"Não atribua culpa, intenção, saúde mental ou
   valor moral."* You cannot show a couple a fairness chart without it becoming a
   weapon; the prompt is where that is prevented.
@@ -1470,20 +1525,34 @@ bare specifier — its lint task forbids an inline `npm:` prefix — so its
 platform bundler cannot resolve the import and the deploy fails with 400.
 
 - **`nina-chat`** — the assistant turn. Order is load-bearing and asserted by
-  "the turn runs in the order the product promises": adult gate →
-  `begin_nina_chat_run` (idempotent on `message_id`, claims rate limits, reserves
-  budget, and refuses untrusted, blocked or outdated-consent callers) → context
-  and `get_nina_model_roster` → `Pseudonymizer` → input moderation on the
-  pseudonymized text (child-safety hold on `sexual/minors`) → deterministic
-  safety shortcuts, the medical refusal included → token pre-count → model +
-  tool loop (every body pseudonymized, `safety_identifier` on every call) →
-  `restoreDeep` → output moderation → `fillMissingDueAt` →
+  "the turn runs in the order the product promises": adult gate → attachments
+  switch → `begin_nina_chat_run` (idempotent on `message_id`, claims rate
+  limits, reserves budget, and refuses untrusted, blocked or outdated-consent
+  callers) → context and `get_nina_model_roster` → `Pseudonymizer` → input
+  moderation on the pseudonymized text (child-safety hold on `sexual/minors`)
+  → deterministic safety shortcuts, the medical refusal included → token
+  pre-count → model + tool loop (every body pseudonymized, `safety_identifier`
+  on every call) → `restoreDeep` → output moderation → `fillMissingDueAt` →
   `complete_nina_chat_run`. The context carries `local_now` from the same clock
   the fill uses, and `nina_run_completed` logs `due_at_filled`, the count of
   proposals the fill dated — how often the model alone left a named day null.
   Model `gpt-6-luna` at reasoning effort `medium` (since 2026-09-23; low effort
   lost two cases in the eval) via OpenAI Responses, strict `json_schema`,
-  ≤3 proposals, ≤2 extra tool rounds / ≤4 tool calls, 32k input cap, 35s timeout.
+  ≤3 proposals, ≤2 extra tool rounds / ≤4 tool calls, 32k input cap. Every
+  OpenAI call goes through `postOpenAI` in `_shared/nina-openai.ts` (since
+  2026-10-19): 35 s per model call, 20 s per token count and 15 s per
+  moderation, one retry 500 ms after a 429 or a 5xx, and the whole turn capped
+  at 50 s from the request (`ninaTurnBudgetMs`): no call starts with under 1 s
+  left and no retry without room for it, so a run that hits the cap fails as
+  `turn_deadline_exceeded` and answers `502 assistant_unavailable` (the app's
+  generic line). Photos and documents are refused with `403
+  attachments_disabled` after the adult gate and before `begin_nina_chat_run`,
+  so nothing is stored or charged, unless the Edge Function secret
+  `NINA_ATTACHMENTS_ENABLED` reads exactly `true` (`attachmentsEnabled`; unset
+  means off, which is production's state). The app knows no such code: it
+  reads it as `.unavailable`, takes the line back, returns the words and
+  attachments to the composer and shows "Não deu para a Nina responder agora.
+  Tente de novo.", and no build sends an attachment while its own flag is `NO`.
   The body is capped at 12 MiB (`maxNinaChatRequestBytes`): the 8 MiB attachment
   ceiling as base64, plus the slashes Swift's `JSONEncoder` escapes. A larger
   body is read to its end and thrown away (up to 32 MiB, see §12), then gets
@@ -1493,7 +1562,9 @@ platform bundler cannot resolve the import and the deploy fails with 400.
   accounts that have had no house for 30 days
   (`list_minor_accounts_due_for_deletion` → `deleteAccountInOrder`), then ≤25
   weekly insights on `gpt-6-luna` at effort `low` with a `gpt-5.4-mini` fallback
-  (since 2026-09-23; `gpt-5.5` before), each input pseudonymized.
+  (since 2026-09-23; `gpt-5.5` before), each input pseudonymized, each call
+  carrying the household's `safety_identifier` and the chat's one retry, and
+  each output moderated before it is stored (§4, since 2026-10-19).
 - **`delete-account`** — all logic is in `_shared/delete-account.ts` behind an
   injectable `DeleteAccountBackend`; `index.ts` is a thin adapter. The body is
   exactly one of the three in §4 (self, self with an Apple authorization code,
@@ -1508,7 +1579,10 @@ platform bundler cannot resolve the import and the deploy fails with 400.
   (the assertion over the stored key, a rising counter, the challenge consumed,
   then `record_age_signal` as service_role). Each step accepts exactly its own
   keys. `NINA_APP_ATTEST_MODE` must be `production`; `development` and
-  `insecure-local` are refused unless the project URL is loopback. Every
+  `insecure-local` are refused unless the project URL is loopback, and so is
+  `APPLE_APP_ATTEST_ROOT_CA_PEM` since 2026-10-19: `rootCertificatesFrom`
+  trusts a root other than Apple's embedded one only on a loopback project and
+  ignores the secret on the hosted one. Every
   signal that leaves an account not adult also removes its profile photos.
   **Chain links are verified with `@noble/curves` on each certificate's own
   DER, never through WebCrypto** (`certificateSignedBy`; `@peculiar/x509` only
@@ -1611,7 +1685,11 @@ CI's `npm audit --audit-level=high`. Every deviation from the Paper boards is in
   2).
   `/familias/` is the App Store Age Suitability URL and `/denuncia/` the
   published report procedure (ECA Digital arts. 16 and 29–33); neither page
-  may state a capability the server does not enforce.
+  may state a capability the server does not enforce. The landing markets
+  nothing for children since 2026-10-19 (Heitor's choice 2: its "Crianças"
+  section and kids-mode line went, as the App Store description's had on
+  2026-10-15); `/familias/` alone describes the minor features, and
+  `web/tests/landing.test.ts` fails if the section returns.
 - **The FAQ couples web to app.** `/suporte/` (the App Store Support URL)
   renders `web/src/support.ts`, and `web/tests/support.test.ts` fails unless it
   equals `SupportContent.topics` in `Nina/SupportView.swift`, the screen behind
@@ -2082,7 +2160,11 @@ npx --yes supabase@2.110.0 db lint --local --fail-on error && npx --yes supabase
 Never run `test db` from an export outside the home folder (`/tmp`, the
 scratchpad): colima mounts only the home folder into its VM, so the test
 container sees an empty folder and reports `Files=0` and `Result: NOTESTS`
-with exit 0, a pass that tested nothing (seen 2026-10-14).
+with exit 0, a pass that tested nothing (seen 2026-10-14). Since 2026-10-19
+`repository.icloud-conflict-copies` fails the repository preflight while any
+`… 2.ext` file or `… 2` folder sits anywhere in the working tree outside
+`node_modules` and `.git`, so `deno task preflight:repo` says when to clean up
+before a push, a deploy or a local reset.
 
 **`deno.json` enumerates individual files, not directories.** A new
 `web/src/*.ts` or `_shared/*.ts` module is neither formatted, linted, nor
@@ -2134,16 +2216,21 @@ failure looks like "every receipt is invalid" with an empty error. The local
 reproduction is `supabase functions serve` with a throwaway function, which
 runs the same runtime container as production.
 
-**`nina_ai_budget_months` is one global row per (month, purpose), not per
-family.** One heavy household can exhaust the US$20 cap and every other user
-starts getting 429 `monthly_budget_reached`.
+**`nina_ai_budget_months` is one global row per (month, purpose), and each
+house has its own share of the conversation pool.** Until 2026-10-19 one heavy
+household could exhaust the whole US$20 cap and every other user got 429
+`monthly_budget_reached`. Since migration `202610190001` a house holds at most
+US$5 of the US$50 pool a month (`private.nina_ai_household_budget_months`), so
+it takes ten houses at their share to pause everyone. The insights pool
+(US$10) has no house share: a house gets at most one insight a week.
 
 **Moderation runs *after* `begin_nina_chat_run`**, so a flagged message still
 consumes quota. This ordering is deliberate and asserted by a test — do not
 "optimize" it. It reads the *pseudonymized* text, so the moderation provider
 never sees a minor's name either. Note that document attachments are never
 moderated; only text and images are — one more reason attachments stay off for
-the all-ages launch (`NINA_ATTACHMENTS_ENABLED = NO`).
+the all-ages launch (`NINA_ATTACHMENTS_ENABLED = NO`), and nina-chat refuses
+them itself unless its own secret reads `true` (§7).
 
 **Production Auth must have one provider on: Apple.** Email is still on until
 the runbook §2 dashboard step is done (§13). Email login existed until
@@ -2588,7 +2675,11 @@ the project, not bugs to fix unprompted.
   análise prévia through the Sistema ClassInd (the App Store is not part of
   IARC; the filing needs a video of every feature open to classification, plus
   an access link, login and password when full access needs them), not filed
-  yet; and if the Ministry rates Nina lower, the constant goes back down. Build
+  yet; and if the Ministry rates Nina lower, the constant goes back down.
+  Release waits for it (Heitor's choice 4, 2026-10-19): version 1.0 goes to
+  App Review with "Manually release this version", and Release is pressed
+  only after the análise prévia's result or a written yes from ClassInd
+  (`docs/production-launch-runbook.md` §8, launch day). Build
   18 (2026-10-18, tagged `testflight-1.0-18`) is the
   first to carry the 14 mark on the welcome and the startup screen; builds up
   to 17 still draw "L", and from build 19 the app draws no mark at all (§5). The Terms page reads "Atualizados em 18 de outubro de

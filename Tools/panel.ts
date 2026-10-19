@@ -315,7 +315,7 @@ async function collectLive(root: URL): Promise<LiveSystem[]> {
     name: "AI spend",
     state: "not-yet",
     detail:
-      "US$20/mo chat + US$5/mo insights, capped in the database; no run recorded yet",
+      "US$50/mo chat + US$10/mo insights (at most US$5/mo of chat per house), capped in private.nina_ai_budget_settings; no run recorded yet",
   });
 
   return systems;

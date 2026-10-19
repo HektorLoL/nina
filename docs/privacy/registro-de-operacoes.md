@@ -1,6 +1,6 @@
 # Record of Processing Operations - Nina
 
-Last updated: 2026-10-15
+Last updated: 2026-10-19
 
 LGPD art. 37 asks the controller and each processor to keep a record of the
 processing operations they carry out, especially those based on legitimate
@@ -361,8 +361,12 @@ processors and transfers, retention, and the controls that hold it in place.
   requester, verified account, action, completion date).
 - **Basis:** legal obligation (art. 7 II; LGPD arts. 18-19; Lei 15.211 arts.
   28-30).
-- **Stored:** the `ninai.app` mailbox. The mailbox provider is not recorded in
-  the repository; record it here.
+- **Stored:** the privacy address is a Cloudflare Email Routing rule that
+  forwards each message to the encarregado's own mailbox, which keeps it and
+  forwards a copy to the mailbox of the controller's owner, which keeps that
+  copy; neither mailbox's provider is recorded in the repository. The request
+  log is kept privately, outside this public repository
+  (`docs/production-launch-runbook.md` §2, "Deletion requests by mail").
 - **Retention:** no period is set yet; the controller sets one here.
 - **Controls:** the in-app "Escrever denúncia" attaches no household data; the
   acknowledgement target is 48 hours (the controller's choice; the law sets
@@ -446,9 +450,10 @@ the synced copies already recorded above.
 | Supabase | Processor | Auth, database, storage, Edge Functions (R1-R17) | Project in `sa-east-1`, São Paulo |
 | OpenAI OpCo, LLC | Processor | Model calls for the chat and the insight (R9-R11) | United States; processing country not guaranteed |
 | Apple | Identity, age signal and attestation provider; seller on its own account | Sign in with Apple, Declared Age Range, App Attest, App Store (R1, R4, R13, R16) | Apple's infrastructure |
-| Cloudflare | Processor | Website and Worker (R17-R19) | Global network |
+| Cloudflare | Processor | Website and Worker (R17-R19); routing of the privacy address (R15) | Global network |
 | Resend | Processor | Sending the one launch email (R17) | UNVERIFIED |
-| Mailbox provider of `ninai.app` | Processor | Report and privacy mail (R15) | Not recorded yet |
+| Provider of the encarregado's mailbox | Processor | Report and privacy mail, after Cloudflare forwards it (R15) | Not recorded yet |
+| Provider of the controller owner's mailbox | Processor | The copy of report and privacy mail the encarregado's mailbox forwards (R15) | Not recorded yet |
 
 Whether Supabase Inc., Cloudflare and Resend, all United States companies,
 create transfers of their own beyond the São Paulo storage is UNVERIFIED. The

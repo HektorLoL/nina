@@ -239,25 +239,6 @@ export function workloadDescription(): string {
   return `Exemplo do sinal de sobrecarga, em três faixas: leve, parecido e mais pesado. ${rows} Não há número nenhum.`;
 }
 
-export const childDayExample = {
-  eyebrow: "Hoje · 2",
-  rows: [
-    { title: "Arrumar a mochila", time: "07:00", glyph: "backpack" },
-    { title: "Dar água para o Paçoca", time: "18:00", glyph: "paw" },
-  ] as const satisfies readonly {
-    title: string;
-    time: string;
-    glyph: TrayGlyph;
-  }[],
-  meta: "Só o título, a hora e o ícone.",
-};
-
-export function childDayDescription(): string {
-  const rows = childDayExample.rows.map((row) => `${row.title}, ${row.time}.`)
-    .join(" ");
-  return `Exemplo do dia de uma criança: hoje, ${childDayExample.rows.length}. ${rows}`;
-}
-
 export function initial(name: string): string {
   return Array.from(name.trim())[0]?.toLocaleUpperCase("pt-BR") ?? "";
 }

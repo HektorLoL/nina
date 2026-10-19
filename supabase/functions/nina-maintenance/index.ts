@@ -14,15 +14,27 @@ import {
   insightFallbackModel,
   insightModel,
   insightResponseSchema,
+  isSafetySalt,
   maxInputTokens,
   maxInsightOutputTokens,
-  OpenAIResponsePayload,
+  type OpenAIResponsePayload,
   pricingForModel,
   pricingVersion,
-  safeErrorCode,
+  safetyIdentifier,
   shouldUseInsightFallback,
   usageFromResponse,
 } from "../_shared/nina-ai.ts";
+import {
+  failureCode,
+  insightTexts,
+  moderate,
+  moderationTexts,
+  NinaFailure,
+  type OpenAIAnswer,
+  postOpenAI,
+  upstreamFailure,
+  upstreamStatus,
+} from "../_shared/nina-openai.ts";
 
 type WeeklyCandidate = {
   family_id: string;
@@ -139,24 +151,19 @@ async function deleteMinorAccountsWithoutAHouse(
   return { deleted, failed };
 }
 
-async function openAIRequest(
+function openAIRequest(
   path: string,
   apiKey: string,
   body: Record<string, unknown>,
-): Promise<{ response: Response; payload: OpenAIResponsePayload }> {
-  const response = await fetch(`https://api.openai.com${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(45_000),
-  });
-  return {
-    response,
-    payload: await response.json() as OpenAIResponsePayload,
-  };
+): Promise<OpenAIAnswer> {
+  return postOpenAI(path, apiKey, body, { timeoutMs: 45_000 });
+}
+
+function bookedUsage(answers: OpenAIResponsePayload[]) {
+  return answers.reduce(
+    (usage, answer) => addUsage(usage, usageFromResponse(answer)),
+    emptyUsage(),
+  );
 }
 
 Deno.serve(async (request: Request) => {
@@ -171,6 +178,7 @@ Deno.serve(async (request: Request) => {
     "SUPABASE_SERVICE_ROLE_KEY",
   );
   const openAIKey = Deno.env.get("OPENAI_API_KEY") ?? "";
+  const safetySalt = Deno.env.get("NINA_SAFETY_ID_SALT");
   if (!supabaseURL || !secretKey) {
     return jsonResponse({ error: "service_not_configured" }, 503);
   }
@@ -210,10 +218,10 @@ Deno.serve(async (request: Request) => {
 
   const minorAccounts = await deleteMinorAccountsWithoutAHouse(admin);
 
-  if (!openAIKey) {
+  const insightsSkipped = (code: string) => {
     console.warn(JSON.stringify({
       event: "nina_insights_skipped",
-      code: "openai_not_configured",
+      code,
     }));
     return jsonResponse({
       retention,
@@ -224,6 +232,13 @@ Deno.serve(async (request: Request) => {
       failed: 0,
       insights: "skipped_not_configured",
     }, retentionError || waitlistRetentionError ? 503 : 200);
+  };
+
+  if (!openAIKey) return insightsSkipped("openai_not_configured");
+  // No insight reaches OpenAI without the safety identifier every chat turn
+  // carries, so a missing salt skips them all.
+  if (!isSafetySalt(safetySalt)) {
+    return insightsSkipped("safety_salt_not_configured");
   }
 
   const { data, error } = await admin.rpc("get_nina_weekly_candidates");
@@ -285,11 +300,13 @@ Deno.serve(async (request: Request) => {
       );
       const countValue =
         (count.payload as unknown as { input_tokens?: number }).input_tokens;
-      if (!count.response.ok || typeof countValue !== "number") {
-        throw new Error("token_count_unavailable");
+      if (!count.ok || typeof countValue !== "number") {
+        throw new NinaFailure("token_count_unavailable");
       }
       inputTokens = countValue;
-      if (inputTokens > maxInputTokens) throw new Error("input_too_large");
+      if (inputTokens > maxInputTokens) {
+        throw new NinaFailure("input_too_large");
+      }
     } catch {
       failedCount += 1;
       continue;
@@ -318,15 +335,20 @@ Deno.serve(async (request: Request) => {
     let aggregateUsage = emptyUsage();
     let actualCost = 0;
     try {
+      const householdSafetyIdentifier = await safetyIdentifier(
+        safetySalt,
+        candidate.family_id,
+      );
       let generated = await openAIRequest("/v1/responses", openAIKey, {
         ...tokenRequest,
         store: false,
         reasoning: { effort: "low" },
         max_output_tokens: maxInsightOutputTokens,
         prompt_cache_options: { mode: "explicit" },
+        safety_identifier: householdSafetyIdentifier,
       });
 
-      const primaryUsage = usageFromResponse(generated.payload);
+      const primaryUsage = bookedUsage(generated.answers);
       aggregateUsage = addUsage(aggregateUsage, primaryUsage);
       actualCost += calculateActualCostMicrousd(
         primaryUsage,
@@ -334,8 +356,8 @@ Deno.serve(async (request: Request) => {
       );
 
       if (
-        !generated.response.ok
-        && shouldUseInsightFallback(generated.response.status, generated.payload)
+        !generated.ok
+        && shouldUseInsightFallback(generated.status, generated.payload)
       ) {
         usedModel = insightFallbackModel;
         generated = await openAIRequest("/v1/responses", openAIKey, {
@@ -345,8 +367,9 @@ Deno.serve(async (request: Request) => {
           reasoning: { effort: "low" },
           max_output_tokens: maxInsightOutputTokens,
           prompt_cache_key: "nina-weekly-insights-v2",
+          safety_identifier: householdSafetyIdentifier,
         });
-        const fallbackUsage = usageFromResponse(generated.payload);
+        const fallbackUsage = bookedUsage(generated.answers);
         aggregateUsage = addUsage(aggregateUsage, fallbackUsage);
         actualCost += calculateActualCostMicrousd(
           fallbackUsage,
@@ -354,18 +377,29 @@ Deno.serve(async (request: Request) => {
         );
       }
 
-      if (!generated.response.ok) {
-        throw new Error(safeErrorCode(generated.payload));
+      if (!generated.ok) {
+        throw upstreamFailure(generated.status);
       }
 
       const outputText = extractOutputText(generated.payload);
-      if (!outputText) throw new Error("invalid_assistant_response");
-      const structured = JSON.parse(outputText) as {
-        insights?: unknown[];
-      };
-      if (!Array.isArray(structured.insights) || structured.insights.length === 0) {
-        throw new Error("invalid_assistant_response");
+      if (!outputText) throw new NinaFailure("invalid_assistant_response");
+      let structured: { insights?: unknown[] };
+      try {
+        structured = JSON.parse(outputText) as { insights?: unknown[] };
+      } catch {
+        throw new NinaFailure("invalid_assistant_response");
       }
+      if (!Array.isArray(structured.insights) || structured.insights.length === 0) {
+        throw new NinaFailure("invalid_assistant_response");
+      }
+
+      // The insight's own words are moderated before any real name is put
+      // back, and a flagged insight is never stored for the house to read.
+      const verdict = await moderate(
+        openAIKey,
+        moderationTexts(insightTexts(structured.insights)),
+      );
+      if (verdict.flagged) throw new NinaFailure("insight_moderated");
 
       const latency = Math.round(performance.now() - startedAt);
       await admin
@@ -385,7 +419,7 @@ Deno.serve(async (request: Request) => {
           request_latency_ms: latency,
         },
       );
-      if (completeError) throw new Error("persistence_failed");
+      if (completeError) throw new NinaFailure("persistence_failed");
 
       completedCount += 1;
       console.info(JSON.stringify({
@@ -398,9 +432,7 @@ Deno.serve(async (request: Request) => {
       }));
     } catch (caught) {
       failedCount += 1;
-      const code = caught instanceof Error
-        ? caught.message.slice(0, 120)
-        : "unknown_error";
+      const code = failureCode(caught);
       await admin.rpc("record_failed_nina_ai_run", {
         target_run_id: runID,
         failure_code: code,
@@ -416,6 +448,7 @@ Deno.serve(async (request: Request) => {
         run_id: runID,
         family_id: candidate.family_id,
         code,
+        upstream_status: upstreamStatus(caught),
       }));
     }
   }

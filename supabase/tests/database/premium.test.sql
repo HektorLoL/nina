@@ -587,16 +587,18 @@ select ok(
   'anonymous callers cannot move a house level switch'
 );
 
-insert into public.tasks (family_id, title)
+insert into public.tasks (family_id, title, created_at)
 select
   '82000000-0000-0000-0000-000000000001'::uuid,
-  'Tarefa da casa que paga ' || slot::text
+  'Tarefa da casa que paga ' || slot::text,
+  now() - interval '7 days'
 from generate_series(1, 5) as slot;
 
-insert into public.tasks (family_id, title)
+insert into public.tasks (family_id, title, created_at)
 select
   '82000000-0000-0000-0000-000000000002'::uuid,
-  'Tarefa da casa vizinha ' || slot::text
+  'Tarefa da casa vizinha ' || slot::text,
+  now() - interval '7 days'
 from generate_series(1, 5) as slot;
 
 set local role service_role;
