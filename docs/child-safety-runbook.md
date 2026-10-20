@@ -93,7 +93,11 @@ Then decide:
     pedidos de informação"
     (`https://www.mpf.mp.br/servicos/mpf-servicos-internas/denuncias`: tick
     "Li e aceito os termos acima descritos", then "Entrar com o GOV.BR"; read
-    on 2026-10-20). It takes a company "por meio de seus representantes ou
+    on 2026-10-20). Heitor's MPF account exists since 2026-10-20; in the
+    Sistema Cidadão choose "Cadastrar Nova Manifestação" › "Sala de
+    Atendimento ao Cidadão" (never "Ouvidoria", which takes complaints about
+    the MPF itself), set "Tipo de Manifestação" to "Denúncia/Representação"
+    and write the filing in "O que aconteceu?" (20,000 characters at most). It takes a company "por meio de seus representantes ou
     prepostos" at any hour. File it as the company's legal representative,
     signed in with Heitor's own gov.br account (level bronze or higher; the
     page says gov.br is for natural persons only, and the company's CNPJ goes
