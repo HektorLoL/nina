@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -112,7 +112,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 26.4+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (55 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (57 files) |
 | Server logic | 6 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -724,15 +724,28 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   message storage, blocks the account's chat (`nina_ai_blocks`,
   `child_safety_hold`), answers with the generic refusal and logs only
   `child_safety_hold_created` and the run id. The hold carries the account and
-  house ids with no foreign key, and an account deleted while a hold is inside
-  its preservation period (open, or receipt confirmed less than 6 months ago,
-  UNVERIFIED pending the MJSP act) is first copied into the sealed
+  house ids with no foreign key. The hold copies its account into the sealed
   `private.child_safety_preserved_accounts` (Apple `sub`, email, sign-in dates,
-  memberships, chat and memories); a house deletion takes the same copy first
+  memberships, chat and memories) the moment it is created (since 2026-10-20,
+  migration `202610200001`), after the message, and the same words wherever
+  the account sent them again, are replaced by "Mensagem não enviada.", so the
+  copy never repeats the sealed words, and a failed copy only raises
+  `child_safety_copy_failed` and never undoes the hold; before that only a
+  deletion took the copy, and the daily retention deleted a held account's
+  chat after 30 days. The copy stays while the hold is in its preservation
+  period (open, or receipt confirmed less than 6 months ago: Heitor's decision
+  of 2026-10-20 counts the six months from `authority_receipt_at`). An account
+  deleted inside that period merges a fresh copy into it; a house deletion takes the same copy first
   for every account the house held or that wrote in it, and every later copy
   of that account is merged into the first, never dropped (`202610150001`);
   the deletion then completes, and the block
-  follows a new account signed in with the same Apple ID while the hold stands.
+  follows a new account signed in with the same Apple ID while the hold stands
+  (`private.ai_blocked`); the held account itself answers to its own
+  `nina_ai_blocks` row alone, so the operator's lift still works while its
+  copy stays. Until NIDUS takes reports, the operator reports to the
+  Ministério Público Federal and deletes the content at its receipt unless it
+  asks in writing to keep it (Heitor's decisions of 2026-10-20, runbook §2
+  and §5).
   Retention drops a preserved account once its hold leaves the period, a false
   positive at once. The rest is `docs/child-safety-runbook.md`. A reported reply is kept past normal retention
   through `held_for_review_until`, at most 90 days. When the house is deleted
@@ -949,6 +962,42 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   never confirms whether a token was valid. Both always return
   `202 {accepted:true}`. Any deviation is an email-enumeration oracle.
 - **The raw client IP never leaves the Worker** — only `SHA-256(salt ‖ IP)`.
+- **The app's access records come from Cloudflare's header alone, and survive
+  the account** (Marco Civil art. 15, Heitor's choice 3A, migration
+  `202610200001`, 2026-10-20). `ensure_current_profile` calls
+  `private.record_app_access`; it runs on every app load, pull and realtime
+  refresh and in every RPC that returns the home context, while direct task,
+  shopping, section and category writes record nothing themselves and are
+  covered by the load or refresh around them. The IP comes from
+  `cf-connecting-ip` only (`private.request_client_address`): on 2026-10-20
+  Cloudflare refused a production request that carried its own
+  `CF-Connecting-IP` ("error code: 1000") while a forged `X-Forwarded-For`
+  passed, so a request without Cloudflare's header records nothing, and
+  `cf-connecting-ipv6` is read only when `cf-connecting-ip` holds a Class E
+  pseudo address (Cloudflare's Pseudo IPv4 mode; no client has one). A use
+  from the same address within thirty minutes widens one row (`first_seen_at`,
+  `last_seen_at`, never moved back by a slow transaction), and one account adds
+  at most 500 new address rows a day (`app_access_record_cap_reached`). The
+  source port stays null because no header carries it, although Decreto 8.771
+  art. 15-A (in force since 2026-07-20) asks for it when needed to identify
+  the terminal: getting it means routing the app's API traffic through a
+  Cloudflare zone Nina controls, a build. A chat turn goes to `nina-chat` and
+  records nothing; the record of the app use around it shows the address. A
+  failure raises the warning `app_access_record_failed` with the SQLSTATE
+  alone and never stops the load. No Edge Function reaches
+  `ensure_current_profile`, so every row is a phone's address; keep it that
+  way, or a server's IP would be recorded as the person's.
+  `private.app_access_records` has no foreign key, so a deleted account's rows
+  stay for their six months, and `run_nina_retention` deletes a row six months
+  after `last_seen_at` unless `kept_until` (an authority's request, art. 15 §2)
+  or a preserved hold on that account keeps it. They leave only on a court
+  order or inside the child-safety report the law requires (ECA Digital art.
+  27; runbook §2 and §7). The operator reads them by procedure through
+  `private.operator_read_access_records`, which logs each read with the
+  reader, the case and the target in `private.app_access_record_reads`
+  (Decreto 8.771 art. 13 III, kept five years); `postgres` owns the table, so
+  nothing in the database stops a plain `select`. Locked by
+  `access_records.test.sql`.
 - **Misconfiguration fails closed, never guesses.** No production fallback
   endpoint or key, anywhere.
 - **A child's list carries a task's title, hour and category glyph, nothing
@@ -1393,7 +1442,7 @@ is longer than a word budget, the legal text wins.
 
 ## 6. Database
 
-55 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+57 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order. The eight
 `202609290001`–`…0008` files (age assurance, minors and guardianship, adult-only
 RLS, join and house rules, the minor home view, the AI gates, the insight and
@@ -1483,7 +1532,8 @@ too — `account_age_status`, `age_policy`, `age_signal_challenges`,
 `minor_guardianships`, `minor_data_consents`, `account_terms_acceptances`,
 `minor_acknowledgements`, `minor_usage_days`, `nina_reply_reports`,
 `child_safety_holds` — so the public RLS canary stays at 27 and
-`age_and_minors.test.sql` covers them instead. Guardianship, consent and
+`age_and_minors.test.sql` covers them instead; `app_access_records` (since
+2026-10-20) is covered by `access_records.test.sql`. Guardianship, consent and
 acceptance proof is kept 5 years after closing, with user ids nulled on
 deletion and `SHA-256(salt ‖ uid)` kept.
 

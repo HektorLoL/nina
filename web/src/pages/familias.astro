@@ -6,7 +6,7 @@ import RatingMark from "../components/RatingMark.astro";
 import { legalIdentity } from "../legal";
 import { ninaRating } from "../rating";
 
-const updatedAt = "18 de outubro de 2026";
+const updatedAt = "20 de outubro de 2026";
 const ratingReason = ninaRating.code === "14"
   ? " Essa classificação vem da assinatura do Nina Premium e da conversa com a inteligência artificial, mesmo que as duas sejam só para adultos: contas de menores não assinam e não conversam com a Nina."
   : "";
@@ -224,8 +224,10 @@ const capabilities: ReadonlyArray<{
         (mãe, pai ou responsável legal), as tarefas atribuídas e as marcações de feito, lembretes de
         saúde se o responsável autorizar. De quem tem conta, também o identificador de login da
         Apple, a faixa de idade informada pela Apple com o modo como ela foi obtida, e os minutos de
-        uso por dia. A Nina não guarda data de nascimento de menores, não pede email a menores, e
-        apaga o email e a foto do perfil quando uma conta passa a ser de menor.
+        uso por dia. De toda conta, de qualquer idade, a Nina guarda também a data, a hora e o
+        endereço IP de cada uso do app (Marco Civil da Internet, art. 15). A Nina não guarda data de
+        nascimento de menores, não pede email a menores, e apaga o email e a foto do perfil quando
+        uma conta passa a ser de menor.
       </p>
       <p>
         <strong>Para quê:</strong> organizar a rotina da casa, mostrar ao menor as próprias tarefas,
@@ -248,8 +250,9 @@ const capabilities: ReadonlyArray<{
       <p>
         <strong>Por quanto tempo:</strong> enquanto o perfil ou a conta existirem; minutos de uso por
         30 dias; um pedido de entrada não aprovado some em 7 dias; uma conta de menor sem casa é
-        apagada em 30 dias; o registro das autorizações é guardado por 5 anos depois de encerrado,
-        como prova.
+        apagada em 30 dias; os registros de acesso (data, hora e IP) por 6 meses depois do último
+        uso, sob sigilo, mesmo que a conta seja apagada; o registro das autorizações é guardado por
+        5 anos depois de encerrado, como prova.
       </p>
 
       <h2>4. O que sai do Brasil, e o que nunca sai com nome</h2>

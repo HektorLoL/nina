@@ -1,6 +1,6 @@
 # Children's Impact Assessment - Nina
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 One document for every assessment the law asks of a product that children and
 adolescents are likely to use. It was written by the controller, without a
@@ -102,7 +102,10 @@ A child is under 12 and an adolescent is 12 to 17 (ECA art. 2; ECA Digital art.
   a 30-minute limit, no nudges, health off until a separate consent.
 - **Retention.** Usage minutes 30 days, unapproved minor requests 7 days, a
   minor account without a house 30 days, consent proof 5 years after it ends
-  (the burden of proof of LGPD art. 8 §2).
+  (the burden of proof of LGPD art. 8 §2). Since 2026-10-20 a minor's account,
+  like every account, also has access records (IP and time of each app use,
+  Marco Civil art. 15) kept six months after the last use, past the account's
+  deletion, with no age, band or content in them.
 
 ## 5. Best interest, purpose by purpose
 

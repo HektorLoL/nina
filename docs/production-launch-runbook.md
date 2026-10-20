@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -1054,6 +1054,18 @@ manifest, compares every public release value with the approved inventory, scans
 the complete app payload for high-confidence server credentials, and checks the
 archive signing team and identity. A direct `.app` can be used during
 development, but produces a warning because it cannot prove archive signing.
+
+### What the next build carries
+
+Build 20 is the release candidate. If another build is cut before submission,
+it also carries these, found on 2026-10-20 and not worth a build alone:
+
+- The account deletion sheet says what stays by law: the access records for
+  the rest of their six months (Marco Civil art. 15) and the guardianship and
+  consent proof for five years. Apple's account-deletion guidance asks for it;
+  the privacy policy already says it.
+- `Nina/PrivacyInfo.xcprivacy` lists the data types Nina collects
+  (`NSPrivacyCollectedDataTypes`), matching `docs/privacy/app-store-privacy-labels.md`.
 
 ### Uploading a TestFlight build from the command line
 

@@ -1,6 +1,6 @@
 # Record of Processing Operations - Nina
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 LGPD art. 37 asks the controller and each processor to keep a record of the
 processing operations they carry out, especially those based on legitimate
@@ -65,7 +65,11 @@ processors and transfers, retention, and the controls that hold it in place.
   Apple's given name when there is one. Accounts created with builds up to 10
   still hold the formatted full name Apple shared then in their Auth metadata,
   and their display name, and the member name a house copied, is that full name
-  until they rename in Perfil.
+  until they rename in Perfil. Supabase Auth also keeps, for each signed-in
+  session, the IP address and the device's user agent it was created from
+  (`auth.sessions`, read on 2026-10-20: every session row carries both), until
+  the session ends on sign-out or account deletion. Supabase Auth's audit log
+  (`auth.audit_log_entries`) held no rows that day.
 - **Source:** Sign in with Apple; for an adult whom Apple gave no name, and for
   every minor or account of unknown age, the person.
 - **Basis:** contract execution (art. 7 V); for a minor, the guardian's consent
@@ -333,9 +337,13 @@ processors and transfers, retention, and the controls that hold it in place.
   15.211/2025 art. 27; Decreto 12.880/2026 art. 39).
 - **Subjects:** the reporting adult; the account involved.
 - **Data:** report reason code and message reference; block reason code;
-  sealed text of a flagged message with its run and family; for an account
-  deleted while its hold is preserved, a sealed copy of its Auth user id, Apple
-  `sub`, email, creation and last sign-in dates, memberships, chat and memories.
+  sealed text of a flagged message with its run and family; for the account
+  that wrote it, a sealed copy of its Auth user id, Apple `sub`, email,
+  creation and last sign-in dates, memberships, chat and memories, taken when
+  the hold is created (since 2026-10-20) and merged again if the account or
+  its house is deleted while the hold is preserved. The copy is taken after
+  the flagged message is replaced by its marker, so it never repeats the
+  sealed text.
 - **Basis:** legal obligation (art. 7 II; Lei 15.211 arts. 27-29); for reply
   reports that concern no child, legitimate interest (art. 7 IX), never for
   health data.
@@ -345,12 +353,15 @@ processors and transfers, retention, and the controls that hold it in place.
 - **Access:** the operator only, in the SQL editor, following
   `docs/child-safety-runbook.md`.
 - **Retention:** reviewed reports 6 months; lifted blocks 1 year; held content
-  until the Polícia Federal confirms receipt, then deleted; account data and
-  metadata for the period art. 27 §2 requires, implemented as six months after
-  receipt (UNVERIFIED until the MJSP act), and dropped at once for a hold
-  emptied as a false positive.
-- **Gaps:** the Polícia Federal intake channel and the MJSP act are
-  UNVERIFIED.
+  until the authority confirms receipt (the Ministério Público Federal until
+  NIDUS opens; then the CNCA's validation, Portaria MJSP 1.312 art. 23), or
+  longer if the authority asks in writing, then deleted; account data and
+  metadata for six months after that moment (`authority_receipt_at`, Heitor's
+  decision of 2026-10-20), and dropped at once for a hold emptied as a false
+  positive.
+- **Gaps:** NIDUS does not take reports yet; the interim channel and the
+  deletion rule are Heitor's decisions without counsel
+  (`docs/child-safety-runbook.md` §5).
 
 ### R15. Report channel and privacy requests by email
 
@@ -442,6 +453,55 @@ Local notifications (scheduled on the iPhone, no server push, no task detail
 line in the body), the protected household snapshot, profile, consent, pending
 invite and a minor's usage counter. They never leave the device except through
 the synced copies already recorded above.
+
+### R21. Access records (Marco Civil art. 15)
+
+- **Purpose:** keep the access records an application provider must keep
+  (Lei 12.965/2014 art. 15), so a court order can be answered, the
+  child-safety report the law requires can carry them, and for security.
+- **Subjects:** every account that uses the app, adults and minors alike.
+- **Data:** the account id, the IP address each use came from, and the date
+  and time it started and last continued (a use from the same address within
+  thirty minutes widens one record; at most 500 new address records per
+  account a day). The address is the one Cloudflare passes as
+  `cf-connecting-ip`, which Cloudflare refuses to take from a client (tested
+  on production on 2026-10-20); nothing a client claims is recorded. A chat
+  turn goes to an Edge Function and is covered only by the record of the app
+  use around it, and so are direct task and shopping writes.
+- **Source:** written by the server inside `ensure_current_profile`, which
+  every app load, pull, realtime refresh and home-context RPC runs; the app
+  sends nothing new.
+- **Basis:** legal obligation (art. 7 II; Lei 12.965 art. 15); wherever art.
+  15 does not bind the controller (see Gaps), legitimate interest in security
+  and in answering court orders (art. 7 IX).
+- **Minors:** yes, as for every account; no age, band or content is recorded,
+  and the privacy policy's and `/familias/` children's sections say so.
+- **Stored:** `private.app_access_records`, reachable by no client role, with
+  no foreign key, so a deleted account's records stay for their six months.
+- **Access:** the operator only, by procedure through
+  `private.operator_read_access_records`, which logs every read made through it
+  (who, when it started and finished, the case, the account or address, the
+  period, the rows returned) in `private.app_access_record_reads` (Decreto
+  8.771 art. 13 III; that log is kept five years). `postgres`, the SQL
+  editor's role, owns the table, so a plain `select` reads it unlogged and
+  nothing in the database can stop that role. Handed over only on a court
+  order, or inside the child-safety report the law requires (Lei 15.211 art.
+  27; Portaria MJSP 1.312 art. 9 X) (`docs/child-safety-runbook.md` §2 and §7).
+- **Retention:** six months after the last use, then deleted by the daily
+  retention; longer while an authority's request (`kept_until`, art. 15 §2,
+  which lapses without a court filing in 60 days) or a preserved child-safety
+  hold on the account requires it.
+- **Controls:** pgTAP `access_records.test.sql` (no API role reads or writes
+  them; only Cloudflare's address counts; the daily cap; retention; survival
+  of deletion; every read through the operator function logged).
+- **Gaps:** the source port, which Decreto 8.771 art. 15-A (Decreto
+  12.975/2026, in force since 2026-07-20) asks for whenever it is needed to
+  identify the terminal, never reaches Nina behind Supabase's gateway, so
+  `source_port` is empty; getting it needs the app's traffic to pass through a
+  Cloudflare zone Nina controls, which needs a build. The decree is
+  challenged (ADI 7981, no injunction on 2026-10-20). Whether an Inova Simples
+  company is a "pessoa jurídica" bound by art. 15 is unsettled (a DREI letter
+  of 2022 says it has no legal personality); Nina keeps the records anyway.
 
 ## 4. Processors and other recipients
 

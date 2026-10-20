@@ -4,7 +4,7 @@ import Brand from "../components/Brand.astro";
 import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
 
-const updatedAt = "19 de outubro de 2026";
+const updatedAt = "20 de outubro de 2026";
 const privacyMailto = `mailto:${legalIdentity.privacyContactEmail}`;
 const reportMailto = `mailto:${legalIdentity.reportContactEmail}`;
 const dpoMailto = legalIdentity.dpoContactEmail
@@ -115,9 +115,10 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
         listas de compras, mensagens, anexos, documentos, fotos, memórias confirmadas e insights;
         preferências de uso e consentimento; email, nome opcional, idioma e origem do formulário
         quando você entra voluntariamente na lista de lançamento; e dados técnicos necessários
-        para autenticação, segurança, sincronização, prevenção de abuso, custo e diagnóstico. A
-        proteção contra abuso da lista usa um identificador criptográfico temporário e não
-        armazena o endereço IP bruto.
+        para autenticação, segurança, sincronização, prevenção de abuso, custo e diagnóstico.
+        Guardamos também registros de acesso ao app: a data e a hora de cada uso e o endereço IP de
+        onde ele veio. A proteção contra abuso da lista usa um identificador
+        criptográfico temporário e não armazena o endereço IP bruto.
       </p>
       <p>
         Também tratamos a faixa de idade da conta (nunca a data de nascimento) e como a Apple a
@@ -141,8 +142,10 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
         (mãe, pai ou responsável legal), as tarefas atribuídas e as marcações de feito, lembretes de
         saúde se o responsável autorizar. De quem tem conta, também o identificador de login da
         Apple, a faixa de idade informada pela Apple com o modo como ela foi obtida, e os minutos de
-        uso por dia. A Nina não guarda data de nascimento de menores, não pede email a menores, e
-        apaga o email e a foto do perfil quando uma conta passa a ser de menor.
+        uso por dia. De toda conta, de qualquer idade, a Nina guarda também a data, a hora e o
+        endereço IP de cada uso do app (Marco Civil da Internet, art. 15). A Nina não guarda data de
+        nascimento de menores, não pede email a menores, e apaga o email e a foto do perfil quando
+        uma conta passa a ser de menor.
       </p>
       <p>
         <strong>Para quê:</strong> organizar a rotina da casa, mostrar ao menor as próprias tarefas,
@@ -153,7 +156,8 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
         <strong>Com que base:</strong> consentimento específico e em destaque da mãe, do pai ou do
         responsável legal (LGPD, art. 14, §1º), dado no app e registrado com data, versão do texto e
         quem consentiu; para lembretes de saúde, um consentimento separado (art. 11, I). A faixa de
-        idade é tratada para cumprir a lei (Lei 15.211/2025, art. 14) e só para isso.
+        idade é tratada para cumprir a lei (Lei 15.211/2025, art. 14) e só para isso. Os registros
+        de acesso têm a mesma base dos de qualquer conta (seção 7).
       </p>
       <p>
         <strong>Quem vê:</strong> os adultos da casa veem os perfis e as tarefas. O menor vê só as
@@ -171,8 +175,9 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
       <p>
         <strong>Por quanto tempo:</strong> enquanto o perfil ou a conta existirem; minutos de uso por
         30 dias; um pedido de entrada não aprovado some em 7 dias; uma conta de menor sem casa é
-        apagada em 30 dias; o registro das autorizações é guardado por 5 anos depois de encerrado,
-        como prova.
+        apagada em 30 dias; os registros de acesso (data, hora e IP) por 6 meses depois do último
+        uso, sob sigilo, mesmo que a conta seja apagada; o registro das autorizações é guardado por
+        5 anos depois de encerrado, como prova.
       </p>
       <p>
         <strong>Direitos:</strong> o responsável legal exerce os direitos do menor (LGPD, art. 18,
@@ -241,7 +246,10 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
         lista de lançamento e encaminha os emails enviados ao endereço de privacidade; os provedores
         de email do encarregado e da controladora, que recebem esses emails; e a Resend, que envia o
         único email do aviso de lançamento. Esses operadores devem tratar dados conforme nossas instruções e
-        medidas de segurança.
+        medidas de segurança. A autoridades, entregamos dados só quando a lei manda: por ordem
+        judicial, e na comunicação de conteúdo de aparente abuso sexual de crianças ou adolescentes
+        que a lei exige (Lei 15.211/2025, art. 27), que leva o conteúdo, a data e a hora, os
+        identificadores e os dados da conta ligada a ele e os registros de acesso dela.
       </p>
 
       <section class="policy-highlight" aria-labelledby="envio-para-fora">
@@ -310,6 +318,11 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
         </li>
         <li>Segurança e prevenção de abuso: legítimo interesse, nunca para dados de saúde.</li>
         <li>
+          Registros de acesso ao app: cumprimento de obrigação legal (art. 7º, II; Marco Civil da
+          Internet, art. 15) e, se essa obrigação não alcançar a controladora, legítimo interesse
+          em segurança e em atender ordens judiciais (art. 7º, IX).
+        </li>
+        <li>
           Denúncias e conteúdo retido para comunicar às autoridades: cumprimento de obrigação legal
           (Lei 15.211/2025, art. 27).
         </li>
@@ -364,6 +377,18 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
           apagada, pelo prazo que a lei exige, lacrados e só para as autoridades.
         </li>
         <li>
+          Os registros de acesso ao app (data, hora e endereço IP) ficam 6 meses depois do último
+          uso, sob sigilo, pelo prazo do Marco Civil da Internet (art. 15), mesmo depois de a conta
+          ser apagada. Só saem por ordem judicial, ou na comunicação às autoridades de conteúdo de
+          aparente abuso sexual de crianças ou adolescentes ligado à conta, que a lei exige. Ficam
+          mais tempo se uma autoridade pedir, ou enquanto a conta estiver ligada a esse conteúdo.
+        </li>
+        <li>
+          Cada leitura desses registros fica anotada, com o motivo, quem leu, a conta ou o endereço
+          IP consultado, o período e quantos registros havia, por 5 anos (Decreto 8.771/2016, art.
+          13, III).
+        </li>
+        <li>
           Inscrições na lista de lançamento são removidas após 24 meses sem nova confirmação, ou
           antes disso quando o consentimento é retirado. Os identificadores temporários de
           prevenção de abuso da lista expiram em até 24 horas.
@@ -371,7 +396,7 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
         <li>
           Quando você apaga a conta pelo app, apagamos as fotos de perfil, o conteúdo da Nina ligado
           à conta e a participação nas casas, e também pedimos à Apple que encerre o vínculo do
-          login com a Apple dessa conta.
+          login com a Apple dessa conta. Os registros de acesso ficam pelo prazo dito acima.
         </li>
       </ul>
 
@@ -409,6 +434,9 @@ const openAISubprocessorsLabel = openAISubprocessorsURL.replace(/^https:\/\//, "
         Usamos autenticação, regras de acesso por casa e por idade, escopo privado para conversas
         adultas, storage privado para fotos de perfil, verificação do aparelho para registrar a
         faixa de idade, retenção automática e funções de backend para manter segredos fora do app.
+        Os registros de acesso ficam numa área do banco de dados que nenhum app e nenhuma chave
+        pública alcançam; só a controladora os lê, e a consulta que ela usa registra cada leitura
+        com o motivo.
         Nenhum sistema é infalível; caso identifiquemos incidente relevante, seguiremos as
         obrigações legais aplicáveis.
       </p>

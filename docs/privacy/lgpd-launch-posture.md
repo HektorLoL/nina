@@ -1,6 +1,6 @@
 # LGPD Launch Posture - Nina
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 This is an engineering/privacy operations checklist for launch readiness. It is
 not a substitute for Brazilian legal review, but it documents the product
@@ -80,6 +80,14 @@ Nina processes:
   moderation flagged as sexual content involving minors).
 - Operational data: rate limits, AI run cost/token/latency/status metadata,
   backend request diagnostics.
+- Access records (Marco Civil art. 15, since 2026-10-20): per account, of any
+  age, the IP address Cloudflare passes as `cf-connecting-ip` and the date and
+  time each use started and last continued (one record per thirty minutes
+  from the same address), in `private.app_access_records`, which no API role
+  reaches; each operator read is logged in `private.app_access_record_reads`.
+  The source port is not recorded (a gap against Decreto 8.771 art. 15-A).
+  Supabase Auth also keeps the IP and user agent of each signed-in session in
+  `auth.sessions` until it ends.
 - On-device diagnostics: Apple MetricKit crash, hang, launch, and performance
   payloads kept in a bounded local archive, excluded from backup and not
   uploaded automatically.
@@ -106,6 +114,7 @@ Nina processes:
 | Transfer to OpenAI in the United States | Specific, highlighted consent to the transfer (art. 33 VIII) | Separate required checkbox on the consent card, recorded as `transfer_consented_at`; a grant without it is refused. |
 | Security, abuse prevention, rate limits, backend diagnostics | Legitimate interest, never for health data | Content-free logs; no ad tracking. |
 | Reports and child-safety holds | Legal obligation (Lei 15.211 art. 27; Decreto 12.880 art. 39) | Sealed table no client role reaches; runbook `docs/child-safety-runbook.md`. |
+| App access records | Legal obligation (art. 7 II; Lei 12.965 art. 15); legitimate interest (art. 7 IX) wherever art. 15 does not bind the controller | Sealed private table; read by procedure only through `private.operator_read_access_records`, which logs each read; handed over only on a court order or inside the child-safety report Lei 15.211 art. 27 requires (runbook §7). |
 | Launch notification emails | Consent | Unchecked consent box, versioned consent record, cancellation link in every email, and privacy-mailbox fallback. |
 | Required retention or legal requests | Legal obligation | Policy reserves legally required retention. |
 
@@ -362,9 +371,16 @@ Implemented backend retention:
 - Guardianship, consent and acceptance proof: 5 years after it ends, with the
   user id nulled on deletion and the salted hash kept (LGPD art. 8 §2 burden of
   proof).
-- Child-safety holds: sealed until the Polícia Federal confirms receipt, then
-  deleted; account data and metadata kept for the period Lei 15.211 art. 27 §2
-  requires.
+- Child-safety holds: sealed until the authority confirms receipt (the
+  Ministério Público Federal until NIDUS takes reports, Heitor's decision of
+  2026-10-20), or longer if it asks in writing, then deleted; the account's
+  copy, data and metadata kept six months after that receipt (Lei 15.211 art.
+  27 §2), the copy taken when the hold is created.
+- App access records: six months after their last use, deleted by
+  `run_nina_retention`, longer while an authority's request (`kept_until`) or
+  a preserved child-safety hold keeps them; they carry no foreign key, so they
+  outlive the account for the rest of that period. The log of operator reads:
+  five years.
 - Launch waitlist: 24 months from the last consent submission, or earlier after
   withdrawal.
 - Waitlist abuse fingerprints: up to 24 hours and stored separately from email.
@@ -483,8 +499,11 @@ automatically. See `docs/production-launch-runbook.md` for ownership and order.
   `/privacidade` (`data-legal-launch="ready"`).
 - Confirm `privacidade@ninai.app` and the report mailbox are monitored, and
   that the 48-hour acknowledgement on `/denuncia/` can be met.
-- Confirm the Polícia Federal intake channel for child-safety reports and the
-  CVV number (188) shown on `/familias/` before launch; both are UNVERIFIED.
+- The interim channel for child-safety reports is the Ministério Público
+  Federal until NIDUS takes reports (Heitor's decision of 2026-10-20,
+  `docs/child-safety-runbook.md` §2 and §5); register Nina in NIDUS as soon as
+  the Polícia Federal opens it. The CVV number (188) was read at its official
+  source on 2026-10-19.
 - Confirm the ClassInd symbol colours and artwork against gov.br/mj, settle
   the App Review questions in `docs/privacy/classificacao-indicativa.md`, and
   file the análise prévia through the Sistema ClassInd (its §6).

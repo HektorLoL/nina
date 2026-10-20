@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(202);
+select plan(204);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -888,6 +888,19 @@ select is(
   'a report holds the reply and the message that caused it for review'
 );
 
+insert into public.chat_messages
+select (
+  jsonb_populate_record(
+    null::public.chat_messages,
+    to_jsonb(messages) || jsonb_build_object(
+      'id', 'a5000000-0000-4000-8000-0000000000f1',
+      'created_at', messages.created_at - interval '1 minute'
+    )
+  )
+).*
+from public.chat_messages as messages
+where messages.id = 'a5000000-0000-4000-8000-000000000001';
+
 set local role service_role;
 
 select lives_ok(
@@ -909,7 +922,44 @@ select ok(
   'no API role can read a held message'
 );
 
+select ok(
+  (select text = 'Mensagem não enviada.' from public.chat_messages where id = 'a5000000-0000-4000-8000-0000000000f1')
+    and exists (
+      select 1
+      from private.child_safety_preserved_accounts as preserved
+      join private.child_safety_holds as holds on holds.id = preserved.hold_id
+      where holds.run_id = current_setting('test.run')::uuid
+        and preserved.user_id = 'a1000000-0000-4000-8000-000000000001'
+        and preserved.messages @> '[{"id": "a5000000-0000-4000-8000-000000000001", "text": "Mensagem não enviada."}]'::jsonb
+        and not preserved.messages::text like '%Oi Nina%'
+    ),
+  'a hold seals the same words sent again and copies its account at once, so the copy never repeats them'
+);
+
+insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at)
+values ('apple-subject-ana', 'a1000000-0000-4000-8000-000000000001', '{"sub":"apple-subject-ana"}', 'apple', now(), now());
+
+update private.child_safety_preserved_accounts
+set apple_subject = 'apple-subject-ana'
+where user_id = 'a1000000-0000-4000-8000-000000000001';
+
 delete from private.nina_ai_blocks where user_id = 'a1000000-0000-4000-8000-000000000001';
+
+select ok(
+  exists (
+    select 1
+    from auth.identities
+    join private.child_safety_preserved_accounts as preserved on preserved.apple_subject = identities.provider_id
+    where identities.user_id = 'a1000000-0000-4000-8000-000000000001'
+  )
+    and not private.ai_blocked('a1000000-0000-4000-8000-000000000001'),
+  'the held account answers to its own block alone, so lifting it works while its copy, Apple ID included, stays'
+);
+
+delete from auth.identities where provider_id = 'apple-subject-ana';
+update private.child_safety_preserved_accounts
+set apple_subject = null
+where user_id = 'a1000000-0000-4000-8000-000000000001';
 update public.family_members set birth_date = '1990-05-05' where id = current_setting('test.member_ana')::uuid;
 
 set local role authenticated;
