@@ -938,6 +938,63 @@ talking. The weekly summary covers the last whole Monday-to-Sunday week and
 comes at most once a week; before, a covered house with five events in the
 last seven days was chosen again every night.
 
+### Access records and the hold's own copy (`202610200001`)
+
+Heitor's choices of 2026-10-20 (1A 2A 3A, "go database"). Migration
+`202610200001_access_records_and_hold_copy.sql` adds the Marco Civil art. 15
+access records (`private.app_access_records`, written from
+`ensure_current_profile` with Cloudflare's `cf-connecting-ip` alone) and the
+logged operator read (`private.operator_read_access_records`,
+`private.app_access_record_reads`); makes `hold_nina_chat_run_for_child_safety`
+seal the same words wherever the account sent them again and copy the account
+into `private.child_safety_preserved_accounts` at once, a failed copy never
+undoing the hold; lets `private.ai_blocked`'s copy clause skip the held account
+itself; and has `run_nina_retention` delete access records six months after
+their last use and read-log lines after five years. It needs no function
+deploy and no build. The privacy page and `/familias/` that describe the
+records go live first (`Atualizada em 20 de outubro de 2026`), then the
+migration.
+
+Read-only pre-check (bodies as `md5(prosrc)`; run again right before the
+apply):
+
+| Function | Before |
+|---|---|
+| `public.ensure_current_profile(text)` | `10eed1294a1cbdb48d073ada4043f446` |
+| `public.hold_nina_chat_run_for_child_safety(uuid)` | `a4d418589881393dc7715d76da8fdcb4` |
+| `private.ai_blocked(uuid)` | `bd8aba6de53dfa2bed6bb58081017262` |
+| `public.run_nina_retention()` | `a8b3e5e8649eb1df1fd997c029f3fd2b` |
+| `private.preserve_child_safety_account(uuid)` | `012635590a2240b8ad04e3e592c69ac8` (unchanged) |
+
+Apply through the Supabase MCP `apply_migration` with the committed body, set
+its `schema_migrations` row to `202610200001` (`CLAUDE.md` §12), then read
+back: the bodies below, no API role executing a new private function or
+reading either table, RLS on both, 52 functions `authenticated` executes and
+27 `service_role` executes, and 0 unindexed foreign keys.
+
+| Function | After |
+|---|---|
+| `public.ensure_current_profile(text)` | `59d557e3f54fda93a92e2e3d18d75c4e` |
+| `public.hold_nina_chat_run_for_child_safety(uuid)` | `98351e33345032caf8b05a4a0e81a26a` |
+| `private.ai_blocked(uuid)` | `7f93a7b29451ece9c95d513ae5502a01` |
+| `public.run_nina_retention()` | `36377d580c9c3d6374becc76dab84d73` |
+| `private.request_client_address()` | `a6cdd892886ea4139dd1bb7ad388505a` |
+| `private.record_app_access(uuid)` | `82aa2d3a571c3069e839651aab633cd9` |
+| `private.operator_read_access_records(text, text, uuid, inet, timestamptz, timestamptz)` | `d874af6ffd3fdf00d59c976ca919e31f` |
+
+Then open the app once on a phone and check that a row arrived with an
+address, without printing it:
+
+```sql
+select count(*) as rows, count(*) filter (where ip_address is not null) as with_address,
+       max(last_seen_at) as newest
+from private.app_access_records;
+```
+
+No row after a real app load means `cf-connecting-ip` does not reach
+PostgREST on the hosted path; look for `app_access_record_failed` in the
+Postgres logs before changing the header.
+
 ### Age contests and child-safety holds
 
 An age contest (Decreto 12.880 art. 27) follows `docs/age-contest-runbook.md`; a

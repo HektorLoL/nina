@@ -2737,6 +2737,18 @@ the project, not bugs to fix unprompted.
   2026-10-18, the grant counts stay 52 and 27, and the foreign-key canary
   reads 0. No build is needed: a house past its share reads
   `monthly_budget_reached`, which every build shows as a paused chat.
+- **Migration `202610200001` (access records and the hold's own copy) is
+  applied to production (2026-10-20, Heitor's "1A 2A 3A go database").** The
+  privacy page and `/familias/` describing the records went live first (commit
+  9fe5764). The read-only pre-check matched the four redefined bodies and
+  `preserve_child_safety_account` with 0 open holds, twice; it went through the
+  Supabase MCP `apply_migration` with the committed body and its version row
+  was set to `202610200001` (§12). Read back the same day: all eight bodies
+  match the local ones (runbook §3, "Access records and the hold's own copy"),
+  no API role executes the new private functions or reads either table, RLS is
+  on, the grant counts stay 52 and 27, and the foreign-key canary reads 0. No
+  row existed yet; the first app load is the proof that `cf-connecting-ip`
+  reaches PostgREST. No build is needed.
 - **Join requests reach Casa live from build 15 (2026-10-15).** No
   migration: the `families` bump already reached production's realtime; the
   app had subscribed twice per cold launch and kept a dead channel, and a
