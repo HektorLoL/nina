@@ -97,7 +97,16 @@ Then decide:
     Sistema Cidadão choose "Cadastrar Nova Manifestação" › "Sala de
     Atendimento ao Cidadão" (never "Ouvidoria", which takes complaints about
     the MPF itself), set "Tipo de Manifestação" to "Denúncia/Representação"
-    and write the filing in "O que aconteceu?" (20,000 characters at most). It takes a company "por meio de seus representantes ou
+    and write the filing in "O que aconteceu?" (20,000 characters at most).
+    The form also asks for the subject, the state and municipality where it
+    happened (Nina does not know the person's: give Rio de Janeiro, the
+    company's seat, and say so in the text), the people involved (tick "Não
+    possuo conhecimento dos envolvidos" and give the account id in the
+    text), the LGPD consent, and a captcha; tick "Desejo manter meus dados
+    pessoais em sigilo". Read on 2026-10-20 without sending: nothing on the
+    form says it e-mails or prints back what was written, so the text is
+    pasted; after the first real filing, check whether the confirmation
+    e-mail repeats it. It takes a company "por meio de seus representantes ou
     prepostos" at any hour. File it as the company's legal representative,
     signed in with Heitor's own gov.br account (level bronze or higher; the
     page says gov.br is for natural persons only, and the company's CNPJ goes
@@ -355,9 +364,10 @@ researched draft instead of asking counsel, and answered on 2026-10-20 ("1A
   Civil in person (office hours, and the competent station is where the
   facts happened, which Nina does not know). Its cost: a private chat is
   most likely a state matter, so the MPF may pass the report on, which is
-  slower. Not read: the Comunica PF form (HTTP 403 on 2026-10-19), and
-  whether the MPF form e-mails or prints back what was written, which
-  Heitor checks once without sending anything. Heitor also asks the Polícia
+  slower. Not read: the Comunica PF form (HTTP 403 on 2026-10-19). The MPF
+  form, read on 2026-10-20 without sending, says nothing about e-mailing or
+  printing back what was written; the first real filing's confirmation
+  e-mail settles it. Heitor also asks the Polícia
   Federal in writing, with no content and no user data, whether the CNCA
   admits an exceptional means before NIDUS opens (Portaria art. 6 §1 III);
   a route it offers replaces the MPF. The channel ends when NIDUS takes
