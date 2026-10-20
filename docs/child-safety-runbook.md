@@ -89,10 +89,15 @@ Then decide:
     stages only the sending, and art. 35 §5 keeps art. 23's removal and
     preservation binding now. Nina reports to one of the three receivers ECA
     art. 241-B §2 III names, the Ministério Público, through the MPF's online
-    representação (MPF Serviços, `https://www.mpf.mp.br/mpfservicos`), which
-    takes a company "por meio de seus representantes ou prepostos" at any
-    hour. File it as the company's legal representative, signed in with
-    Heitor's own gov.br account (level bronze or higher). Receipt is
+    representação, which the MPF Serviços page now calls "Denúncias e
+    pedidos de informação"
+    (`https://www.mpf.mp.br/servicos/mpf-servicos-internas/denuncias`: tick
+    "Li e aceito os termos acima descritos", then "Entrar com o GOV.BR"; read
+    on 2026-10-20). It takes a company "por meio de seus representantes ou
+    prepostos" at any hour. File it as the company's legal representative,
+    signed in with Heitor's own gov.br account (level bronze or higher; the
+    page says gov.br is for natural persons only, and the company's CNPJ goes
+    into the manifestante's data after login). Receipt is
     immediate; a filing made out of hours is analysed the next working day.
     When a child may be at risk now, call 190 first, then file. A private
     chat is most likely a state matter (STF Tema 393 gives the federal courts
