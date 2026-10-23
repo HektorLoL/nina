@@ -4,6 +4,7 @@ import Brand from "../components/Brand.astro";
 import Glyph from "../components/Glyph.astro";
 import { legalIdentity } from "../legal";
 import { ninaRating } from "../rating";
+import { supportEmail } from "../support";
 
 const updatedAt = "18 de outubro de 2026";
 const ratingReason = ninaRating.code === "14"
@@ -276,8 +277,8 @@ const addressClause = legalIdentity.legalEntityAddress
         Trabalhamos para manter a Nina disponível, mas não prometemos funcionamento ininterrupto.
         Recursos podem ser adicionados, alterados ou removidos conforme o produto evolui. Quando uma
         mudança afetar de forma relevante o que você assinou, avisamos com antecedência razoável e
-        você pode cancelar. O suporte é feito
-        por <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
+        você pode cancelar. O suporte é feito por <a href={`mailto:${supportEmail}`}>{supportEmail}</a>;
+        assuntos de privacidade, por <a href={contactMailto}>{legalIdentity.privacyContactEmail}</a>.
       </p>
 
       <h2>16. Encerramento</h2>
