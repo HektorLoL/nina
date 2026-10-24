@@ -372,8 +372,9 @@ researched draft instead of asking counsel, and answered on 2026-10-20 ("1A
   admits an exceptional means before NIDUS opens (Portaria art. 6 §1 III);
   a route it offers replaces the MPF. The question went in on 2026-10-20 as
   an access-to-information request on Informa.BR (protocol
-  08231.000089/2026-40; the Lei de Acesso à Informação gives 20 days,
-  extendable by 10). The channel ends when NIDUS takes
+  08231.000089/2026-40). On 2026-10-24 the Polícia Federal reclassified it
+  as an Ouvidoria manifestation, followed on Fala.BR; Lei 13.460/2017 art. 16
+  gives it 30 days, extendable once by 30. The channel ends when NIDUS takes
   Nina's reports.
 - **On the MPF, the content goes at the MPF's receipt (decided
   2026-10-20).** This follows ECA art. 241-B §2 III, a law, whose shelter
