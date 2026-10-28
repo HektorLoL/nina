@@ -374,7 +374,9 @@ researched draft instead of asking counsel, and answered on 2026-10-20 ("1A
   an access-to-information request on Informa.BR (protocol
   08231.000089/2026-40). On 2026-10-24 the Polícia Federal reclassified it
   as an Ouvidoria manifestation, followed on Fala.BR; Lei 13.460/2017 art. 16
-  gives it 30 days, extendable once by 30. The channel ends when NIDUS takes
+  gives it 30 days, extendable once by 30. On 2026-10-26 the Ouvidoria
+  forwarded it to the Diretoria de Combate a Crimes Cibernéticos (DCIBER/PF);
+  the answer is due by 2026-11-25. The channel ends when NIDUS takes
   Nina's reports.
 - **On the MPF, the content goes at the MPF's receipt (decided
   2026-10-20).** This follows ECA art. 241-B §2 III, a law, whose shelter
