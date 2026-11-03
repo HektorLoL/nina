@@ -22,7 +22,7 @@ final class AgeAssuranceTests: XCTestCase {
         XCTAssertEqual(AgeAssurance.map(sharing(lower: nil, upper: 17, nil)).band, .under12)
     }
 
-    func testASelfDeclaredAdultIsNeverTrusted() {
+    func testASelfDeclaredAdultIsTrustedAndParentalControlsNeverAre() {
         let selfDeclared = AgeAssurance.map(sharing(lower: 18, upper: nil, "self_declared"))
         let parentalControls = AgeAssurance.map(
             sharing(lower: 18, upper: nil, "confirmed", controls: ["communication_limits"])
@@ -30,11 +30,30 @@ final class AgeAssuranceTests: XCTestCase {
 
         XCTAssertEqual(selfDeclared.status, .adult)
         XCTAssertEqual(selfDeclared.assurance, .selfDeclared)
-        XCTAssertFalse(selfDeclared.isTrustedAdult)
+        XCTAssertTrue(selfDeclared.isTrustedAdult)
         XCTAssertEqual(parentalControls.assurance, .confirmed)
         XCTAssertTrue(parentalControls.parentalControlsActive)
         XCTAssertFalse(parentalControls.isTrustedAdult)
         XCTAssertTrue(AgeAssurance.map(sharing(lower: 18, upper: nil, "confirmed")).isTrustedAdult)
+    }
+
+    @MainActor
+    func testASettledAgeOutcomeLeavesWithTheScreenItWasShownOn() async {
+        let user = AuthUser(id: UUID().uuidString, displayName: "Heitor", email: nil, provider: .apple)
+        let held = adult(.selfDeclared, recordedAt: Date(timeIntervalSince1970: 1_000))
+        let retry = AgeCheckCoordinator(
+            provider: ScriptedAgeRangeProvider(result: .success(sharing(lower: 18, upper: nil, "self_declared"))),
+            submitter: RecordingSubmitter(answering: held),
+            defaults: isolatedDefaults(),
+            privateDataStore: InMemoryPrivateStore()
+        )
+
+        _ = await retry.requestInline(for: user, current: held)
+        XCTAssertEqual(retry.inlineOutcome, .unchanged)
+
+        retry.clearInlineOutcomeIfIdle()
+
+        XCTAssertNil(retry.inlineOutcome)
     }
 
     // The same ten rows supabase/functions/_shared/age-assurance.test.ts asserts.

@@ -33,6 +33,7 @@ struct HomeSetupView: View {
     @State private var inviteText = ""
     @State private var firstName = ""
     @State private var errorMessage: String?
+    @State private var storeErrorFromThisScreen: String?
     @State private var isSavingName = false
     @FocusState private var focusedField: FocusedField?
 
@@ -93,6 +94,11 @@ struct HomeSetupView: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: mode)
         .onChange(of: mode) { _, _ in
             errorMessage = nil
+            // Only a line this screen caused goes with the path it came from; one a refresh left stays for the person to read.
+            if let message = storeErrorFromThisScreen {
+                store.dismissSyncError(ifStill: message)
+                storeErrorFromThisScreen = nil
+            }
         }
         .task(id: mode) {
             await Task.yield()
@@ -350,6 +356,8 @@ struct HomeSetupView: View {
             guard await saveChosenNameIfNeeded() else { return }
             if await store.createHome(named: homeName, owner: authSession.currentUser) {
                 Haptics.success()
+            } else {
+                storeErrorFromThisScreen = store.syncErrorMessage
             }
         }
     }
@@ -370,6 +378,7 @@ struct HomeSetupView: View {
             if await store.joinHome(with: inviteText, member: authSession.currentUser) {
                 Haptics.success()
             } else {
+                storeErrorFromThisScreen = store.syncErrorMessage
                 errorMessage = store.syncErrorMessage ?? "Não deu para abrir esse convite agora. Tente de novo."
             }
         }

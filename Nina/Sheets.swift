@@ -667,6 +667,8 @@ private struct SettingsToggleRow: View {
 }
 
 struct SettingsSheet: View {
+    private static let houseSectionID = "settings-house"
+
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(OnboardingStore.self) private var onboardingStore
@@ -687,6 +689,8 @@ struct SettingsSheet: View {
     @State private var isConfirmingSignOut = false
     @State private var houseError: String?
 
+    var startsAtHouse = false
+
     @AppStorage(LocalHomeNotificationScheduler.notificationsEnabledKey)
     private var notificationsEnabled = true
 
@@ -702,20 +706,28 @@ struct SettingsSheet: View {
                 dismiss()
             }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
-                    accountSection
-                    ninaSection
-                    houseSection
-                    helpSection
-                    #if DEBUG
-                    developerSection
-                    #endif
-                    exits
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 26) {
+                        accountSection
+                        ninaSection
+                        houseSection
+                            .id(Self.houseSectionID)
+                        helpSection
+                        #if DEBUG
+                        developerSection
+                        #endif
+                        exits
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 2)
+                    .padding(.bottom, 34)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 2)
-                .padding(.bottom, 34)
+                .task {
+                    guard startsAtHouse else { return }
+                    await Task.yield()
+                    proxy.scrollTo(Self.houseSectionID, anchor: .top)
+                }
             }
         }
         .ninaSheetBackground()

@@ -40,6 +40,7 @@ final class InviteLinkStore {
     private static let pendingCodeKey = "nina.invite.pendingCode"
 
     var pendingCode: String?
+    private(set) var isHeldUntilHouseExit = false
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let privateDataStore: any PrivateLocalDataStoring
@@ -72,7 +73,14 @@ final class InviteLinkStore {
         return true
     }
 
+    // The invite waits behind the house the person is leaving and comes back once they hold none.
+    func holdUntilHouseExit() {
+        guard pendingCode != nil else { return }
+        isHeldUntilHouseExit = true
+    }
+
     func clear() {
+        isHeldUntilHouseExit = false
         pendingCode = nil
         PrivateLocalDataAccess.removeData(
             forKey: Self.pendingCodeKey,
@@ -94,6 +102,54 @@ enum InviteSetAside {
     }
 }
 
+// One house at a time: someone already in one is told the way out their role has, never offered to ask.
+enum InviteHouseExit {
+    static func blocksRequest(_ access: HomeAccessState) -> Bool {
+        access == .authorized
+    }
+
+    static func line(
+        canLeave: Bool,
+        mustHandOver: Bool,
+        hasAdultToHold: Bool,
+        canDelete: Bool
+    ) -> String {
+        if canLeave {
+            return "Você já está numa casa. Para entrar nesta, primeiro saia da sua em Sair da casa."
+        }
+        if mustHandOver, hasAdultToHold {
+            return "Você já está numa casa. Para entrar nesta, primeiro passe a sua para outro adulto ou use Apagar a casa."
+        }
+        if mustHandOver, canDelete {
+            return "Você já está numa casa. Para entrar nesta, primeiro use Apagar a casa."
+        }
+        return "Você já está numa casa. Para entrar nesta, primeiro saia da sua."
+    }
+
+    static let openSettingsTitle = "Abrir Ajustes"
+    static let ownHouseLine = "Você já está nesta casa."
+    static let openHouseTitle = "Abrir a casa"
+
+    // A member's own link changes nothing; the code is compared when the phone holds it, the name only when it is masked.
+    static func isOwnHouse(
+        code: String,
+        previewName: String?,
+        houseInviteCode: String,
+        houseName: String
+    ) -> Bool {
+        let houseCode = AppStore.normalizedInviteCode(from: houseInviteCode)
+        if let houseCode {
+            return houseCode == AppStore.normalizedInviteCode(from: code)
+        }
+        guard let previewName else { return false }
+        let fold: (String) -> String = {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "pt_BR"))
+        }
+        return !fold(houseName).isEmpty && fold(previewName) == fold(houseName)
+    }
+}
+
 struct InviteAcceptanceView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
@@ -108,6 +164,30 @@ struct InviteAcceptanceView: View {
     @FocusState private var isNameFocused: Bool
 
     var onCreateHouse: () -> Void = {}
+    var onOpenHouseSettings: () -> Void = {}
+
+    private var isAlreadyInAHouse: Bool {
+        InviteHouseExit.blocksRequest(store.homeAccessState)
+    }
+
+    private var isOwnHouse: Bool {
+        isAlreadyInAHouse && InviteHouseExit.isOwnHouse(
+            code: code,
+            previewName: preview?.familyName,
+            houseInviteCode: store.familyGroup.inviteCode,
+            houseName: store.familyGroup.name
+        )
+    }
+
+    private var houseExitLine: String {
+        if isOwnHouse { return InviteHouseExit.ownHouseLine }
+        return InviteHouseExit.line(
+            canLeave: store.canLeaveFamily,
+            mustHandOver: store.ownerMustHandOverBeforeLeaving,
+            hasAdultToHold: store.hasAdultToHoldTheHouse,
+            canDelete: store.canDeleteFamily
+        )
+    }
 
     private var knownName: String? {
         authSession.currentUser.flatMap { profileStore.profiles[$0.id]?.displayName }
@@ -191,7 +271,7 @@ struct InviteAcceptanceView: View {
             }
 
             // Possessing an invite grants nothing: an owner or admin approves the request.
-            Text("Ter o link não dá acesso. Alguém da casa aprova.")
+            Text(isAlreadyInAHouse ? houseExitLine : "Ter o link não dá acesso. Alguém da casa aprova.")
                 .ninaText(.label, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -203,7 +283,7 @@ struct InviteAcceptanceView: View {
                 .ninaText(.display)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Ter o link não dá acesso. Alguém da casa aprova.")
+            Text(isAlreadyInAHouse ? houseExitLine : "Ter o link não dá acesso. Alguém da casa aprova.")
                 .ninaText(.label, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -233,7 +313,22 @@ struct InviteAcceptanceView: View {
 
             // request_family_join is the real authority, so an unverified link
             // keeps the button: the server decides, not the preview.
-            if preview?.isValid == true || preview == nil {
+            if isOwnHouse {
+                NinaButton(title: InviteHouseExit.openHouseTitle, fillsWidth: true, isEnabled: !isLoading) {
+                    Haptics.selection()
+                    inviteLinkStore.clear()
+                }
+            } else if isAlreadyInAHouse, preview?.isValid == true || preview == nil {
+                NinaButton(
+                    title: InviteHouseExit.openSettingsTitle,
+                    fillsWidth: true,
+                    isEnabled: !isLoading
+                ) {
+                    Haptics.lightImpact()
+                    inviteLinkStore.holdUntilHouseExit()
+                    onOpenHouseSettings()
+                }
+            } else if preview?.isValid == true || preview == nil {
                 if needsName, !isLoading {
                     ChosenNameField(name: $firstName, focus: $isNameFocused, focusValue: true)
                         .submitLabel(.join)
@@ -250,11 +345,17 @@ struct InviteAcceptanceView: View {
                 }
             }
 
-            NinaButton(title: InviteSetAside.title(for: store.homeAccessState), kind: .outline, fillsWidth: true) {
-                Haptics.selection()
-                if InviteSetAside.offersHouseCreation(store.homeAccessState) { onCreateHouse() }
-                inviteLinkStore.clear()
+            if !isOwnHouse {
+                setAsideButton
             }
+        }
+    }
+
+    private var setAsideButton: some View {
+        NinaButton(title: InviteSetAside.title(for: store.homeAccessState), kind: .outline, fillsWidth: true) {
+            Haptics.selection()
+            if InviteSetAside.offersHouseCreation(store.homeAccessState) { onCreateHouse() }
+            inviteLinkStore.clear()
         }
     }
 

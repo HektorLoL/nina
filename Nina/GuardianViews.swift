@@ -14,41 +14,24 @@ enum GuardianSheetMode: Hashable, Identifiable {
     }
 }
 
-// A self-declared adult at a closed child gate learns what Apple's confirmation is and can share again.
-struct AppleConfirmationRetry: View {
-    @Environment(AppStore.self) private var store
-    @Environment(AuthSessionStore.self) private var authSession
-    @Environment(AgeCheckCoordinator.self) private var ageCheck
+// Any adult the server trusts acts for a minor, so a closed child gate names parental controls when they are the reason, and never Apple's confirmation.
+enum MinorActingCopy {
+    static func addingLine(closedByParentalControls: Bool) -> String {
+        closedByParentalControls
+            ? "Com controles parentais ativos, esta conta não inclui crianças nem adolescentes."
+            : "Esta conta não inclui crianças nem adolescentes."
+    }
 
-    var body: some View {
-        if store.actingForMinorsWaitsForApple {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Confirmada é a idade que a Apple verificou, não só a declarada.")
-                    .ninaText(.caption, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+    static func approvingLine(closedByParentalControls: Bool) -> String {
+        closedByParentalControls
+            ? "Com controles parentais ativos, esta conta não aprova crianças nem adolescentes."
+            : "Esta conta não aprova crianças nem adolescentes."
+    }
 
-                NinaButton(
-                    title: "Tentar de novo",
-                    kind: .quiet,
-                    systemName: "arrow.clockwise",
-                    isPending: ageCheck.isRequestingInline
-                ) {
-                    Haptics.lightImpact()
-                    guard let user = authSession.currentUser else { return }
-                    Task {
-                        guard let status = await ageCheck.requestInline(
-                            for: user,
-                            current: store.viewerAge
-                        ) else { return }
-                        await store.applyRecordedAge(status, for: user)
-                    }
-                }
-
-                if let outcome = ageCheck.inlineOutcome {
-                    AgeOutcomeNote(outcome: outcome)
-                }
-            }
-        }
+    static func answeringLine(for name: String, closedByParentalControls: Bool) -> String {
+        closedByParentalControls
+            ? "Com controles parentais ativos, esta conta não responde por \(name)."
+            : "Esta conta não responde por \(name)."
     }
 }
 
@@ -547,10 +530,14 @@ struct MinorSupervisionSection: View {
                     guardianSheet = .declare(member)
                 }
             } else {
-                Text("Só um responsável com idade confirmada pela Apple cadastra.")
-                    .ninaText(.caption, NinaTheme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                AppleConfirmationRetry()
+                Text(
+                    MinorActingCopy.answeringLine(
+                        for: member.name,
+                        closedByParentalControls: store.actingForMinorsClosedByParentalControls
+                    )
+                )
+                .ninaText(.caption, NinaTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16)

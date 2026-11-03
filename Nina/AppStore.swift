@@ -427,9 +427,9 @@ final class AppStore {
         viewerAge.canActForMinors
     }
 
-    // Parental controls close the child gates whatever Apple says, so only an adult without them waits for Apple.
-    var actingForMinorsWaitsForApple: Bool {
-        viewerAge.isAdult && !viewerAge.canActForMinors && !viewerAge.parentalControlsActive
+    // Any adult the server trusts acts for a minor, so an adult it does not is one under parental controls.
+    var actingForMinorsClosedByParentalControls: Bool {
+        viewerAge.isAdult && !viewerAge.canActForMinors && viewerAge.parentalControlsActive
     }
 
     var canBuyPremium: Bool {
@@ -788,7 +788,7 @@ final class AppStore {
         #endif
     }
 
-    func refreshHomeFromRemote(for user: AuthUser?) async {
+    func refreshHomeFromRemote(for user: AuthUser?, keepingStateWhenUnverifiable: Bool = false) async {
         guard let user,
               user.id == activeHomeUserID,
               !usesLocalDebugBackend(for: user),
@@ -820,6 +820,7 @@ final class AppStore {
 
         if case .unverifiable = load.outcome {
             // An unreachable server says nothing about age, so the last verified reading stands.
+            if keepingStateWhenUnverifiable { return }
         } else {
             viewerAge = load.viewerAge
         }
@@ -828,6 +829,8 @@ final class AppStore {
             for: user.id,
             mergingContentAtRevision: requestedRevision
         )
+        if case .unverifiable = load.outcome { return }
+        recordTermsAcceptanceIfNeeded()
     }
 
     private func loadMembershipOutcome(
@@ -1008,8 +1011,13 @@ final class AppStore {
                 if code == .ageSignalRequired {
                     ageCheckRequested = true
                 }
-                syncErrorMessage = code?.userMessage() ?? "Não deu para criar a casa agora. Tente de novo."
                 Haptics.error()
+                if code == .familyMembershipExists {
+                    finishSyncingHome(ifCurrent: contextToken)
+                    await refreshHomeFromRemote(for: owner ?? activeUser)
+                    guard isCurrentHomeContext(contextToken) else { return false }
+                }
+                syncErrorMessage = code?.userMessage() ?? "Não deu para criar a casa agora. Tente de novo."
                 return false
             }
         }
@@ -1071,10 +1079,17 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
+                Haptics.error()
+                if RemoteRPCErrorCode.from(error) == .familyMembershipExists {
+                    finishSyncingHome(ifCurrent: contextToken)
+                    await refreshHomeFromRemote(for: member ?? activeUser)
+                    guard isCurrentHomeContext(contextToken) else { return false }
+                    syncErrorMessage = RemoteRPCErrorCode.familyMembershipExists.userMessage()
+                    return false
+                }
                 syncErrorMessage = error is RemoteHomeBackendError
                     ? "Este convite é inválido, expirou ou a casa está sem vagas."
                     : "Não deu para verificar o convite agora. Tente de novo em instantes."
-                Haptics.error()
                 return false
             }
         }
@@ -1120,6 +1135,12 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
+                // A request the house already answered cannot be withdrawn; the answer is what the person needs to see.
+                if RemoteRPCErrorCode.from(error) == .joinRequestCancelDenied {
+                    finishSyncingHome(ifCurrent: contextToken)
+                    await refreshHomeFromRemote(for: activeUser)
+                    return false
+                }
                 syncErrorMessage = "Não deu para cancelar o pedido agora. Tente de novo."
                 Haptics.error()
                 return false
@@ -1154,6 +1175,12 @@ final class AppStore {
                 return true
             } catch {
                 guard isCurrentHomeContext(contextToken) else { return false }
+                // The server refuses only a decision already read, so a retry after a lost answer is done.
+                if RemoteRPCErrorCode.from(error) == .accessDecisionAcknowledgeDenied {
+                    familyAccessDecision = nil
+                    homeAccessState = .noHome
+                    return true
+                }
                 syncErrorMessage = "Não deu para marcar esse aviso como lido agora."
                 Haptics.error()
                 return false
@@ -1591,9 +1618,15 @@ final class AppStore {
         } catch {
             finishSyncingHome(ifCurrent: contextToken)
             guard isCurrentHomeContext(contextToken) else { return false }
-            syncErrorMessage = "Não deu para sair da casa agora. Tente de novo."
-            Haptics.error()
-            return false
+            let code = RemoteRPCErrorCode.from(error)
+            // A leave whose answer was lost reads as not found on the retry: the person is out either way.
+            if code != .familyNotFound {
+                syncErrorMessage = code == nil && RemoteWriteAnswer.mayHaveBeenLost(error)
+                    ? "A resposta não chegou. Tente de novo."
+                    : "Não deu para sair da casa agora. Tente de novo."
+                Haptics.error()
+                return false
+            }
         }
 
         finishSyncingHome(ifCurrent: contextToken)
@@ -1704,9 +1737,12 @@ final class AppStore {
                 syncErrorMessage = code?.userMessage(name: request.requesterName)
                     ?? "Não deu para aprovar este pedido agora. Tente de novo."
                 Haptics.error()
-                if code == .joinRequestAgeChanged {
+                if code == .joinRequestAgeChanged || code == .joinRequestNotPending {
                     isSyncingHome = false
+                    let message = syncErrorMessage
                     await refreshHomeFromRemote(for: activeUser)
+                    guard isCurrentHomeContext(contextToken) else { return false }
+                    syncErrorMessage = message
                 }
                 return false
             }
@@ -1770,8 +1806,11 @@ final class AppStore {
         ) { backend in
             try await backend.approveJoinRequestAsGuardian(request.id, approval: approval)
         }
-        if !succeeded, lastMutationErrorCode == .joinRequestAgeChanged {
+        if !succeeded,
+           lastMutationErrorCode == .joinRequestAgeChanged || lastMutationErrorCode == .joinRequestNotPending {
+            let message = syncErrorMessage
             await refreshHomeFromRemote(for: activeUser)
+            if syncErrorMessage == nil { syncErrorMessage = message }
         }
         return succeeded
     }
@@ -2040,11 +2079,11 @@ final class AppStore {
         }
     }
 
-    // After age-signal records a new status the whole context is read again: the shape may have changed.
+    // After age-signal records a new status the context is read again in place: the shape may have changed, the screen stays.
     func applyRecordedAge(_ status: AgeStatus, for user: AuthUser?) async {
         guard user?.id == activeHomeUserID else { return }
         viewerAge = status
-        await activateHomeContext(for: user)
+        await refreshHomeFromRemote(for: user)
     }
 
     func refreshMinorHome() async {
@@ -3988,6 +4027,19 @@ final class AppStore {
     nonisolated static func normalizedInviteCode(from rawInvite: String) -> String? {
         let trimmedInvite = rawInvite.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInvite.isEmpty else { return nil }
+
+        // A shared invite travels inside a sentence, so the token is read out of it and no sentence becomes a code.
+        if let token = trimmedInvite.range(of: #"(?i)casa-[0-9a-f]{32}(?![0-9a-z])"#, options: .regularExpression) {
+            return slugified(String(trimmedInvite[token]))
+        }
+        if let link = trimmedInvite.range(
+            of: #"(?i)ninai\.app/invite/[a-z0-9-]+"#,
+            options: .regularExpression
+        ) {
+            let code = slugified(String(trimmedInvite[link].split(separator: "/").last ?? ""))
+            return code.count >= 4 ? code : nil
+        }
+        guard trimmedInvite.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
 
         let candidate: String
         let lowercased = trimmedInvite.lowercased()

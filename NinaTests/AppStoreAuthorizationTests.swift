@@ -1357,6 +1357,255 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testAPollOfAPendingRequestReadsInPlaceAndAnApprovalLandsInTheHouseListening() async {
+        let user = makeUser()
+        let request = pendingRequest(for: user)
+        let house = makeRemoteState(permissionRole: .member)
+        let backend = OneHouseBackend(loads: [.none, .held], viewerAge: .testTrustedAdult, pendingRequest: request)
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertEqual(store.homeAccessState, .pendingApproval)
+
+        let poll = Task {
+            await store.refreshHomeFromRemote(for: user, keepingStateWhenUnverifiable: true)
+        }
+        await backend.waitUntilHeld()
+
+        XCTAssertEqual(store.homeAccessState, .pendingApproval)
+        XCTAssertEqual(AppEntryRouting.phase(for: entryInputs(for: store)), .pendingApproval)
+
+        await backend.release(with: .home(house))
+        await poll.value
+        let listened = await backend.waitForRealtimeSubscription()
+
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertEqual(store.familyGroup.id, house.familyGroup.id)
+        XCTAssertEqual(listened, [house.familyGroup.id])
+    }
+
+    @MainActor
+    func testAPollThatCannotReachTheServerLeavesThePendingScreenAsItWas() async {
+        let user = makeUser()
+        let backend = OneHouseBackend(loads: [.none, .unreachable], pendingRequest: pendingRequest(for: user))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        await store.refreshHomeFromRemote(for: user, keepingStateWhenUnverifiable: true)
+
+        XCTAssertEqual(store.homeAccessState, .pendingApproval)
+        XCTAssertNotNil(store.pendingJoinRequest)
+        XCTAssertNil(store.syncErrorMessage)
+    }
+
+    @MainActor
+    func testAnAgeShareMadeInsideTheAppReadsTheHouseInPlaceWithoutTheWaitingScreen() async {
+        let user = makeUser()
+        let house = makeRemoteState(permissionRole: .member)
+        let backend = OneHouseBackend(loads: [.home(house), .held])
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+
+        let share = Task { await store.applyRecordedAge(.testTrustedAdult, for: user) }
+        await backend.waitUntilHeld()
+
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertTrue(store.hasActiveHome)
+
+        await backend.release(with: .home(house))
+        await share.value
+
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertEqual(store.familyGroup.id, house.familyGroup.id)
+    }
+
+    @MainActor
+    func testTheServerRefusingSomeoneAlreadyInAHouseReadsThatHouseAndSaysWhy() async {
+        let user = makeUser()
+        let house = makeRemoteState(permissionRole: .member)
+        let backend = OneHouseBackend(
+            loads: [.none, .home(house)],
+            joinRefusal: RemoteRPCError(code: .familyMembershipExists)
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertEqual(store.homeAccessState, .noHome)
+
+        let joined = await store.joinHome(with: "casa-valid-invite", member: user)
+
+        XCTAssertFalse(joined)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertEqual(store.familyGroup.id, house.familyGroup.id)
+        XCTAssertEqual(
+            store.syncErrorMessage,
+            "Você já está numa casa. Para entrar em outra, saia da sua antes."
+        )
+        XCTAssertNotEqual(store.syncErrorMessage, "Este convite é inválido, expirou ou a casa está sem vagas.")
+    }
+
+    @MainActor
+    func testCreatingAHouseWhileTheServerHoldsAnotherIsRefusedAndThatHouseStays() async {
+        let user = makeUser()
+        let house = makeRemoteState(permissionRole: .owner)
+        let backend = OneHouseBackend(
+            loads: [.none, .home(house)],
+            createRefusal: RemoteRPCError(code: .familyMembershipExists)
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let created = await store.createHome(named: "Outra casa", owner: user)
+
+        XCTAssertFalse(created)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertEqual(store.familyGroup.id, house.familyGroup.id)
+        XCTAssertEqual(
+            store.syncErrorMessage,
+            "Você já está numa casa. Para entrar em outra, saia da sua antes."
+        )
+    }
+
+    @MainActor
+    func testAnApprovalWhoseRequesterWentElsewhereSaysTheRequestNoLongerHoldsAndRereadsTheHouse() async {
+        let user = makeUser()
+        let house = makeRemoteState(permissionRole: .owner)
+        let backend = OneHouseBackend(
+            loads: [.home(house), .home(house)],
+            approveRefusal: RemoteRPCError(code: .joinRequestNotPending)
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let request = pendingRequest(for: makeUser())
+
+        let approved = await store.approveJoinRequest(request)
+        let loads = await backend.loadCount()
+
+        XCTAssertFalse(approved)
+        XCTAssertEqual(loads, 2)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertEqual(store.syncErrorMessage, "Esse pedido já não vale.")
+    }
+
+    @MainActor
+    func testCancellingARequestTheHouseAlreadyAnsweredLandsOnTheAnswerWithoutAFailureLine() async {
+        let user = makeUser()
+        let house = makeRemoteState(permissionRole: .member)
+        let backend = OneHouseBackend(
+            loads: [.none, .home(house)],
+            pendingRequest: pendingRequest(for: user),
+            cancelRefusal: RemoteRPCError(code: .joinRequestCancelDenied)
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertEqual(store.homeAccessState, .pendingApproval)
+
+        let cancelled = await store.cancelPendingJoinRequest()
+
+        XCTAssertFalse(cancelled)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertNil(store.syncErrorMessage)
+    }
+
+    @MainActor
+    func testALeaveWhoseAnswerWasLostSaysSoAndItsRetryLandsOutOfTheHouse() async {
+        let user = makeUser()
+        let me = HouseholdMember(
+            userID: user.id,
+            name: "Membro",
+            relationship: "Irmão",
+            role: .adult,
+            permissionRole: .member,
+            tone: .sky,
+            taskCount: 0,
+            memoryNote: ""
+        )
+        let house = makeRemoteState(permissionRole: .member, members: [me])
+        let backend = OneHouseBackend(
+            loads: [.home(house), .none],
+            leaveRefusals: [URLError(.networkConnectionLost), RemoteRPCError(code: .familyNotFound)]
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertTrue(store.canLeaveFamily)
+
+        let firstTry = await store.leaveFamily()
+
+        XCTAssertFalse(firstTry)
+        XCTAssertEqual(store.homeAccessState, .authorized)
+        XCTAssertEqual(store.syncErrorMessage, "A resposta não chegou. Tente de novo.")
+
+        let retry = await store.leaveFamily()
+
+        XCTAssertTrue(retry)
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertFalse(store.hasActiveHome)
+    }
+
+    @MainActor
+    func testAnAcknowledgementWhoseAnswerWasLostCountsAsReadOnTheRetry() async {
+        let user = makeUser()
+        let decision = FamilyAccessDecision(
+            id: UUID(),
+            familyName: "Casa Prado",
+            outcome: .declined,
+            decidedAt: .now
+        )
+        let backend = OneHouseBackend(
+            loads: [.none],
+            decision: decision,
+            acknowledgeRefusal: RemoteRPCError(code: .accessDecisionAcknowledgeDenied)
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertEqual(store.homeAccessState, .accessDecision)
+
+        let acknowledged = await store.acknowledgeFamilyAccessDecision()
+
+        XCTAssertTrue(acknowledged)
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertNil(store.familyAccessDecision)
+        XCTAssertNil(store.syncErrorMessage)
+    }
+
+    @MainActor
+    func testRetryingAnUnverifiableFirstLoadRunsTheAgeStepSoANewAdultNeverLandsOnTheMinorScreen() async {
+        let user = makeUser()
+        let backend = OneHouseBackend(loads: [.unreachable, .none])
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        let ageCheck = AgeCheckCoordinator(
+            provider: NeverAnsweringAgeRangeProvider(),
+            submitter: UnavailableAgeSignalSubmitter(),
+            defaults: UserDefaults(suiteName: "nina.tests.retryAge.\(UUID().uuidString)") ?? .standard
+        )
+
+        await HomeEntryLoad.run(store: store, ageCheck: ageCheck, user: user)
+
+        XCTAssertEqual(store.homeAccessState, .unavailable)
+        XCTAssertFalse(ageCheck.needsAgeCheck)
+
+        await HomeEntryLoad.run(store: store, ageCheck: ageCheck, user: user)
+
+        XCTAssertEqual(store.homeAccessState, .noHome)
+        XCTAssertEqual(ageCheck.phase, .prompt)
+        var inputs = entryInputs(for: store)
+        inputs.needsAgeCheck = ageCheck.needsAgeCheck
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .ageCheck)
+    }
+
+    private func pendingRequest(for user: AuthUser) -> FamilyJoinRequest {
+        FamilyJoinRequest(
+            id: UUID(),
+            familyID: UUID(),
+            familyName: "Casa Prado",
+            requesterUserID: UUID(uuidString: user.id) ?? UUID(),
+            requesterName: user.displayName,
+            status: .pending,
+            createdAt: .now,
+            reviewedAt: nil
+        )
+    }
+
     func testAppDataSnapshotRoundTripsEveryCollection() throws {
         let snapshot = AppDataSnapshot.preview
 
@@ -4295,9 +4544,65 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(AppStore.minorAlertsValue(guardianAllows: false, status: .authorized), "Desligados")
     }
 
+    func testTheMemberEditorNamesWhatItAddsAndExplainsAClosedChildChipOnlyWhileOneIsChosen() {
+        XCTAssertEqual(MemberEditorCopy.eyebrow(for: .pet), "Pet")
+        for role: HouseholdRole in [.adult, .child, .teen] {
+            XCTAssertEqual(MemberEditorCopy.eyebrow(for: role), "Pessoa")
+        }
+
+        for role: HouseholdRole in [.pet, .adult] {
+            XCTAssertNil(
+                MemberEditorCopy.minorLine(
+                    for: role,
+                    isAdding: true,
+                    canActForMinors: false,
+                    closedByParentalControls: true
+                )
+            )
+        }
+        for role: HouseholdRole in [.child, .teen] {
+            XCTAssertNil(
+                MemberEditorCopy.minorLine(
+                    for: role,
+                    isAdding: true,
+                    canActForMinors: true,
+                    closedByParentalControls: false
+                )
+            )
+            XCTAssertEqual(
+                MemberEditorCopy.minorLine(
+                    for: role,
+                    isAdding: true,
+                    canActForMinors: false,
+                    closedByParentalControls: true
+                ),
+                "Com controles parentais ativos, esta conta não inclui crianças nem adolescentes."
+            )
+        }
+
+        let lines = [
+            MinorActingCopy.addingLine(closedByParentalControls: true),
+            MinorActingCopy.addingLine(closedByParentalControls: false),
+            MinorActingCopy.approvingLine(closedByParentalControls: true),
+            MinorActingCopy.approvingLine(closedByParentalControls: false),
+            MinorActingCopy.answeringLine(for: "Bia", closedByParentalControls: true),
+            MinorActingCopy.answeringLine(for: "Bia", closedByParentalControls: false),
+            RemoteRPCErrorCode.ageConfirmationRequired.userMessage(),
+        ]
+        for line in lines {
+            XCTAssertFalse(line.contains("Apple"), line)
+            XCTAssertFalse(line.contains("confirmad"), line)
+            XCTAssertFalse(line.contains("!"), line)
+        }
+        XCTAssertEqual(
+            MinorActingCopy.answeringLine(for: "Bia", closedByParentalControls: true),
+            "Com controles parentais ativos, esta conta não responde por Bia."
+        )
+    }
+
     @MainActor
-    func testOnlyAnAdultWithoutParentalControlsWaitsForAppleToActForAMinor() async {
-        func waits(_ age: AgeStatus) async -> Bool {
+    func testOnlyParentalControlsCloseActingForAMinorToAnAdult() async {
+        func closed(_ age: AgeStatus) async -> (closedByParentalControls: Bool, actsForMinors: Bool) {
             let user = makeUser()
             let adultMember = HouseholdMember(
                 userID: user.id,
@@ -4311,20 +4616,25 @@ final class AppStoreAuthorizationTests: XCTestCase {
             let backend = RecordingHomeBackend(state: makeRemoteState(members: [adultMember], viewerAge: age))
             let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
             await store.activateHomeContext(for: user)
-            return store.actingForMinorsWaitsForApple
+            return (store.actingForMinorsClosedByParentalControls, store.canActForMinors)
         }
         var parentalControls = AgeStatus.testDeclaredAdult
         parentalControls.parentalControlsActive = true
+        parentalControls.trustedAdult = false
 
-        let declared = await waits(.testDeclaredAdult)
-        let trusted = await waits(.testTrustedAdult)
-        let controlled = await waits(parentalControls)
-        let minor = await waits(.testMinor(.sixteenToSeventeen))
+        let declared = await closed(.testDeclaredAdult)
+        let trusted = await closed(.testTrustedAdult)
+        let controlled = await closed(parentalControls)
+        let minor = await closed(.testMinor(.sixteenToSeventeen))
 
-        XCTAssertTrue(declared)
-        XCTAssertFalse(trusted)
-        XCTAssertFalse(controlled)
-        XCTAssertFalse(minor)
+        XCTAssertFalse(declared.closedByParentalControls)
+        XCTAssertTrue(declared.actsForMinors)
+        XCTAssertFalse(trusted.closedByParentalControls)
+        XCTAssertTrue(trusted.actsForMinors)
+        XCTAssertTrue(controlled.closedByParentalControls)
+        XCTAssertFalse(controlled.actsForMinors)
+        XCTAssertFalse(minor.closedByParentalControls)
+        XCTAssertFalse(minor.actsForMinors)
     }
 
     private func datedProposal(kind: NinaProposalKind) -> NinaProposal {
@@ -4617,12 +4927,12 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertTrue(store.needsConfirmedAgeForChat)
         XCTAssertTrue(store.chatWaitsForConfirmedAge)
         XCTAssertFalse(store.canBuyPremium)
-        XCTAssertFalse(store.canActForMinors)
+        XCTAssertTrue(store.canActForMinors)
         XCTAssertEqual(store.messages.count, messageCount)
     }
 
     @MainActor
-    func testASelfDeclaredAdultThePolicyAdmitsChatsAndBuysButNeverActsForAMinor() async {
+    func testASelfDeclaredAdultThePolicyAdmitsChatsBuysAndActsForAMinor() async {
         let user = makeUser()
         let adultMember = HouseholdMember(
             userID: user.id,
@@ -4649,7 +4959,7 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertTrue(store.canUseNinaAI)
         XCTAssertFalse(store.needsConfirmedAgeForChat)
         XCTAssertTrue(store.canBuyPremium)
-        XCTAssertFalse(store.canActForMinors)
+        XCTAssertTrue(store.canActForMinors)
     }
 
     @MainActor
@@ -5909,7 +6219,6 @@ private extension AgeStatus {
     static var testDeclaredAdult: AgeStatus {
         var status = testTrustedAdult
         status.assurance = .selfDeclared
-        status.trustedAdult = false
         status.mayUseAI = false
         status.mayBuyPremium = false
         return status
@@ -6948,4 +7257,179 @@ private final class DeliveredReminderRecorder: HomeNotificationScheduling {
     func removeDeliveredNotifications() {
         deliveredRemovals += 1
     }
+}
+
+private struct NeverAnsweringAgeRangeProvider: AgeRangeProviding {
+    func requestAgeRange() async throws -> AgeSignal {
+        throw AgeRangeRequestError.unavailable
+    }
+
+    func requiredRegulatoryFeatures() async -> [String]? {
+        nil
+    }
+}
+
+private actor OneHouseBackend: RemoteHomeBackend {
+    enum Load {
+        case home(RemoteHomeState)
+        case none
+        case unreachable
+        case held
+    }
+
+    struct Unreachable: Error {}
+
+    private var loads: [Load]
+    private let viewerAge: AgeStatus
+    private var pendingRequest: FamilyJoinRequest?
+    private var decision: FamilyAccessDecision?
+    private let joinRefusal: Error?
+    private let createRefusal: Error?
+    private let approveRefusal: Error?
+    private let cancelRefusal: Error?
+    private var leaveRefusals: [Error]
+    private let acknowledgeRefusal: Error?
+    private var loadCalls = 0
+    private var held: CheckedContinuation<Load, Never>?
+    private var heldWaiter: CheckedContinuation<Void, Never>?
+    private var subscribedFamilies: [UUID] = []
+    private var subscriptionWaiter: CheckedContinuation<Void, Never>?
+
+    init(
+        loads: [Load],
+        viewerAge: AgeStatus = .unknown,
+        pendingRequest: FamilyJoinRequest? = nil,
+        decision: FamilyAccessDecision? = nil,
+        joinRefusal: Error? = nil,
+        createRefusal: Error? = nil,
+        approveRefusal: Error? = nil,
+        cancelRefusal: Error? = nil,
+        leaveRefusals: [Error] = [],
+        acknowledgeRefusal: Error? = nil
+    ) {
+        self.loads = loads
+        self.viewerAge = viewerAge
+        self.pendingRequest = pendingRequest
+        self.decision = decision
+        self.joinRefusal = joinRefusal
+        self.createRefusal = createRefusal
+        self.approveRefusal = approveRefusal
+        self.cancelRefusal = cancelRefusal
+        self.leaveRefusals = leaveRefusals
+        self.acknowledgeRefusal = acknowledgeRefusal
+    }
+
+    func loadCount() -> Int {
+        loadCalls
+    }
+
+    func waitUntilHeld() async {
+        if held != nil { return }
+        await withCheckedContinuation { heldWaiter = $0 }
+    }
+
+    func release(with load: Load) {
+        held?.resume(returning: load)
+        held = nil
+    }
+
+    func waitForRealtimeSubscription() async -> [UUID] {
+        if subscribedFamilies.isEmpty {
+            await withCheckedContinuation { subscriptionWaiter = $0 }
+        }
+        return subscribedFamilies
+    }
+
+    func loadHome(for user: AuthUser) async throws -> RemoteHomeState? {
+        loadCalls += 1
+        var load = loads.count > 1 ? loads.removeFirst() : (loads.first ?? .none)
+        if case .held = load {
+            load = await withCheckedContinuation { continuation in
+                held = continuation
+                heldWaiter?.resume()
+                heldWaiter = nil
+            }
+        }
+        switch load {
+        case .home(let state):
+            pendingRequest = nil
+            return state
+        case .none, .held:
+            return nil
+        case .unreachable:
+            throw Unreachable()
+        }
+    }
+
+    func loadHomeContext(for user: AuthUser) async throws -> RemoteHomeContext {
+        let state = try await loadHome(for: user)
+        return RemoteHomeContext(viewerAge: state?.viewerAge ?? viewerAge, state: state)
+    }
+
+    func loadPendingJoinRequest() async throws -> FamilyJoinRequest? {
+        pendingRequest
+    }
+
+    func loadFamilyAccessDecision() async throws -> FamilyAccessDecision? {
+        decision
+    }
+
+    func acknowledgeFamilyAccessDecision(_ decisionID: UUID) async throws {
+        if let acknowledgeRefusal { throw acknowledgeRefusal }
+        decision = nil
+    }
+
+    func requestHomeAccess(with inviteCode: String, member: AuthUser?) async throws -> FamilyJoinOutcome {
+        if let joinRefusal { throw joinRefusal }
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func createHome(named name: String, owner: AuthUser?) async throws -> RemoteHomeState {
+        if let createRefusal { throw createRefusal }
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func approveJoinRequest(_ requestID: UUID, permissionRole: FamilyPermissionRole) async throws -> RemoteHomeState {
+        if let approveRefusal { throw approveRefusal }
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func cancelJoinRequest(_ requestID: UUID) async throws {
+        if let cancelRefusal { throw cancelRefusal }
+        pendingRequest = nil
+    }
+
+    func leaveFamily(familyID: UUID) async throws {
+        if !leaveRefusals.isEmpty { throw leaveRefusals.removeFirst() }
+    }
+
+    func realtimeEvents(familyID: UUID) async -> AsyncStream<HomeRealtimeEvent> {
+        subscribedFamilies.append(familyID)
+        subscriptionWaiter?.resume()
+        subscriptionWaiter = nil
+        return AsyncStream { _ in }
+    }
+
+    func joinHome(with inviteCode: String, member: AuthUser?) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func updateFamilySettings(familyID: UUID, name: String) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func addUnclaimedMember(_ member: HouseholdMember, familyID: UUID) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func updateFamilyMember(_ member: HouseholdMember) async throws -> RemoteHomeState {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
+    func createTaskSection(_ section: TaskSection, sortOrder: Int, familyID: UUID) async throws {}
+    func createTaskCategory(_ category: TaskCategory, familyID: UUID) async throws {}
+    func createTask(_ task: TaskItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateTask(_ task: TaskItem, familyID: UUID) async throws {}
+    func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws {}
+    func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {}
 }

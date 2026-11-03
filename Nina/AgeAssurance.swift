@@ -456,11 +456,11 @@ struct AgeMapping: Equatable {
     var assurance: AgeAssuranceLevel
     var parentalControlsActive: Bool
 
-    // Acting for a child is hard-coded to an Apple-confirmed or operator record, whatever the policy row allows for chat.
+    // Acting for a child takes an adult without parental controls, whatever the policy row allows for chat.
     var isTrustedAdult: Bool {
         status == .adult
             && !parentalControlsActive
-            && (assurance == .confirmed || assurance == .operatorSet)
+            && (assurance == .confirmed || assurance == .operatorSet || assurance == .selfDeclared)
     }
 }
 
@@ -833,6 +833,12 @@ final class AgeCheckCoordinator {
     }
 
     func clearInlineOutcome() {
+        inlineOutcome = nil
+    }
+
+    // A share still running owns its outcome; only a settled one may be cleared by the screen leaving.
+    func clearInlineOutcomeIfIdle() {
+        guard !isRequestingInline else { return }
         inlineOutcome = nil
     }
 

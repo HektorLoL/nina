@@ -36,6 +36,7 @@ enum Route: Hashable {
 
 enum SheetDestination: Identifiable, Hashable {
     case settings
+    case houseSettings
     case premium
     case addTask
     case addSeed
@@ -52,6 +53,8 @@ enum SheetDestination: Identifiable, Hashable {
         switch self {
         case .settings:
             "settings"
+        case .houseSettings:
+            "house-settings"
         case .premium:
             "premium"
         case .addTask:
@@ -135,6 +138,7 @@ struct AppEntryInputs {
     var reachedMajority: Bool = false
     var needsTermsAcceptance: Bool = false
     var hasPendingInvite: Bool
+    var inviteHeldUntilHouseExit: Bool = false
     var shouldShowTutorial: Bool
 }
 
@@ -150,7 +154,11 @@ enum AppEntryRouting {
         if !inputs.viewerIsAdult { return .minorRoot }
         if inputs.reachedMajority { return .majority }
         if inputs.needsTermsAcceptance { return .termsAcceptance }
-        if inputs.hasPendingInvite { return .invite }
+        // An invite held while the person leaves their house waits behind it and returns once they hold none.
+        if inputs.hasPendingInvite,
+           !(inputs.inviteHeldUntilHouseExit && inputs.homeAccessState == .authorized) {
+            return .invite
+        }
 
         switch inputs.homeAccessState {
         case .loading:
@@ -343,6 +351,7 @@ struct AppRootView: View {
                 reachedMajority: store.viewerAge.terms.reachedMajority,
                 needsTermsAcceptance: store.needsTermsAcceptance,
                 hasPendingInvite: inviteLinkStore.pendingCode != nil,
+                inviteHeldUntilHouseExit: inviteLinkStore.isHeldUntilHouseExit,
                 shouldShowTutorial: onboardingStore.shouldShowTutorial(for: authSession.currentUser)
             )
         )
@@ -376,22 +385,14 @@ struct AppRootView: View {
             return
         }
         let load = Task {
-            await store.activateHomeContext(for: user)
-            await evaluateAge(for: user)
+            await HomeEntryLoad.run(store: store, ageCheck: ageCheck, user: user)
         }
         homeLoad = HomeLoad(userID: user?.id, task: load)
         await load.value
     }
 
     private func evaluateAge(for user: AuthUser?) async {
-        let isVerified = store.homeAccessState != .loading && store.homeAccessState != .unavailable
-        guard let status = await ageCheck.evaluate(
-            user: user,
-            age: store.viewerAge,
-            isVerified: isVerified,
-            isLocalContext: store.isUsingLocalContext
-        ) else { return }
-        await store.applyRecordedAge(status, for: user)
+        await HomeEntryLoad.evaluateAge(store: store, ageCheck: ageCheck, user: user)
     }
 
     @ViewBuilder
@@ -423,7 +424,13 @@ struct AppRootView: View {
             AppWaitingScreen()
                 .transition(.opacity)
         case .invite:
-            InviteAcceptanceView { homeSetupStartsCreating = true }
+            InviteAcceptanceView(
+                onCreateHouse: { homeSetupStartsCreating = true },
+                onOpenHouseSettings: {
+                    selectedTab = .house
+                    tabRouter.router(for: .house).presentedSheet = .houseSettings
+                }
+            )
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         case .pendingApproval:
             PendingHomeApprovalView()
@@ -436,7 +443,9 @@ struct AppRootView: View {
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
                 .onDisappear { homeSetupStartsCreating = false }
         case .homeUnavailable:
-            HomeAccessUnavailableView()
+            HomeAccessUnavailableView {
+                await HomeEntryLoad.run(store: store, ageCheck: ageCheck, user: authSession.currentUser)
+            }
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
         case .app:
             appShell
@@ -609,11 +618,33 @@ struct AppRootView: View {
     }
 }
 
+// The age step reads only a verified house, so every load that may turn an unverified house verified runs it after.
+@MainActor
+enum HomeEntryLoad {
+    static func run(store: AppStore, ageCheck: AgeCheckCoordinator, user: AuthUser?) async {
+        await store.activateHomeContext(for: user)
+        await evaluateAge(store: store, ageCheck: ageCheck, user: user)
+    }
+
+    static func evaluateAge(store: AppStore, ageCheck: AgeCheckCoordinator, user: AuthUser?) async {
+        let isVerified = store.homeAccessState != .loading && store.homeAccessState != .unavailable
+        guard let status = await ageCheck.evaluate(
+            user: user,
+            age: store.viewerAge,
+            isVerified: isVerified,
+            isLocalContext: store.isUsingLocalContext
+        ) else { return }
+        await store.applyRecordedAge(status, for: user)
+    }
+}
+
 private struct HomeAccessUnavailableView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
     @Environment(OnboardingStore.self) private var onboardingStore
     @State private var isShowingDeletion = false
+
+    let retry: () async -> Void
 
     var body: some View {
         GeometryReader { proxy in
@@ -631,7 +662,7 @@ private struct HomeAccessUnavailableView: View {
                             systemName: "arrow.clockwise",
                             isEnabled: !store.isSyncingHome
                         ) {
-                            Task { await store.activateHomeContext(for: authSession.currentUser) }
+                            Task { await retry() }
                         }
 
                         NinaButton(title: "Sair da conta", kind: .quiet) {
@@ -1170,6 +1201,8 @@ private struct SheetDestinationsModifier: ViewModifier {
                 switch destination {
                 case .settings:
                     SettingsSheet()
+                case .houseSettings:
+                    SettingsSheet(startsAtHouse: true)
                 case .premium:
                     PremiumEntryView()
                 case .addTask:

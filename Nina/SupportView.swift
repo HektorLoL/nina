@@ -39,7 +39,7 @@ enum SupportContent {
                 ),
                 SupportQuestion(
                     question: "Quem pode conversar com a Nina?",
-                    answer: "Quem tem 18 anos ou mais na faixa de idade da Apple, declarada ou confirmada. Depois de aceitar o aviso, você conversa com a Nina e pode assinar o Premium. Incluir uma criança ou um adolescente pede idade confirmada pela Apple."
+                    answer: "Quem tem 18 anos ou mais na faixa de idade da Apple, declarada ou confirmada. Depois de aceitar o aviso, você conversa com a Nina e pode assinar o Premium."
                 ),
             ]
         ),
@@ -55,12 +55,16 @@ enum SupportContent {
                     answer: "Até \(AppStore.maxFamilyPeople), entre pessoas e pets. A Nina não ocupa vaga."
                 ),
                 SupportQuestion(
+                    question: "Posso estar em duas casas?",
+                    answer: "Não. Cada conta fica numa casa por vez. Para entrar em outra, saia da sua em Ajustes. Quem é titular passa a casa para outro adulto ou apaga a casa antes."
+                ),
+                SupportQuestion(
                     question: "Crianças podem usar a Nina?",
                     answer: "Uma criança ou um adolescente entra numa casa só com a aprovação de um responsável, e vê só as próprias tarefas."
                 ),
                 SupportQuestion(
-                    question: "Por que não consigo incluir uma criança?",
-                    answer: "Incluir uma criança ou aprovar um adolescente pede idade confirmada pela Apple: a idade que a Apple verificou, não só a declarada. Se a confirmação chegar depois, use Tentar de novo no mesmo lugar."
+                    question: "Quem pode incluir uma criança?",
+                    answer: "Um adulto da casa com 18 anos ou mais na faixa de idade da Apple, declarada ou confirmada, que se declara responsável pela criança. Aprovar o pedido de uma criança ou de um adolescente também pede ser titular ou administrador da casa. Com controles parentais ativos, a conta não inclui crianças nem adolescentes."
                 ),
                 SupportQuestion(
                     question: "O que o Premium inclui?",

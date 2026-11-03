@@ -5,6 +5,23 @@ enum MemberEditorMode: Hashable {
     case edit(UUID)
 }
 
+enum MemberEditorCopy {
+    static func eyebrow(for role: HouseholdRole) -> String {
+        role == .pet ? "Pet" : "Pessoa"
+    }
+
+    // The line explains a child or teen chip that cannot be saved, so it shows only while one is chosen.
+    static func minorLine(
+        for role: HouseholdRole,
+        isAdding: Bool,
+        canActForMinors: Bool,
+        closedByParentalControls: Bool
+    ) -> String? {
+        guard isAdding, role.isMinorRole, !canActForMinors else { return nil }
+        return MinorActingCopy.addingLine(closedByParentalControls: closedByParentalControls)
+    }
+}
+
 struct MemberEditorSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(RouterPath.self) private var router
@@ -88,7 +105,9 @@ struct MemberEditorSheet: View {
     }
 
     private var canSave: Bool {
-        canEdit && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        canEdit
+            && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !(isAdding && householdRole.isMinorRole && !store.canActForMinors)
     }
 
     var body: some View {
@@ -145,7 +164,7 @@ struct MemberEditorSheet: View {
     }
 
     private var header: some View {
-        SheetHeader(eyebrow: "Pessoa") {
+        SheetHeader(eyebrow: MemberEditorCopy.eyebrow(for: householdRole)) {
             dismiss()
         }
         .padding(.top, 4)
@@ -230,11 +249,15 @@ struct MemberEditorSheet: View {
                         VStack(alignment: .leading, spacing: 8) { roleChips }
                     }
 
-                    if isAdding, !store.canActForMinors {
-                        Text("Só um responsável com idade confirmada pela Apple cadastra.")
+                    if let line = MemberEditorCopy.minorLine(
+                        for: householdRole,
+                        isAdding: isAdding,
+                        canActForMinors: store.canActForMinors,
+                        closedByParentalControls: store.actingForMinorsClosedByParentalControls
+                    ) {
+                        Text(line)
                             .ninaText(.caption, NinaTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
-                        AppleConfirmationRetry()
                     }
                 }
             }
@@ -295,11 +318,11 @@ struct MemberEditorSheet: View {
         }
     }
 
-    // Children and teens are registered only by a guardian Apple confirmed; a pet only by who runs the house.
+    // A closed child chip still answers a tap with its reason; saving it stays closed (canSave).
     private func isRoleAvailable(_ role: HouseholdRole) -> Bool {
         guard isAdding else { return true }
         switch role {
-        case .teen, .child: return store.canActForMinors
+        case .teen, .child: return true
         case .pet: return store.canManageFamily
         case .adult: return true
         case .assistant, .unrecognized: return false
@@ -829,14 +852,17 @@ struct PendingJoinRequestCard: View {
         }
     }
 
-    // A minor or a person of unknown age enters only as a member, approved by a guardian Apple confirmed.
+    // A minor or a person of unknown age enters only as a member, approved by an adult the server trusts.
     @ViewBuilder
     private var guardianApproval: some View {
         if !store.canActForMinors {
-            Text("Isso pede idade confirmada pela Apple.")
-                .ninaText(.caption, NinaTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            AppleConfirmationRetry()
+            Text(
+                MinorActingCopy.approvingLine(
+                    closedByParentalControls: store.actingForMinorsClosedByParentalControls
+                )
+            )
+            .ninaText(.caption, NinaTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
         }
 
         ViewThatFits(in: .horizontal) {
@@ -1018,7 +1044,7 @@ struct PendingHomeApprovalView: View {
                                 isEnabled: !store.isSyncingHome
                             ) {
                                 Task {
-                                    await store.activateHomeContext(for: authSession.currentUser)
+                                    await store.refreshHomeFromRemote(for: authSession.currentUser)
                                 }
                             }
 
@@ -1056,12 +1082,16 @@ struct PendingHomeApprovalView: View {
         }
         .ninaScreenBackground()
         .accountDeletionSheet(isPresented: $isShowingDeletion)
-        // Nobody should have to tap "Atualizar" to learn they were let in.
+        // Nobody should have to tap "Atualizar" to learn they were let in, and the poll reads in place so no open sheet closes.
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard !Task.isCancelled else { return }
-                await store.activateHomeContext(for: authSession.currentUser)
+                guard !isShowingDeletion, !isCancelling else { continue }
+                await store.refreshHomeFromRemote(
+                    for: authSession.currentUser,
+                    keepingStateWhenUnverifiable: true
+                )
             }
         }
     }

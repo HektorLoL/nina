@@ -56,6 +56,20 @@ final class SupportContentTests: XCTestCase {
         XCTAssertEqual(cancelAnswer?.answer.contains("Apagar a conta não cancela a cobrança."), true)
     }
 
+    func testNoAnswerSaysActingForAChildNeedsAnAgeAppleConfirmedAndOneHouseIsTheRule() {
+        for item in everyQuestion {
+            XCTAssertFalse(item.answer.contains("idade confirmada pela Apple"), item.answer)
+            XCTAssertFalse(item.answer.contains("Tentar de novo"), item.answer)
+        }
+
+        let houses = everyQuestion.first { $0.question == "Posso estar em duas casas?" }
+        XCTAssertEqual(houses?.answer.hasPrefix("Não. Cada conta fica numa casa por vez."), true)
+
+        let child = everyQuestion.first { $0.question == "Quem pode incluir uma criança?" }
+        XCTAssertEqual(child?.answer.contains("declarada ou confirmada"), true)
+        XCTAssertEqual(child?.answer.contains("controles parentais"), true)
+    }
+
     func testQuestionsAreUniqueSoOnlyOneOpensAtATime() {
         let ids = everyQuestion.map(\.id)
 

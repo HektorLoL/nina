@@ -97,6 +97,10 @@ enum RemoteRPCErrorCode: String, CaseIterable {
     case familyDeleteDenied = "family_delete_denied"
     case familyDeleteNameMismatch = "family_delete_name_mismatch"
     case familyNotFound = "family_not_found"
+    case familyMembershipExists = "family_membership_exists"
+    case joinRequestNotPending = "join_request_not_pending"
+    case joinRequestCancelDenied = "join_request_cancel_denied"
+    case accessDecisionAcknowledgeDenied = "access_decision_acknowledge_denied"
 
     // The message is the code itself; a longer message never contains another code by accident because matching is exact.
     init?(message: String?) {
@@ -128,7 +132,7 @@ enum RemoteRPCErrorCode: String, CaseIterable {
         case .adultAccountRequired:
             return "Isso é só para maiores de 18 anos."
         case .ageConfirmationRequired:
-            return "Isso pede idade confirmada pela Apple."
+            return "Isso não abre nesta conta."
         case .guardianDeclarationRequired:
             return "Falta sua declaração de responsável."
         case .minorRoleRestricted:
@@ -159,10 +163,17 @@ enum RemoteRPCErrorCode: String, CaseIterable {
             return "O nome da casa mudou. Confira e escreva de novo."
         case .familyNotFound:
             return "Você não faz mais parte desta casa."
+        case .familyMembershipExists:
+            return "Você já está numa casa. Para entrar em outra, saia da sua antes."
+        case .joinRequestNotPending:
+            return "Esse pedido já não vale."
+        case .joinRequestCancelDenied:
+            return "A casa já respondeu ao seu pedido."
         case .minorBirthDateNotAllowed, .invalidNicknames, .invalidSupervisionSettings,
              .invalidAcknowledgement, .invalidUsage, .invalidNextDueAt, .invalidReportReason,
              .notAMinorMember, .minorAccountRequired, .taskVersionConflict, .taskNotFound,
-             .ninaMessageNotFound, .ninaAdultAccessRequired, .rateLimited:
+             .ninaMessageNotFound, .ninaAdultAccessRequired, .rateLimited,
+             .accessDecisionAcknowledgeDenied:
             return "Não deu para salvar agora."
         }
     }
@@ -871,8 +882,11 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                     .execute()
                     .value
             }
-        } catch is PostgrestError {
-            // Only the server's verdict may call an invite dead; a transport failure must not.
+        } catch let error as PostgrestError {
+            // Someone already in a house is told so; every other server verdict reads as a dead invite, a transport failure never does.
+            if RemoteRPCErrorCode(message: error.message) == .familyMembershipExists {
+                throw RemoteRPCError(code: .familyMembershipExists)
+            }
             throw RemoteHomeBackendError.inviteRefused
         }
 

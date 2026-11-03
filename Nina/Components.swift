@@ -281,22 +281,28 @@ struct NinaSuccessNote: View {
 
 // A new age reading lands green, a refusal by Apple or the server lands red, and a person's own "no" or an
 // answer that changed nothing stays neutral.
+// The outcome belongs to the screen it was shown on, so it leaves with that screen and never follows the person.
 struct AgeOutcomeNote: View {
+    @Environment(AgeCheckCoordinator.self) private var ageCheck: AgeCheckCoordinator?
+
     var outcome: InlineAgeOutcome
     var alignment: TextAlignment = .leading
 
     var body: some View {
-        switch outcome {
-        case .updated:
-            NinaSuccessNote(text: outcome.line)
-        case .appleError, .attestFailure, .rejected:
-            NinaErrorNote(text: outcome.line, alignment: alignment)
-        case .declined, .unchanged:
-            Text(outcome.line)
-                .ninaText(.caption, NinaTheme.ink, weight: .medium)
-                .multilineTextAlignment(alignment)
-                .fixedSize(horizontal: false, vertical: true)
+        Group {
+            switch outcome {
+            case .updated:
+                NinaSuccessNote(text: outcome.line)
+            case .appleError, .attestFailure, .rejected:
+                NinaErrorNote(text: outcome.line, alignment: alignment)
+            case .declined, .unchanged:
+                Text(outcome.line)
+                    .ninaText(.caption, NinaTheme.ink, weight: .medium)
+                    .multilineTextAlignment(alignment)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .onDisappear { ageCheck?.clearInlineOutcomeIfIdle() }
     }
 }
 

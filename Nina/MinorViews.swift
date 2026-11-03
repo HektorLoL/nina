@@ -656,8 +656,11 @@ private struct MinorPendingView: View {
                 presence: .waiting
             ) {
                 VStack(spacing: 10) {
+                    if let error = store.syncErrorMessage {
+                        NinaErrorNote(text: error, alignment: .center)
+                    }
                     NinaButton(title: "Atualizar", systemName: "arrow.clockwise", isEnabled: !store.isSyncingHome) {
-                        Task { await store.activateHomeContext(for: authSession.currentUser) }
+                        Task { await store.refreshHomeFromRemote(for: authSession.currentUser) }
                     }
                     NinaButton(title: "Cancelar pedido", kind: .quiet, isEnabled: !store.isSyncingHome) {
                         Task {
@@ -674,7 +677,11 @@ private struct MinorPendingView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard !Task.isCancelled else { return }
-                await store.activateHomeContext(for: authSession.currentUser)
+                guard !isShowingSettings else { continue }
+                await store.refreshHomeFromRemote(
+                    for: authSession.currentUser,
+                    keepingStateWhenUnverifiable: true
+                )
             }
         }
     }
