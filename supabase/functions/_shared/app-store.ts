@@ -402,31 +402,49 @@ export function buildSubscriptionUpsert(
     revocation_reason: params.transaction.revocationReason == null
       ? null
       : String(params.transaction.revocationReason),
-    grace_period_expires_at: isoDate(params.renewal?.gracePeriodExpiresDate),
-    will_renew: params.renewal?.autoRenewStatus == null
+    signed_transaction_info: params.signedTransactionInfo,
+    raw_transaction: params.transaction,
+    last_verified_at: now,
+    ...renewalColumns(params.renewal, params.signedRenewalInfo),
+    ...notificationColumns(params.notification),
+  };
+}
+
+// An app sync carries no renewal info, so it never overwrites the renewal state a notification recorded.
+function renewalColumns(
+  renewal: JWSRenewalInfoDecodedPayload | null | undefined,
+  signedRenewalInfo: string | null | undefined,
+): Record<string, unknown> {
+  if (!renewal) return {};
+
+  return {
+    grace_period_expires_at: isoDate(renewal.gracePeriodExpiresDate),
+    will_renew: renewal.autoRenewStatus == null
       ? null
-      : params.renewal.autoRenewStatus === 1,
-    auto_renew_status: params.renewal?.autoRenewStatus == null
+      : renewal.autoRenewStatus === 1,
+    auto_renew_status: renewal.autoRenewStatus == null
       ? null
-      : params.renewal.autoRenewStatus === 1
+      : renewal.autoRenewStatus === 1
       ? "on"
       : "off",
-    auto_renew_product_id: stringOrNull(params.renewal?.autoRenewProductId),
-    expiration_intent: params.renewal?.expirationIntent == null
+    auto_renew_product_id: stringOrNull(renewal.autoRenewProductId),
+    expiration_intent: renewal.expirationIntent == null
       ? null
-      : String(params.renewal.expirationIntent),
-    signed_transaction_info: params.signedTransactionInfo,
-    signed_renewal_info: params.signedRenewalInfo ?? null,
-    raw_transaction: params.transaction,
-    raw_renewal_info: params.renewal ?? {},
-    latest_notification_type: stringOrNull(
-      params.notification?.notificationType,
-    ),
-    latest_notification_subtype: stringOrNull(params.notification?.subtype),
-    latest_notification_uuid: stringOrNull(
-      params.notification?.notificationUUID,
-    ),
-    last_verified_at: now,
+      : String(renewal.expirationIntent),
+    signed_renewal_info: signedRenewalInfo ?? null,
+    raw_renewal_info: renewal,
+  };
+}
+
+function notificationColumns(
+  notification: ResponseBodyV2DecodedPayload | null | undefined,
+): Record<string, unknown> {
+  if (!notification) return {};
+
+  return {
+    latest_notification_type: stringOrNull(notification.notificationType),
+    latest_notification_subtype: stringOrNull(notification.subtype),
+    latest_notification_uuid: stringOrNull(notification.notificationUUID),
   };
 }
 

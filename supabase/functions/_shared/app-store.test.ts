@@ -159,6 +159,54 @@ Deno.test("a sandbox purchase is recorded as Sandbox and bound to the account th
   assertEquals(subscription.app_account_token, userID);
 });
 
+Deno.test("an app sync never clears the renewal state a notification recorded", () => {
+  const userID = "7e3fb20b-4cdb-47cc-936d-99d65f608138";
+  const transaction = {
+    originalTransactionId: "2000000000000001",
+    transactionId: "2000000000000003",
+    productId: "com.heitor.nina.premium.monthly",
+    environment: "Sandbox",
+    appAccountToken: userID,
+    purchaseDate: Date.now(),
+    expiresDate: Date.now() + 300_000,
+  } as unknown as Parameters<typeof buildSubscriptionUpsert>[0]["transaction"];
+  const renewalKeys = [
+    "grace_period_expires_at",
+    "will_renew",
+    "auto_renew_status",
+    "auto_renew_product_id",
+    "expiration_intent",
+    "signed_renewal_info",
+    "raw_renewal_info",
+    "latest_notification_type",
+    "latest_notification_subtype",
+    "latest_notification_uuid",
+  ];
+
+  const appSync = buildSubscriptionUpsert({
+    userID,
+    signedTransactionInfo: "header.payload.signature",
+    transaction,
+    source: "purchase",
+  });
+  for (const key of renewalKeys) assertFalse(key in appSync, key);
+
+  const notified = buildSubscriptionUpsert({
+    userID,
+    signedTransactionInfo: "header.payload.signature",
+    transaction,
+    signedRenewalInfo: "renewal.payload.signature",
+    renewal: { autoRenewStatus: 1, autoRenewProductId: "com.heitor.nina.premium.monthly" } as unknown as Parameters<typeof buildSubscriptionUpsert>[0]["renewal"],
+    notification: { notificationType: "DID_RENEW", notificationUUID: "n-1" } as unknown as Parameters<typeof buildSubscriptionUpsert>[0]["notification"],
+    source: "app_store_notification",
+  });
+  assertEquals(notified.will_renew, true);
+  assertEquals(notified.auto_renew_status, "on");
+  assertEquals(notified.signed_renewal_info, "renewal.payload.signature");
+  assertEquals(notified.latest_notification_type, "DID_RENEW");
+  assertEquals(notified.latest_notification_uuid, "n-1");
+});
+
 Deno.test("App Store JSON requests require bounded application/json bodies", async () => {
   const valid = await readAppStoreJSONRequest(
     new Request("https://example.test/premium", {

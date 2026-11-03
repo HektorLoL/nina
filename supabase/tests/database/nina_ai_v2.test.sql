@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(110);
+select plan(114);
 
 insert into auth.users (
   id,
@@ -782,6 +782,71 @@ select is(
   '0:1234',
   'failed run settlement releases reservation and adds actual spend'
 );
+
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select ok(
+  not exists (
+    select 1
+    from jsonb_array_elements(public.get_current_nina_state('62000000-0000-0000-0000-000000000001') -> 'messages') as message
+    where message ->> 'id' = '63000000-0000-0000-0000-000000000014'
+  ),
+  'the line of a turn that failed is not read back into the thread'
+);
+
+reset role;
+
+select ok(
+  exists (
+    select 1
+    from public.chat_messages
+    where id = '63000000-0000-0000-0000-000000000014'
+  ),
+  'the line of a failed turn is hidden, never deleted'
+);
+
+update public.nina_ai_runs
+set status = 'running'
+where id = current_setting('test.failed_nina_run')::uuid;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select ok(
+  exists (
+    select 1
+    from jsonb_array_elements(public.get_current_nina_state('62000000-0000-0000-0000-000000000001') -> 'messages') as message
+    where message ->> 'id' = '63000000-0000-0000-0000-000000000014'
+  ),
+  'the line of a turn still running stays in the thread'
+);
+
+reset role;
+
+update public.nina_ai_runs
+set status = 'failed'
+where id = current_setting('test.failed_nina_run')::uuid;
+
+update public.chat_messages
+set text = 'Mensagem não enviada.'
+where id = '63000000-0000-0000-0000-000000000014';
+
+set local role authenticated;
+set local request.jwt.claim.sub = '61000000-0000-0000-0000-000000000001';
+
+select ok(
+  exists (
+    select 1
+    from jsonb_array_elements(public.get_current_nina_state('62000000-0000-0000-0000-000000000001') -> 'messages') as message
+    where message ->> 'id' = '63000000-0000-0000-0000-000000000014'
+      and message ->> 'text' = 'Mensagem não enviada.'
+  ),
+  'a refused line the server redacted still reads as not sent'
+);
+
+reset role;
+set local request.jwt.claim.sub = '';
 
 select is(
   (

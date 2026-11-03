@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(204);
+select plan(208);
 
 create function pg_temp.affected_rows(command text)
 returns integer
@@ -87,7 +87,7 @@ select ok(
 
 select ok(
   (select trusted_assurances = '{confirmed,operator}' from private.age_policy),
-  'only Apple-confirmed and operator-set adults are trusted by default'
+  'only Apple-confirmed and operator-set adults may chat and buy Premium under the default policy'
 );
 
 select throws_ok(
@@ -162,9 +162,9 @@ set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000002';
 
 select ok(
   (public.get_my_age_status() ->> 'status') = 'adult'
-    and (public.get_my_age_status() ->> 'trusted_adult') = 'false'
+    and (public.get_my_age_status() ->> 'trusted_adult') = 'true'
     and (public.get_my_age_status() ->> 'may_use_ai') = 'false',
-  'a self-declared adult is an adult for the house but never trusted'
+  'a self-declared adult may act for a minor while the default policy still keeps the chat closed'
 );
 
 set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000001';
@@ -273,14 +273,21 @@ select throws_ok(
   'a minor is never approved as administrator'
 );
 
+reset role;
+update private.account_age_status set parental_controls_active = true where user_id = 'a1000000-0000-4000-8000-000000000002';
+set local role authenticated;
 set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000002';
 
 select throws_ok(
   $$select public.approve_family_join_request(current_setting('test.request_minor')::uuid, 'member', 'pai', '12_15', true, '2026-09-29')$$,
   '42501',
   'age_confirmation_required',
-  'a self-declared administrator cannot approve a minor'
+  'an administrator under parental controls cannot approve a minor'
 );
+
+reset role;
+update private.account_age_status set parental_controls_active = false where user_id = 'a1000000-0000-4000-8000-000000000002';
+set local role authenticated;
 
 set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000001';
 
@@ -562,6 +569,7 @@ select throws_ok(
   'a child or teen row never stores a birth date'
 );
 
+update private.account_age_status set parental_controls_active = true where user_id = 'a1000000-0000-4000-8000-000000000002';
 set local role authenticated;
 set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000002';
 
@@ -569,8 +577,13 @@ select throws_ok(
   $$select public.add_minor_profile(current_setting('test.family')::uuid, 'Caio', '12_15', 'pai', '2026-09-29')$$,
   '42501',
   'age_confirmation_required',
-  'a self-declared adult cannot create a child profile'
+  'an adult under parental controls cannot create a child profile'
 );
+
+reset role;
+update private.account_age_status set parental_controls_active = false where user_id = 'a1000000-0000-4000-8000-000000000002';
+set local role authenticated;
+set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000002';
 
 set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000005';
 
@@ -1123,6 +1136,22 @@ select is(
 );
 
 reset role;
+
+select set_config('test.terms_version', (select current_terms_version from private.age_policy where singleton), true);
+update private.age_policy set current_terms_version = '2099-01-01' where singleton;
+
+set local role authenticated;
+set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000003';
+
+select ok(
+  (public.get_my_age_status() #>> '{terms,reached_majority}') = 'false'
+    and (public.get_my_age_status() #>> '{terms,accepted_current}') = 'false',
+  'a new adult who answered the majority notice meets only the changed Terms when their version moves'
+);
+
+reset role;
+
+update private.age_policy set current_terms_version = current_setting('test.terms_version') where singleton;
 set local role service_role;
 
 select is(
@@ -1759,11 +1788,16 @@ select is(
 
 select ok(
   (select assurance = 'self_declared' from private.account_age_status where user_id = 'c1000000-0000-4000-8000-000000000002')
-    and not private.is_trusted_adult('c1000000-0000-4000-8000-000000000002'),
-  'an adult the operator stops trusting reads as self-declared'
+    and private.is_trusted_adult('c1000000-0000-4000-8000-000000000002'),
+  'an adult the operator stops marking reads as self-declared and still acts for a minor'
 );
 
--- Decision D3 = A admits self-declared adults to chat and Premium, never to act for a minor.
+select ok(
+  not private.is_trusted_adult('c1000000-0000-4000-8000-000000000004'),
+  'a self-declared adult under parental controls never acts for a minor'
+);
+
+-- Decision D3 = A admits self-declared adults to chat and Premium; acting for a minor never follows the policy row.
 update private.age_policy
 set trusted_assurances = '{confirmed,operator,self_declared}'
 where singleton;
@@ -1774,8 +1808,8 @@ set local request.jwt.claim.sub = 'c1000000-0000-4000-8000-000000000003';
 select ok(
   (public.get_my_age_status() ->> 'may_use_ai') = 'true'
     and (public.get_my_age_status() ->> 'may_buy_premium') = 'true'
-    and (public.get_my_age_status() ->> 'trusted_adult') = 'false',
-  'with self-declared adults admitted, one may chat and buy Premium and is still not a trusted adult'
+    and (public.get_my_age_status() ->> 'trusted_adult') = 'true',
+  'with self-declared adults admitted, one may chat, buy Premium and act for a minor'
 );
 
 select lives_ok(
@@ -1796,12 +1830,28 @@ select lives_ok(
   'an admitted self-declared adult starts a chat turn'
 );
 
-select throws_ok(
+select lives_ok(
   $$select public.add_minor_profile(current_setting('test.family3')::uuid, 'Lia', 'under_12', 'mae', '2026-09-29')$$,
-  '42501',
-  'age_confirmation_required',
-  'an admitted self-declared adult still cannot register a child'
+  'a self-declared adult registers a child'
 );
+
+reset role;
+
+select is(
+  (
+    select links.guardian_assurance
+    from private.minor_guardianships as links
+    join public.family_members as wards on wards.id = links.member_id
+    where wards.family_id = current_setting('test.family3')::uuid
+      and wards.name = 'Lia'
+      and links.ended_at is null
+  ),
+  'self_declared',
+  'a self-declared guardian is recorded with the assurance they hold'
+);
+
+set local role authenticated;
+set local request.jwt.claim.sub = 'c1000000-0000-4000-8000-000000000003';
 
 reset role;
 set local role service_role;
@@ -1840,6 +1890,12 @@ select throws_ok(
 );
 
 reset role;
+
+select ok(
+  private.is_trusted_adult('c1000000-0000-4000-8000-000000000003')
+    and not private.may_use_ai('c1000000-0000-4000-8000-000000000003'),
+  'reverting the AI policy leaves a self-declared adult acting for a minor'
+);
 
 select * from finish();
 

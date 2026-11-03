@@ -154,6 +154,9 @@ values
     '71000000-0000-0000-0000-000000000001'
   );
 
+-- An account left in two houses before the one-house rule is still deleted house by house.
+alter table public.family_members disable trigger family_members_one_house_per_account;
+
 insert into public.family_members (
   family_id,
   user_id,
@@ -191,6 +194,8 @@ values
     'owner',
     'mint'
   );
+
+alter table public.family_members enable trigger family_members_one_house_per_account;
 
 insert into public.invites (
   token,

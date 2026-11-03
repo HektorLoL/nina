@@ -17,6 +17,7 @@ export const maxAttachmentBytes = 5 * 1024 * 1024;
 export const maxTotalAttachmentBytes = 8 * 1024 * 1024;
 export const maxNinaChatRequestBytes = 12 * 1024 * 1024;
 export const maxDrainedRequestBytes = 32 * 1024 * 1024;
+export const maxNinaChatMessageLength = 2000;
 
 export type NinaChatRequestRead =
   | { ok: true; request: NinaChatRequest }
@@ -113,7 +114,7 @@ export function isNinaChatRequest(value: unknown): value is NinaChatRequest {
       )
     )
     && typeof request.message === "string"
-    && request.message.length <= 2000
+    && request.message.length <= maxNinaChatMessageLength
     && (request.message.trim().length > 0 || attachments.length > 0);
 }
 
@@ -147,6 +148,16 @@ export async function readNinaChatRequest(
     body = JSON.parse(rawBody);
   } catch {
     return { ok: false, status: 400, error: "invalid_json" };
+  }
+
+  // A message over the length cap is too large, never a malformed turn, so the app can say why.
+  if (
+    body
+    && typeof body === "object"
+    && typeof (body as { message?: unknown }).message === "string"
+    && (body as { message: string }).message.length > maxNinaChatMessageLength
+  ) {
+    return { ok: false, status: 413, error: "input_too_large" };
   }
 
   if (!isNinaChatRequest(body)) {

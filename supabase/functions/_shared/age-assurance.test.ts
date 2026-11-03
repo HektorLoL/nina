@@ -143,7 +143,7 @@ Deno.test("a deprecated checked declaration counts as confirmed", () => {
   }
 });
 
-Deno.test("a self-declared adult is never trusted", () => {
+Deno.test("an 18+ range without Apple's confirmation records a self-declared adult", () => {
   assertEquals(
     mapAgeRange(sharing(18, null, "self_declared")).assurance,
     "self_declared",

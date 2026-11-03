@@ -46,6 +46,7 @@ import {
   isNinaChatRequest,
   maxAttachmentCount,
   maxDrainedRequestBytes,
+  maxNinaChatMessageLength,
   maxNinaChatRequestBytes,
   maxTotalAttachmentBytes,
   readNinaChatRequest,
@@ -193,6 +194,23 @@ Deno.test("an endless chat body stops being read at the drain ceiling", async ()
     error: "input_too_large",
   });
   assert(pulls <= maxDrainedRequestBytes / chunkBytes + 2);
+});
+
+Deno.test("a message over the length cap reads as too large and one at the cap still reads", async () => {
+  const turn = (message: string) =>
+    chatRequest(JSON.stringify({ family_id: familyID, message_id: messageID, message }));
+
+  assertEquals(maxNinaChatMessageLength, 2000);
+  const atCap = await readNinaChatRequest(turn("a".repeat(maxNinaChatMessageLength)));
+  assert(atCap.ok);
+  assertEquals(
+    await readNinaChatRequest(turn("a".repeat(maxNinaChatMessageLength + 1))),
+    { ok: false, status: 413, error: "input_too_large" },
+  );
+  assertEquals(
+    await readNinaChatRequest(turn("\u{1F600}".repeat(1001))),
+    { ok: false, status: 413, error: "input_too_large" },
+  );
 });
 
 Deno.test("a chat body that is not JSON or not a turn keeps its stable codes", async () => {
