@@ -1538,6 +1538,27 @@ enum AccountDeletionTarget: Hashable {
 }
 
 // One deletion flow for every signed-in state: with a house, without one, as a minor, or as a guardian for a ward.
+enum DeletedAccountCleanup {
+    @MainActor
+    static func clear(
+        _ userID: String,
+        store: AppStore,
+        profileStore: ProfileStore,
+        onboardingStore: OnboardingStore,
+        inviteLinkStore: InviteLinkStore,
+        ageCheck: AgeCheckCoordinator
+    ) {
+        store.clearLocalData(for: userID)
+        profileStore.clearLocalData(for: userID)
+        onboardingStore.clearLocalData(for: userID)
+        inviteLinkStore.clear()
+        KeychainAppAttestKeyStore().remove(for: userID)
+        ageCheck.reset()
+        try? PrivacyExportFileStore.removeAll()
+        OperationalDiagnostics.shared.removeArchives()
+    }
+}
+
 struct AccountDeletionView: View {
     @Environment(AppStore.self) private var store
     @Environment(AuthSessionStore.self) private var authSession
@@ -1614,11 +1635,17 @@ struct AccountDeletionView: View {
         return items
     }
 
+    private var deletesTheHouse: Bool {
+        wardName == nil && store.accountDeletionDeletesTheHouse
+    }
+
+    static let houseDeletedWithAccountMessage = "A casa é apagada junto. Não dá para desfazer."
+
     private var remainingItems: [String] {
         if wardName != nil || store.homeAccessState == .minorMember {
             return ["As tarefas, que voltam para a casa"]
         }
-        guard store.hasActiveHome else { return [] }
+        guard store.hasActiveHome, !deletesTheHouse else { return [] }
         return ["Tarefas que você criou, sem dono", "Compras", "Memórias compartilhadas"]
     }
 
@@ -1632,6 +1659,9 @@ struct AccountDeletionView: View {
         }
         if store.homeAccessState == .minorMember {
             return "Suas tarefas voltam para a casa. Não dá para desfazer."
+        }
+        if deletesTheHouse {
+            return Self.houseDeletedWithAccountMessage
         }
         return "Não dá para desfazer."
     }
@@ -1658,6 +1688,12 @@ struct AccountDeletionView: View {
                     NounList(eyebrow: "Some para sempre", items: disappearingItems)
                         .padding(16)
                         .ninaCard()
+
+                    if deletesTheHouse {
+                        NounList(eyebrow: "A casa some para todos", items: HouseDeletionView.disappearingItems)
+                            .padding(16)
+                            .ninaCard()
+                    }
 
                     if !remainingItems.isEmpty {
                         NounList(eyebrow: "Fica na casa", items: remainingItems)
@@ -1775,14 +1811,14 @@ struct AccountDeletionView: View {
     }
 
     private func clearDeletedAccountFromThisPhone(_ userID: String) {
-        store.clearLocalData(for: userID)
-        profileStore.clearLocalData(for: userID)
-        onboardingStore.clearLocalData(for: userID)
-        inviteLinkStore.clear()
-        KeychainAppAttestKeyStore().remove(for: userID)
-        ageCheck.reset()
-        try? PrivacyExportFileStore.removeAll()
-        OperationalDiagnostics.shared.removeArchives()
+        DeletedAccountCleanup.clear(
+            userID,
+            store: store,
+            profileStore: profileStore,
+            onboardingStore: onboardingStore,
+            inviteLinkStore: inviteLinkStore,
+            ageCheck: ageCheck
+        )
     }
 
     private func leaveAccountThatMayBeDeleted() {

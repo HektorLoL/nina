@@ -513,6 +513,31 @@ final class ProfileStore {
         }
     }
 
+    // Nothing re-sends an edit, so this phone keeps one only once the server holds it; a refresh would revert it otherwise.
+    func saveProfileToServerThenLocally(
+        _ profile: UserProfile,
+        photoData: Data?,
+        user: AuthUser
+    ) async -> Bool {
+        let generation = localDataGeneration(for: profile.userID)
+        // The kept profile changes only after a save the server holds, so it still says whether a photo is stored there.
+        let removesPhoto = photoData == nil
+            && profile.avatar.kind == .preset
+            && self.profile(for: user).avatar.kind == .photo
+        guard await pushProfileToServer(profile, photoData: photoData, removesPhoto: removesPhoto, user: user) else {
+            return false
+        }
+        guard isCurrentLocalDataGeneration(generation, for: profile.userID) else { return true }
+        if let photoData {
+            try? persistPhotoLocally(photoData, for: profile.userID)
+            photoVersions[profile.userID, default: 0] += 1
+        } else if profile.avatar.kind == .preset {
+            deleteLocalPhoto(for: profile.userID)
+        }
+        saveProfile(profile, user: user)
+        return true
+    }
+
     // The server names a new member from its own profile row, so a name counts as chosen only once the server holds it.
     func chooseDisplayName(_ raw: String, for user: AuthUser) async -> Bool {
         let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)

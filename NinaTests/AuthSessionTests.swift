@@ -1255,6 +1255,41 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(store.errorMessage, "Não deu para sair da conta agora. Tente de novo.")
     }
 
+    @MainActor
+    func testASignOutRetriedAfterAFailureClearsTheLineWhenItSucceeds() async {
+        let client = AuthClientSpy()
+        client.signOutError = URLError(.notConnectedToInternet)
+        let store = AuthSessionStore(authClient: client)
+        store.currentUser = AuthUser(id: "current", displayName: "Current", email: nil, provider: .apple)
+
+        _ = await store.signOut()
+        XCTAssertNotNil(store.errorMessage)
+
+        client.signOutError = nil
+        let signedOut = await store.signOut()
+
+        XCTAssertTrue(signedOut)
+        XCTAssertNil(store.errorMessage)
+    }
+
+    @MainActor
+    func testARelaunchWhoseDeletionAnswerWasLostEndsTheSessionAsADeletionAndNeverAsksToSignInAgain() async {
+        let client = AuthClientSpy(restoration: .accountGone(userID: "gone"))
+        let store = AuthSessionStore(authClient: client)
+
+        await store.restoreSession()
+
+        XCTAssertNil(store.currentUser)
+        XCTAssertEqual(store.deletedAccountUserID, "gone")
+        XCTAssertNil(store.errorMessage)
+
+        let signedIn = AuthSessionStore(authClient: AuthClientSpy())
+        signedIn.currentUser = AuthUser(id: "still", displayName: "Ana", email: nil, provider: .apple)
+        await signedIn.leaveDeletedAccount()
+        XCTAssertNil(signedIn.currentUser)
+        XCTAssertEqual(signedIn.deletedAccountUserID, "still")
+    }
+
     #if DEBUG
     @MainActor
     func testTheDebugTestAccountsSignInLocallyWithoutTouchingTheBackend() async {

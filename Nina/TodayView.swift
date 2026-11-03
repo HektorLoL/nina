@@ -116,7 +116,7 @@ struct TodayView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 4)
-                    .padding(.bottom, 104)
+                    .padding(.bottom, FloatingAddClearance.listBottom)
                     .frame(minHeight: showsZeroState ? proxy.size.height : nil, alignment: .top)
                 }
                 .refreshable {
@@ -431,8 +431,15 @@ struct TodayView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Adicionar tarefa")
         .padding(.trailing, 20)
-        .padding(.bottom, 96)
+        .padding(.bottom, FloatingAddClearance.buttonBottom)
     }
+}
+
+// The floating + spans buttonBottom to buttonBottom + 56 above the safe area, so a list's last row and a toast end above it.
+enum FloatingAddClearance {
+    static let buttonBottom: CGFloat = 96
+    static let listBottom: CGFloat = 164
+    static let plainListBottom: CGFloat = 104
 }
 
 extension Notification.Name {

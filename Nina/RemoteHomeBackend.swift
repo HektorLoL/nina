@@ -101,6 +101,7 @@ enum RemoteRPCErrorCode: String, CaseIterable {
     case joinRequestNotPending = "join_request_not_pending"
     case joinRequestCancelDenied = "join_request_cancel_denied"
     case accessDecisionAcknowledgeDenied = "access_decision_acknowledge_denied"
+    case authUserNotFound = "auth_user_not_found"
 
     // The message is the code itself; a longer message never contains another code by accident because matching is exact.
     init?(message: String?) {
@@ -169,6 +170,8 @@ enum RemoteRPCErrorCode: String, CaseIterable {
             return "Esse pedido já não vale."
         case .joinRequestCancelDenied:
             return "A casa já respondeu ao seu pedido."
+        case .authUserNotFound:
+            return "A conta pode já ter sido apagada."
         case .minorBirthDateNotAllowed, .invalidNicknames, .invalidSupervisionSettings,
              .invalidAcknowledgement, .invalidUsage, .invalidNextDueAt, .invalidReportReason,
              .notAMinorMember, .minorAccountRequired, .taskVersionConflict, .taskNotFound,

@@ -649,7 +649,7 @@ struct MemberEditorSheet: View {
         guard canSave, !isSaving else { return }
         if isAdding, householdRole.isMinorRole {
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guardianSheet = .newProfile(name: trimmed, band: householdRole == .child ? .under12 : nil)
+            guardianSheet = .newProfile(name: trimmed, band: householdRole == .child ? .under12 : nil, tone: tone)
             return
         }
         isSaving = true

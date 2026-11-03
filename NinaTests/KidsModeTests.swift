@@ -39,4 +39,39 @@ final class KidsModeTests: XCTestCase {
             XCTAssertFalse(text.lowercased().contains("eu "))
         }
     }
+
+    func testModoCriancaIsKeptPerAccountSoASiblingOpensInTheirOwnBandsDefault() async throws {
+        let suiteName = "KidsModeTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nina-kids-mode-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        defaults.set(KidsMode.Override.on.rawValue, forKey: KidsMode.legacyOverrideKey)
+        let store = AppStore(
+            defaults: defaults,
+            privateDataStore: ProtectedLocalDataStore(directoryURL: directory),
+            remoteHomeBackend: nil,
+            ninaEngine: MockNinaEngine()
+        )
+        let teen = AuthUser(id: UUID().uuidString, displayName: "Bia", email: nil, provider: .apple)
+        let sibling = AuthUser(id: UUID().uuidString, displayName: "Leo", email: nil, provider: .apple)
+
+        await store.activateHomeContext(for: teen)
+        XCTAssertEqual(store.kidsModeOverride, "")
+        XCTAssertNil(defaults.string(forKey: KidsMode.legacyOverrideKey))
+
+        store.setKidsMode(true)
+        await store.activateHomeContext(for: sibling)
+        XCTAssertEqual(store.kidsModeOverride, "")
+
+        await store.activateHomeContext(for: teen)
+        XCTAssertEqual(store.kidsModeOverride, KidsMode.Override.on.rawValue)
+
+        store.clearLocalData(for: teen.id)
+        XCTAssertNil(defaults.string(forKey: KidsMode.overrideKey(for: teen.id)))
+        XCTAssertEqual(store.kidsModeOverride, "")
+    }
 }

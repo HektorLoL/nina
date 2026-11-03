@@ -127,6 +127,13 @@ struct PremiumLocalTransaction: Hashable {
     var signedTransactionInfo: String
     // A family-shared receipt carries the buyer's account token, so the server refuses it; the house already shares premium.
     var isFamilyShared = false
+    var appAccountToken: UUID?
+
+    // The server binds a receipt to the account whose token it carries, so another account's receipt is never this one's.
+    func belongs(toAccount userID: String) -> Bool {
+        guard let appAccountToken, let account = UUID(uuidString: userID) else { return false }
+        return appAccountToken == account
+    }
 
     func isUsable(at date: Date) -> Bool {
         guard revocationDate == nil else { return false }
@@ -167,7 +174,8 @@ extension PremiumLocalTransaction {
             expirationDate: transaction.expirationDate,
             revocationDate: transaction.revocationDate,
             signedTransactionInfo: signedTransactionInfo,
-            isFamilyShared: transaction.ownershipType == .familyShared
+            isFamilyShared: transaction.ownershipType == .familyShared,
+            appAccountToken: transaction.appAccountToken
         )
     }
 }
@@ -258,6 +266,7 @@ enum PremiumPurchaseError: LocalizedError {
 
 enum PremiumReconciliationCopy {
     static let purchaseRecorded = "Compra confirmada. Registrando na casa."
+    static let otherAccountsSubscription = "Esta assinatura é de outra conta Nina."
 }
 
 @MainActor
@@ -275,6 +284,7 @@ final class PremiumSubscriptionStore {
     /// reserved for confirmed states, and "nothing was found" is not one.
     var statusIsConfirmation = false
     var errorMessage: String?
+    private(set) var hasOtherAccountsSubscription = false
 
     var showsSubscriptionContinuesWarning: Bool {
         entitlement.keepsBillingAfterAccountDeletion
@@ -381,6 +391,11 @@ final class PremiumSubscriptionStore {
                     transaction: transaction,
                     signedTransactionInfo: verifiedTransaction.signedTransactionInfo
                 )
+                guard local.belongs(toAccount: currentUser.id) else {
+                    statusMessage = PremiumReconciliationCopy.otherAccountsSubscription
+                    statusIsConfirmation = false
+                    return
+                }
                 applyLocal(local)
 
                 guard backend != nil else {
@@ -427,7 +442,13 @@ final class PremiumSubscriptionStore {
         do {
             try await StoreKit.AppStore.sync()
             await refreshEntitlement(forcingTransactionSync: true)
-            if entitlement.isActive {
+            let foundOnlyAnotherAccounts = !entitlement.isActive
+                && !entitlement.isReconciling
+                && hasOtherAccountsSubscription
+            if foundOnlyAnotherAccounts {
+                statusMessage = PremiumReconciliationCopy.otherAccountsSubscription
+                statusIsConfirmation = false
+            } else if entitlement.isActive {
                 Haptics.success()
                 statusMessage = "Premium restaurado."
                 statusIsConfirmation = true
@@ -462,10 +483,12 @@ final class PremiumSubscriptionStore {
                 transaction: transaction,
                 signedTransactionInfo: verifiedTransaction.signedTransactionInfo
             )
-            guard !local.isFamilyShared else { return }
+            guard !local.isFamilyShared,
+                  let currentUser,
+                  local.belongs(toAccount: currentUser.id) else { return }
             applyLocal(local)
 
-            guard backend != nil, let currentUser else { return }
+            guard backend != nil else { return }
 
             isSyncingBackend = true
             let didRecord = await recordOnServer(
@@ -559,8 +582,14 @@ final class PremiumSubscriptionStore {
             writeSyncLedger(ledger, for: userID)
             entitlement = reconciling(for: local)
             // The receipt stays unfinished so Apple can redeliver it once the server lets this account buy.
-            if error as? PremiumBackendRequestError == .premiumRequiresAdult {
+            switch error as? PremiumBackendRequestError {
+            case .premiumRequiresAdult:
                 errorMessage = "Isso pede idade confirmada pela Apple."
+            case .appAccountTokenMismatch:
+                entitlement = .inactive
+                errorMessage = PremiumReconciliationCopy.otherAccountsSubscription
+            default:
+                break
             }
             return false
         }
@@ -569,11 +598,16 @@ final class PremiumSubscriptionStore {
     private func latestUsableLocalTransaction() async -> PremiumLocalTransaction? {
         let now = Date()
         var latest: PremiumLocalTransaction?
+        var sawAnotherAccounts = false
 
         for transaction in await localTransactions.currentEntitlements() {
             guard productIDs.contains(transaction.productID),
                   !transaction.isFamilyShared,
                   transaction.isUsable(at: now) else {
+                continue
+            }
+            guard let currentUser, transaction.belongs(toAccount: currentUser.id) else {
+                sawAnotherAccounts = true
                 continue
             }
 
@@ -582,6 +616,7 @@ final class PremiumSubscriptionStore {
             }
         }
 
+        hasOtherAccountsSubscription = latest == nil && sawAnotherAccounts
         return latest
     }
 
@@ -702,10 +737,18 @@ enum PremiumBackendRequestError: Error, Equatable {
     case missingSession
     case invalidResponse
     case premiumRequiresAdult
+    case appAccountTokenMismatch
     case server(String)
 
     init(serverCode: String) {
-        self = serverCode == "premium_requires_adult" ? .premiumRequiresAdult : .server(serverCode)
+        switch serverCode {
+        case "premium_requires_adult":
+            self = .premiumRequiresAdult
+        case "app_account_token_mismatch":
+            self = .appAccountTokenMismatch
+        default:
+            self = .server(serverCode)
+        }
     }
 }
 

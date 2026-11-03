@@ -161,6 +161,7 @@ enum AppEntryPhase: Hashable {
 struct AppEntryInputs {
     var isSignedIn: Bool
     var needsAgeCheck: Bool
+    var homeContextMatchesUser: Bool = true
     var homeAccessState: HomeAccessState
     var viewerIsAdult: Bool
     var reachedMajority: Bool = false
@@ -176,6 +177,8 @@ enum AppEntryRouting {
     static func phase(for inputs: AppEntryInputs) -> AppEntryPhase {
         guard inputs.isSignedIn else { return .signedOut }
         if inputs.needsAgeCheck { return .ageCheck }
+        // A house read for another account (or none) says nothing about this one, so it is never routed on.
+        if !inputs.homeContextMatchesUser { return .homeLoading }
         if inputs.homeAccessState == .loading { return .homeLoading }
         // A failed verification says nothing about age, so it is never read as a minor's screen.
         if inputs.homeAccessState == .unavailable { return .homeUnavailable }
@@ -274,6 +277,21 @@ struct AppRootView: View {
             tabRouter = TabRouter()
             homeSetupStartsCreating = false
         }
+        .onChange(of: store.accountNoLongerExists) { _, isGone in
+            guard isGone else { return }
+            Task { await authSession.leaveDeletedAccount() }
+        }
+        .onChange(of: authSession.deletedAccountUserID) { _, userID in
+            guard let userID else { return }
+            DeletedAccountCleanup.clear(
+                userID,
+                store: store,
+                profileStore: profileStore,
+                onboardingStore: onboardingStore,
+                inviteLinkStore: inviteLinkStore,
+                ageCheck: ageCheck
+            )
+        }
         .onChange(of: store.ageCheckRequested) { _, requested in
             guard requested else { return }
             store.ageCheckRequested = false
@@ -322,7 +340,6 @@ struct AppRootView: View {
             }
         }
         .task {
-            ageCheck.onRejection = { message in store.reportSyncError(message) }
             await authSession.restoreSession()
             await profileStore.refreshProfile(for: authSession.currentUser)
             await premiumSubscriptionStore.configure(for: authSession.currentUser)
@@ -374,6 +391,7 @@ struct AppRootView: View {
             for: AppEntryInputs(
                 isSignedIn: authSession.isSignedIn,
                 needsAgeCheck: ageCheck.needsAgeCheck,
+                homeContextMatchesUser: store.homeContextUserID == authSession.currentUser?.id,
                 homeAccessState: store.homeAccessState,
                 viewerIsAdult: store.viewerAge.isAdult,
                 reachedMajority: store.viewerAge.terms.reachedMajority,
@@ -482,7 +500,7 @@ struct AppRootView: View {
     }
 
     private var syncErrorToastBottomPadding: CGFloat {
-        let base: CGFloat = tabRouter.router(for: selectedTab).path.isEmpty ? 164 : 16
+        let base: CGFloat = tabRouter.router(for: selectedTab).path.isEmpty ? FloatingAddClearance.listBottom : 16
         let undoIsVisible = store.undoableCompletionID.map { id in
             store.tasks.contains { $0.id == id }
         } ?? false
@@ -501,7 +519,7 @@ struct AppRootView: View {
             if let id = store.undoableCompletionID,
                let task = store.tasks.first(where: { $0.id == id }) {
                 UndoCompletionToast(title: task.title)
-                    .padding(.bottom, tabRouter.router(for: selectedTab).path.isEmpty ? 164 : 16)
+                    .padding(.bottom, tabRouter.router(for: selectedTab).path.isEmpty ? FloatingAddClearance.listBottom : 16)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .bottom)))
                     .zIndex(2)
             }
@@ -683,7 +701,14 @@ enum HomeEntryLoad {
             isVerified: isVerified,
             isLocalContext: store.isUsingLocalContext
         ) else { return }
+        await applyRecorded(status, store: store, ageCheck: ageCheck, user: user)
+    }
+
+    static func applyRecorded(_ status: AgeStatus, store: AppStore, ageCheck: AgeCheckCoordinator, user: AuthUser?) async {
         await store.applyRecordedAge(status, for: user)
+        if ageCheck.lastRecordWasRejected {
+            store.reportSyncError(RemoteRPCErrorCode.ageSignalRejected.userMessage())
+        }
     }
 }
 
@@ -712,6 +737,11 @@ private struct HomeAccessUnavailableView: View {
                             isEnabled: !store.isSyncingHome
                         ) {
                             Task { await retry() }
+                        }
+
+                        if let message = authSession.errorMessage {
+                            NinaErrorNote(text: message, alignment: .center)
+                                .frame(maxWidth: .infinity)
                         }
 
                         NinaButton(title: "Sair da conta", kind: .quiet) {
@@ -744,9 +774,16 @@ struct KeyboardVisibilityModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                if !isVisible {
+            // A hardware keyboard posts these with an off-screen frame, and then nothing on screen moves aside.
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
+                if !isVisible, SheetFit.keyboardIsOnScreen(note) {
                     isVisible = true
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+                let isOnScreen = SheetFit.keyboardIsOnScreen(note)
+                if isVisible != isOnScreen {
+                    isVisible = isOnScreen
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
@@ -1344,10 +1381,10 @@ private struct RouteGoneView: View {
     var body: some View {
         VStack(spacing: 0) {
             BackHeader { dismiss() }
-            Spacer(minLength: 24)
-            ZeroState(headline: headline, body_: line, showsMark: false)
-                .padding(.horizontal, 24)
-            Spacer(minLength: 24)
+            CenteredScrollingBlock {
+                ZeroState(headline: headline, body_: line, showsMark: false)
+                    .padding(.horizontal, 24)
+            }
         }
         .ninaScreenBackground()
     }

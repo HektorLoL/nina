@@ -4772,6 +4772,250 @@ final class AppStoreAuthorizationTests: XCTestCase {
         )
     }
 
+    func testASignInIsNeverRoutedOnAHouseReadForNoAccountOrAnotherOne() {
+        var inputs = AppEntryInputs(
+            isSignedIn: true,
+            needsAgeCheck: false,
+            homeContextMatchesUser: false,
+            homeAccessState: .noHome,
+            viewerIsAdult: false,
+            hasPendingInvite: false,
+            shouldShowTutorial: false
+        )
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .homeLoading)
+
+        inputs.homeContextMatchesUser = true
+        XCTAssertEqual(AppEntryRouting.phase(for: inputs), .minorRoot)
+    }
+
+    @MainActor
+    func testTheHouseContextNamesTheAccountItWasReadFor() async {
+        let user = makeUser()
+        let store = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: makeRemoteState()),
+            ninaEngine: MockNinaEngine()
+        )
+        await store.activateHomeContext(for: nil)
+        XCTAssertNil(store.homeContextUserID)
+        XCTAssertNotEqual(store.homeContextUserID, user.id)
+
+        await store.activateHomeContext(for: user)
+        XCTAssertEqual(store.homeContextUserID, user.id)
+    }
+
+    @MainActor
+    func testASignInWhoseTermsAreAlreadyCurrentSpendsItsFootnoteSoALaterVersionAsksAgain() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState(viewerAge: .testTrustedAdult))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        store.noteTermsFootnoteShown(for: user.id)
+        await store.activateHomeContext(for: user)
+        XCTAssertFalse(store.hasUnrecordedTermsFootnote)
+
+        var changed = AgeStatus.testTrustedAdult
+        changed.terms.acceptedCurrent = false
+        changed.terms.currentTermsVersion = "2099-01-01"
+        await backend.setViewerAge(changed)
+        await store.activateHomeContext(for: user)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        let recorded = await backend.termsAcceptanceCount()
+        XCTAssertEqual(recorded, 0)
+        XCTAssertTrue(store.needsTermsAcceptance)
+        XCTAssertFalse(store.hasUnrecordedTermsFootnote)
+    }
+
+    @MainActor
+    func testAFootnoteHeldInMemoryNeverAcceptsTermsDatedAfterItWasShown() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState(viewerAge: .unknown))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+
+        store.noteTermsFootnoteShown(for: user.id, at: Date(timeIntervalSince1970: 1_793_000_000))
+        await store.activateHomeContext(for: user)
+
+        var adult = AgeStatus.testTrustedAdult
+        adult.terms.acceptedCurrent = false
+        adult.terms.currentTermsVersion = "2026-11-02"
+        await backend.setViewerAge(adult)
+        await store.applyRecordedAge(adult, for: user)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        let recorded = await backend.termsAcceptanceCount()
+        XCTAssertEqual(recorded, 0)
+        XCTAssertTrue(store.needsTermsAcceptance)
+        XCTAssertFalse(store.hasUnrecordedTermsFootnote)
+    }
+
+    @MainActor
+    func testAnAgeTheServerRefusesIsToldAfterTheHouseIsReadAgainSoTheReloadNeverErasesIt() async throws {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState(viewerAge: .testTrustedAdult))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let ageCheck = AgeCheckCoordinator(
+            provider: DecliningAgeRangeProvider(),
+            submitter: RefusingAgeSignalSubmitter(status: .testTrustedAdult),
+            defaults: UserDefaults(suiteName: "nina.tests.refusedAge.\(UUID().uuidString)") ?? .standard
+        )
+
+        let recorded = await ageCheck.requestAndRecord(for: user)
+        let status = try XCTUnwrap(recorded)
+        XCTAssertTrue(ageCheck.lastRecordWasRejected)
+        XCTAssertNil(store.syncErrorMessage)
+
+        await HomeEntryLoad.applyRecorded(status, store: store, ageCheck: ageCheck, user: user)
+
+        XCTAssertEqual(store.syncErrorMessage, "Não deu para atualizar sua idade.")
+    }
+
+    @MainActor
+    func testDeletingTheAccountOfATitularWithNoOtherAdultSaysTheHouseGoesWithIt() async {
+        let user = makeUser()
+        let me = HouseholdMember(userID: user.id, name: "Dona", relationship: "", role: .adult, permissionRole: .owner, tone: .mint, taskCount: 0, memoryNote: "")
+        let child = HouseholdMember(name: "Lia", relationship: "Criança", role: .child, tone: .amber, taskCount: 0, memoryNote: "")
+        let partner = HouseholdMember(userID: UUID().uuidString, name: "Ana", relationship: "Esposa", role: .adult, permissionRole: .member, tone: .sky, taskCount: 0, memoryNote: "")
+
+        let alone = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: makeRemoteState(permissionRole: .owner, members: [me, child])),
+            ninaEngine: MockNinaEngine()
+        )
+        await alone.activateHomeContext(for: user)
+        let withPartner = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: makeRemoteState(permissionRole: .owner, members: [me, child, partner])),
+            ninaEngine: MockNinaEngine()
+        )
+        await withPartner.activateHomeContext(for: user)
+        let member = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: makeRemoteState(permissionRole: .member, members: [me, child])),
+            ninaEngine: MockNinaEngine()
+        )
+        await member.activateHomeContext(for: user)
+
+        XCTAssertTrue(alone.accountDeletionDeletesTheHouse)
+        XCTAssertFalse(withPartner.accountDeletionDeletesTheHouse)
+        XCTAssertFalse(member.accountDeletionDeletesTheHouse)
+        XCTAssertEqual(AccountDeletionView.houseDeletedWithAccountMessage, "A casa é apagada junto. Não dá para desfazer.")
+        XCTAssertTrue(HouseDeletionView.disappearingItems.contains("Perfis de crianças e pets"))
+    }
+
+    @MainActor
+    func testAHouseReadThatFindsNoAccountBehindTheSessionSaysTheAccountIsGone() async {
+        let user = makeUser()
+        let store = AppStore(
+            remoteHomeBackend: FailingHomeBackend(loadError: RemoteRPCError(code: .authUserNotFound)),
+            ninaEngine: MockNinaEngine()
+        )
+        await store.activateHomeContext(for: user)
+        XCTAssertTrue(store.accountNoLongerExists)
+        XCTAssertEqual(RemoteRPCErrorCode(message: "auth_user_not_found"), .authUserNotFound)
+        XCTAssertEqual(RemoteRPCErrorCode.authUserNotFound.userMessage(), "A conta pode já ter sido apagada.")
+
+        let unreachable = AppStore(remoteHomeBackend: FailingHomeBackend(), ninaEngine: MockNinaEngine())
+        await unreachable.activateHomeContext(for: user)
+        XCTAssertFalse(unreachable.accountNoLongerExists)
+        XCTAssertEqual(unreachable.homeAccessState, .unavailable)
+    }
+
+    @MainActor
+    func testAGuardianTheServerNoLongerTrustsKeepsOnlyWhatALiveLinkAllows() async {
+        let user = makeUser()
+        let ward = HouseholdMember(
+            name: "Lia",
+            relationship: "Criança",
+            role: .child,
+            tone: .amber,
+            taskCount: 0,
+            memoryNote: "",
+            minorAccess: MinorAccess(
+                guardianNames: ["Dona"],
+                isViewerGuardian: true,
+                hasProfileConsent: true,
+                supervision: MinorSupervision(band: .under12)
+            )
+        )
+        var underParentalControls = AgeStatus.testTrustedAdult
+        underParentalControls.parentalControlsActive = true
+        underParentalControls.trustedAdult = false
+        let backend = RecordingHomeBackend(
+            state: makeRemoteState(permissionRole: .member, members: [ward], viewerAge: underParentalControls)
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        XCTAssertFalse(store.mayActAsGuardian(for: ward))
+        XCTAssertFalse(store.canRemoveFamilyMember(ward))
+        let changed = await store.changeMinorBand(for: ward, to: .twelveToFifteen)
+        XCTAssertFalse(changed)
+        let bandChanges = await backend.recordedBandChanges()
+        XCTAssertTrue(bandChanges.isEmpty)
+        XCTAssertEqual(
+            MinorActingCopy.supervisingLine(for: "Lia", closedByParentalControls: true),
+            "Com controles parentais ativos, esta conta não muda a supervisão de Lia."
+        )
+
+        let trustedStore = AppStore(
+            remoteHomeBackend: RecordingHomeBackend(state: makeRemoteState(permissionRole: .member, members: [ward])),
+            ninaEngine: MockNinaEngine()
+        )
+        await trustedStore.activateHomeContext(for: user)
+        XCTAssertTrue(trustedStore.mayActAsGuardian(for: ward))
+    }
+
+    @MainActor
+    func testAGuardianMayRaiseAClaimedTeensBandAndTheServerJudgesItAgainstApples() async {
+        let user = makeUser()
+        let teen = HouseholdMember(
+            userID: UUID().uuidString,
+            name: "Pedro",
+            relationship: "Adolescente",
+            role: .teen,
+            tone: .amber,
+            taskCount: 0,
+            memoryNote: "",
+            minorAccess: MinorAccess(
+                isClaimed: true,
+                guardianNames: ["Dona"],
+                isViewerGuardian: true,
+                hasProfileConsent: true,
+                supervision: MinorSupervision(band: .under12)
+            )
+        )
+        let backend = RecordingHomeBackend(state: makeRemoteState(permissionRole: .owner, members: [teen]))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let raised = await store.changeMinorBand(for: teen, to: .twelveToFifteen)
+        let changes = await backend.recordedBandChanges()
+        XCTAssertTrue(raised)
+        XCTAssertEqual(changes, [RecordingHomeBackend.BandChange(memberID: teen.id, band: .twelveToFifteen, consentVersion: MinorConsentVersion.current)])
+
+        await backend.setBandChangeError(RemoteRPCError(code: .invalidMinorBand))
+        let pastApple = await store.changeMinorBand(for: teen, to: .sixteenToSeventeen)
+        XCTAssertFalse(pastApple)
+        XCTAssertEqual(store.syncErrorMessage, "Essa faixa passa da que a Apple informou.")
+    }
+
+    @MainActor
+    func testATaskAnAdultTookAwayFromAMinorsListRefreshesSilentlyWithNoRedLine() async {
+        let user = makeUser()
+        let task = MinorTask(title: "Arrumar a cama", dueAt: Date().addingTimeInterval(3_600), dueLabel: "Hoje")
+        let backend = MinorAccountBackend(
+            viewerAge: .testMinor(.twelveToFifteen),
+            minorHome: makeMinorHome(memberID: UUID(), tasks: [task])
+        )
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        XCTAssertEqual(store.minorTaskItems.map(\.id), [task.id])
+
+        await backend.takeAway(task.id)
+        _ = await store.markMinorTaskDone(task.id)
+
+        XCTAssertNil(store.syncErrorMessage)
+        XCTAssertTrue(store.minorTaskItems.isEmpty)
+    }
+
     private func makeUser() -> AuthUser {
         AuthUser(
             id: UUID().uuidString,
@@ -6376,6 +6620,12 @@ private actor MinorAccountBackend: RemoteHomeBackend {
     private var minorHome: MinorHome?
     private var writes: [MinorTaskWrite] = []
     private var usage: [(day: String, minutes: Int)] = []
+    private var takenAwayTaskIDs: Set<UUID> = []
+
+    func takeAway(_ taskID: UUID) {
+        takenAwayTaskIDs.insert(taskID)
+        minorHome?.tasks.removeAll { $0.id == taskID }
+    }
 
     func recordedUsage() -> [(day: String, minutes: Int)] {
         usage
@@ -6419,7 +6669,9 @@ private actor MinorAccountBackend: RemoteHomeBackend {
         writes.append(
             MinorTaskWrite(taskID: taskID, expectedVersion: expectedVersion, markDone: markDone, nextDueAt: nextDueAt)
         )
-        guard var home = minorHome else { throw RemoteRPCError(code: .taskNotFound) }
+        guard var home = minorHome, !takenAwayTaskIDs.contains(taskID) else {
+            throw RemoteRPCError(code: .taskNotFound)
+        }
         if let index = home.tasks.firstIndex(where: { $0.id == taskID }) {
             if home.tasks[index].recurrence == .none {
                 home.tasks[index].isDone = markDone
@@ -6747,8 +6999,10 @@ private actor AccessDecisionBackend: RemoteHomeBackend {
 private struct FailingHomeBackend: RemoteHomeBackend {
     struct VerificationError: Error {}
 
+    var loadError: Error = VerificationError()
+
     func loadHome(for user: AuthUser) async throws -> RemoteHomeState? {
-        throw VerificationError()
+        throw loadError
     }
 
     func createHome(named name: String, owner: AuthUser?) async throws -> RemoteHomeState {
@@ -6886,6 +7140,29 @@ private actor DelayedNotificationScheduler: HomeNotificationScheduling {
 }
 
 private actor RecordingHomeBackend: RemoteHomeBackend {
+    struct BandChange: Equatable {
+        var memberID: UUID
+        var band: MinorBand
+        var consentVersion: String?
+    }
+
+    private var bandChanges: [BandChange] = []
+    private var bandChangeError: Error?
+
+    func recordedBandChanges() -> [BandChange] {
+        bandChanges
+    }
+
+    func setBandChangeError(_ error: Error?) {
+        bandChangeError = error
+    }
+
+    func changeMinorBand(_ memberID: UUID, band: MinorBand, consentVersion: String?) async throws -> RemoteHomeState {
+        if let bandChangeError { throw bandChangeError }
+        bandChanges.append(BandChange(memberID: memberID, band: band, consentVersion: consentVersion))
+        return state
+    }
+
     private var state: RemoteHomeState
     private let conflictingTask: TaskItem?
     private let conflictingTasks: [UUID: TaskItem]
@@ -7406,6 +7683,24 @@ private final class DeliveredReminderRecorder: HomeNotificationScheduling {
 
     func removeDeliveredNotifications() {
         deliveredRemovals += 1
+    }
+}
+
+private struct DecliningAgeRangeProvider: AgeRangeProviding {
+    func requestAgeRange() async throws -> AgeSignal {
+        .declined
+    }
+
+    func requiredRegulatoryFeatures() async -> [String]? {
+        nil
+    }
+}
+
+private struct RefusingAgeSignalSubmitter: AgeSignalSubmitting {
+    var status: AgeStatus
+
+    func submit(_ signal: AgeSignal, for user: AuthUser) async throws -> AgeStatus {
+        throw AgeSignalError.rejected(status)
     }
 }
 

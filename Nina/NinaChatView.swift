@@ -44,65 +44,63 @@ struct NinaChatView: View {
         let waitsForApple = store.chatWaitsForConfirmedAge
         return VStack(spacing: 0) {
             header
-            Spacer(minLength: 0)
-            ZeroState(
-                headline: waitsForApple
-                    ? "A conversa pede idade confirmada."
-                    : "A conversa não abre nesta conta.",
-                body_: waitsForApple
-                    ? "A Apple ainda não confirmou sua idade. O resto funciona."
-                    : "Esta conta tem controles parentais ativos. O resto funciona.",
-                presence: .unavailable
-            ) {
-                VStack(spacing: 10) {
-                    NinaButton(
-                        title: "Tentar de novo",
-                        systemName: "arrow.clockwise",
-                        isPending: ageCheck.isRequestingInline
-                    ) {
-                        Haptics.lightImpact()
-                        guard let user = authSession.currentUser else { return }
-                        Task {
-                            guard let status = await ageCheck.requestInline(
-                                for: user,
-                                current: store.viewerAge
-                            ) else { return }
-                            await store.applyRecordedAge(status, for: user)
+            CenteredScrollingBlock(bottomClearance: 104) {
+                ZeroState(
+                    headline: waitsForApple
+                        ? "A conversa pede idade confirmada."
+                        : "A conversa não abre nesta conta.",
+                    body_: waitsForApple
+                        ? "A Apple ainda não confirmou sua idade. O resto funciona."
+                        : "Esta conta tem controles parentais ativos. O resto funciona.",
+                    presence: .unavailable
+                ) {
+                    VStack(spacing: 10) {
+                        NinaButton(
+                            title: "Tentar de novo",
+                            systemName: "arrow.clockwise",
+                            isPending: ageCheck.isRequestingInline
+                        ) {
+                            Haptics.lightImpact()
+                            guard let user = authSession.currentUser else { return }
+                            Task {
+                                guard let status = await ageCheck.requestInline(
+                                    for: user,
+                                    current: store.viewerAge
+                                ) else { return }
+                                await store.applyRecordedAge(status, for: user)
+                            }
                         }
-                    }
 
-                    if let outcome = ageCheck.inlineOutcome {
-                        AgeOutcomeNote(outcome: outcome, alignment: .center)
+                        if let outcome = ageCheck.inlineOutcome {
+                            AgeOutcomeNote(outcome: outcome, alignment: .center)
 
-                        // A retry Apple answered as before names what opens the chat, not another retry.
-                        if outcome == .unchanged, waitsForApple {
-                            Text("A conversa abre quando a Apple confirmar sua idade.")
-                                .ninaText(.caption, NinaTheme.muted)
-                                .multilineTextAlignment(.center)
-                                .fixedSize(horizontal: false, vertical: true)
+                            // A retry Apple answered as before names what opens the chat, not another retry.
+                            if outcome == .unchanged, waitsForApple {
+                                Text("A conversa abre quando a Apple confirmar sua idade.")
+                                    .ninaText(.caption, NinaTheme.muted)
+                                    .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, 20)
             }
-            .padding(.horizontal, 20)
-            Spacer(minLength: 0)
         }
-        .padding(.bottom, 104)
     }
 
     private var blockedContent: some View {
         VStack(spacing: 0) {
             header
-            Spacer(minLength: 0)
-            ZeroState(
-                headline: "A conversa está suspensa nesta conta.",
-                body_: "Se for engano, escreva para \(NinaLegalLinks.privacyEmail).",
-                presence: .unavailable
-            )
-            .padding(.horizontal, 20)
-            Spacer(minLength: 0)
+            CenteredScrollingBlock(bottomClearance: 104) {
+                ZeroState(
+                    headline: "A conversa está suspensa nesta conta.",
+                    body_: "Se for engano, escreva para \(NinaLegalLinks.privacyEmail).",
+                    presence: .unavailable
+                )
+                .padding(.horizontal, 20)
+            }
         }
-        .padding(.bottom, 104)
     }
 
     private var chatContent: some View {
@@ -296,16 +294,15 @@ struct NinaChatView: View {
     private var adultOnlyContent: some View {
         VStack(spacing: 0) {
             header
-            Spacer(minLength: 0)
-            ZeroState(
-                headline: "A conversa é dos adultos da casa.",
-                body_: "Tarefas e compras continuam com você.",
-                presence: .unavailable
-            )
-            .padding(.horizontal, 20)
-            Spacer(minLength: 0)
+            CenteredScrollingBlock(bottomClearance: 104) {
+                ZeroState(
+                    headline: "A conversa é dos adultos da casa.",
+                    body_: "Tarefas e compras continuam com você.",
+                    presence: .unavailable
+                )
+                .padding(.horizontal, 20)
+            }
         }
-        .padding(.bottom, 104)
     }
 
     private var header: some View {

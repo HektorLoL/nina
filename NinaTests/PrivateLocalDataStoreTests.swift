@@ -299,6 +299,83 @@ final class PrivateLocalDataStoreTests: XCTestCase {
     }
 }
 
+final class ProfileSaveTests: XCTestCase {
+    @MainActor
+    func testAProfileTheServerNeverReceivedIsNotKeptAndItsPhotoRemovalIsSentAgainOnTheRetry() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nina-profile-save-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suiteName = "ProfileSaveTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let backend = FlakyProfileBackend()
+        let profileStore = ProfileStore(
+            defaults: defaults,
+            privateDataStore: ProtectedLocalDataStore(directoryURL: root),
+            remoteProfileBackend: backend
+        )
+        let user = AuthUser(id: UUID().uuidString, displayName: "Ana", email: nil, provider: .apple)
+        var withPhoto = profileStore.profile(for: user)
+        withPhoto.avatar = withPhoto.avatar.asPhoto(for: user.id)
+        profileStore.saveProfile(withPhoto, user: user)
+
+        var edited = withPhoto
+        edited.displayName = "Aninha"
+        edited.avatar = ProfileAvatar.defaultPreset
+        await backend.setFails(true)
+        let firstTry = await profileStore.saveProfileToServerThenLocally(edited, photoData: nil, user: user)
+
+        XCTAssertFalse(firstTry)
+        XCTAssertEqual(profileStore.profile(for: user), withPhoto)
+
+        await backend.setFails(false)
+        let retry = await profileStore.saveProfileToServerThenLocally(edited, photoData: nil, user: user)
+        let deletions = await backend.photoDeletions()
+
+        XCTAssertTrue(retry)
+        XCTAssertEqual(deletions, 2)
+        XCTAssertEqual(profileStore.profile(for: user).displayName, "Aninha")
+        XCTAssertEqual(profileStore.profile(for: user).avatar.kind, .preset)
+        XCTAssertEqual(ProfileEditorView.saveFailureLine, "Não deu para salvar o perfil agora. Tente de novo.")
+    }
+}
+
+private actor FlakyProfileBackend: RemoteProfileBackend {
+    private struct Offline: Error {}
+
+    private var fails = false
+    private var deletions = 0
+
+    func setFails(_ value: Bool) {
+        fails = value
+    }
+
+    func photoDeletions() -> Int {
+        deletions
+    }
+
+    func loadProfile(for user: AuthUser) async throws -> UserProfile? {
+        nil
+    }
+
+    func saveProfile(_ profile: UserProfile, user: AuthUser?) async throws {
+        if fails { throw Offline() }
+    }
+
+    func loadPhotoData(for userID: String) async throws -> Data {
+        throw Offline()
+    }
+
+    func savePhotoData(_ data: Data, for userID: String) async throws {
+        if fails { throw Offline() }
+    }
+
+    func deletePhoto(for userID: String) async throws {
+        deletions += 1
+        if fails { throw Offline() }
+    }
+}
+
 private final class FailingPrivateLocalDataStore: PrivateLocalDataStoring {
     private struct StorageFailure: Error {}
 

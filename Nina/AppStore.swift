@@ -324,6 +324,9 @@ final class AppStore {
     @ObservationIgnored var attachmentGate = NinaAttachmentGate.current
     @ObservationIgnored var now: () -> Date = Date.init
     @ObservationIgnored private var activeHomeUserID: String?
+    private(set) var homeContextUserID: String?
+    private(set) var kidsModeOverride = ""
+    private(set) var accountNoLongerExists = false
     @ObservationIgnored private var activeUser: AuthUser?
     @ObservationIgnored private var homeContextGeneration: UInt64 = 0
     @ObservationIgnored private var messagesContext: HomeContextToken?
@@ -343,7 +346,6 @@ final class AppStore {
     private struct TermsFootnote {
         let userID: String
         let shownAt: Date
-        let wasRestored: Bool
     }
     @ObservationIgnored private(set) var lastMutationErrorCode: RemoteRPCErrorCode?
 
@@ -432,6 +434,11 @@ final class AppStore {
 
     var canActForMinors: Bool {
         viewerAge.canActForMinors
+    }
+
+    // A live link alone lets a guardian step back or export; every other guardian write needs an adult the server trusts today.
+    func mayActAsGuardian(for member: HouseholdMember) -> Bool {
+        member.minorAccess?.isViewerGuardian == true && canActForMinors
     }
 
     // Any adult the server trusts acts for a minor, so an adult it does not is one under parental controls.
@@ -627,7 +634,7 @@ final class AppStore {
         if member.userID == activeHomeUserID {
             return true
         }
-        if member.role.isMinorRole, member.minorAccess?.isViewerGuardian == true {
+        if member.role.isMinorRole, mayActAsGuardian(for: member) {
             return true
         }
         guard canManageFamily else { return false }
@@ -640,7 +647,7 @@ final class AppStore {
     }
 
     func canRemoveFamilyMember(_ member: HouseholdMember) -> Bool {
-        if member.minorAccess?.isViewerGuardian == true,
+        if mayActAsGuardian(for: member),
            member.role.isMinorRole,
            member.userID != activeHomeUserID {
             return true
@@ -698,6 +705,8 @@ final class AppStore {
                 termsFootnote = user.flatMap { storedTermsFootnote(for: $0.id) }
             }
             hasUnrecordedTermsFootnote = termsFootnote != nil
+            defaults.removeObject(forKey: KidsMode.legacyOverrideKey)
+            kidsModeOverride = user.flatMap { defaults.string(forKey: KidsMode.overrideKey(for: $0.id)) } ?? ""
         }
         homeContextGeneration &+= 1
         remoteMutationTask?.cancel()
@@ -706,7 +715,9 @@ final class AppStore {
         stopRealtimeSync()
         refreshRequestedWhileSyncing = false
         deletedHouseName = nil
+        accountNoLongerExists = false
         activeHomeUserID = user?.id
+        homeContextUserID = user?.id
         activeUser = user
         let contextToken = currentHomeContextToken
         loadAIMemoryConsent(for: user?.id)
@@ -880,6 +891,9 @@ final class AppStore {
             return nil
         } catch {
             guard isCurrentHomeContext(contextToken) else { return nil }
+            if RemoteRPCErrorCode.from(error) == .authUserNotFound {
+                accountNoLongerExists = true
+            }
             return HomeMembershipLoad(outcome: .unverifiable, viewerAge: viewerAge)
         }
     }
@@ -1489,6 +1503,11 @@ final class AppStore {
         familyGroup.members.contains { canOfferHouse(to: $0) }
     }
 
+    // With no other adult to inherit it, prepare_account_deletion deletes the titular's house with the account.
+    var accountDeletionDeletesTheHouse: Bool {
+        ownerMustHandOverBeforeLeaving && !hasAdultToHoldTheHouse
+    }
+
     // Deleting erases every member's shared data, so only the titular, an adult today, may do it.
     var canDeleteFamily: Bool {
         ownerMustHandOverBeforeLeaving && isAdultViewer
@@ -1850,7 +1869,7 @@ final class AppStore {
 
     @discardableResult
     func setMinorHealthConsent(for member: HouseholdMember, granted: Bool) async -> Bool {
-        guard member.minorAccess?.isViewerGuardian == true else { return false }
+        guard mayActAsGuardian(for: member) else { return false }
         return await performHomeMutation(
             name: member.name,
             fallback: "Não deu para salvar agora."
@@ -1865,7 +1884,7 @@ final class AppStore {
 
     @discardableResult
     func updateMinorSupervision(for member: HouseholdMember, update: MinorSupervisionUpdate) async -> Bool {
-        guard member.minorAccess?.isViewerGuardian == true else { return false }
+        guard mayActAsGuardian(for: member) else { return false }
         return await performHomeMutation(
             name: member.name,
             fallback: "Não deu para salvar agora."
@@ -1877,20 +1896,24 @@ final class AppStore {
     @discardableResult
     func changeMinorBand(for member: HouseholdMember, to band: MinorBand) async -> Bool {
         guard let supervision = member.minorAccess?.supervision,
-              member.minorAccess?.isViewerGuardian == true,
+              mayActAsGuardian(for: member),
               band != supervision.band else { return false }
-        // Only an unclaimed profile may grow older, and only with the consent affirmed again.
-        let consentVersion: String? = band > supervision.band ? MinorConsentVersion.current : nil
-        if band > supervision.band, member.isClaimed {
-            return false
-        }
-        return await performHomeMutation(
+        // An older band needs the consent affirmed again; for an account, the server caps it at the band Apple reported.
+        let isOlder = band > supervision.band
+        let consentVersion: String? = isOlder ? MinorConsentVersion.current : nil
+        let changed = await performHomeMutation(
             name: member.name,
             fallback: "Não deu para salvar agora."
         ) { backend in
             try await backend.changeMinorBand(member.id, band: band, consentVersion: consentVersion)
         }
+        if !changed, isOlder, member.isClaimed, lastMutationErrorCode == .invalidMinorBand {
+            syncErrorMessage = Self.bandPastApplesLine
+        }
+        return changed
     }
+
+    static let bandPastApplesLine = "Essa faixa passa da que a Apple informou."
 
     @discardableResult
     func endMinorGuardianship(for member: HouseholdMember) async -> Bool {
@@ -1930,7 +1953,7 @@ final class AppStore {
     // a restored session never saw the current version, so it waits for the person to tap Aceitar.
     // The footnote outlives a relaunch on this phone until the server records it.
     func noteTermsFootnoteShown(for userID: String, at shownAt: Date = .now) {
-        termsFootnote = TermsFootnote(userID: userID, shownAt: shownAt, wasRestored: false)
+        termsFootnote = TermsFootnote(userID: userID, shownAt: shownAt)
         hasUnrecordedTermsFootnote = true
         PrivateLocalDataAccess.writeDataBestEffort(
             Data(Self.termsFootnoteDateFormatter.string(from: shownAt).utf8),
@@ -1970,6 +1993,16 @@ final class AppStore {
     }
 
     private func recordTermsAcceptanceIfNeeded() {
+        // A footnote over Terms the account already holds is spent, so it can never stand for a later version.
+        if viewerAge.isAdult,
+           viewerAge.terms.acceptedCurrent,
+           let activeUser,
+           termsFootnote?.userID == activeUser.id {
+            termsFootnote = nil
+            removeStoredTermsFootnote(for: activeUser.id)
+            hasUnrecordedTermsFootnote = false
+            return
+        }
         guard viewerAge.isAdult,
               !viewerAge.terms.acceptedCurrent,
               !viewerAge.terms.reachedMajority,
@@ -1982,8 +2015,7 @@ final class AppStore {
         }
         termsFootnote = nil
         let userID = activeUser.id
-        if footnote.wasRestored,
-           !Self.termsFootnote(shownAt: footnote.shownAt, covers: viewerAge.terms.currentTermsVersion) {
+        if !Self.termsFootnote(shownAt: footnote.shownAt, covers: viewerAge.terms.currentTermsVersion) {
             removeStoredTermsFootnote(for: userID)
             hasUnrecordedTermsFootnote = false
             return
@@ -2017,7 +2049,7 @@ final class AppStore {
               let shownAt = Self.termsFootnoteDateFormatter.date(from: stored) else {
             return nil
         }
-        return TermsFootnote(userID: userID, shownAt: shownAt, wasRestored: true)
+        return TermsFootnote(userID: userID, shownAt: shownAt)
     }
 
     private func removeStoredTermsFootnote(for userID: String) {
@@ -2169,10 +2201,15 @@ final class AppStore {
             return home.taskItems.first { $0.id == task.id }
         } catch {
             guard isCurrentHomeContext(contextToken) else { return nil }
-            // A version conflict is settled by the house's version, silently, never by a sheet in a child's hands.
-            if RemoteRPCErrorCode.from(error) == .taskVersionConflict {
+            // A version conflict or a task an adult took away is settled by the house's version, silently, never by a sheet in a child's hands.
+            let code = RemoteRPCErrorCode.from(error)
+            if code == .taskVersionConflict || code == .taskNotFound {
                 await refreshMinorHome()
                 return nil
+            }
+            if code == .guardianRequired {
+                await refreshMinorHome()
+                guard isCurrentHomeContext(contextToken) else { return nil }
             }
             syncErrorMessage = RemoteRPCErrorCode.from(error)?.userMessage() ?? "Não deu para salvar agora."
             Haptics.error()
@@ -2833,6 +2870,12 @@ final class AppStore {
         return "nina-privacy-export-\(formatter.string(from: .now)).json"
     }
 
+    func setKidsMode(_ isOn: Bool) {
+        guard let userID = activeHomeUserID else { return }
+        kidsModeOverride = (isOn ? KidsMode.Override.on : .off).rawValue
+        defaults.set(kidsModeOverride, forKey: KidsMode.overrideKey(for: userID))
+    }
+
     func clearLocalDataForActiveUser() {
         guard let userID = activeHomeUserID else { return }
         clearLocalData(for: userID)
@@ -2862,7 +2905,9 @@ final class AppStore {
         let clearsActiveContext = activeHomeUserID == userID
         if clearsActiveContext {
             homeContextGeneration &+= 1
+            kidsModeOverride = ""
         }
+        defaults.removeObject(forKey: KidsMode.overrideKey(for: userID))
 
         clearCachedHome(for: userID)
         PrivateLocalDataAccess.removeAllData(
@@ -2889,6 +2934,7 @@ final class AppStore {
         notificationSyncTask?.cancel()
         notificationSyncTask = nil
         activeHomeUserID = nil
+        homeContextUserID = nil
         activeUser = nil
         homeAccessState = .noHome
         currentPermissionRole = .member

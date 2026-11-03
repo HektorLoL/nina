@@ -7,6 +7,14 @@ final class TaskAgendaTests: XCTestCase {
     private var calendar: Calendar!
     private var now: Date!
 
+    func testTheLastRowOfAListWithTheFloatingAddEndsAboveTheButton() {
+        XCTAssertGreaterThanOrEqual(
+            FloatingAddClearance.listBottom,
+            FloatingAddClearance.buttonBottom + 56
+        )
+        XCTAssertLessThan(FloatingAddClearance.plainListBottom, FloatingAddClearance.listBottom)
+    }
+
     override func setUp() {
         super.setUp()
         var gregorian = Calendar(identifier: .gregorian)

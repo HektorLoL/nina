@@ -92,7 +92,7 @@ struct TasksView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 4)
-                    .padding(.bottom, isSelecting ? 16 : 104)
+                    .padding(.bottom, listBottomPadding)
                     .frame(minHeight: showsZeroState ? proxy.size.height : nil, alignment: .top)
                 }
                 .refreshable {
@@ -333,6 +333,11 @@ struct TasksView: View {
         case .shopping: store.pendingShoppingItems.count
         }
         return count > 0 ? "\(option.title) \(count)" : option.title
+    }
+
+    private var listBottomPadding: CGFloat {
+        if isSelecting { return 16 }
+        return filter == .shopping ? FloatingAddClearance.plainListBottom : FloatingAddClearance.listBottom
     }
 
     private var showsZeroState: Bool {
@@ -728,7 +733,7 @@ struct TasksView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Adicionar")
         .padding(.trailing, 20)
-        .padding(.bottom, 96)
+        .padding(.bottom, FloatingAddClearance.buttonBottom)
     }
 }
 

@@ -671,6 +671,33 @@ final class PremiumSubscriptionTests: XCTestCase {
     }
 
     @MainActor
+    func testAnotherAccountsReceiptOnThisPhoneIsNeverSentToTheServerAndNeverReadsAsPremium() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.success(TestEnvironment.activeEntitlement))
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([
+                TestEnvironment.liveTransaction(accountToken: UUID()),
+                TestEnvironment.liveTransaction(transactionID: "2000000000000002", accountToken: nil),
+            ])
+        )
+
+        await store.configure(for: environment.user)
+        await store.refreshEntitlement(forcingTransactionSync: true)
+
+        let calls = await backend.recordedSyncCalls()
+        XCTAssertEqual(calls.count, 0)
+        XCTAssertFalse(store.entitlement.isActive)
+        XCTAssertFalse(store.entitlement.isReconciling)
+        XCTAssertTrue(store.hasOtherAccountsSubscription)
+        XCTAssertEqual(PremiumBackendRequestError(serverCode: "app_account_token_mismatch"), .appAccountTokenMismatch)
+        XCTAssertEqual(PremiumReconciliationCopy.otherAccountsSubscription, "Esta assinatura é de outra conta Nina.")
+    }
+
+    @MainActor
     func testAForcedRestoreRepairsTheServerEvenAfterTheLedgerRecordedASync() async {
         let environment = TestEnvironment(function: #function)
         defer { environment.tearDown() }
@@ -788,7 +815,7 @@ private struct TestEnvironment {
         defaults.removePersistentDomain(forName: suiteName)
         privateDataStore = ProtectedLocalDataStore(directoryURL: directory)
         user = AuthUser(
-            id: UUID().uuidString,
+            id: Self.accountID.uuidString,
             displayName: "Paula",
             email: "paula@example.com",
             provider: .apple
@@ -820,6 +847,8 @@ private struct TestEnvironment {
         )
     }
 
+    static let accountID = UUID()
+
     static let configuredProductIDs = [
         "com.heitor.nina.premium.monthly",
         "com.heitor.nina.premium.yearly",
@@ -843,7 +872,8 @@ private struct TestEnvironment {
         expiresAt: Date? = Date(timeIntervalSinceNow: 30 * 24 * 60 * 60),
         revokedAt: Date? = nil,
         signedTransactionInfo: String = "signed-transaction-2000000000000001",
-        familyShared: Bool = false
+        familyShared: Bool = false,
+        accountToken: UUID? = accountID
     ) -> PremiumLocalTransaction {
         PremiumLocalTransaction(
             productID: productID,
@@ -853,7 +883,8 @@ private struct TestEnvironment {
             expirationDate: expiresAt,
             revocationDate: revokedAt,
             signedTransactionInfo: signedTransactionInfo,
-            isFamilyShared: familyShared
+            isFamilyShared: familyShared,
+            appAccountToken: accountToken
         )
     }
 

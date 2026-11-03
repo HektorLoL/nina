@@ -701,7 +701,8 @@ final class AgeCheckCoordinator {
     private(set) var phase: AgeCheckPhase = .idle
     private(set) var isRequestingInline = false
     private(set) var inlineOutcome: InlineAgeOutcome?
-    @ObservationIgnored var onRejection: ((String) -> Void)?
+    // A refusal is told after the house is read again, so the reload that follows it never erases the line.
+    private(set) var lastRecordWasRejected = false
 
     @ObservationIgnored private let provider: any AgeRangeProviding
     @ObservationIgnored private let submitter: any AgeSignalSubmitting
@@ -732,6 +733,7 @@ final class AgeCheckCoordinator {
         phase = .idle
         isRequestingInline = false
         inlineOutcome = nil
+        lastRecordWasRejected = false
         settledUserIDs = []
     }
 
@@ -771,6 +773,7 @@ final class AgeCheckCoordinator {
     func requestAndRecord(for user: AuthUser) async -> AgeStatus? {
         let token = generation
         phase = .requesting
+        lastRecordWasRejected = false
         let signal: AgeSignal
         do {
             signal = try await provider.requestAgeRange()
@@ -872,7 +875,7 @@ final class AgeCheckCoordinator {
             guard token == generation else { return nil }
             settledUserIDs.insert(user.id)
             phase = .idle
-            onRejection?(RemoteRPCErrorCode.ageSignalRejected.userMessage())
+            lastRecordWasRejected = true
             return status
         } catch {
             guard token == generation else { return nil }

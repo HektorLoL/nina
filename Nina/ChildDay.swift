@@ -11,6 +11,8 @@ struct ChildDayRow: Identifiable, Hashable {
     let state: State
 
     var isDone: Bool { state != .open }
+    // A task someone else closed is the house's to reopen, so a tap on it here does nothing and the row says so.
+    var canBeTapped: Bool { state != .doneElsewhere }
 }
 
 struct ChildDayMark: Equatable {

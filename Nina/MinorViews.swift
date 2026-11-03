@@ -4,6 +4,9 @@ import SwiftUI
 struct MinorRootView: View {
     @Environment(AppStore.self) private var store
 
+    // Owned above the daily-limit switch, so Ajustes and anything open in it outlive the swap to "Por hoje é só.".
+    @State private var isShowingMemberSettings = false
+
     var body: some View {
         Group {
             switch store.homeAccessState {
@@ -34,18 +37,22 @@ struct MinorRootView: View {
                                 headline: "Por hoje é só.",
                                 line: store.minorAlertsKeepComing
                                     ? "Seus avisos continuam chegando."
-                                    : "Volte amanhã."
+                                    : "Volte amanhã.",
+                                isShowingSettings: $isShowingMemberSettings
                             )
                         } else {
-                            MinorHomeView(home: home)
+                            MinorHomeView(home: home, isShowingSettings: $isShowingMemberSettings)
                         }
                     }
+                    .minorSettingsSheet(isPresented: $isShowingMemberSettings)
                 }
             case .noGuardian:
                 MinorStatusView(
                     headline: "Sua conta está pausada.",
-                    line: "Falta um responsável na casa."
+                    line: "Falta um responsável na casa.",
+                    isShowingSettings: $isShowingMemberSettings
                 )
+                .minorSettingsSheet(isPresented: $isShowingMemberSettings)
             case .ageRequired:
                 MinorAgeRequiredView()
             case .noHome:
@@ -61,17 +68,16 @@ struct MinorStatusView: View {
     let headline: String
     let line: String
 
-    @State private var isShowingSettings = false
+    @Binding var isShowingSettings: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             MinorHeader(isShowingSettings: $isShowingSettings)
-            Spacer(minLength: 24)
-            ZeroState(headline: headline, body_: line, presence: .rest)
-                .padding(.horizontal, 20)
-            Spacer(minLength: 24)
+            CenteredScrollingBlock {
+                ZeroState(headline: headline, body_: line, presence: .rest)
+                    .padding(.horizontal, 20)
+            }
         }
-        .minorSettingsSheet(isPresented: $isShowingSettings)
     }
 }
 
@@ -194,16 +200,14 @@ struct MinorHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let home: MinorHome
-
-    @AppStorage(KidsMode.overrideKey) private var kidsModeOverride = ""
+    @Binding var isShowingSettings: Bool
 
     @State private var session: ChildDaySession?
-    @State private var isShowingSettings = false
     @State private var upcomingMarks: [TaskItem.ID: ChildDayMark] = [:]
     @State private var upcomingChangedAt: [TaskItem.ID: Date] = [:]
 
     private var isKidsMode: Bool {
-        KidsMode.isOn(band: store.viewerAge.band, override: kidsModeOverride)
+        KidsMode.isOn(band: store.viewerAge.band, override: store.kidsModeOverride)
     }
 
     private var owner: HouseholdMember {
@@ -281,7 +285,8 @@ struct MinorHomeView: View {
                                             title: row.title,
                                             time: row.time,
                                             symbolName: row.symbolName,
-                                            isDone: row.isDone
+                                            isDone: row.isDone,
+                                            canToggle: row.canBeTapped
                                         ) {
                                             tap(row.id)
                                         }
@@ -318,7 +323,6 @@ struct MinorHomeView: View {
                 await store.refreshMinorHome()
             }
         }
-        .minorSettingsSheet(isPresented: $isShowingSettings)
         .onAppear {
             absorb()
             store.askForNotificationsOnMinorHome()
@@ -430,7 +434,7 @@ private struct MinorTaskRow: View {
         }
         .buttonStyle(.plain)
         .disabled(!canToggle)
-        .opacity(canToggle ? 1 : 0.4)
+        .opacity(canToggle ? 1 : 0.6)
         .accessibilityElement(children: .combine)
         .accessibilityValue(isDone ? "Feita" : "Por fazer")
     }
@@ -609,32 +613,32 @@ private struct MinorAgeRequiredView: View {
     var body: some View {
         VStack(spacing: 0) {
             MinorHeader(isShowingSettings: $isShowingSettings)
-            Spacer(minLength: 24)
-            ZeroState(
-                headline: "Falta sua faixa de idade.",
-                body_: "Sem ela, só um responsável aprova sua entrada.",
-                presence: .rest
-            ) {
-                VStack(spacing: 10) {
-                    NinaButton(title: "Compartilhar faixa", isPending: ageCheck.isRequestingInline) {
-                        Haptics.lightImpact()
-                        guard let user = authSession.currentUser else { return }
-                        Task {
-                            guard let status = await ageCheck.requestInline(
-                                for: user,
-                                current: store.viewerAge
-                            ) else { return }
-                            await store.applyRecordedAge(status, for: user)
+            CenteredScrollingBlock {
+                ZeroState(
+                    headline: "Falta sua faixa de idade.",
+                    body_: "Sem ela, só um responsável aprova sua entrada.",
+                    presence: .rest
+                ) {
+                    VStack(spacing: 10) {
+                        NinaButton(title: "Compartilhar faixa", isPending: ageCheck.isRequestingInline) {
+                            Haptics.lightImpact()
+                            guard let user = authSession.currentUser else { return }
+                            Task {
+                                guard let status = await ageCheck.requestInline(
+                                    for: user,
+                                    current: store.viewerAge
+                                ) else { return }
+                                await store.applyRecordedAge(status, for: user)
+                            }
+                        }
+
+                        if let outcome = ageCheck.inlineOutcome {
+                            AgeOutcomeNote(outcome: outcome, alignment: .center)
                         }
                     }
-
-                    if let outcome = ageCheck.inlineOutcome {
-                        AgeOutcomeNote(outcome: outcome, alignment: .center)
-                    }
                 }
+                .padding(.horizontal, 20)
             }
-            .padding(.horizontal, 20)
-            Spacer(minLength: 24)
         }
         .minorSettingsSheet(isPresented: $isShowingSettings)
     }
@@ -649,28 +653,28 @@ private struct MinorPendingView: View {
     var body: some View {
         VStack(spacing: 0) {
             MinorHeader(isShowingSettings: $isShowingSettings)
-            Spacer(minLength: 24)
-            ZeroState(
-                headline: "Pedido enviado.",
-                body_: "Um responsável seu na casa precisa aprovar.",
-                presence: .waiting
-            ) {
-                VStack(spacing: 10) {
-                    if let error = store.syncErrorMessage {
-                        NinaErrorNote(text: error, alignment: .center)
-                    }
-                    NinaButton(title: "Atualizar", systemName: "arrow.clockwise", isEnabled: !store.isSyncingHome) {
-                        Task { await store.refreshHomeFromRemote(for: authSession.currentUser) }
-                    }
-                    NinaButton(title: "Cancelar pedido", kind: .quiet, isEnabled: !store.isSyncingHome) {
-                        Task {
-                            if await store.cancelPendingJoinRequest() { Haptics.selection() }
+            CenteredScrollingBlock {
+                ZeroState(
+                    headline: "Pedido enviado.",
+                    body_: "Um responsável seu na casa precisa aprovar.",
+                    presence: .waiting
+                ) {
+                    VStack(spacing: 10) {
+                        if let error = store.syncErrorMessage {
+                            NinaErrorNote(text: error, alignment: .center)
+                        }
+                        NinaButton(title: "Atualizar", systemName: "arrow.clockwise", isEnabled: !store.isSyncingHome) {
+                            Task { await store.refreshHomeFromRemote(for: authSession.currentUser) }
+                        }
+                        NinaButton(title: "Cancelar pedido", kind: .quiet, isEnabled: !store.isSyncingHome) {
+                            Task {
+                                if await store.cancelPendingJoinRequest() { Haptics.selection() }
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, 20)
             }
-            .padding(.horizontal, 20)
-            Spacer(minLength: 24)
         }
         .minorSettingsSheet(isPresented: $isShowingSettings)
         .task {
@@ -705,28 +709,28 @@ private struct MinorAccessDecisionView: View {
     var body: some View {
         VStack(spacing: 0) {
             MinorHeader(isShowingSettings: $isShowingSettings)
-            Spacer(minLength: 24)
-            ZeroState(
-                headline: headline,
-                body_: wasRemoved ? "Sua conta é apagada em 30 dias." : "Peça o convite de novo para quem cuida de você.",
-                presence: .unavailable
-            ) {
-                VStack(spacing: 10) {
-                    if wasRemoved {
-                        NinaButton(title: "Apagar agora", kind: .outline) {
-                            Haptics.warning()
-                            isShowingDeletion = true
+            CenteredScrollingBlock {
+                ZeroState(
+                    headline: headline,
+                    body_: wasRemoved ? "Sua conta é apagada em 30 dias." : "Peça o convite de novo para quem cuida de você.",
+                    presence: .unavailable
+                ) {
+                    VStack(spacing: 10) {
+                        if wasRemoved {
+                            NinaButton(title: "Apagar agora", kind: .outline) {
+                                Haptics.warning()
+                                isShowingDeletion = true
+                            }
                         }
-                    }
-                    NinaButton(title: "Entendi", kind: wasRemoved ? .quiet : .primary, isEnabled: !store.isSyncingHome) {
-                        Task {
-                            if await store.acknowledgeFamilyAccessDecision() { Haptics.selection() }
+                        NinaButton(title: "Entendi", kind: wasRemoved ? .quiet : .primary, isEnabled: !store.isSyncingHome) {
+                            Task {
+                                if await store.acknowledgeFamilyAccessDecision() { Haptics.selection() }
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, 20)
             }
-            .padding(.horizontal, 20)
-            Spacer(minLength: 24)
         }
         .minorSettingsSheet(isPresented: $isShowingSettings)
         .accountDeletionSheet(isPresented: $isShowingDeletion)
@@ -751,8 +755,6 @@ struct MinorSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    @AppStorage(KidsMode.overrideKey) private var kidsModeOverride = ""
-
     @State private var isConfirmingSignOut = false
 
     private var home: MinorHome? {
@@ -761,10 +763,10 @@ struct MinorSettingsView: View {
 
     private var kidsModeBinding: Binding<Bool> {
         Binding(
-            get: { KidsMode.isOn(band: store.viewerAge.band, override: kidsModeOverride) },
+            get: { KidsMode.isOn(band: store.viewerAge.band, override: store.kidsModeOverride) },
             set: { isOn in
                 Haptics.selection()
-                kidsModeOverride = (isOn ? KidsMode.Override.on : .off).rawValue
+                store.setKidsMode(isOn)
             }
         )
     }
@@ -818,6 +820,12 @@ struct MinorSettingsView: View {
                     }
 
                     VStack(spacing: 4) {
+                        if let message = authSession.errorMessage {
+                            NinaErrorNote(text: message, alignment: .center)
+                                .frame(maxWidth: .infinity)
+                                .padding(.bottom, 6)
+                        }
+
                         NinaButton(title: "Sair", kind: .quiet) {
                             Haptics.warning()
                             isConfirmingSignOut = true

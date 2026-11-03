@@ -2,13 +2,13 @@ import SwiftUI
 
 enum GuardianSheetMode: Hashable, Identifiable {
     case approval(FamilyJoinRequest)
-    case newProfile(name: String, band: MinorBand?)
+    case newProfile(name: String, band: MinorBand?, tone: MemberTone = .amber)
     case declare(HouseholdMember)
 
     var id: String {
         switch self {
         case .approval(let request): "approval-\(request.id.uuidString)"
-        case .newProfile(let name, let band): "profile-\(name)-\(band?.rawValue ?? "none")"
+        case .newProfile(let name, let band, let tone): "profile-\(name)-\(band?.rawValue ?? "none")-\(tone.rawValue)"
         case .declare(let member): "declare-\(member.id.uuidString)"
         }
     }
@@ -26,6 +26,12 @@ enum MinorActingCopy {
         closedByParentalControls
             ? "Com controles parentais ativos, esta conta não aprova crianças nem adolescentes."
             : "Esta conta não aprova crianças nem adolescentes."
+    }
+
+    static func supervisingLine(for name: String, closedByParentalControls: Bool) -> String {
+        closedByParentalControls
+            ? "Com controles parentais ativos, esta conta não muda a supervisão de \(name)."
+            : "Esta conta não muda a supervisão de \(name)."
     }
 
     static func answeringLine(for name: String, closedByParentalControls: Bool) -> String {
@@ -73,7 +79,7 @@ struct GuardianApprovalForm: Equatable {
         )
     }
 
-    func profileDraft(name: String) -> MinorProfileDraft? {
+    func profileDraft(name: String, tone: MemberTone = .amber) -> MinorProfileDraft? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard canSubmit, !trimmed.isEmpty, let relationship, let band else { return nil }
         return MinorProfileDraft(
@@ -82,7 +88,8 @@ struct GuardianApprovalForm: Equatable {
             guardianRelationship: relationship,
             healthConsent: healthConsent,
             nicknames: nicknames,
-            relationship: band.householdRole.title
+            relationship: band.householdRole.title,
+            tone: tone
         )
     }
 
@@ -119,7 +126,7 @@ struct GuardianApprovalSheet: View {
         switch mode {
         case .approval(let request):
             _form = State(initialValue: .forApproval(request))
-        case .newProfile(_, let band):
+        case .newProfile(_, let band, _):
             _form = State(initialValue: GuardianApprovalForm(band: band))
         case .declare(let member):
             let isLegacy = member.minorAccess?.hasProfileConsent != true
@@ -130,7 +137,7 @@ struct GuardianApprovalSheet: View {
     private var name: String {
         switch mode {
         case .approval(let request): request.requesterName
-        case .newProfile(let name, _): name
+        case .newProfile(let name, _, _): name
         case .declare(let member): member.name
         }
     }
@@ -375,8 +382,8 @@ struct GuardianApprovalSheet: View {
                 } else {
                     succeeded = false
                 }
-            case .newProfile(let name, _):
-                if let draft = form.profileDraft(name: name) {
+            case .newProfile(let name, _, let tone):
+                if let draft = form.profileDraft(name: name, tone: tone) {
                     succeeded = await store.addMinorProfile(draft)
                 } else {
                     succeeded = false
@@ -429,6 +436,17 @@ struct MinorSupervisionSection: View {
         access.guardianNames.count <= 1
     }
 
+    private var isStillInTheHouse: Bool {
+        store.familyGroup.members.contains { $0.id == member.id }
+    }
+
+    static func withdrawalMessage(for name: String, isLastGuardian: Bool, isClaimed: Bool) -> String {
+        guard isLastGuardian else { return "Você deixa de responder por \(name)." }
+        return isClaimed
+            ? "\(name) sai da casa. A conta de \(name) é apagada em 30 dias."
+            : "O perfil de \(name) é apagado."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if !access.hasProfileConsent, !member.isClaimed {
@@ -436,7 +454,11 @@ struct MinorSupervisionSection: View {
             }
 
             if access.isViewerGuardian, let supervision = access.supervision {
-                guardianBlock(supervision)
+                if store.mayActAsGuardian(for: member) {
+                    guardianBlock(supervision)
+                } else {
+                    heldGuardianBlock(supervision)
+                }
             } else {
                 observerBlock
             }
@@ -460,6 +482,9 @@ struct MinorSupervisionSection: View {
             .presentationDragIndicator(.visible)
         }
         .accountDeletionSheet(isPresented: $isShowingWardDeletion, target: .ward(member))
+        .onChange(of: isShowingWardDeletion) { _, isShowing in
+            if !isShowing, !isStillInTheHouse { dismiss() }
+        }
         .alert("Tirar \(member.name) da casa?", isPresented: $isConfirmingRemoval) {
             Button("Cancelar", role: .cancel) {}
             Button("Tirar", role: .destructive) {
@@ -479,11 +504,12 @@ struct MinorSupervisionSection: View {
                 Task {
                     if await store.endMinorGuardianship(for: member) {
                         Haptics.success()
+                        if !isStillInTheHouse { dismiss() }
                     }
                 }
             }
         } message: {
-            Text(isLastGuardian ? "O perfil de \(member.name) é apagado." : "Você deixa de responder por \(member.name).")
+            Text(Self.withdrawalMessage(for: member.name, isLastGuardian: isLastGuardian, isClaimed: member.isClaimed))
         }
         .alert("Apagar o perfil de \(member.name)?", isPresented: $isConfirmingProfileDeletion) {
             Button("Cancelar", role: .cancel) {}
@@ -564,6 +590,35 @@ struct MinorSupervisionSection: View {
                     guardianSheet = .declare(member)
                 }
             }
+        }
+    }
+
+    // A guardian the server no longer trusts sees what it holds and keeps only what a live link alone allows.
+    private func heldGuardianBlock(_ supervision: MinorSupervision) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Eyebrow(text: "Supervisão")
+            valueRow("Responsáveis", guardianNames)
+            NinaDivider(inset: 0)
+            valueRow("Idade", supervision.band.chipTitle)
+            NinaDivider(inset: 0)
+            exportRow
+
+            Text(
+                MinorActingCopy.supervisingLine(
+                    for: member.name,
+                    closedByParentalControls: store.actingForMinorsClosedByParentalControls
+                )
+            )
+            .ninaText(.caption, NinaTheme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 8)
+
+            NinaButton(title: "Retirar autorização", kind: .quiet) {
+                Haptics.warning()
+                isConfirmingWithdrawal = true
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 6)
         }
     }
 
@@ -659,7 +714,6 @@ struct MinorSupervisionSection: View {
     private func bandRow(_ supervision: MinorSupervision) -> some View {
         Menu {
             ForEach(MinorBand.allCases) { band in
-                let mayChoose = band <= supervision.band || !member.isClaimed
                 Button {
                     Haptics.selection()
                     if band > supervision.band {
@@ -670,7 +724,7 @@ struct MinorSupervisionSection: View {
                 } label: {
                     Label(band.chipTitle, systemImage: band == supervision.band ? "checkmark" : "person")
                 }
-                .disabled(!mayChoose || band == supervision.band)
+                .disabled(band == supervision.band)
             }
         } label: {
             valueRow("Idade", supervision.band.chipTitle, showsChevron: true)

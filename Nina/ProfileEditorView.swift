@@ -6,6 +6,7 @@ import UIKit
 
 struct ProfileEditorView: View {
     @Environment(AppStore.self) private var appStore
+    @Environment(AuthSessionStore.self) private var authSession
     @Environment(ProfileStore.self) private var profileStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -328,47 +329,42 @@ struct ProfileEditorView: View {
         profile.memoryNote = profile.memoryNote.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !isSaving else { return }
-        let hadServerPhoto = profileStore.profile(for: user).avatar.kind == .photo
         var preparedPhoto: Data?
-        var removesPhoto = false
 
-        // The photo is written first: a profile that points at a photo the disk
-        // does not hold would render a face that cannot be loaded.
         if let pendingPhotoData {
             do {
-                preparedPhoto = try profileStore.savePhotoData(pendingPhotoData, for: profile.userID)
+                preparedPhoto = try ProfilePhotoPolicy.prepareForStorage(pendingPhotoData)
                 profile.avatar = profile.avatar.asPhoto(for: profile.userID)
             } catch {
                 photoError = error.localizedDescription
                 Haptics.error()
                 return
             }
-        } else if profile.avatar.kind == .preset {
-            profileStore.deleteLocalPhoto(for: profile.userID)
-            removesPhoto = hadServerPhoto
         }
 
-        profileStore.saveProfile(profile, user: user)
         isSaving = true
         saveError = nil
 
         Task {
-            let reachedServer = await profileStore.pushProfileToServer(
+            let reachedServer = await profileStore.saveProfileToServerThenLocally(
                 profile,
                 photoData: preparedPhoto,
-                removesPhoto: removesPhoto,
                 user: user
             )
             isSaving = false
             if reachedServer {
                 Haptics.success()
+                authSession.noteChosenDisplayName(profile.displayName)
+                Task { await appStore.refreshHome() }
                 dismiss()
             } else {
-                saveError = "Salvo só neste aparelho. Tente de novo."
+                saveError = Self.saveFailureLine
                 Haptics.error()
             }
         }
     }
+
+    static let saveFailureLine = "Não deu para salvar o perfil agora. Tente de novo."
 
     private func showCoreMemories() {
         Haptics.lightImpact()

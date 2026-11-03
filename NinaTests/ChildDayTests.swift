@@ -647,6 +647,15 @@ final class ChildDayTests: XCTestCase {
         ]
     }
 
+    func testOnlyARowSomeoneElseClosedIsOutOfTheMinorsReach() {
+        func row(_ state: ChildDayRow.State) -> ChildDayRow {
+            ChildDayRow(id: UUID(), title: "Arrumar a cama", time: nil, symbolName: "house", state: state)
+        }
+        XCTAssertTrue(row(.open).canBeTapped)
+        XCTAssertTrue(row(.doneHere).canBeTapped)
+        XCTAssertFalse(row(.doneElsewhere).canBeTapped)
+    }
+
     private func numberedRows(_ count: Int) -> [ChildDayRow] {
         (1...count).map { number in
             ChildDayRow(

@@ -156,6 +156,9 @@ struct SupabaseAuthClient: AuthClient {
             return .signedIn(AuthUser(supabaseUser: session.user, profile: profile))
         } catch is AuthError {
             return .signedOut
+        } catch where RemoteRPCErrorCode.from(error) == .authUserNotFound {
+            try? await client.auth.signOut()
+            return .accountGone(userID: storedSession.user.id.uuidString)
         } catch {
             // Only Auth itself may end a session; a refresh the network dropped keeps it.
             return .unreachable(AuthUser(offlineSupabaseUser: storedSession.user))

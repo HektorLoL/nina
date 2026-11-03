@@ -118,7 +118,7 @@ struct AgeCheckView: View {
         guard let user = authSession.currentUser else { return }
         Task {
             guard let status = await ageCheck.requestAndRecord(for: user) else { return }
-            await store.applyRecordedAge(status, for: user)
+            await HomeEntryLoad.applyRecorded(status, store: store, ageCheck: ageCheck, user: user)
         }
     }
 }

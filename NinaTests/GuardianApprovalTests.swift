@@ -97,6 +97,29 @@ final class GuardianApprovalTests: XCTestCase {
         XCTAssertEqual(JoinRequesterAge(status: nil, band: nil), .unknown)
     }
 
+    func testANewChildProfileKeepsTheToneChosenInTheEditor() {
+        var form = completedForm(age: .unknown)
+        form.band = .under12
+
+        XCTAssertEqual(form.profileDraft(name: "Lia", tone: .sky)?.tone, .sky)
+        XCTAssertEqual(GuardianSheetMode.newProfile(name: "Lia", band: .under12, tone: .sky).id, "profile-Lia-under_12-sky")
+    }
+
+    func testWithdrawingTheLastGuardianOfAnAccountSaysThePersonLeavesAndTheAccountGoesIn30Days() {
+        XCTAssertEqual(
+            MinorSupervisionSection.withdrawalMessage(for: "Pedro", isLastGuardian: true, isClaimed: true),
+            "Pedro sai da casa. A conta de Pedro é apagada em 30 dias."
+        )
+        XCTAssertEqual(
+            MinorSupervisionSection.withdrawalMessage(for: "Lia", isLastGuardian: true, isClaimed: false),
+            "O perfil de Lia é apagado."
+        )
+        XCTAssertEqual(
+            MinorSupervisionSection.withdrawalMessage(for: "Lia", isLastGuardian: false, isClaimed: true),
+            "Você deixa de responder por Lia."
+        )
+    }
+
     private func completedForm(age: JoinRequesterAge) -> GuardianApprovalForm {
         var form = GuardianApprovalForm.forApproval(request(age: age))
         form.relationship = .pai

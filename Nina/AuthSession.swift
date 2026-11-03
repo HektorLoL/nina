@@ -215,6 +215,8 @@ enum AuthSessionRestoration {
     case signedIn(AuthUser)
     // The stored session is intact but the network could not confirm it.
     case unreachable(AuthUser)
+    // The server holds no account behind a still-valid token: a deletion finished, even one whose answer was lost.
+    case accountGone(userID: String)
 }
 
 protocol AuthClient {
@@ -369,6 +371,7 @@ final class AuthSessionStore {
     private(set) var deletionFailure: AccountDeletionFailure?
     private(set) var failedDeletionAttempts = 0
     @ObservationIgnored private var ownDeletionMayHaveRun = false
+    private(set) var deletedAccountUserID: String?
     static let failedDeletionAttemptsBeforeMail = 2
 
     var isSignedIn: Bool {
@@ -423,7 +426,19 @@ final class AuthSessionStore {
             adoptSharedName(for: user, signingInAs: nil)
             currentUser = user
             isBackendAvailable = true
+        case .accountGone(let userID):
+            clearSessionState()
+            isBackendAvailable = true
+            deletedAccountUserID = userID
         }
+    }
+
+    // A house read that finds no account behind the session ends it like a finished deletion, never a sign-in prompt.
+    func leaveDeletedAccount() async {
+        guard let userID = currentUser?.id else { return }
+        try? await authClient.signOut()
+        clearSessionState()
+        deletedAccountUserID = userID
     }
 
     // Held before the exchange: Apple never shares the name again, so a failed sign-in must not lose it.

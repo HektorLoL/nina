@@ -409,15 +409,38 @@ struct ZeroState<Actions: View>: View {
                 .ninaText(.zero)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 330)
+                .fixedSize(horizontal: false, vertical: true)
             if !body_.isEmpty {
                 Text(body_)
                     .ninaText(.label, NinaTheme.muted)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 306)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             actions.padding(.top, 8)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// A gate's single centred block scrolls once large text outgrows the screen, so its words are never cut short.
+struct CenteredScrollingBlock<Content: View>: View {
+    var bottomClearance: CGFloat = 0
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 24)
+                    content
+                    Spacer(minLength: 24)
+                }
+                .padding(.bottom, bottomClearance)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
     }
 }
 

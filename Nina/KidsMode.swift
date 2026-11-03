@@ -2,7 +2,12 @@ import SwiftUI
 
 // Kids mode changes only how a minor's own tasks look; what the server sends a minor and what a minor may do stay the same.
 enum KidsMode {
-    static let overrideKey = "nina.kidsMode.override"
+    static let legacyOverrideKey = "nina.kidsMode.override"
+
+    // Each account on a shared phone keeps its own choice, so a sibling never opens in another child's mode.
+    static func overrideKey(for userID: String) -> String {
+        "nina.kidsMode.override.\(userID)"
+    }
 
     enum Override: String {
         case on
