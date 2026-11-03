@@ -562,8 +562,7 @@ struct TaskRowView: View {
     var body: some View {
         HStack(spacing: 12) {
             Button {
-                // A semente is planted, never ticked: the checkbox opens the date.
-                if task.kind == .seed, !task.isDone {
+                if task.checkboxPlants {
                     Haptics.lightImpact()
                     router.presentedSheet = .plantSeed(task.id)
                     return
@@ -581,7 +580,7 @@ struct TaskRowView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(
-                "\(task.kind == .seed && !task.isDone ? "Plantar" : task.completionActionTitle): \(task.title)"
+                "\(task.checkboxPlants ? "Plantar" : task.completionActionTitle): \(task.title)"
             )
 
             Button {

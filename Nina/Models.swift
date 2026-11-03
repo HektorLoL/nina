@@ -988,6 +988,11 @@ struct TaskItem: Identifiable, Codable, Hashable {
         return recurrence == .none ? "Marcar como feita" : "Feita por hoje"
     }
 
+    // A semente is planted, never ticked: wherever its checkbox is drawn, it opens the date.
+    var checkboxPlants: Bool {
+        kind == .seed && !isDone
+    }
+
     // A label the date reader could not place books no reminder, and the task must say so
     // wherever its label reads like a date.
     var namesADayWithoutAReminder: Bool {

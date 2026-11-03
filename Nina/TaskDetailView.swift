@@ -64,8 +64,8 @@ struct TaskDetailView: View {
         .ninaScreenBackground()
         .alert(task.kind == .seed ? "Apagar esta semente?" : "Apagar esta tarefa?", isPresented: $isConfirmingDelete) {
             Button("Apagar", role: .destructive) {
-                store.deleteTask(task.id)
                 dismiss()
+                store.deleteTask(task.id)
             }
             Button("Cancelar", role: .cancel) {}
         } message: {
@@ -108,6 +108,11 @@ struct TaskDetailView: View {
     private var titleBlock: some View {
         HStack(alignment: .top, spacing: 14) {
             Button {
+                if task.checkboxPlants {
+                    Haptics.lightImpact()
+                    router.presentedSheet = .plantSeed(task.id)
+                    return
+                }
                 task.isDone ? Haptics.selection() : Haptics.success()
                 store.toggleTask(task)
             } label: {
@@ -116,7 +121,7 @@ struct TaskDetailView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(task.completionActionTitle)
+            .accessibilityLabel(task.checkboxPlants ? "Plantar: \(task.title)" : task.completionActionTitle)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(task.title).ninaText(.title)

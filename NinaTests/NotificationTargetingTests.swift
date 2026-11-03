@@ -144,6 +144,17 @@ final class NotificationTargetingTests: XCTestCase {
         )
     }
 
+    func testASementeThatStillCarriesAFutureDateNeverRings() {
+        var seed = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: 18, minute: 0))
+        seed.kind = .seed
+        seed.priority = .urgent
+
+        XCTAssertTrue(plan([seed]).isEmpty)
+        XCTAssertFalse(
+            LocalHomeNotificationScheduler.ringsSilently(seed, now: now, defaults: defaults, calendar: calendar)
+        )
+    }
+
     func testALeadTimeThatWouldLandInThePastFallsBackToTheDueMomentInsteadOfDroppingTheAlert() {
         var task = homeTask(dueAt: date(year: 2026, month: 8, day: 8, hour: 10, minute: 20))
         task.reminderLead = .oneHour
@@ -519,6 +530,88 @@ final class NotificationTargetingTests: XCTestCase {
                 date(year: 2026, month: 8, day: 8, hour: 17, minute: 0),
                 date(year: 2026, month: 8, day: 8, hour: 19, minute: 0)
             ]
+        )
+    }
+
+    func testOpeningTheAppAfterAnUrgentAlertFiredKeepsItsFollowUp() {
+        // Due at 09:30, alerted then; the app opens at 10:00 with the 10:30 follow-up still pending.
+        let due = date(year: 2026, month: 8, day: 8, hour: 9, minute: 30)
+        var task = homeTask(dueAt: due)
+        task.priority = .urgent
+        let pendingNudge = CarriedNudge(
+            taskID: task.id,
+            dueMoment: due,
+            deliveryDate: date(year: 2026, month: 8, day: 8, hour: 10, minute: 30)
+        )
+
+        let replanned = LocalHomeNotificationScheduler.plannedNotifications(
+            tasks: [task],
+            familyID: familyID,
+            viewer: HomeNotificationViewer(name: "Ana"),
+            now: now,
+            defaults: defaults,
+            calendar: calendar,
+            carriedNudges: [pendingNudge]
+        )
+
+        XCTAssertEqual(replanned.map(\.kind), [.nudge])
+        XCTAssertEqual(replanned.first?.deliveryDate, pendingNudge.deliveryDate)
+
+        var moved = task
+        moved.dueAt = date(year: 2026, month: 8, day: 9, hour: 9, minute: 30)
+        let afterTheMove = LocalHomeNotificationScheduler.plannedNotifications(
+            tasks: [moved],
+            familyID: familyID,
+            viewer: HomeNotificationViewer(name: "Ana"),
+            now: now,
+            defaults: defaults,
+            calendar: calendar,
+            carriedNudges: [pendingNudge]
+        )
+        XCTAssertFalse(afterTheMove.contains { $0.deliveryDate == pendingNudge.deliveryDate })
+    }
+
+    func testALeadAlertThatAlreadyFiredIsNotRepeatedAtTheDueTimeWhenTheAppOpens() {
+        // Due at 10:20 with "30 minutos antes": the 09:50 alert fired before the 10:00 plan.
+        let due = date(year: 2026, month: 8, day: 8, hour: 10, minute: 20)
+        var task = homeTask(dueAt: due)
+        task.reminderLead = .thirtyMinutes
+
+        let replanned = LocalHomeNotificationScheduler.plannedNotifications(
+            tasks: [task],
+            familyID: familyID,
+            viewer: HomeNotificationViewer(name: "Ana"),
+            now: now,
+            defaults: defaults,
+            calendar: calendar,
+            leadAlertsShown: [LeadAlertKey(taskID: task.id, dueMoment: due)]
+        )
+
+        XCTAssertTrue(replanned.isEmpty)
+        XCTAssertEqual(plan([task]).map(\.deliveryDate), [due])
+    }
+
+    func testTheSchedulerRemembersOnlyLeadAlertsWhoseTimeHasCome() {
+        let memory = LeadAlertMemory()
+        let taskID = UUID()
+        let due = date(year: 2026, month: 8, day: 8, hour: 18, minute: 0)
+        let lead = ScheduledNotification(
+            identifier: "lead",
+            taskID: taskID,
+            title: "",
+            body: "",
+            deliveryDate: date(year: 2026, month: 8, day: 8, hour: 17, minute: 30),
+            isSilent: false,
+            kind: .alert,
+            dueMoment: due
+        )
+
+        memory.record([lead], now: now)
+
+        XCTAssertTrue(memory.shown(before: now).isEmpty)
+        XCTAssertEqual(
+            memory.shown(before: date(year: 2026, month: 8, day: 8, hour: 17, minute: 45)),
+            [LeadAlertKey(taskID: taskID, dueMoment: due)]
         )
     }
 

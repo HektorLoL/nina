@@ -2094,6 +2094,18 @@ struct PremiumEntryView: View {
     }
 }
 
+enum NotificationSwitch {
+    // A switch that reads ON before iOS allows delivery promises alerts that never come.
+    static func reads(status: HomeNotificationAuthorizationStatus, preference: Bool) -> Bool {
+        switch status {
+        case .denied, .notDetermined:
+            false
+        case .authorized, .provisional, .ephemeral, .unavailable:
+            preference
+        }
+    }
+}
+
 private struct NotificationPreferencesView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -2194,22 +2206,19 @@ private struct NotificationPreferencesView: View {
 
     private var notificationToggle: Binding<Bool> {
         Binding(
-            // A switch that reads ON before iOS allows delivery promises alerts that never come.
             get: {
-                switch store.notificationAuthorizationStatus {
-                case .denied, .notDetermined:
-                    false
-                case .authorized, .provisional, .ephemeral, .unavailable:
-                    notificationsEnabled
-                }
+                NotificationSwitch.reads(
+                    status: store.notificationAuthorizationStatus,
+                    preference: notificationsEnabled
+                )
             },
+            // A refusal from iOS is not the person switching alerts off: allowing them later in
+            // iOS Settings must bring them back without a second trip here.
             set: { isEnabled in
                 notificationsEnabled = isEnabled
                 if isEnabled, store.notificationAuthorizationStatus == .notDetermined {
                     Task {
-                        if await store.requestNotificationAuthorization() == false {
-                            notificationsEnabled = false
-                        }
+                        _ = await store.requestNotificationAuthorization()
                     }
                 } else {
                     store.synchronizeLocalNotifications()
@@ -2870,6 +2879,7 @@ private enum TaskEditorPanel: Hashable {
 
 struct TaskEditorSheet: View {
     @Environment(AppStore.self) private var store
+    @Environment(RouterPath.self) private var router
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -2881,6 +2891,8 @@ struct TaskEditorSheet: View {
     @State private var owner = "Casa"
     @State private var ownerMemberID: UUID?
     @State private var dueDate = Date()
+    @State private var hasDueDate = true
+    @State private var undatedLabel = "Sem data"
     @State private var kind: TaskKind = .task
     @State private var category: TaskCategory = .home
     @State private var priority: TaskPriority = .normal
@@ -2903,11 +2915,30 @@ struct TaskEditorSheet: View {
         var owner = "Casa"
         var ownerMemberID: UUID?
         var dueDate = Date.distantPast
+        var hasDueDate = true
         var kind: TaskKind = .task
         var category: TaskCategory = .home
         var priority: TaskPriority = .normal
         var recurrence: TaskRecurrence = .none
         var reminderLead: TaskReminderLead = .atTime
+    }
+
+    // An undated task the reader cannot place stays undated through an edit that never touched
+    // its date, so a typo fix never books a reminder for the next full hour.
+    static func loadsWithDate(_ task: TaskItem, planting: Bool) -> Bool {
+        guard !planting, task.kind == .task, task.dueAt == nil else { return true }
+        return AppStore.inferredDueAt(from: task.dueLabel) != nil
+    }
+
+    static func savedDue(
+        isSeed: Bool,
+        hasDueDate: Bool,
+        dueDate: Date,
+        undatedLabel: String
+    ) -> (label: String, dueAt: Date?) {
+        if isSeed { return ("Sem data", nil) }
+        guard hasDueDate else { return (undatedLabel, nil) }
+        return (dateLabel(for: dueDate), dueDate)
     }
 
     // A swipe or a stray tap above the card never throws away what the person typed; the close button still does.
@@ -2929,12 +2960,17 @@ struct TaskEditorSheet: View {
             owner: owner,
             ownerMemberID: ownerMemberID,
             dueDate: dueDate,
+            hasDueDate: hasDueDate,
             kind: kind,
             category: category,
             priority: priority,
             recurrence: recurrence,
             reminderLead: reminderLead
         )
+    }
+
+    private var dateChipLabel: String {
+        hasDueDate ? Self.dateLabel(for: dueDate) : undatedLabel
     }
 
     private var isEditing: Bool {
@@ -3184,7 +3220,7 @@ struct TaskEditorSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
-            } else if !isSeed, store.reminderRingsSilently(
+            } else if !isSeed, hasDueDate, store.reminderRingsSilently(
                 owner: owner,
                 ownerMemberID: ownerMemberID,
                 dueAt: dueDate,
@@ -3333,13 +3369,16 @@ struct TaskEditorSheet: View {
         } else {
             Button {
                 Haptics.lightImpact()
+                if activePanel != .date {
+                    hasDueDate = true
+                }
                 togglePanel(.date)
             } label: {
-                EditorChip(systemName: "calendar", text: Self.dateLabel(for: dueDate), isSet: true)
+                EditorChip(systemName: "calendar", text: dateChipLabel, isSet: hasDueDate)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Quando")
-            .accessibilityValue(Self.dateLabel(for: dueDate))
+            .accessibilityValue(dateChipLabel)
         }
     }
 
@@ -3354,6 +3393,20 @@ struct TaskEditorSheet: View {
             .tint(NinaTheme.ink)
 
             Spacer(minLength: 0)
+
+            if loadedDraft?.hasDueDate == false {
+                Button {
+                    Haptics.selection()
+                    hasDueDate = false
+                    closePanel()
+                } label: {
+                    Text("Sem data")
+                        .ninaText(.label, NinaTheme.muted, weight: .semibold)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.vertical, 4)
     }
@@ -3515,18 +3568,22 @@ struct TaskEditorSheet: View {
             dueDate: isPlantingSeed || task.kind == .seed
                 ? Self.defaultDueDate()
                 : (task.dueAt ?? Self.date(fromDueLabel: task.dueLabel)),
+            hasDueDate: Self.loadsWithDate(task, planting: isPlantingSeed),
             kind: isPlantingSeed ? .task : task.kind,
             category: task.category,
             priority: task.priority,
             recurrence: task.recurrence,
             reminderLead: isPlantingSeed ? .atTime : task.reminderLead
         )
+        let trimmedLabel = task.dueLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        undatedLabel = trimmedLabel.isEmpty ? "Sem data" : task.dueLabel
         title = loaded.title
         subtitle = loaded.subtitle
         owner = loaded.owner
         ownerMemberID = loaded.ownerMemberID
         kind = loaded.kind
         dueDate = loaded.dueDate
+        hasDueDate = loaded.hasDueDate
         category = loaded.category
         priority = loaded.priority
         recurrence = loaded.recurrence
@@ -3541,8 +3598,14 @@ struct TaskEditorSheet: View {
             return
         }
 
-        let dueLabel = isSeed ? "Sem data" : Self.dateLabel(for: dueDate)
-        let dueAt = isSeed ? nil : dueDate
+        let due = Self.savedDue(
+            isSeed: isSeed,
+            hasDueDate: hasDueDate,
+            dueDate: dueDate,
+            undatedLabel: undatedLabel
+        )
+        let dueLabel = due.label
+        let dueAt = due.dueAt
         let recurrenceForSave: TaskRecurrence = isSeed ? .none : recurrence
         let reminderLeadForSave: TaskReminderLead = isSeed ? .atTime : reminderLead
         let categoryForSave = persistedCategoryIfNeeded(category)
@@ -3629,7 +3692,14 @@ struct TaskEditorSheet: View {
         }
         store.deleteTask(id)
         Haptics.success()
+        router.path = Self.pathAfterDeleting(id, from: router.path)
         dismiss()
+    }
+
+    // Deleting from the editor goes back to the list, never onto a page that blames someone else.
+    static func pathAfterDeleting(_ id: UUID, from path: [Route]) -> [Route] {
+        guard let index = path.firstIndex(of: .task(id)) else { return path }
+        return Array(path[..<index])
     }
 
     private func createCategory() {
@@ -4396,8 +4466,8 @@ struct TaskQuickActionsSheet: View {
                     dismiss()
                 }
 
-                // A closed task has nothing to push, hand over or plant.
-                if task.kind == .task, !task.isDone {
+                // A closed task has nothing to push, hand over or plant, and a later one is never pulled earlier.
+                if task.kind == .task, !task.isDone, task.belongsOnAgenda() {
                     NinaDivider(inset: 52)
 
                     actionRow(title: "Remarcar para amanhã", systemName: "clock") {
@@ -4492,9 +4562,20 @@ struct TaskQuickActionsSheet: View {
     // A snooze, not a rewrite of dueAt: rewriting the anchor of a repeating task
     // would move every future occurrence, not only this one.
     private func pushToTomorrow() {
-        let base = max(task.dueAt ?? .now, .now)
-        let target = Calendar.current.date(byAdding: .day, value: 1, to: base) ?? base
-        store.snoozeTask(task.id, until: target)
+        store.snoozeTask(task.id, until: Self.tomorrowTarget(for: task))
+    }
+
+    static func tomorrowTarget(
+        for task: TaskItem,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Date {
+        let startOfToday = calendar.startOfDay(for: now)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
+        let shown = task.displayDate(relativeTo: now, calendar: calendar)
+        let hour = shown.map { calendar.component(.hour, from: $0) } ?? AppStore.defaultDueHour
+        let minute = shown.map { calendar.component(.minute, from: $0) } ?? 0
+        return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: tomorrow) ?? tomorrow
     }
 
     private func takeOver(as member: HouseholdMember) {
@@ -4577,6 +4658,13 @@ struct TaskEditConflictSheet: View {
         .interactiveDismissDisabled(true)
     }
 
+    // Two versions that differ only in whether the task is done must never read alike.
+    static func versionLine(_ task: TaskItem) -> String {
+        let when = task.kind == .seed ? "Plante depois" : task.effectiveDueLabel()
+        let owner = HouseholdWorkload.isSharedOwner(task.owner) ? "Sem dono" : task.owner
+        return "\(task.isDone ? "Feita · " : "")\(when) · \(owner)"
+    }
+
     private func versionCard(eyebrow: String, task: TaskItem, isMine: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Eyebrow(text: eyebrow)
@@ -4585,7 +4673,7 @@ struct TaskEditConflictSheet: View {
                 .ninaText(.body, NinaTheme.ink, weight: .semibold)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("\(task.kind == .seed ? "Plante depois" : task.effectiveDueLabel()) · \(HouseholdWorkload.isSharedOwner(task.owner) ? "Sem dono" : task.owner)")
+            Text(Self.versionLine(task))
                 .ninaText(.caption, NinaTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -4602,5 +4690,6 @@ struct TaskEditConflictSheet: View {
     NavigationStack {
         TaskEditorSheet(mode: .add(sectionID: AppStore.houseTasksSectionID))
             .environment(AppStore())
+            .environment(RouterPath())
     }
 }

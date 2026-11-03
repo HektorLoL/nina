@@ -291,6 +291,156 @@ final class TaskAgendaTests: XCTestCase {
         XCTAssertEqual(EditorSecondaryPlacement.deletePlacement(isEditing: true, isAccessibilitySize: true), .column)
     }
 
+    func testRemarcarParaAmanhaMovesATaskOfTodayOrALateOneToTomorrowAtItsOwnHour() {
+        var today = TaskItem(
+            title: "Pagar a luz",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "hoje, 15:00",
+            dueAt: date(year: 2026, month: 8, day: 8, hour: 15, minute: 0),
+            category: .bills,
+            isDone: false,
+            createdBy: "Manual"
+        )
+        XCTAssertEqual(
+            TaskQuickActionsSheet.tomorrowTarget(for: today, now: now, calendar: calendar),
+            date(year: 2026, month: 8, day: 9, hour: 15, minute: 0)
+        )
+
+        today.dueAt = date(year: 2026, month: 8, day: 5, hour: 14, minute: 30)
+        XCTAssertEqual(
+            TaskQuickActionsSheet.tomorrowTarget(for: today, now: now, calendar: calendar),
+            date(year: 2026, month: 8, day: 9, hour: 14, minute: 30)
+        )
+
+        var friday = today
+        friday.dueAt = date(year: 2026, month: 8, day: 14, hour: 14, minute: 0)
+        XCTAssertFalse(friday.belongsOnAgenda(for: now, calendar: calendar))
+    }
+
+    func testASementesCheckboxPlantsItAndATasksOrADoneSementesTicks() {
+        var seed = TaskItem(
+            kind: .seed,
+            title: "Pintar a varanda",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Sem data",
+            category: .home,
+            isDone: false,
+            createdBy: "Manual"
+        )
+        XCTAssertTrue(seed.checkboxPlants)
+
+        seed.isDone = true
+        XCTAssertFalse(seed.checkboxPlants)
+
+        var task = seed
+        task.kind = .task
+        task.isDone = false
+        XCTAssertFalse(task.checkboxPlants)
+    }
+
+    func testTwoVersionsOfATaskThatDifferOnlyInBeingDoneNeverReadAlikeInTheConflictSheet() {
+        var task = TaskItem(
+            kind: .seed,
+            title: "Tirar o lixo",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Sem data",
+            category: .home,
+            isDone: false,
+            createdBy: "Manual"
+        )
+        let open = TaskEditConflictSheet.versionLine(task)
+        task.isDone = true
+
+        XCTAssertEqual(open, "Plante depois · Sem dono")
+        XCTAssertEqual(TaskEditConflictSheet.versionLine(task), "Feita · Plante depois · Sem dono")
+    }
+
+    func testAReminderTapWaitsForAnOpenEditorAndClosesEveryOtherSheetOnEveryTab() {
+        let router = TabRouter()
+        router.router(for: .nina).presentedSheet = .settings
+        router.router(for: .house).presentedSheet = .premium
+        XCTAssertFalse(router.presentsAnEditor)
+
+        router.router(for: .tasks).presentedSheet = .editTask(UUID())
+        XCTAssertTrue(router.presentsAnEditor)
+
+        router.router(for: .tasks).presentedSheet = nil
+        router.dismissAllSheets()
+        for tab in AppTab.allCases {
+            XCTAssertNil(router.router(for: tab).presentedSheet, "\(tab)")
+        }
+    }
+
+    func testVerSemDonoLandsOnTheTasksListAndNeverOnATaskLeftOpenThere() {
+        let router = TabRouter()
+        let tasks = router.router(for: .tasks)
+        tasks.path = [.task(UUID())]
+        tasks.presentedSheet = .addTask
+        router.router(for: .house).path = [.workload]
+
+        router.showUnownedTasks()
+
+        XCTAssertEqual(tasks.path, [])
+        XCTAssertNil(tasks.presentedSheet)
+        XCTAssertEqual(router.router(for: .house).path, [.workload])
+    }
+
+    func testDeletingATaskFromItsEditorLeavesItsDetailScreenInsteadOfLandingOnTheGonePage() {
+        let deleted = UUID()
+        let member = UUID()
+        let other = UUID()
+
+        XCTAssertEqual(TaskEditorSheet.pathAfterDeleting(deleted, from: [.task(deleted)]), [])
+        XCTAssertEqual(
+            TaskEditorSheet.pathAfterDeleting(deleted, from: [.member(member), .task(deleted)]),
+            [.member(member)]
+        )
+        XCTAssertEqual(
+            TaskEditorSheet.pathAfterDeleting(deleted, from: [.workload, .task(other)]),
+            [.workload, .task(other)]
+        )
+    }
+
+    func testEditingAnUndatedTaskWithoutTouchingItsDateKeepsItUndatedWithItsOwnLabel() {
+        let undated = TaskItem(
+            title: "Trocar a resistência do chuveiro",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "hoje à noite",
+            category: .home,
+            isDone: false,
+            createdBy: "Nina"
+        )
+        var named = undated
+        named.dueLabel = "dia 20"
+        var seed = undated
+        seed.kind = .seed
+        var dated = undated
+        dated.dueAt = date(year: 2026, month: 8, day: 9, hour: 9, minute: 0)
+
+        XCTAssertFalse(TaskEditorSheet.loadsWithDate(undated, planting: false))
+        XCTAssertTrue(TaskEditorSheet.loadsWithDate(named, planting: false))
+        XCTAssertTrue(TaskEditorSheet.loadsWithDate(dated, planting: false))
+        XCTAssertTrue(TaskEditorSheet.loadsWithDate(seed, planting: false))
+        XCTAssertTrue(TaskEditorSheet.loadsWithDate(seed, planting: true))
+
+        let picked = date(year: 2026, month: 8, day: 14, hour: 10, minute: 0)
+        let kept = TaskEditorSheet.savedDue(isSeed: false, hasDueDate: false, dueDate: picked, undatedLabel: "hoje à noite")
+        XCTAssertNil(kept.dueAt)
+        XCTAssertEqual(kept.label, "hoje à noite")
+
+        let chosen = TaskEditorSheet.savedDue(isSeed: false, hasDueDate: true, dueDate: picked, undatedLabel: "hoje à noite")
+        XCTAssertEqual(chosen.dueAt, picked)
+        XCTAssertEqual(chosen.label, TaskEditorSheet.dateLabel(for: picked))
+
+        let planted = TaskEditorSheet.savedDue(isSeed: true, hasDueDate: true, dueDate: picked, undatedLabel: "hoje à noite")
+        XCTAssertNil(planted.dueAt)
+        XCTAssertEqual(planted.label, "Sem data")
+    }
+
     func testASwipeOrAStrayTapAboveTheCardNeverThrowsAwayWhatThePersonTypedInAnEditor() {
         let id = UUID()
         let add = TaskEditorMode.add(sectionID: AppStore.houseTasksSectionID)

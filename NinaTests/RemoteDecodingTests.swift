@@ -875,6 +875,42 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertFalse(wire.keys.contains("email"))
     }
 
+    func testATaskUpdateSendsAClearedDateAndSnoozeAsExplicitNullsSoTheServerCannotKeepThem() throws {
+        let cleared = TaskItem(
+            kind: .seed,
+            title: "Pagar o IPVA",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Sem data",
+            dueAt: nil,
+            category: .home,
+            snoozedUntil: nil,
+            isDone: false,
+            createdBy: "Manual"
+        )
+        let clearedWire = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(TaskUpdateRow(task: cleared)))
+                as? [String: Any]
+        )
+
+        XCTAssertTrue(clearedWire["due_at"] is NSNull)
+        XCTAssertTrue(clearedWire["snoozed_until"] is NSNull)
+
+        var snoozed = cleared
+        snoozed.kind = .task
+        snoozed.dueAt = Date(timeIntervalSince1970: 1_790_000_000)
+        snoozed.snoozedUntil = Date(timeIntervalSince1970: 1_790_003_600)
+        let snoozedWire = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(TaskUpdateRow(task: snoozed)))
+                as? [String: Any]
+        )
+
+        XCTAssertFalse(snoozedWire["due_at"] is NSNull)
+        XCTAssertNotNil(snoozedWire["due_at"])
+        XCTAssertFalse(snoozedWire["snoozed_until"] is NSNull)
+        XCTAssertNotNil(snoozedWire["snoozed_until"])
+    }
+
     private static func proposal(kind: NinaProposalKind, dueLabel: String, dueAt: String?) -> NinaProposal {
         NinaProposal(
             kind: kind,

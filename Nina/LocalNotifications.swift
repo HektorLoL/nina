@@ -141,6 +141,7 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
     private let center: UNUserNotificationCenter
     private let defaults: UserDefaults
     private let calendar: Calendar
+    private let leadAlerts = LeadAlertMemory()
 
     init(
         center: UNUserNotificationCenter = .current(),
@@ -179,11 +180,19 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
             return
         }
 
-        let requests = notificationRequests(
+        let now = Date()
+        let planned = Self.plannedNotifications(
             tasks: tasks,
             familyID: familyID,
-            viewer: viewer
+            viewer: viewer,
+            now: now,
+            defaults: defaults,
+            calendar: calendar,
+            carriedNudges: Self.carriedNudges(from: pending, familyID: familyID),
+            leadAlertsShown: leadAlerts.shown(before: now)
         )
+        leadAlerts.record(planned, now: now)
+        let requests = planned.compactMap { Self.request($0, calendar: calendar) }
 
         center.removePendingNotificationRequests(withIdentifiers: existingNinaIDs)
         for request in requests {
@@ -225,7 +234,9 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         viewer: HomeNotificationViewer,
         now: Date = Date(),
         defaults: UserDefaults = .standard,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        carriedNudges: [CarriedNudge] = [],
+        leadAlertsShown: Set<LeadAlertKey> = []
     ) -> [ScheduledNotification] {
         if let minorPolicy = viewer.minorPolicy, !minorPolicy.alertsEnabled {
             return []
@@ -242,8 +253,14 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
             if task.recurrence != .none, !moments.isEmpty {
                 endlessTaskIDs.insert(task.id)
             }
+            // A lead alert this phone already showed is not repeated at the due time on a later plan.
+            let alertMoments = moments.filter { moment in
+                !(moment.alertDate == moment.dueMoment
+                    && task.reminderLead.minutes > 0
+                    && leadAlertsShown.contains(LeadAlertKey(taskID: task.id, dueMoment: moment.dueMoment)))
+            }
 
-            for (index, moment) in moments.enumerated() {
+            for (index, moment) in alertMoments.enumerated() {
                 let isMinor = viewer.minorPolicy != nil
                 let alert = ScheduledNotification(
                     identifier: taskIdentifier(
@@ -273,8 +290,36 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
 
             // A minor's phone never repeats itself: no follow-up nudge, ever.
             guard viewer.minorPolicy == nil,
-                  task.priority == .high || task.priority == .urgent,
-                  let dueMoment = moments.first?.dueMoment else { continue }
+                  task.priority == .high || task.priority == .urgent else { continue }
+
+            // A follow-up already booked for an alert that has fired survives the next plan, as long
+            // as the task still shows the moment that alert announced.
+            if let shown = task.displayDate(relativeTo: now, calendar: calendar), shown <= now,
+               let carried = carriedNudges.first(where: { nudge in
+                   nudge.taskID == task.id
+                       && nudge.deliveryDate > now
+                       && abs(nudge.dueMoment.timeIntervalSince(shown)) < 1
+               }) {
+                nudges.append(
+                    ScheduledNotification(
+                        identifier: nudgeIdentifier(
+                            task.id,
+                            familyID: familyID,
+                            deliveryDate: carried.deliveryDate
+                        ),
+                        taskID: task.id,
+                        title: task.title,
+                        body: nudgeNotificationBody(task),
+                        deliveryDate: carried.deliveryDate,
+                        isSilent: quietHours.contains(carried.deliveryDate),
+                        kind: .nudge,
+                        actions: ReminderActionSet(task, offersSnooze: true),
+                        dueMoment: carried.dueMoment
+                    )
+                )
+            }
+
+            guard let dueMoment = moments.first?.dueMoment else { continue }
 
             let nudgeDate = dueMoment.addingTimeInterval(missedReminderNudgeDelay)
             guard nudgeDate > now else { continue }
@@ -353,20 +398,23 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
             .sorted { $0.deliveryDate < $1.deliveryDate }
     }
 
-    private func notificationRequests(
-        tasks: [TaskItem],
-        familyID: UUID,
-        viewer: HomeNotificationViewer
-    ) -> [UNNotificationRequest] {
-        Self.plannedNotifications(
-            tasks: tasks,
-            familyID: familyID,
-            viewer: viewer,
-            now: Date(),
-            defaults: defaults,
-            calendar: calendar
-        )
-        .compactMap { Self.request($0, calendar: calendar) }
+    // Only pending requests are read back: a delivered one disappears when it is tapped or cleared.
+    private static func carriedNudges(from pending: [UNNotificationRequest], familyID: UUID) -> [CarriedNudge] {
+        let prefix = "nina.local.nudge.\(familyID.uuidString)."
+        return pending.compactMap { request in
+            guard request.identifier.hasPrefix(prefix),
+                  let rawTaskID = request.content.userInfo[taskIDKey] as? String,
+                  let taskID = UUID(uuidString: rawTaskID),
+                  let dueSeconds = request.content.userInfo[dueInstantKey] as? Double,
+                  let deliveryDate = (request.trigger as? UNCalendarNotificationTrigger)?.nextTriggerDate() else {
+                return nil
+            }
+            return CarriedNudge(
+                taskID: taskID,
+                dueMoment: Date(timeIntervalSince1970: dueSeconds),
+                deliveryDate: deliveryDate
+            )
+        }
     }
 
     static func reminderMoments(
@@ -374,6 +422,8 @@ struct LocalHomeNotificationScheduler: HomeNotificationScheduling {
         after now: Date,
         calendar: Calendar
     ) -> [ReminderMoment] {
+        // A semente is an intention without a date, so a date it still carries never rings.
+        guard task.kind == .task else { return [] }
         let lead = TimeInterval(task.reminderLead.minutes * 60)
 
         func leadAdjusted(_ dueMoments: [Date]) -> [ReminderMoment] {
@@ -573,6 +623,41 @@ enum ReminderActionSet: String, CaseIterable, Hashable {
 struct ReminderMoment {
     var dueMoment: Date
     var alertDate: Date
+}
+
+struct CarriedNudge: Hashable {
+    var taskID: UUID
+    var dueMoment: Date
+    var deliveryDate: Date
+}
+
+struct LeadAlertKey: Hashable {
+    var taskID: UUID
+    var dueMoment: Date
+}
+
+// Remembers, for this launch only, which lead alerts were booked, so a plan made after one fired
+// does not book the same reminder again at the due time.
+final class LeadAlertMemory: @unchecked Sendable {
+    private let lock = NSLock()
+    private var booked: [LeadAlertKey: Date] = [:]
+
+    func shown(before now: Date) -> Set<LeadAlertKey> {
+        lock.lock()
+        defer { lock.unlock() }
+        return Set(booked.filter { $0.value <= now }.map(\.key))
+    }
+
+    func record(_ planned: [ScheduledNotification], now: Date) {
+        lock.lock()
+        defer { lock.unlock() }
+        booked = booked.filter { $0.key.dueMoment > now }
+        for alert in planned where alert.kind == .alert {
+            guard let taskID = alert.taskID, let dueMoment = alert.dueMoment,
+                  alert.deliveryDate < dueMoment else { continue }
+            booked[LeadAlertKey(taskID: taskID, dueMoment: dueMoment)] = alert.deliveryDate
+        }
+    }
 }
 
 private struct QuietHoursConfiguration {

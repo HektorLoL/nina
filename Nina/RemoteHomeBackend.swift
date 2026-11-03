@@ -320,6 +320,7 @@ protocol RemoteHomeBackend {
         familyID: UUID
     ) async throws -> TaskUpdateResult
     func deleteTask(_ taskID: UUID, familyID: UUID) async throws
+    func fetchTask(id taskID: UUID, familyID: UUID) async throws -> TaskItem?
     func createShoppingItem(_ item: ShoppingItem, familyID: UUID, currentUser: AuthUser) async throws
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws
     func deleteShoppingItem(_ itemID: UUID, familyID: UUID) async throws
@@ -381,6 +382,10 @@ enum RemoteHomeBackendError: Error {
 }
 
 extension RemoteHomeBackend {
+    func fetchTask(id taskID: UUID, familyID: UUID) async throws -> TaskItem? {
+        throw RemoteHomeBackendError.operationUnavailable
+    }
+
     func requestHomeAccess(with inviteCode: String, member: AuthUser?) async throws -> FamilyJoinOutcome {
         .joined(try await joinHome(with: inviteCode, member: member))
     }
@@ -1328,6 +1333,20 @@ struct SupabaseRemoteHomeBackend: RemoteHomeBackend {
                 throw RemoteHomeBackendError.familyNotFound
             }
             return .conflict(current: currentTask)
+        }
+    }
+
+    func fetchTask(id taskID: UUID, familyID: UUID) async throws -> TaskItem? {
+        try await perform(operation: "tasks.fetch") {
+            let rows: [TaskRow] = try await client
+                .from("tasks")
+                .select(Self.taskColumns)
+                .eq("id", value: taskID)
+                .eq("family_id", value: familyID)
+                .limit(1)
+                .execute()
+                .value
+            return rows.first?.domainTask
         }
     }
 
@@ -2474,7 +2493,7 @@ private struct TaskInsertRow: Encodable {
     }
 }
 
-private struct TaskUpdateRow: Encodable {
+struct TaskUpdateRow: Encodable {
     var taskKind: String
     var sectionID: String
     var title: String
@@ -2530,8 +2549,8 @@ private struct TaskUpdateRow: Encodable {
         createdByLabel = task.createdBy
     }
 
-    // An omitted owner_member_id would leave the previous person assigned, so unassigning travels
-    // as an explicit null rather than the synthesized encodeIfPresent.
+    // An omitted owner_member_id, due_at or snoozed_until would keep the server's old value, so
+    // clearing any of them travels as an explicit null rather than the synthesized encodeIfPresent.
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(taskKind, forKey: .taskKind)
@@ -2540,14 +2559,14 @@ private struct TaskUpdateRow: Encodable {
         try container.encode(subtitle, forKey: .subtitle)
         try container.encode(ownerLabel, forKey: .ownerLabel)
         try container.encode(ownerMemberID, forKey: .ownerMemberID)
-        try container.encodeIfPresent(dueAt, forKey: .dueAt)
+        try container.encode(dueAt, forKey: .dueAt)
         try container.encode(dueLabel, forKey: .dueLabel)
         try container.encode(categoryID, forKey: .categoryID)
         try container.encode(categorySnapshot, forKey: .categorySnapshot)
         try container.encode(priority, forKey: .priority)
         try container.encode(recurrenceRule, forKey: .recurrenceRule)
         try container.encode(remindOffsetMinutes, forKey: .remindOffsetMinutes)
-        try container.encodeIfPresent(snoozedUntil, forKey: .snoozedUntil)
+        try container.encode(snoozedUntil, forKey: .snoozedUntil)
         try container.encode(isDone, forKey: .isDone)
         try container.encode(createdByLabel, forKey: .createdByLabel)
     }

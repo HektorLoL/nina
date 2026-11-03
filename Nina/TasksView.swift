@@ -63,10 +63,18 @@ struct TasksView: View {
     }
 
     var body: some View {
-        if isSearching {
-            searchScreen
-        } else {
-            main
+        Group {
+            if isSearching {
+                searchScreen
+            } else {
+                main
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
+            searchQuery = ""
+            isSearching = false
+            endSelection()
+            filter = .unowned
         }
     }
 
@@ -103,10 +111,6 @@ struct TasksView: View {
         }
         .ninaScreenBackground()
         .ninaStatusBarMask()
-        .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
-            endSelection()
-            filter = .unowned
-        }
         // Only a task still drawn can stay chosen, so an action never reaches one that left the list.
         .onChange(of: selectableTasks.map(\.id)) { _, ids in
             selection.formIntersection(ids)

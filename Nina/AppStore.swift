@@ -215,6 +215,13 @@ enum HomeAccessState: Hashable {
     case unavailable
 }
 
+enum ReminderActionOutcome: Equatable {
+    case completed
+    case snoozed
+    case nothing
+    case gone
+}
+
 struct TaskEditConflict: Identifiable {
     var id: TaskItem.ID { remoteTask.id }
     var localTask: TaskItem
@@ -2962,7 +2969,15 @@ final class AppStore {
         persistActivityLocally()
         synchronizeLocalNotifications()
         askForNotificationsAfterConfirming(dueAt: task.dueAt)
-        enqueueRemoteMutation(errorMessage: "Não deu para salvar a nova tarefa agora. Tente de novo.") {
+        enqueueRemoteMutation(
+            errorMessage: "Não deu para salvar a nova tarefa agora. Tente de novo.",
+            onFailure: { [weak self] in
+                guard let self, self.tasks.contains(task) else { return }
+                self.tasks.removeAll { $0 == task }
+                self.persistActivityLocally()
+                self.synchronizeLocalNotifications()
+            }
+        ) {
             backend,
             familyID,
             user in
@@ -3223,6 +3238,44 @@ final class AppStore {
         return true
     }
 
+    // A reminder's button acts on the house's copy of its task, not on what this phone last saw,
+    // so a chore another adult already closed is never closed twice or reopened by a snooze.
+    func followReminderAction(_ route: ReminderRoute, now: Date = .now) async -> ReminderActionOutcome {
+        let contextToken = currentHomeContextToken
+        if let activeUser,
+           !usesLocalDebugBackend(for: activeUser),
+           let remoteHomeBackend,
+           hasActiveHome {
+            let familyID = familyGroup.id
+            do {
+                let fresh = try await remoteHomeBackend.fetchTask(id: route.taskID, familyID: familyID)
+                guard isCurrentHomeContext(contextToken) else { return .nothing }
+                guard let fresh else { return .gone }
+                if let index = tasks.firstIndex(where: { $0.id == fresh.id }),
+                   tasks[index].version < fresh.version {
+                    tasks[index] = fresh
+                    cacheAppSnapshotLocally()
+                    synchronizeLocalNotifications()
+                }
+            } catch {
+                guard isCurrentHomeContext(contextToken) else { return .nothing }
+            }
+        }
+
+        guard let task = tasks.first(where: { $0.id == route.taskID }) else { return .gone }
+        switch route.action {
+        case .complete where route.completes(task):
+            toggleTask(task, through: route.dueMoment)
+            return .completed
+        case .snooze:
+            guard let target = route.snoozeTarget(for: task, now: now) else { return .nothing }
+            snoozeTask(task.id, until: target)
+            return .snoozed
+        case .open, .complete:
+            return .nothing
+        }
+    }
+
     func snoozeTask(_ id: TaskItem.ID, until date: Date) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
         let currentTask = tasks[index]
@@ -3438,7 +3491,14 @@ final class AppStore {
         )
         shoppingItems.insert(item, at: 0)
         persistActivityLocally()
-        enqueueRemoteMutation(errorMessage: "Não deu para salvar o item agora. Tente de novo.") {
+        enqueueRemoteMutation(
+            errorMessage: "Não deu para salvar o item agora. Tente de novo.",
+            onFailure: { [weak self] in
+                guard let self, self.shoppingItems.contains(item) else { return }
+                self.shoppingItems.removeAll { $0 == item }
+                self.persistActivityLocally()
+            }
+        ) {
             backend,
             familyID,
             user in
@@ -3457,13 +3517,19 @@ final class AppStore {
         let trimmedOwner = owner.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
         guard let index = shoppingItems.firstIndex(where: { $0.id == id }) else { return }
+        let previousItem = shoppingItems[index]
         shoppingItems[index].title = trimmedTitle
         shoppingItems[index].amount = amount.trimmingCharacters(in: .whitespacesAndNewlines)
         shoppingItems[index].owner = trimmedOwner.isEmpty ? "Casa" : trimmedOwner
         shoppingItems[index].ownerMemberID = Self.assignableMemberID(ownerMemberID, forOwner: trimmedOwner)
         let item = shoppingItems[index]
         persistActivityLocally()
-        enqueueRemoteMutation(errorMessage: "Não deu para salvar a mudança no item agora. Tente de novo.") {
+        enqueueRemoteMutation(
+            errorMessage: "Não deu para salvar a mudança no item agora. Tente de novo.",
+            onFailure: { [weak self] in
+                self?.rollBackFailedShoppingWrite(item, to: previousItem)
+            }
+        ) {
             backend,
             familyID,
             _ in
@@ -3473,15 +3539,28 @@ final class AppStore {
 
     func toggleShoppingItem(_ item: ShoppingItem) {
         guard let index = shoppingItems.firstIndex(where: { $0.id == item.id }) else { return }
+        let previousItem = shoppingItems[index]
         shoppingItems[index].isChecked.toggle()
         let updatedItem = shoppingItems[index]
         persistActivityLocally()
-        enqueueRemoteMutation(errorMessage: "Não deu para marcar o item agora. Tente de novo.") {
+        enqueueRemoteMutation(
+            errorMessage: "Não deu para marcar o item agora. Tente de novo.",
+            onFailure: { [weak self] in
+                self?.rollBackFailedShoppingWrite(updatedItem, to: previousItem)
+            }
+        ) {
             backend,
             familyID,
             _ in
             try await backend.updateShoppingItem(updatedItem, familyID: familyID)
         }
+    }
+
+    private func rollBackFailedShoppingWrite(_ written: ShoppingItem, to previous: ShoppingItem) {
+        guard let index = shoppingItems.firstIndex(where: { $0.id == written.id }),
+              shoppingItems[index] == written else { return }
+        shoppingItems[index] = previous
+        persistActivityLocally()
     }
 
     func deleteShoppingItem(_ id: ShoppingItem.ID) {
@@ -3557,6 +3636,7 @@ final class AppStore {
     private func enqueueRemoteMutation(
         errorMessage: String,
         signalsFailure: Bool = true,
+        onFailure: (@MainActor () -> Void)? = nil,
         operation: @escaping (
             _ backend: any RemoteHomeBackend,
             _ familyID: UUID,
@@ -3589,6 +3669,7 @@ final class AppStore {
                       self.isCurrentHomeContext(contextToken),
                       self.activeHomeUserID == userID else { return }
                 self.syncErrorMessage = errorMessage
+                onFailure?()
                 // A run of writes that fail together buzzes once, not once per write.
                 if signalsFailure, Date().timeIntervalSince(self.lastFailureHapticAt) > 1 {
                     self.lastFailureHapticAt = Date()
@@ -3629,7 +3710,10 @@ final class AppStore {
 
         enqueueRemoteMutation(
             errorMessage: "Não deu para salvar a mudança na tarefa agora. Tente de novo.",
-            signalsFailure: audience == .adult
+            signalsFailure: audience == .adult,
+            onFailure: { [weak self] in
+                self?.rollBackFailedTaskUpdate(optimisticTask, to: baseTask)
+            }
         ) {
             [weak self] backend,
             familyID,
@@ -3642,6 +3726,19 @@ final class AppStore {
             guard let self, self.isCurrentHomeContext(contextToken) else { return }
             self.applyTaskUpdateResult(result, optimisticTask: optimisticTask, for: audience)
         }
+    }
+
+    // A write the server never took goes back to the version it holds, so the next edit is not
+    // mistaken for someone else's; a later local edit of the same task is never overwritten.
+    private func rollBackFailedTaskUpdate(_ optimisticTask: TaskItem, to baseTask: TaskItem) {
+        guard let index = tasks.firstIndex(where: { $0.id == optimisticTask.id }),
+              tasks[index] == optimisticTask else { return }
+        tasks[index] = baseTask
+        if undoableCompletionID == optimisticTask.id {
+            clearUndo()
+        }
+        persistActivityLocally()
+        synchronizeLocalNotifications()
     }
 
     private func applyTaskUpdateResult(

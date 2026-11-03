@@ -2265,6 +2265,102 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testAFailedTaskWriteGoesBackToTheServersVersionSoTheNextEditRaisesNoFalseConflict() async {
+        let user = makeUser()
+        let task = TaskItem(
+            title: "Lavar a louça",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "Sem data",
+            category: .home,
+            isDone: false,
+            createdBy: "Manual",
+            version: 3
+        )
+        let backend = RecordingHomeBackend(state: makeRemoteState(tasks: [task]))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        await backend.failNextTaskUpdates(1)
+
+        store.toggleTask(task)
+        await store.waitForPendingRemoteMutations()
+
+        XCTAssertEqual(store.tasks.first, task)
+        XCTAssertNotNil(store.syncErrorMessage)
+        XCTAssertNil(store.undoableCompletionID)
+
+        store.toggleTask(task)
+        await store.waitForPendingRemoteMutations()
+        let updates = await backend.recordedTaskUpdates()
+
+        XCTAssertEqual(updates.map(\.expectedVersion), [3, 3])
+        XCTAssertNil(store.taskEditConflict)
+        XCTAssertEqual(store.tasks.first?.isDone, true)
+    }
+
+    @MainActor
+    func testAReminderButtonActsOnTheHousesCopySoAChoreAnotherAdultClosedIsNeverClosedTwice() async {
+        let user = makeUser()
+        let task = TaskItem(
+            title: "Tirar o lixo",
+            subtitle: "",
+            owner: "Casa",
+            dueLabel: "hoje, 21:00",
+            dueAt: Date().addingTimeInterval(-600),
+            category: .home,
+            isDone: false,
+            createdBy: "Manual",
+            version: 1
+        )
+        var closedElsewhere = task
+        closedElsewhere.isDone = true
+        closedElsewhere.version = 2
+        let backend = RecordingHomeBackend(state: makeRemoteState(tasks: [task]))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        await backend.setHouseCopy(closedElsewhere, for: task.id)
+
+        let completed = await store.followReminderAction(
+            ReminderRoute(taskID: task.id, action: .complete, dueMoment: task.dueAt)
+        )
+        let snoozed = await store.followReminderAction(
+            ReminderRoute(taskID: task.id, action: .snooze, dueMoment: task.dueAt)
+        )
+        await store.waitForPendingRemoteMutations()
+        let updates = await backend.recordedTaskUpdates()
+
+        XCTAssertEqual(completed, .nothing)
+        XCTAssertEqual(snoozed, .nothing)
+        XCTAssertEqual(updates, [])
+        XCTAssertNil(store.taskEditConflict)
+        XCTAssertEqual(store.tasks.first { $0.id == task.id }, closedElsewhere)
+
+        await backend.setHouseCopy(nil, for: task.id)
+        let gone = await store.followReminderAction(
+            ReminderRoute(taskID: task.id, action: .complete, dueMoment: task.dueAt)
+        )
+        XCTAssertEqual(gone, .gone)
+    }
+
+    @MainActor
+    func testAShoppingTickThatNeverReachedTheServerIsUntickedAgain() async throws {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState(tasks: []))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        store.addShoppingItem(title: "Leite", amount: "2", owner: "Casa")
+        await store.waitForPendingRemoteMutations()
+        let item = try XCTUnwrap(store.shoppingItems.first { $0.title == "Leite" })
+        await backend.setShoppingUpdatesFail(true)
+
+        store.toggleShoppingItem(item)
+        await store.waitForPendingRemoteMutations()
+
+        XCTAssertEqual(store.shoppingItems.first { $0.id == item.id }?.isChecked, false)
+        XCTAssertNotNil(store.syncErrorMessage)
+    }
+
+    @MainActor
     func testTwoClashesFromOneActionAreShownOneAfterTheOtherAndNeitherIsLost() async {
         let user = makeUser()
         func task(_ title: String, version: Int, id: UUID = UUID()) -> TaskItem {
@@ -4325,6 +4421,30 @@ final class AppStoreAuthorizationTests: XCTestCase {
         XCTAssertEqual(planted.kind, .task)
         XCTAssertEqual(planted.dueAt, dueAt)
         XCTAssertTrue(store.openSeeds.isEmpty)
+    }
+
+    @MainActor
+    func testRefusingIOSFromTheAvisosSwitchNeverTurnsAlertsOffOnceIOSAllowsThemLater() async throws {
+        let suiteName = "nina.tests.avisos.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: LocalHomeNotificationScheduler.notificationsEnabledKey)
+        let store = AppStore(
+            defaults: defaults,
+            remoteHomeBackend: nil,
+            ninaEngine: MockNinaEngine(),
+            notificationScheduler: PermissionPromptRecorder(status: .notDetermined, answer: .denied)
+        )
+
+        let allowed = await store.requestNotificationAuthorization()
+        let preference = defaults.object(forKey: LocalHomeNotificationScheduler.notificationsEnabledKey) as? Bool
+
+        XCTAssertFalse(allowed)
+        XCTAssertEqual(preference, true)
+        XCTAssertFalse(NotificationSwitch.reads(status: .denied, preference: true))
+        XCTAssertFalse(NotificationSwitch.reads(status: .notDetermined, preference: true))
+        XCTAssertTrue(NotificationSwitch.reads(status: .authorized, preference: true))
+        XCTAssertFalse(NotificationSwitch.reads(status: .authorized, preference: false))
     }
 
     @MainActor
@@ -6784,6 +6904,29 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
     private(set) var lastTransferConsent: Bool?
     private var termsAcceptances = 0
     private var termsAcceptanceFails = false
+    private var failingTaskUpdates = 0
+    private var shoppingUpdatesFail = false
+
+    private var houseCopies: [UUID: TaskItem?] = [:]
+
+    func setHouseCopy(_ task: TaskItem?, for id: UUID) {
+        houseCopies[id] = .some(task)
+    }
+
+    func fetchTask(id taskID: UUID, familyID: UUID) async throws -> TaskItem? {
+        if let copy = houseCopies[taskID] {
+            return copy
+        }
+        return state.snapshot?.tasks.first { $0.id == taskID }
+    }
+
+    func failNextTaskUpdates(_ count: Int) {
+        failingTaskUpdates = count
+    }
+
+    func setShoppingUpdatesFail(_ shouldFail: Bool) {
+        shoppingUpdatesFail = shouldFail
+    }
 
     func termsAcceptanceCount() -> Int {
         termsAcceptances
@@ -6936,6 +7079,10 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         taskUpdates.append(
             RecordedTaskUpdate(id: task.id, isDone: task.isDone, expectedVersion: expectedVersion)
         )
+        if failingTaskUpdates > 0 {
+            failingTaskUpdates -= 1
+            throw URLError(.notConnectedToInternet)
+        }
         if let conflict = conflictingTasks[task.id] {
             return .conflict(current: conflict)
         }
@@ -6955,6 +7102,9 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
 
     func updateShoppingItem(_ item: ShoppingItem, familyID: UUID) async throws {
         mutations.append(.updateShoppingItem(item.id))
+        if shoppingUpdatesFail {
+            throw URLError(.notConnectedToInternet)
+        }
     }
 
     func resolveNinaProposal(

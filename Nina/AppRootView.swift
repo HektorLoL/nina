@@ -49,6 +49,17 @@ enum SheetDestination: Identifiable, Hashable {
     case member(UUID)
     case suggestion(NinaSuggestion)
 
+    // An editor holds what the person typed, so nothing the person did not choose may close it.
+    var holdsTypedInput: Bool {
+        switch self {
+        case .addTask, .addSeed, .editTask, .plantSeed, .addShoppingItem, .editShoppingItem,
+             .addMemberProfile, .member:
+            true
+        case .settings, .houseSettings, .premium, .inviteFamily, .suggestion:
+            false
+        }
+    }
+
     var id: String {
         switch self {
         case .settings:
@@ -111,6 +122,23 @@ final class TabRouter {
             get: { router.path },
             set: { router.path = $0 }
         )
+    }
+
+    var presentsAnEditor: Bool {
+        AppTab.allCases.contains { router(for: $0).presentedSheet?.holdsTypedInput == true }
+    }
+
+    func dismissAllSheets() {
+        for tab in AppTab.allCases {
+            router(for: tab).presentedSheet = nil
+        }
+    }
+
+    // "Ver sem dono" lands on the Sem dono list itself, never on a task left open in Tarefas.
+    func showUnownedTasks() {
+        let tasks = router(for: .tasks)
+        tasks.path = []
+        tasks.presentedSheet = nil
     }
 }
 
@@ -500,6 +528,7 @@ struct AppRootView: View {
             travel(to: .nina)
         }
         .onReceive(NotificationCenter.default.publisher(for: .ninaShowUnowned)) { _ in
+            tabRouter.showUnownedTasks()
             travel(to: .tasks)
         }
         .onAppear(perform: followReminder)
@@ -512,6 +541,10 @@ struct AppRootView: View {
         .onChange(of: TaskNotificationRoute.shared.pending) { _, _ in
             followReminder()
         }
+        // A reminder tapped while an editor is open waits for it to close, so nothing typed is lost.
+        .onChange(of: tabRouter.presentsAnEditor) { _, presents in
+            if !presents { followReminder() }
+        }
         // While a child holds the phone, an adult's reminder neither shows nor acts; it waits for the hold.
         .onChange(of: store.childDayPresentation == nil, initial: true) { _, isClear in
             TaskNotificationRoute.shared.isChildListShowing = !isClear
@@ -523,26 +556,42 @@ struct AppRootView: View {
     // A finished task stays on Hoje under the undo toast; anything else shows the task itself.
     private func followReminder() {
         guard store.childDayPresentation == nil,
+              !tabRouter.presentsAnEditor,
               let route = TaskNotificationRoute.shared.pending else { return }
         TaskNotificationRoute.shared.pending = nil
-        guard let task = store.tasks.first(where: { $0.id == route.taskID }) else { return }
+        let taskID = route.taskID
+        guard store.tasks.contains(where: { $0.id == taskID }) else { return }
         dismissKeyboard()
+        tabRouter.dismissAllSheets()
         selectedTab = .today
         let router = tabRouter.router(for: .today)
-        router.presentedSheet = nil
         switch route.action {
-        case .complete where route.completes(task):
+        case .open:
+            router.path = [.task(taskID)]
+        case .complete:
             router.path = []
-            store.toggleTask(task, through: route.dueMoment)
-            Haptics.success()
-        case .snooze:
-            if let target = route.snoozeTarget(for: task, now: .now) {
-                store.snoozeTask(task.id, until: target)
-                Haptics.success()
+            Task {
+                switch await store.followReminderAction(route) {
+                case .completed:
+                    Haptics.success()
+                case .snoozed, .nothing:
+                    router.path = [.task(taskID)]
+                case .gone:
+                    break
+                }
             }
-            router.path = [.task(task.id)]
-        case .open, .complete:
-            router.path = [.task(task.id)]
+        case .snooze:
+            router.path = [.task(taskID)]
+            Task {
+                switch await store.followReminderAction(route) {
+                case .snoozed:
+                    Haptics.success()
+                case .gone:
+                    router.path.removeAll { $0 == .task(taskID) }
+                case .completed, .nothing:
+                    break
+                }
+            }
         }
     }
 
