@@ -26,28 +26,28 @@ struct NinaApp: App {
 
         let diagnostics = BackendDiagnosticsStore(environment: BackendServices.environment)
         _backendDiagnostics = State(initialValue: diagnostics)
-        _store = State(
-            initialValue: AppStore(
-                remoteHomeBackend: BackendServices.makeRemoteHomeBackend(diagnostics: diagnostics),
-                ninaEngine: BackendServices.makeNinaEngine(diagnostics: diagnostics)
-            )
+        let appStore = AppStore(
+            remoteHomeBackend: BackendServices.makeRemoteHomeBackend(diagnostics: diagnostics),
+            ninaEngine: BackendServices.makeNinaEngine(diagnostics: diagnostics)
         )
-        _authSession = State(
-            initialValue: AuthSessionStore(
-                authClient: BackendServices.makeAuthClient(diagnostics: diagnostics),
-                sharedNameStore: ProtectedLocalDataStore.shared
-            )
+        let session = AuthSessionStore(
+            authClient: BackendServices.makeAuthClient(diagnostics: diagnostics),
+            sharedNameStore: ProtectedLocalDataStore.shared
         )
+        _store = State(initialValue: appStore)
+        _authSession = State(initialValue: session)
         _profileStore = State(
             initialValue: ProfileStore(
                 remoteProfileBackend: BackendServices.makeRemoteProfileBackend(diagnostics: diagnostics)
             )
         )
-        _premiumSubscriptionStore = State(
-            initialValue: PremiumSubscriptionStore(
-                backend: BackendServices.makePremiumSubscriptionBackend(diagnostics: diagnostics)
-            )
+        let premiumStore = PremiumSubscriptionStore(
+            backend: BackendServices.makePremiumSubscriptionBackend(diagnostics: diagnostics)
         )
+        premiumStore.onHouseholdCoverageChanged = { [weak appStore, weak session] in
+            await appStore?.refreshHomeFromRemote(for: session?.currentUser)
+        }
+        _premiumSubscriptionStore = State(initialValue: premiumStore)
         _ageCheck = State(
             initialValue: AgeCheckCoordinator(
                 provider: BackendServices.makeAgeRangeProvider(),

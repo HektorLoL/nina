@@ -332,9 +332,10 @@ struct AppRootView: View {
             Task {
                 await authSession.restoreSession()
                 await profileStore.refreshProfile(for: authSession.currentUser)
+                // A receipt repaired on return is recorded before the house is read, so Casa shows it at once.
+                await premiumSubscriptionStore.configure(for: authSession.currentUser)
                 await store.refreshHomeFromRemote(for: authSession.currentUser)
                 await evaluateAge(for: authSession.currentUser)
-                await premiumSubscriptionStore.configure(for: authSession.currentUser)
                 await store.refreshNotificationAuthorizationStatus()
                 store.synchronizeLocalNotifications()
             }

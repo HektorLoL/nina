@@ -1643,6 +1643,7 @@ struct NinaProposal: Identifiable, Codable, Hashable {
     var actionTitle: String
     var payload: NinaProposalPayload
     var allowedMemoryVisibilities: [NinaMemoryVisibility]
+    var resolvedPayload: NinaProposalPayload?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -1653,6 +1654,7 @@ struct NinaProposal: Identifiable, Codable, Hashable {
         case actionTitle = "action_title"
         case payload
         case allowedMemoryVisibilities = "allowed_memory_visibilities"
+        case resolvedPayload = "resolved_payload"
     }
 
     init(
@@ -1663,7 +1665,8 @@ struct NinaProposal: Identifiable, Codable, Hashable {
         detail: String,
         actionTitle: String,
         payload: NinaProposalPayload,
-        allowedMemoryVisibilities: [NinaMemoryVisibility] = []
+        allowedMemoryVisibilities: [NinaMemoryVisibility] = [],
+        resolvedPayload: NinaProposalPayload? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -1673,6 +1676,7 @@ struct NinaProposal: Identifiable, Codable, Hashable {
         self.actionTitle = actionTitle
         self.payload = payload
         self.allowedMemoryVisibilities = allowedMemoryVisibilities
+        self.resolvedPayload = resolvedPayload
     }
 
     init(from decoder: Decoder) throws {
@@ -1690,6 +1694,15 @@ struct NinaProposal: Identifiable, Codable, Hashable {
             [NinaMemoryVisibility].self,
             forKey: .allowedMemoryVisibilities
         ) ?? []
+        resolvedPayload = (try? container.decodeIfPresent(NinaProposalPayload.self, forKey: .resolvedPayload)) ?? nil
+    }
+
+    // A rejection stores '{}' and an expiry its reason, so only an acceptance carries what the person approved.
+    var approvedPayload: NinaProposalPayload? {
+        guard state == .accepted,
+              let resolvedPayload,
+              !resolvedPayload.title.isEmpty else { return nil }
+        return resolvedPayload
     }
 
     var confirmationPayload: NinaProposalPayload {

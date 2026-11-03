@@ -348,6 +348,7 @@ final class AppStore {
         let shownAt: Date
     }
     @ObservationIgnored private(set) var lastMutationErrorCode: RemoteRPCErrorCode?
+    @ObservationIgnored private(set) var lastProposalResolutionFailure: NinaProposalResolutionFailure?
 
     var undoableCompletionID: TaskItem.ID?
     // Counts closings on this phone, so the mark in the tab bar can notice each one.
@@ -709,6 +710,8 @@ final class AppStore {
             kidsModeOverride = user.flatMap { defaults.string(forKey: KidsMode.overrideKey(for: $0.id)) } ?? ""
         }
         homeContextGeneration &+= 1
+        // A turn from the old context can never clear its own flag, so a reload never leaves the chat reading forever.
+        isNinaResponding = false
         remoteMutationTask?.cancel()
         remoteMutationTask = nil
         remoteMutationGeneration = 0
@@ -2370,6 +2373,14 @@ final class AppStore {
               !isNinaResponding else {
             return
         }
+        // nina-chat refuses a message past its length before storing anything, so it never leaves the phone.
+        guard !NinaMessageLimit.exceeds(text) else {
+            restorableDraft = text
+            restorableAttachments = attachments
+            ninaSendFailure = NinaMessageLimit.tooLongMessage
+            Haptics.error()
+            return
+        }
         let contextToken = currentHomeContextToken
         let familyID = familyGroup.id
         ninaSendFailure = nil
@@ -2616,6 +2627,7 @@ final class AppStore {
             return false
         }
         let contextToken = currentHomeContextToken
+        lastProposalResolutionFailure = nil
 
         isSyncingHome = true
         defer { finishSyncingHome(ifCurrent: contextToken) }
@@ -2627,7 +2639,11 @@ final class AppStore {
                 memoryVisibility: memoryVisibility
             )
             guard isCurrentHomeContext(contextToken) else { return false }
-            updateProposalState(proposal.id, state: resolution.state)
+            updateProposalState(
+                proposal.id,
+                state: resolution.state,
+                resolvedPayload: resolution.resolvedPayload
+            )
             persistActivityLocally()
             isSyncingHome = false
             await refreshHomeFromRemote(for: activeUser)
@@ -2641,9 +2657,32 @@ final class AppStore {
             return true
         } catch {
             guard isCurrentHomeContext(contextToken) else { return false }
+            let code = RemoteRPCErrorCode.from(error)
+            if code == nil, RemoteWriteAnswer.mayHaveBeenLost(error) {
+                // The confirmation may have committed before the answer was lost, so the house is read before anything is claimed.
+                isSyncingHome = false
+                await refreshHomeFromRemote(for: activeUser)
+                guard isCurrentHomeContext(contextToken) else { return false }
+                if proposalState(proposal.id).map({ $0 != .pending }) == true {
+                    Haptics.success()
+                    return true
+                }
+                lastProposalResolutionFailure = .answerMayHaveBeenLost
+            } else {
+                lastProposalResolutionFailure = .refused(code)
+            }
             Haptics.error()
             return false
         }
+    }
+
+    private func proposalState(_ proposalID: UUID) -> NinaProposalState? {
+        for message in messages {
+            if let proposal = message.proposals.first(where: { $0.id == proposalID }) {
+                return proposal.state
+            }
+        }
+        return nil
     }
 
     func canEditMemory(_ memory: NinaMemory) -> Bool {
@@ -2886,6 +2925,7 @@ final class AppStore {
     func clearHouseholdCopy(for userID: String) {
         if activeHomeUserID == userID {
             homeContextGeneration &+= 1
+            isNinaResponding = false
             remoteMutationTask?.cancel()
             remoteMutationTask = nil
             remoteMutationGeneration &+= 1
@@ -2963,7 +3003,11 @@ final class AppStore {
         resetActivityState()
     }
 
-    private func updateProposalState(_ proposalID: UUID, state: NinaProposalState) {
+    private func updateProposalState(
+        _ proposalID: UUID,
+        state: NinaProposalState,
+        resolvedPayload: NinaProposalPayload? = nil
+    ) {
         for messageIndex in messages.indices {
             guard let proposalIndex = messages[messageIndex].proposals.firstIndex(
                 where: { $0.id == proposalID }
@@ -2971,6 +3015,9 @@ final class AppStore {
                 continue
             }
             messages[messageIndex].proposals[proposalIndex].state = state
+            if state == .accepted, let resolvedPayload {
+                messages[messageIndex].proposals[proposalIndex].resolvedPayload = resolvedPayload
+            }
             return
         }
     }

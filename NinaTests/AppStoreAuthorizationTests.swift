@@ -6303,6 +6303,125 @@ final class AppStoreAuthorizationTests: XCTestCase {
     }
 
     @MainActor
+    func testAHealthTaskForAChildWithoutHealthConsentSaysWhyAndNeverAsksToTryAgain() async {
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeRemoteState())
+        await backend.setResolveError(RemoteRPCError(code: .minorHealthConsentRequired))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+        let proposal = NinaProposal(
+            kind: .reminder,
+            title: "Dar o remédio",
+            detail: "",
+            actionTitle: "Criar lembrete",
+            payload: NinaProposalPayload(title: "Dar o remédio", detail: "", owner: "Pedro")
+        )
+
+        let didAccept = await store.resolveProposal(proposal, decision: .accept, editedPayload: proposal.payload)
+        let failure = store.lastProposalResolutionFailure
+        let line = failure?.message(decision: .accept, owner: "Pedro")
+
+        XCTAssertFalse(didAccept)
+        XCTAssertEqual(failure, .refused(.minorHealthConsentRequired))
+        XCTAssertEqual(line, "Sem autorização de saúde para Pedro. Troque o dono ou autorize no perfil.")
+        XCTAssertFalse(line?.contains("Tente de novo") ?? true)
+        XCTAssertEqual(
+            NinaProposalResolutionFailure.refused(nil).message(decision: .accept, owner: "Pedro"),
+            "Não deu para confirmar agora. Nada entrou na casa. Tente de novo."
+        )
+    }
+
+    @MainActor
+    func testAConfirmationWhoseAnswerWasLostReadsTheHouseAndNeverClaimsNothingEntered() async {
+        let user = makeUser()
+        let proposal = NinaProposal(
+            kind: .task,
+            title: "Levar o lixo",
+            detail: "",
+            actionTitle: "Criar tarefa",
+            payload: NinaProposalPayload(title: "Levar o lixo", detail: "")
+        )
+        var state = makeRemoteState()
+        state.snapshot?.messages = [
+            ChatMessage(sender: .nina, text: "Preparei uma proposta.", timestamp: .now, proposals: [proposal])
+        ]
+        let backend = RecordingHomeBackend(state: state)
+        await backend.setResolveError(URLError(.networkConnectionLost))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: MockNinaEngine())
+        await store.activateHomeContext(for: user)
+
+        let lost = await store.resolveProposal(proposal, decision: .accept, editedPayload: proposal.payload)
+
+        XCTAssertFalse(lost)
+        XCTAssertEqual(store.lastProposalResolutionFailure, .answerMayHaveBeenLost)
+        XCTAssertEqual(
+            store.lastProposalResolutionFailure?.message(decision: .accept, owner: "Casa"),
+            "A resposta não chegou. Tente de novo."
+        )
+
+        var accepted = proposal
+        accepted.state = .accepted
+        state.snapshot?.messages = [
+            ChatMessage(sender: .nina, text: "Preparei uma proposta.", timestamp: .now, proposals: [accepted])
+        ]
+        await backend.setHomeState(state)
+
+        let committed = await store.resolveProposal(proposal, decision: .accept, editedPayload: proposal.payload)
+
+        XCTAssertTrue(committed)
+        XCTAssertNil(store.lastProposalResolutionFailure)
+        XCTAssertEqual(store.messages.flatMap(\.proposals).first?.state, .accepted)
+    }
+
+    @MainActor
+    func testAHouseReloadDuringATurnNeverLeavesTheChatReadingAndTheNextSendReachesNina() async {
+        let engine = SuspendedFirstTurnNinaEngine()
+        let user = makeUser()
+        let backend = RecordingHomeBackend(state: makeChattingState(for: user))
+        let store = AppStore(remoteHomeBackend: backend, ninaEngine: engine)
+        await store.activateHomeContext(for: user)
+
+        let firstTurn = Task { await store.sendMessage("comprar pão amanhã") }
+        await engine.waitUntilFirstTurnStarted()
+        XCTAssertTrue(store.isNinaResponding)
+
+        await store.activateHomeContext(for: user)
+
+        XCTAssertFalse(store.isNinaResponding)
+        await engine.releaseFirstTurn()
+        await firstTurn.value
+        await store.sendMessage("comprar leite")
+        let count = await engine.recordedTurnCount()
+
+        XCTAssertEqual(count, 2)
+        XCTAssertFalse(store.isNinaResponding)
+    }
+
+    @MainActor
+    func testAMessagePastTheServersLengthNeverLeavesThePhoneAndSaysWhy() async {
+        let engine = ScriptedNinaEngine(failures: [])
+        let store = await makeStoreForFailingTurn(engine: engine)
+        let before = store.messages
+        let tooLong = String(repeating: "a", count: NinaMessageLimit.maxLength + 1)
+        let emoji = String(repeating: "👍", count: NinaMessageLimit.maxLength / 2 + 1)
+
+        await store.sendMessage(tooLong)
+
+        XCTAssertEqual(store.messages, before)
+        XCTAssertEqual(store.restorableDraft, tooLong)
+        XCTAssertEqual(store.ninaSendFailure, "Mensagem longa demais. A Nina lê até 2.000 caracteres.")
+        XCTAssertFalse(NinaMessageLimit.tooLongMessage.contains("!"))
+        XCTAssertTrue(NinaMessageLimit.exceeds(emoji))
+        XCTAssertFalse(NinaMessageLimit.exceeds(String(repeating: "a", count: NinaMessageLimit.maxLength)))
+        var ids = await engine.recordedMessageIDs()
+        XCTAssertTrue(ids.isEmpty)
+
+        await store.sendMessage(String(repeating: "a", count: NinaMessageLimit.maxLength))
+        ids = await engine.recordedMessageIDs()
+        XCTAssertEqual(ids.count, 1)
+    }
+
+    @MainActor
     private func makeStoreForFailingTurn(error: NinaEngineError) async -> AppStore {
         await makeStoreForFailingTurn(engine: FailingNinaEngine(error: error))
     }
@@ -6543,6 +6662,54 @@ private actor ScriptedNinaEngine: NinaEngine {
         }
         return NinaEngineResponse(
             reply: "Preparei uma proposta.",
+            suggestion: nil,
+            version: 2,
+            runID: UUID(),
+            threadID: UUID(),
+            assistantMessageID: UUID(),
+            proposals: [],
+            serverPersisted: true
+        )
+    }
+}
+
+private actor SuspendedFirstTurnNinaEngine: NinaEngine {
+    private var turns = 0
+    private var heldTurn: CheckedContinuation<Void, Never>?
+    private var startedContinuation: CheckedContinuation<Void, Never>?
+
+    func recordedTurnCount() -> Int {
+        turns
+    }
+
+    func waitUntilFirstTurnStarted() async {
+        if heldTurn != nil { return }
+        await withCheckedContinuation { continuation in
+            startedContinuation = continuation
+        }
+    }
+
+    func releaseFirstTurn() {
+        heldTurn?.resume()
+        heldTurn = nil
+    }
+
+    func respond(
+        to text: String,
+        attachments: [NinaAttachmentInput],
+        familyID: UUID,
+        messageID: UUID
+    ) async throws -> NinaEngineResponse {
+        turns += 1
+        if turns == 1 {
+            await withCheckedContinuation { continuation in
+                heldTurn = continuation
+                startedContinuation?.resume()
+                startedContinuation = nil
+            }
+        }
+        return NinaEngineResponse(
+            reply: "Anotei.",
             suggestion: nil,
             version: 2,
             runID: UUID(),
@@ -7284,6 +7451,12 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         self.state = state
     }
 
+    private var resolveError: Error?
+
+    func setResolveError(_ error: Error?) {
+        resolveError = error
+    }
+
     func setViewerAge(_ age: AgeStatus) {
         state.viewerAge = age
     }
@@ -7393,6 +7566,7 @@ private actor RecordingHomeBackend: RemoteHomeBackend {
         mutations.append(.resolveNinaProposal(proposalID, decision))
         confirmedProposalPayloads[proposalID] = editedPayload
         confirmedMemoryVisibilities[proposalID] = memoryVisibility
+        if let resolveError { throw resolveError }
         return NinaProposalResolution(
             id: proposalID,
             state: decision == .accept ? .accepted : .rejected

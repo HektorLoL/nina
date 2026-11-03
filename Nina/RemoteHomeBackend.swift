@@ -283,6 +283,32 @@ enum NinaProposalDecision: String, Equatable {
 struct NinaProposalResolution: Decodable {
     var id: UUID
     var state: NinaProposalState
+    var resolvedPayload: NinaProposalPayload? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case state
+        case resolvedPayload = "resolved_payload"
+    }
+}
+
+enum NinaProposalResolutionFailure: Equatable {
+    case refused(RemoteRPCErrorCode?)
+    case answerMayHaveBeenLost
+
+    // "Nada entrou na casa" is said only where the server's own answer proves it.
+    func message(decision: NinaProposalDecision, owner: String) -> String {
+        switch self {
+        case .answerMayHaveBeenLost:
+            return "A resposta não chegou. Tente de novo."
+        case .refused(.minorHealthConsentRequired?) where decision == .accept:
+            return "\(RemoteRPCErrorCode.minorHealthConsentRequired.userMessage(name: owner)) Troque o dono ou autorize no perfil."
+        case .refused:
+            return decision == .accept
+                ? "Não deu para confirmar agora. Nada entrou na casa. Tente de novo."
+                : "Não deu para responder agora. Tente de novo."
+        }
+    }
 }
 
 protocol RemoteHomeBackend {

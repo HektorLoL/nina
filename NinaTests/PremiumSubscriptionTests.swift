@@ -13,6 +13,131 @@ final class PremiumSubscriptionTests: XCTestCase {
         XCTAssertFalse(PremiumBenefitsSheet.fitsItsContent(wasCoveredOnAppear: true, isCovered: false))
     }
 
+    @MainActor
+    func testAPaywallOverAStaleHouseOffersNothingUntilTheHouseIsReadAndNeverCelebratesAnotherAdultsPurchase() {
+        XCTAssertFalse(PremiumBenefitsSheet.offersPurchase(wasCoveredOnAppear: nil, isCovered: false))
+        XCTAssertTrue(PremiumBenefitsSheet.offersPurchase(wasCoveredOnAppear: false, isCovered: false))
+        XCTAssertFalse(PremiumBenefitsSheet.offersPurchase(wasCoveredOnAppear: true, isCovered: true))
+        XCTAssertFalse(PremiumBenefitsSheet.offersPurchase(wasCoveredOnAppear: false, isCovered: true))
+        XCTAssertFalse(PremiumBenefitsSheet.activatedHere(wasCoveredOnAppear: nil, isCovered: true))
+        XCTAssertFalse(PremiumBenefitsSheet.activatedHere(wasCoveredOnAppear: true, isCovered: true))
+        XCTAssertTrue(PremiumBenefitsSheet.activatedHere(wasCoveredOnAppear: false, isCovered: true))
+    }
+
+    @MainActor
+    func testAPayerWhoseRenewalFailedIsSentToFixItAndNeverSoldASecondPlan() {
+        var retrying = TestEnvironment.activeEntitlement
+        retrying.isActive = false
+        retrying.status = .billingRetry
+
+        XCTAssertTrue(PremiumBenefitsSheet.showsBillingProblem(entitlement: retrying, isCovered: false))
+        XCTAssertFalse(PremiumBenefitsSheet.showsBillingProblem(entitlement: retrying, isCovered: true))
+        XCTAssertFalse(PremiumBenefitsSheet.showsBillingProblem(entitlement: .inactive, isCovered: false))
+        XCTAssertEqual(PremiumBenefitsSheet.billingProblemMessage, "A cobrança da sua assinatura não passou.")
+        XCTAssertTrue(retrying.keepsBillingAfterAccountDeletion)
+    }
+
+    @MainActor
+    func testAnIPhoneThatBlocksPurchasesIsToldSoInsteadOfToTryAgain() {
+        XCTAssertEqual(
+            PremiumSubscriptionStore.userMessage(for: Product.PurchaseError.purchaseNotAllowed),
+            "Este iPhone não permite compras no app."
+        )
+        XCTAssertEqual(
+            PremiumSubscriptionStore.userMessage(for: Product.PurchaseError.productUnavailable),
+            "Plano indisponível agora."
+        )
+    }
+
+    func testARenewalTheServerDidNotReportIsNeverReadAsAnEnding() {
+        var entitlement = TestEnvironment.activeEntitlement
+        let date = (entitlement.expiresAt ?? .now).formatted(date: .abbreviated, time: .omitted)
+
+        entitlement.willRenew = nil
+        XCTAssertEqual(entitlement.renewalSummary, "Período atual até \(date)")
+        entitlement.willRenew = true
+        XCTAssertEqual(entitlement.renewalSummary, "Renova em \(date)")
+        entitlement.willRenew = false
+        XCTAssertEqual(entitlement.renewalSummary, "Acesso até \(date)")
+    }
+
+    @MainActor
+    func testASwitchedOffWeeklyDigestIsNeverPromisedOnCasa() {
+        XCTAssertEqual(
+            HouseView.coveredDigestSubtitle(isEnabled: true, canManage: true),
+            "Chega quando 2 adultos aceitarem conversar com a Nina."
+        )
+        XCTAssertEqual(HouseView.coveredDigestSubtitle(isEnabled: false, canManage: true), "Desligado em Ajustes.")
+        XCTAssertEqual(HouseView.coveredDigestSubtitle(isEnabled: false, canManage: false), "Desligado.")
+    }
+
+    @MainActor
+    func testReadingThePremiumStatusNeverShowsAPurchaseBeingRegistered() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = HeldStatusPremiumBackend()
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([])
+        )
+
+        let configure = Task { await store.configure(for: environment.user) }
+        await backend.waitUntilStatusRequested()
+
+        XCTAssertFalse(store.isSyncingBackend)
+        await backend.answerStatus()
+        await configure.value
+        XCTAssertFalse(store.isSyncingBackend)
+        XCTAssertFalse(store.entitlement.isActive)
+    }
+
+    @MainActor
+    func testAReceiptRepairedOutsideThePaywallReloadsTheHouseOnceAndAPlainReadDoesNot() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let backend = RecordingPremiumBackend(status: .inactive)
+        await backend.setSyncResult(.success(TestEnvironment.activeEntitlement))
+        let store = environment.makePremiumStore(
+            backend: backend,
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction()])
+        )
+        var houseReloads = 0
+        store.onHouseholdCoverageChanged = { houseReloads += 1 }
+
+        await store.configure(for: environment.user)
+        XCTAssertTrue(store.entitlement.isActive)
+        XCTAssertEqual(houseReloads, 1)
+
+        let quietBackend = RecordingPremiumBackend(status: TestEnvironment.activeEntitlement)
+        let quietStore = environment.makePremiumStore(
+            backend: quietBackend,
+            localTransactions: StubLocalTransactionSource([])
+        )
+        var quietReloads = 0
+        quietStore.onHouseholdCoverageChanged = { quietReloads += 1 }
+        await quietStore.configure(for: environment.user)
+        XCTAssertEqual(quietReloads, 0)
+    }
+
+    @MainActor
+    func testAnotherAccountsReceiptKeepsTheBillingWarningBecauseAppleStillCharges() async {
+        let environment = TestEnvironment(function: #function)
+        defer { environment.tearDown() }
+
+        let store = environment.makePremiumStore(
+            backend: RecordingPremiumBackend(status: .inactive),
+            localTransactions: StubLocalTransactionSource([TestEnvironment.liveTransaction(accountToken: UUID())])
+        )
+
+        await store.configure(for: environment.user)
+
+        XCTAssertFalse(store.entitlement.isActive)
+        XCTAssertTrue(store.hasOtherAccountsSubscription)
+        XCTAssertTrue(store.showsSubscriptionContinuesWarning)
+    }
+
     func testDeletingTheAccountWarnsOnlyWhileApplesBillingWouldContinue() {
         func entitlement(_ status: PremiumSubscriptionStatus, active: Bool, renews: Bool?) -> PremiumEntitlement {
             PremiumEntitlement(
@@ -986,6 +1111,36 @@ private actor RecordingPremiumBackend: PremiumSubscriptionBackend {
         case .failure:
             throw BackendError()
         }
+    }
+}
+
+private actor HeldStatusPremiumBackend: PremiumSubscriptionBackend {
+    private var heldStatus: CheckedContinuation<Void, Never>?
+    private var requestedContinuation: CheckedContinuation<Void, Never>?
+
+    func waitUntilStatusRequested() async {
+        if heldStatus != nil { return }
+        await withCheckedContinuation { continuation in
+            requestedContinuation = continuation
+        }
+    }
+
+    func answerStatus() {
+        heldStatus?.resume()
+        heldStatus = nil
+    }
+
+    func loadStatus() async throws -> PremiumEntitlement {
+        await withCheckedContinuation { continuation in
+            heldStatus = continuation
+            requestedContinuation?.resume()
+            requestedContinuation = nil
+        }
+        return .inactive
+    }
+
+    func syncTransaction(signedTransactionInfo: String, source: String) async throws -> PremiumEntitlement {
+        .inactive
     }
 }
 

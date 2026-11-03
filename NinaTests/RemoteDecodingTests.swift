@@ -629,6 +629,33 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(proposal.actionTitle, "Guardar semente")
     }
 
+    func testAConfirmedProposalShowsWhatThePersonApprovedAfterARelaunchAndARejectedOneKeepsNinasReading() throws {
+        let accepted = """
+        {"id":"5A1B0000-0000-4000-8000-000000000003","kind":"task","state":"accepted",
+         "title":"Levar o lixo","detail":"","action_title":"Criar tarefa",
+         "payload":{"title":"Levar o lixo","detail":"","owner":"Bia","due_label":"amanhã"},
+         "resolved_payload":{"title":"Levar o lixo reciclável","detail":"","owner":"Leo",
+          "due_label":"Dia 20","due_at":"2026-10-20T12:00:00Z","created_id":"5A1B0000-0000-4000-8000-0000000000AA"}}
+        """
+        let rejected = """
+        {"id":"5A1B0000-0000-4000-8000-000000000004","kind":"task","state":"rejected",
+         "title":"Levar o lixo","detail":"","action_title":"Criar tarefa",
+         "payload":{"title":"Levar o lixo","detail":"","owner":"Bia"},
+         "resolved_payload":{}}
+        """
+
+        let confirmed = try JSONDecoder().decode(NinaProposal.self, from: Data(accepted.utf8))
+        let declined = try JSONDecoder().decode(NinaProposal.self, from: Data(rejected.utf8))
+        let cached = try JSONDecoder().decode(NinaProposal.self, from: JSONEncoder().encode(confirmed))
+
+        XCTAssertEqual(confirmed.approvedPayload?.owner, "Leo")
+        XCTAssertEqual(confirmed.approvedPayload?.title, "Levar o lixo reciclável")
+        XCTAssertEqual(confirmed.approvedPayload?.dueAt, "2026-10-20T12:00:00Z")
+        XCTAssertEqual(cached.approvedPayload, confirmed.approvedPayload)
+        XCTAssertNil(declined.approvedPayload)
+        XCTAssertEqual(declined.payload.owner, "Bia")
+    }
+
     func testAProposalKindFromANewerServerDoesNotCostTheUserTheConversation() throws {
         let json = """
         {"id":"5A1B0000-0000-4000-8000-000000000002","kind":"ritual","state":"pending",

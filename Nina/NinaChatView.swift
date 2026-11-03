@@ -586,6 +586,13 @@ private struct ChatInputBar: View {
                     .opacity(canSend ? 1 : 0.4)
                     .accessibilityLabel("Enviar mensagem")
                 }
+
+                if draftIsTooLong {
+                    Text(NinaMessageLimit.tooLongMessage)
+                        .ninaText(.meta, NinaTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -820,8 +827,13 @@ private struct ChatInputBar: View {
         !store.isNinaResponding && !isLoadingAttachments && remainingAttachmentSlots > 0
     }
 
+    private var draftIsTooLong: Bool {
+        NinaMessageLimit.exceeds(draft)
+    }
+
     private var canSend: Bool {
         (!trimmedDraft.isEmpty || !pendingAttachments.isEmpty)
+            && !draftIsTooLong
             && store.canSendNinaMessages
             && !store.isNinaResponding
             && !isLoadingAttachments
@@ -1050,6 +1062,16 @@ private struct PendingChatAttachment: Identifiable, Hashable {
 
     var input: NinaAttachmentInput {
         NinaAttachmentInput(metadata: metadata, data: data)
+    }
+}
+
+// nina-chat counts a message in UTF-16 units, so an emoji spends two of them.
+enum NinaMessageLimit {
+    static let maxLength = 2_000
+    static let tooLongMessage = "Mensagem longa demais. A Nina lê até 2.000 caracteres."
+
+    static func exceeds(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count > maxLength
     }
 }
 
@@ -1738,8 +1760,12 @@ private struct NinaProposalCard: View {
         }
     }
 
+    // A confirmed card shows what the person approved, as the server recorded it, never Nina's first reading.
     private var confirmationPayload: NinaProposalPayload {
-        proposal.confirmationPayload(
+        if let approved = proposal.approvedPayload {
+            return approved
+        }
+        return proposal.confirmationPayload(
             title: draftTitle,
             detail: draftDetail,
             owner: draftOwner,
@@ -2159,9 +2185,8 @@ private struct NinaProposalCard: View {
             )
             isResolving = false
             if !resolved {
-                resolveFailure = decision == .accept
-                    ? "Não deu para confirmar agora. Nada entrou na casa. Tente de novo."
-                    : "Não deu para responder agora. Tente de novo."
+                resolveFailure = (store.lastProposalResolutionFailure ?? .refused(nil))
+                    .message(decision: decision, owner: payload.owner)
             }
         }
     }

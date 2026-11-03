@@ -2382,6 +2382,35 @@ struct PremiumBenefitsSheet: View {
         (wasCoveredOnAppear ?? isCovered) && isCovered
     }
 
+    // Coverage counts as seen only once the house was read again, so a house another adult covered meanwhile is never sold twice or celebrated here.
+    static func activatedHere(wasCoveredOnAppear: Bool?, isCovered: Bool) -> Bool {
+        wasCoveredOnAppear == false && isCovered
+    }
+
+    static func offersPurchase(wasCoveredOnAppear: Bool?, isCovered: Bool) -> Bool {
+        wasCoveredOnAppear != nil && !isCovered
+    }
+
+    // Apple is still retrying the charge, so the screen sends the payer to fix it instead of selling a second plan.
+    static func showsBillingProblem(entitlement: PremiumEntitlement, isCovered: Bool) -> Bool {
+        !isCovered && entitlement.status == .billingRetry
+    }
+
+    static let billingProblemMessage = "A cobrança da sua assinatura não passou."
+
+    private var showsBillingProblem: Bool {
+        Self.showsBillingProblem(entitlement: premiumStore.entitlement, isCovered: isCovered)
+    }
+
+    // A receipt that belongs to another Nina account is still billed to this App Store account, and only Apple cancels it.
+    private var managesAnotherAccountsSubscription: Bool {
+        !isCovered && premiumStore.hasOtherAccountsSubscription
+    }
+
+    private var canMakePayments: Bool {
+        StoreKit.AppStore.canMakePayments
+    }
+
     var body: some View {
         FittedSheetLayout(
             fits: Self.fitsItsContent(wasCoveredOnAppear: wasCoveredOnAppear, isCovered: isCovered)
@@ -2394,6 +2423,11 @@ struct PremiumBenefitsSheet: View {
                 if isCovered {
                     managementHeading
                     subscriptionCard
+                } else if showsBillingProblem {
+                    heading
+                    Text(Self.billingProblemMessage)
+                        .ninaText(.label, NinaTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     heading
                     periodControl
@@ -2410,7 +2444,7 @@ struct PremiumBenefitsSheet: View {
             .padding(.top, 2)
             .padding(.bottom, 24)
         } bar: {
-            if !isCovered {
+            if Self.offersPurchase(wasCoveredOnAppear: wasCoveredOnAppear, isCovered: isCovered) {
                 purchaseArea
             }
         }
@@ -2418,10 +2452,12 @@ struct PremiumBenefitsSheet: View {
         .toolbar(.hidden, for: .navigationBar)
         .manageSubscriptionsSheet(isPresented: $isManagingSubscription)
         .task {
-            await premiumStore.configure(for: authSession.currentUser)
+            async let premium: Void = premiumStore.configure(for: authSession.currentUser)
+            async let house: Void = store.refreshHomeFromRemote(for: authSession.currentUser)
+            _ = await (premium, house)
+            if wasCoveredOnAppear == nil { wasCoveredOnAppear = isCovered }
         }
         .onChange(of: isCovered, initial: true) { _, covered in
-            if wasCoveredOnAppear == nil { wasCoveredOnAppear = covered }
             guard covered else {
                 activeMarkIsShown = false
                 return
@@ -2438,7 +2474,7 @@ struct PremiumBenefitsSheet: View {
 
     // A house that arrives already covered is managing, not celebrating.
     private var activatedHere: Bool {
-        wasCoveredOnAppear == false && isCovered
+        Self.activatedHere(wasCoveredOnAppear: wasCoveredOnAppear, isCovered: isCovered)
     }
 
     // Moss marks what a person confirmed, and a purchase is exactly that.
@@ -2754,6 +2790,14 @@ struct PremiumBenefitsSheet: View {
                 }
             }
 
+            if managesAnotherAccountsSubscription,
+               premiumStore.statusMessage != PremiumReconciliationCopy.otherAccountsSubscription,
+               premiumStore.errorMessage != PremiumReconciliationCopy.otherAccountsSubscription {
+                Text(PremiumReconciliationCopy.otherAccountsSubscription)
+                    .ninaText(.caption, NinaTheme.ink, weight: .semibold)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // A covered house already reads its confirmation in the title and the moss mark.
             if let statusMessage = premiumStore.statusMessage, !statusMessage.isEmpty,
                !(isCovered && premiumStore.statusIsConfirmation) {
@@ -2768,6 +2812,8 @@ struct PremiumBenefitsSheet: View {
 
             if let errorMessage = premiumStore.errorMessage, !errorMessage.isEmpty {
                 NinaErrorNote(text: errorMessage, style: .card)
+            } else if !isCovered, !canMakePayments {
+                NinaErrorNote(text: PremiumSubscriptionStore.purchasesNotAllowedMessage, style: .card)
             }
         }
     }
@@ -2785,11 +2831,16 @@ struct PremiumBenefitsSheet: View {
 
     private var purchaseArea: some View {
         VStack(spacing: 10) {
-            if let product = selectedProduct {
+            if showsBillingProblem || managesAnotherAccountsSubscription {
+                NinaButton(title: "Gerenciar na App Store", fillsWidth: true) {
+                    Haptics.lightImpact()
+                    isManagingSubscription = true
+                }
+            } else if let product = selectedProduct {
                 NinaButton(
                     title: purchaseButtonTitle,
                     fillsWidth: true,
-                    isEnabled: !isCurrentPlan,
+                    isEnabled: !isCurrentPlan && canMakePayments,
                     isPending: isBusy
                 ) {
                     Task {

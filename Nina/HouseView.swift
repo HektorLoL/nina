@@ -320,6 +320,12 @@ struct HouseView: View {
         .ninaCard()
     }
 
+    // A digest switched off never arrives, so the row never promises it on a condition.
+    static func coveredDigestSubtitle(isEnabled: Bool, canManage: Bool) -> String {
+        guard isEnabled else { return canManage ? "Desligado em Ajustes." : "Desligado." }
+        return "Chega quando 2 adultos aceitarem conversar com a Nina."
+    }
+
     // A house that pays for the digest must see where it will appear; a house
     // that does not must see it is Premium, not a card that does nothing.
     @ViewBuilder
@@ -328,7 +334,10 @@ struct HouseView: View {
             // The server writes a digest only for a house with two adults who accepted the notice, so the row says so instead of a date.
             NinaRow(
                 title: "Resumo semanal",
-                subtitle: "Chega quando 2 adultos aceitarem conversar com a Nina.",
+                subtitle: Self.coveredDigestSubtitle(
+                    isEnabled: store.isWeeklyDigestEnabled,
+                    canManage: store.canManageFamily
+                ),
                 verticalPadding: 14
             ) {
                 CategoryGlyph(systemName: "calendar", size: 18, tint: NinaTheme.ink)

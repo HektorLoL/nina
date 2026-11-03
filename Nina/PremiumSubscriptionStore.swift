@@ -96,10 +96,15 @@ struct PremiumEntitlement: Codable, Hashable {
 
         if let expiresAt {
             let date = expiresAt.formatted(date: .abbreviated, time: .omitted)
-            if willRenew == true {
+            switch willRenew {
+            case true?:
                 return "Renova em \(date)"
+            case false?:
+                return "Acesso até \(date)"
+            case nil:
+                // An app sync carries no renewal state, so an unknown renewal is never read as an ending.
+                return "Período atual até \(date)"
             }
-            return "Acesso até \(date)"
         }
 
         return "Acesso liberado"
@@ -286,8 +291,9 @@ final class PremiumSubscriptionStore {
     var errorMessage: String?
     private(set) var hasOtherAccountsSubscription = false
 
+    // Another Nina account's receipt on this phone is still billed to this App Store account.
     var showsSubscriptionContinuesWarning: Bool {
-        entitlement.keepsBillingAfterAccountDeletion
+        entitlement.keepsBillingAfterAccountDeletion || hasOtherAccountsSubscription
     }
 
     @ObservationIgnored private let backend: (any PremiumSubscriptionBackend)?
@@ -298,6 +304,8 @@ final class PremiumSubscriptionStore {
     @ObservationIgnored private let privateDataStore: any PrivateLocalDataStoring
     @ObservationIgnored private var currentUser: AuthUser?
     @ObservationIgnored private var transactionUpdatesTask: Task<Void, Never>?
+    // Casa reads Premium from the house, so a record made outside the paywall's buttons reloads it.
+    @ObservationIgnored var onHouseholdCoverageChanged: (@MainActor () async -> Void)?
 
     init(
         backend: (any PremiumSubscriptionBackend)? = BackendServices.makePremiumSubscriptionBackend(),
@@ -427,7 +435,7 @@ final class PremiumSubscriptionStore {
                 statusIsConfirmation = false
             }
         } catch {
-            errorMessage = userMessage(for: error)
+            errorMessage = Self.userMessage(for: error)
         }
     }
 
@@ -460,7 +468,7 @@ final class PremiumSubscriptionStore {
                 statusIsConfirmation = false
             }
         } catch {
-            errorMessage = userMessage(for: error)
+            errorMessage = Self.userMessage(for: error)
         }
     }
 
@@ -500,9 +508,12 @@ final class PremiumSubscriptionStore {
 
             if didRecord {
                 await transaction.finish()
+                if entitlement.isActive {
+                    await onHouseholdCoverageChanged?()
+                }
             }
         } catch {
-            errorMessage = userMessage(for: error)
+            errorMessage = Self.userMessage(for: error)
         }
     }
 
@@ -525,11 +536,10 @@ final class PremiumSubscriptionStore {
             return
         }
 
-        isSyncingBackend = true
-        defer { isSyncingBackend = false }
-
         if let local, forcingTransactionSync {
+            isSyncingBackend = true
             await recordOnServer(local, for: currentUser.id, source: "restore")
+            isSyncingBackend = false
             return
         }
 
@@ -542,7 +552,12 @@ final class PremiumSubscriptionStore {
                 return
             }
 
-            await recordOnServer(local, for: currentUser.id, source: "entitlement_repair")
+            isSyncingBackend = true
+            let didRecord = await recordOnServer(local, for: currentUser.id, source: "entitlement_repair")
+            isSyncingBackend = false
+            if didRecord, entitlement.isActive {
+                await onHouseholdCoverageChanged?()
+            }
         } catch PremiumBackendRequestError.missingSession {
             // A phone whose session is gone is signed out for Premium: nothing reads as covered, nothing to retry.
             entitlement = .inactive
@@ -701,7 +716,9 @@ final class PremiumSubscriptionStore {
         return (transaction.expirationDate ?? transaction.purchaseDate) > (other.expirationDate ?? other.purchaseDate)
     }
 
-    private func userMessage(for error: Error) -> String {
+    static let purchasesNotAllowedMessage = "Este iPhone não permite compras no app."
+
+    static func userMessage(for error: Error) -> String {
         if let premiumError = error as? PremiumPurchaseError {
             return premiumError.localizedDescription
         }
@@ -721,6 +738,18 @@ final class PremiumSubscriptionStore {
             case .unknown, .unsupported:
                 return "Não deu para concluir agora. Tente de novo."
             @unknown default:
+                return "Não deu para concluir agora. Tente de novo."
+            }
+        }
+
+        // Screen Time or a profile that blocks purchases fails the same way on every retry.
+        if let purchaseError = error as? Product.PurchaseError {
+            switch purchaseError {
+            case .purchaseNotAllowed:
+                return purchasesNotAllowedMessage
+            case .productUnavailable:
+                return "Plano indisponível agora."
+            default:
                 return "Não deu para concluir agora. Tente de novo."
             }
         }
