@@ -6,7 +6,7 @@ import { legalIdentity } from "../legal";
 import { ninaRating } from "../rating";
 import { supportEmail } from "../support";
 
-const updatedAt = "18 de outubro de 2026";
+const updatedAt = "3 de novembro de 2026";
 const ratingReason = ninaRating.code === "14"
   ? ", por causa da assinatura do Nina Premium e da conversa com a Nina, mesmo que as duas sejam só para maiores de 18 anos"
   : "";
@@ -118,10 +118,11 @@ const addressClause = legalIdentity.legalEntityAddress
       <p>
         Algumas partes são só para maiores de 18 anos: criar ou administrar uma casa, conversar com
         a Nina, assinar o Nina Premium e decidir sobre dados de crianças e adolescentes. Para
-        conversar com a Nina e assinar, a Apple precisa informar que você é maior de idade, pela
-        idade que você declarou ou que ela confirmou. Para decidir por um menor, a Apple precisa
-        confirmar que você é maior de idade. Uma conta com controles parentais ativos não conversa
-        com a Nina, não assina e não decide por um menor.
+        conversar com a Nina, assinar e decidir por um menor, a Apple precisa informar que você é
+        maior de idade, pela idade que você declarou ou que ela confirmou. Só quem se declara mãe,
+        pai ou responsável legal aprova a entrada de um menor ou cadastra uma criança ou um
+        adolescente. Uma conta com controles parentais ativos não conversa com a Nina, não assina e
+        não decide por um menor.
       </p>
       <p>
         Quem tem menos de 18 anos entra na Nina somente por uma casa, depois que a mãe, o pai ou o
@@ -167,6 +168,13 @@ const addressClause = legalIdentity.legalEntityAddress
         O titular sai passando a casa para outro adulto da casa, que precisa aceitar, ou apagando a
         casa. Se o titular apagar a conta, a casa passa para o próximo adulto, e é apagada quando
         não sobra nenhum adulto. A entrada de quem tem menos de 18 anos segue a seção 4.
+      </p>
+      <p>
+        Cada pessoa participa de uma casa por vez. Quem já está em uma casa não pede para entrar em
+        outra nem cria outra: antes, sai da casa ou, se for o titular, passa a casa para outro
+        adulto ou a apaga. Pedir para entrar em uma casa ou criar uma casa cancela os outros pedidos
+        pendentes da pessoa. Um perfil de criança ou adolescente sem conta pode existir em mais de
+        uma casa.
       </p>
       <p>
         Só o titular apaga a casa, e só depois de escrever o nome dela para confirmar. Apagar a casa

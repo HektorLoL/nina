@@ -1,6 +1,6 @@
 # Nina — the azulejo rebrand, as built
 
-Last updated: 2026-10-19
+Last updated: 2026-11-03
 
 The 47 Paper boards are now the shipping app. This document records **every place
 the build departs from the boards**, and why. It is the companion to
@@ -457,8 +457,9 @@ the welcome and Ajustes lose surfaces earlier passes had added.
 
 Heitor's decisions D1–D4 (aim for "Livre", a company before launch, only
 Apple-confirmed adults act for AI, money and minors, iOS 26.4; D3 changed on
-2026-10-14, so self-declared adults now chat and buy, and only acting for a
-minor needs Apple's confirmation; D1 ended on 2026-10-18, when Heitor accepted
+2026-10-14, so self-declared adults now chat and buy, and acting for a minor
+needed Apple's confirmation until Heitor's decision of 2026-11-03 admitted a
+declared age there too, from build 21; D1 ended on 2026-10-18, when Heitor accepted
 ClassInd's 14, so the mark draws 14 from build 18) plus the build-10 Apple fixes. No board draws any of this; every screen below is built from the
 existing parts (`NinaMark`, `NinaButton`, `.ninaCard`, `NinaRow`, `Eyebrow`) and
 its strings are in `docs/text-rubric.md` §3, most of them Law-text-gated.
@@ -1114,7 +1115,12 @@ No board draws any of these; each reuses a part the app already has.
   entrar na casa." shows while the house has one adult, however many children
   or pets live there, with no article that presumes a partner; the invite row
   and "Renovar o link" follow the same count.
-- **A self-declared adult at a child gate can share again.** Under "Só um
+- **A self-declared adult at a child gate can share again** (until build 21,
+  which drops this share: since migration `202611030001` a self-declared adult
+  without parental controls is trusted for a minor, and the gates read "Esta
+  conta não inclui crianças nem adolescentes.", "Esta conta não aprova
+  crianças nem adolescentes." or "Esta conta não responde por {nome}.", each
+  opening "Com controles parentais ativos, …" when those are on). Under "Só um
   responsável com idade confirmada pela Apple cadastra." (member editor and a
   legacy child's card) and "Isso pede idade confirmada pela Apple." (a minor's
   join request), a self-declared adult without parental controls reads

@@ -1,6 +1,6 @@
 # App Store listing — draft for version 1.0
 
-Last updated: 2026-10-19
+Last updated: 2026-11-03
 
 The text to paste into App Store Connect for the first submission. It is a
 draft: Heitor approves every line before it is pasted. The name was decided on
@@ -135,16 +135,16 @@ Each subscription also needs its own review screenshot of the paywall.
 ## 6. App Review notes (English)
 
 The one text to paste into App Review Information › Notes, as it stands on
-2026-10-19. It replaces every earlier draft, the one that was in
+2026-11-03. It replaces every earlier draft, the one that was in
 `docs/privacy/classificacao-indicativa.md` §4 included. Paste what is inside the
-fence, line breaks as they are: 3,877 characters, under Apple's 4,000.
+fence, line breaks as they are: 3,883 characters, under Apple's 4,000.
 
 ```text
 Nina is a household organizer for families in Brazil, in Brazilian Portuguese, for iPhone. A person tells Nina in a chat what the house needs; Nina proposes tasks, reminders and shopping items, and nothing is created until a person confirms it.
 
 How to review
 1. Tap "Continuar com a Apple" and sign in with your own Apple Account. There is no email, password or demo account.
-2. Nina asks for your age range through Apple's Declared Age Range sheet ("Antes, sua faixa de idade."). Share it. An 18+ range, self-declared or confirmed, opens the chat and Premium; adding or approving a child needs an age Apple confirmed.
+2. Nina asks for your age range through Apple's Declared Age Range sheet ("Antes, sua faixa de idade."). Share it. An 18+ range, self-declared or confirmed, opens the chat, Premium, and adding or approving a child as the child's parent or legal guardian.
 3. Tap "Criar uma casa", type any house name and continue. A short tour follows; "Pular" skips it.
 4. Nina tab: before the first message Nina shows a notice saying that what you write goes to OpenAI in the United States, with a separate, unticked box for that transfer. Tick the box, then tap "Aceitar e conversar com a Nina".
 5. Send, for example, "Me lembra de pagar a conta de luz dia 20". Nina answers with a proposal card; tap "Criar tarefa" to confirm. The task then appears in Hoje and Tarefas.
@@ -152,7 +152,7 @@ How to review
 7. Premium: Casa tab, gear icon (Ajustes), "Nina Premium". In-app purchases need a sandbox account set to Brazil, the only storefront where Nina is sold. The server verifies receipts in production first, then in the sandbox, so sandbox purchases work.
 8. Account deletion: Ajustes, "Apagar conta".
 
-If your device shares no age range, Nina treats the account as a minor's, which can only ask to join a household. Reply in this submission with the time (UTC) you signed in, and we will mark that account on our server as a self-declared adult within one business day: it reaches the chat and Premium, never decisions about a child. We remove the mark after the review.
+If your device shares no age range, Nina treats the account as a minor's, which can only ask to join a household. Reply in this submission with the time (UTC) you signed in, and we will mark that account on our server as a self-declared adult within one business day: it reaches the chat, Premium and decisions about a child. We remove the mark after the review.
 
 Sign in with Apple is the only way in. Nina requests only the full-name scope and never the email scope, and keeps only the first (given) name Apple shares; it never stores the family name, and it never asks for an email address, so an account created with this version holds none. The first name is what the other members of the household see. An adult is asked to type a first name only when Apple shared none (the person chose not to share it, or the Apple ID had already signed in to Nina, since Apple shares the name only on the first sign-in), and only when creating or joining a household. A person under 18, or anyone whose age Apple has not shared (Nina treats that account as a minor's until it does), confirms a first name, filled in from Apple's when shared, only when asking a guardian to let them join a household.
 
@@ -180,7 +180,10 @@ What each part rests on, and what to re-check before pasting:
   stays unset (`docs/production-launch-runbook.md` §2).
 - **The reviewer's account** (Heitor's choice 3 of 2026-10-19): marked with
   `trusted = false`, which records a self-declared adult, so it chats and buys
-  but never approves, adds or answers for a child. The mark and unmark
+  and, once migration `202611030001` is applied (2026-11-03, declared adults
+  act for minors), also approves, adds and answers for a child, like any
+  Brazilian adult; `true` would record an `operator` mark that outlives the
+  reviewer's phone. The mark and unmark
   statements, and how to find the account from the time the reviewer gives,
   are in `docs/production-launch-runbook.md` §6, "The reviewer's account".
 - **The Sign in with Apple paragraph** is word for word the one in

@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-10-20
+Last updated: 2026-11-03
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -112,7 +112,7 @@ Four surfaces, one product.
 | Surface | Stack | Entry point |
 |---|---|---|
 | iOS app | SwiftUI, iOS 26.4+, Swift 5 mode, `@Observable` | `Nina/NinaApp.swift` |
-| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (57 files) |
+| Database | Supabase Postgres, RLS + SECURITY DEFINER RPCs | `supabase/migrations/` (58 files) |
 | Server logic | 6 Deno Edge Functions | `supabase/functions/*/index.ts` |
 | Web | Astro 7 static + Cloudflare Worker at `ninai.app`, azulejo, light-only | `web/src/worker.ts` |
 
@@ -342,6 +342,31 @@ product regression, not a refactor.
 - **8 non-assistant people per home**, enforced in three places (trigger,
   `request_family_join` count, remaining-slot arithmetic) under a family
   advisory lock taken *before* any row lock.
+- **One house at a time** (Heitor's decision of 2026-11-03, after his build-20
+  playtest found that a member who opened another house's link joined both;
+  migration `202611030001`, not yet applied to production, §13). A claimed
+  member of any house cannot ask to join, be approved into or create another:
+  `request_family_join` and `create_family` raise `family_membership_exists`
+  (P0001), while opening one's own house's invite still lands in it. The
+  person leaves first ("Sair da casa", `leave_family`); a titular with other
+  members passes the house or deletes it, and a titular alone deletes it. A
+  new request or a created house cancels the person's other pending requests,
+  so a person holds at most one. `approve_family_join_request` checks again
+  and answers `join_request_not_pending` (P0002) when the requester joined or
+  created a house meanwhile, never naming that house, and the `BEFORE INSERT
+  OR UPDATE` trigger `family_members_one_house_per_account` refuses any second
+  claimed row, so the rule holds without the RPCs. Each takes
+  `private.lock_account` after the family lock and before any row lock (§6).
+  Rows already in two houses before the migration stay until the person
+  leaves one; the migration cancels the pending requests that no longer hold
+  and removes no membership. Account-less child and teen profiles
+  (`user_id null`) are outside the rule, so a child of separated parents may
+  have a profile in each house. Entering a house also retires every unread
+  access decision of the person (`family_members_retire_access_decisions`),
+  so a later departure never resurfaces an old removal or refusal. Locked by
+  `one_house.test.sql` ("a member of one house cannot ask to join another",
+  "the table refuses a second claimed membership even without the RPCs",
+  "profiles without an account may be listed in two houses").
 
 ### Age and minors
 
@@ -350,7 +375,8 @@ Built 2026-09-29 from the all-ages spec (Heitor's decisions D1–D4: aim for
 2026-10-18 when Heitor accepted ClassInd's 14 with the chat and Premium
 unchanged, §13; a company and an
 independent encarregado before launch; only Apple-confirmed adults act for
-minors, and D3, decided again on 2026-10-14, lets self-declared adults also
+minors, which Heitor's decision of 2026-11-03 widened to self-declared adults;
+and D3, decided again on 2026-10-14, lets self-declared adults also
 chat and buy Premium; iOS 26.4 everywhere). The research and the capability
 table are in `docs/privacy/avaliacao-impacto-criancas.md`.
 
@@ -401,18 +427,30 @@ table are in `docs/privacy/avaliacao-impacto-criancas.md`.
   (`RemoteDecodingTests.testAnUnknownOrMissingHouseholdRoleNeverReadsAsAnAdult`).
 - **Capabilities come from `AgeStatus`, never from `household_role`.** Three
   levels: *trusted adult* (status adult, no active parental controls, assurance
-  `confirmed` or `operator`) may act for a minor; `may_use_ai` and
-  `may_buy_premium` follow `private.age_policy.trusted_assurances` instead, the
-  D3 switch. A migration creates it as `{confirmed,operator}`; decision D3
-  (Heitor, 2026-10-14) adds `self_declared` to production's row with one
-  operator statement, not a migration, and §13 records when it ran (Apple does
-  not confirm adult ages in Brazil; the reasoning is in
-  `docs/privacy/lgpd-launch-posture.md`, "Decision D3"). Acting for a minor is
-  hard-coded to the two proven assurances in `private.is_trusted_adult` and
-  never widens with the policy row, and active parental controls still mean
-  not trusted for anything. So, with `self_declared` in the row, a *declared
-  adult* runs a house, chats once they accept the notice and buys Premium, but
-  never approves a minor, adds a child or answers for one. An adult whose
+  `confirmed`, `operator` or, since migration `202611030001`, `self_declared`)
+  may act for a minor; `may_use_ai` and `may_buy_premium` follow
+  `private.age_policy.trusted_assurances` instead, the D3 switch. A migration
+  creates it as `{confirmed,operator}`; decision D3 (Heitor, 2026-10-14) adds
+  `self_declared` to production's row with one operator statement, not a
+  migration, and §13 records when it ran (Apple does not confirm adult ages in
+  Brazil; the reasoning is in `docs/privacy/lgpd-launch-posture.md`, "Decision
+  D3"). Acting for a minor is hard-coded in `private.is_trusted_adult` and
+  never follows the policy row: until `202611030001` it took only the two
+  proven assurances, and Heitor's choice A of 2026-11-03 added `self_declared`
+  there, because Apple never confirms an adult in Brazil and so no Brazilian
+  family could add a child (`docs/privacy/lgpd-launch-posture.md`, "Decision
+  of 2026-11-03"). The accepted risk: a minor who declared 18+ to Apple and
+  runs a house can approve another minor as a declared guardian. The guardian
+  declaration (mãe, pai ou responsável legal), the consent and the minor →
+  adult ratchet are unchanged, and active parental controls still mean not
+  trusted for anything. So, with `self_declared` in the row and the migration
+  applied, a *declared adult* runs a house, chats once they accept the notice,
+  buys Premium, and approves a minor, adds a child or answers for one; before
+  the migration reaches production it still does none of the last three
+  (pgTAP "with self-declared adults admitted, one may chat, buy Premium and
+  act for a minor", "a self-declared adult under parental controls never acts
+  for a minor", "a self-declared guardian is recorded with the assurance they
+  hold"). An adult whose
   `may_use_ai` is false meets a gate where the chat would be: with parental
   controls on, "A conversa não abre nesta conta." and "O Premium não abre
   nesta conta." (the tour's closed line), which never name Apple's
@@ -1442,7 +1480,7 @@ is longer than a word budget, the legal text wins.
 
 ## 6. Database
 
-57 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
+58 migrations, `YYYYMMDDNNNN_snake_case.sql`, applied in filename order. Trust
 the filename — on-disk mtimes do not match name order. The eight
 `202609290001`–`…0008` files (age assurance, minors and guardianship, adult-only
 RLS, join and house rules, the minor home view, the AI gates, the insight and
@@ -1493,8 +1531,10 @@ Other conventions:
   were already unreachable, because `authenticated` holds no update or delete
   on that table.
 - **Lock order is global: family advisory lock first**
-  (`pg_advisory_xact_lock(hashtextextended(family_id::text, 0))`), then row
-  `FOR UPDATE`, then re-verify `family_id` still matches.
+  (`pg_advisory_xact_lock(hashtextextended(family_id::text, 0))`), then the
+  account lock where a person's houses are at stake (`private.lock_account`,
+  `'account:' || user_id`, since `202611030001`), then row `FOR UPDATE`, then
+  re-verify `family_id` still matches.
 - **Realtime** requires both `replica identity full` and a DO block adding the
   table to `supabase_realtime` that swallows `duplicate_object`.
 - **Grant explicitly. Never rely on Supabase's default privileges.** A freshly
@@ -1619,7 +1659,10 @@ platform bundler cannot resolve the import and the deploy fails with 400.
   The body is capped at 12 MiB (`maxNinaChatRequestBytes`): the 8 MiB attachment
   ceiling as base64, plus the slashes Swift's `JSONEncoder` escapes. A larger
   body is read to its end and thrown away (up to 32 MiB, see §12), then gets
-  413 `input_too_large`, which the app already shows as "grande demais".
+  413 `input_too_large`, which the app already shows as "grande demais". A
+  message over 2,000 UTF-16 units (`maxNinaChatMessageLength`) gets the same
+  413 since commit 83aeffb (it read 400 `invalid_request` before), so the app
+  can say why; production runs it once `nina-chat` is redeployed.
 - **`nina-maintenance`** — daily retention (`run_nina_retention`,
   `run_waitlist_retention`) *before* any AI work, then the deletion of minor
   accounts that have had no house for 30 days
@@ -2464,7 +2507,8 @@ the project, not bugs to fix unprompted.
   adult, and acting for a minor needs the mark again
   (`private.operator_set_age_status('<id>', 'adult', null, true, 'testflight')`),
   which his phone's adult signals leave in place since `202610140001` was
-  applied the same day. Every other reading in `private.age_assurance_distribution()` shows
+  applied the same day, until migration `202611030001` reaches production and
+  a self-declared adult acts for a minor without it. Every other reading in `private.age_assurance_distribution()` shows
   how a real iPhone came back. Build
   10 reaches the external group only after Beta App Review. Still open on a device, since
   the Simulator runs neither: an Apple-confirmed adult, a self-declared adult, a
@@ -2542,6 +2586,17 @@ the project, not bugs to fix unprompted.
   warnings. Its one change: the Nina mark, the headline and the line of the
   Terms and age gates sit centred, like the welcome. Build 20 is the release
   candidate Heitor tests before any test data is deleted.
+- **Build 21 (in progress) fixes Heitor's build-20 playtest.** Heitor tested
+  build 20 with two testers on 2026-11-03 and found two things: a member who
+  opened another house's link joined both houses, and an adult Apple account
+  could not add a child ("you can't add kids like that"), because Apple reads
+  every Brazilian adult as self-declared. Build 21 carries the app side of
+  migration `202611030001` (next entry): the one-house refusals with how to
+  leave first, the child and minor gates open to a declared adult without
+  parental controls, and the playtest polish listed in
+  `docs/production-launch-runbook.md` §5, "What the next build carries". It
+  needs the migration in production first and replaces build 20 as the
+  release candidate once Heitor tests it. Not archived yet.
 - **Build 19 (2026-10-19) is Heitor's last fixes.** Archived from the sources
   tagged `testflight-1.0-19` with `CURRENT_PROJECT_VERSION` 19; the online
   production preflight against the archive read 0 failures and 0 warnings.
@@ -2749,6 +2804,30 @@ the project, not bugs to fix unprompted.
   on, the grant counts stay 52 and 27, and the foreign-key canary reads 0. No
   row existed yet; the first app load is the proof that `cf-connecting-ip`
   reaches PostgREST. No build is needed.
+- **Migration `202611030001` (one house at a time, and declared guardians) is
+  not yet applied to production.** Committed in 83aeffb on 2026-11-03 from
+  Heitor's two decisions of that day (`docs/privacy/lgpd-launch-posture.md`,
+  "Decision of 2026-11-03"): an account belongs to one house at a time (§4,
+  "One house at a time"), and `private.is_trusted_adult` accepts
+  `self_declared` (§4, "Capabilities come from `AgeStatus`"; choice A, with
+  the risk that a minor who lied to Apple about being 18+ can act for another
+  minor). The same migration shows the majority screen once
+  (`private.age_status_json` answers it with any acceptance of the person's
+  own after the guardianship ended, instead of on every Terms move), retires
+  unread access decisions when the person enters a house, and hides the
+  person's line of a failed turn from `get_current_nina_state` (hidden, never
+  deleted: the hold and the preservation copy still read it). It cancels the
+  pending requests that no longer hold and removes no membership. The same
+  commit changes two Edge Function paths that need a redeploy: `nina-chat`
+  answers a message over 2,000 characters with 413 `input_too_large`, and
+  `_shared/app-store.ts` keeps the renewal and notification columns when the
+  app syncs (`premium-subscription-sync`, `app-store-server-notifications`).
+  The apply, the read-back with each body's md5, the three redeploys and the
+  Terms version move to `2026-11-03` are `docs/production-launch-runbook.md`
+  §3, "One house at a time, and declared guardians". Terms §4 and §5, privacy
+  §3A and `/familias/` (dated 3 November) went live with the documentation
+  push of 2026-11-03, ahead of the apply, so until it runs they describe rules
+  the server does not enforce yet. The grant counts stay 52 and 27.
 - **Join requests reach Casa live from build 15 (2026-10-15).** No
   migration: the `families` bump already reached production's realtime; the
   app had subscribed twice per cold launch and kept a dead channel, and a
@@ -2822,8 +2901,9 @@ the project, not bugs to fix unprompted.
   conversa pede idade confirmada.", `MockNinaEngine`) and the purchase's
   `premium_requires_adult` ("Isso pede idade confirmada pela Apple.",
   `PremiumSubscriptionStore`); `age_confirmation_required` on the minor paths
-  keeps that line because it is true there. Acting for a minor stays
-  `confirmed` or `operator`. The Terms version stayed `2026-09-29` for D3 (the
+  keeps that line because it is true there. Acting for a minor stayed
+  `confirmed` or `operator` under D3; the decision of 2026-11-03 (migration
+  `202611030001`, below) widened it to `self_declared`. The Terms version stayed `2026-09-29` for D3 (the
   change only widens what an adult may do and adds no obligation; it moved to
   `2026-10-15` for the house deletion and to `2026-10-18` for the rating), and the AI consent version stays `2026-09-29`. The expected
   cost was the

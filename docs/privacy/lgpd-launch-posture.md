@@ -1,6 +1,6 @@
 # LGPD Launch Posture - Nina
 
-Last updated: 2026-10-20
+Last updated: 2026-11-03
 
 This is an engineering/privacy operations checklist for launch readiness. It is
 not a substitute for Brazilian legal review, but it documents the product
@@ -108,7 +108,7 @@ Nina processes:
 | --- | --- | --- |
 | Account, login, sync, household management | Contract execution / preliminary procedures | Authenticated app account and home access. |
 | Age band and assurance | Legal obligation (art. 7 II; Lei 15.211 art. 14) | Single purpose (Lei 15.211 art. 13): feature gating only; never in AI context, insights, logs or anyone else's export. |
-| Minor account, child or teen profile | Specific, highlighted consent of a parent or legal guardian (art. 14 §1) | Guardian sheet with a declaration, a separate consent checkbox and a recorded text version; only an Apple-confirmed adult can give it. |
+| Minor account, child or teen profile | Specific, highlighted consent of a parent or legal guardian (art. 14 §1) | Guardian sheet with a declaration, a separate consent checkbox and a recorded text version; only an adult Apple reports as 18+, declared or confirmed (confirmed only until 2026-11-03), with no active parental controls, can give it. |
 | Health reminders of a minor | Specific consent of the guardian (arts. 11 I and 14 §1) | Separate optional checkbox; enforced server-side by `tasks_minor_health_guard` at `category_id = 'health'`; withdrawable. |
 | AI chat, Nina memory, weekly insight | Consent (art. 7 I) | Server-recorded consent per adult in `nina_ai_consents` at the current version, enforced inside `begin_nina_chat_run` and `get_nina_weekly_candidates`; withdrawn grants are retained as a demonstrable record. |
 | Transfer to OpenAI in the United States | Specific, highlighted consent to the transfer (art. 33 VIII) | Separate required checkbox on the consent card, recorded as `transfer_consented_at`; a grant without it is refused. |
@@ -186,8 +186,10 @@ Why:
 What does not change:
 
 - Acting for a minor (approving a minor, creating a child or teen profile,
-  declaring or holding a guardianship) stays hard-coded to `confirmed` and
+  declaring or holding a guardianship) stayed hard-coded to `confirmed` and
   `operator` in `private.is_trusted_adult`. The policy row never widens it.
+  The decision of 2026-11-03 (below) widened that function itself to
+  `self_declared`.
 - Active parental controls still mean not trusted, for anything.
 - Minor and unknown accounts stay as they are.
 
@@ -202,7 +204,8 @@ the 14 does not rest on the self-declared gate alone. Heitor accepted 14 on
 
 **Versions.** Terms §4, privacy §3A and §5, `/familias/` and `/suporte/` now
 say that the chat and Premium need 18+ by Apple's range, declared or
-confirmed, and that deciding for a minor needs an age Apple confirmed. On
+confirmed, and that deciding for a minor needs an age Apple confirmed (true
+until the decision of 2026-11-03, below, which changed that half). On
 2026-10-14 the pages showed "14 de outubro de 2026" as their date (the Terms
 have since moved to 15 and then 18 October, and `/familias/` to 18 October).
 `current_terms_version` stayed `2026-09-29` for that change: it only widened
@@ -241,6 +244,86 @@ Revert with `'{confirmed,operator}'`; the CHECK on `private.age_policy` never
 lets the row drop those two. A revert makes the pages above untrue again, so
 they change back in the same release.
 
+## Decision of 2026-11-03: declared adults act for minors, and one house at a time
+
+Heitor made two decisions on 2026-11-03, after testing build 20. Migration
+`202611030001_one_house_and_declared_guardians.sql` carries both; it is not
+yet applied to production, and `CLAUDE.md` §13 records when it runs.
+
+**Declared adults act for minors (choice A).** `private.is_trusted_adult` now
+accepts `self_declared` as well as `confirmed` and `operator`, still only for
+status adult with no active parental controls. A declared adult may therefore
+approve a minor's join request, add a child or teen profile, declare and hold
+a guardianship, and do everything a live guardian does (supervision, the
+health consent, export, the ward's deletion). The declaration of being mother,
+father or legal guardian, the highlighted `account` consent and the five-year
+proof stay exactly as they were, and each guardianship still records the
+guardian's assurance, so the proof shows whether it rested on a declared age.
+
+Why:
+
+- **Apple never confirms adult ages in Brazil** (the evidence is under D3,
+  above). With acting for a minor held to `confirmed` and `operator`, no
+  Brazilian family could add a child or let a teen in without an operator mark
+  on the parent's account.
+- **LGPD art. 14 asks for reasonable efforts, not proof.** §1 asks for the
+  specific, highlighted consent of at least one parent or legal guardian, and
+  §5 for "todos os esforços razoáveis" to verify it was given by the guardian,
+  "consideradas as tecnologias disponíveis". In Brazil the available
+  technology is Apple's declared range, attested by App Attest, plus the
+  declaration and the recorded consent. This reading comes from research done
+  without a lawyer.
+
+The risk accepted: a minor who declared 18+ to Apple (an Apple Account with a
+false birth date; a Family Sharing child's account carries the one its
+guardian set) can approve another minor or add a child as a declared guardian.
+What still stands in the way:
+
+- the approver must already be the titular or an admin of a house, and only an
+  adult creates one;
+- the age ratchet is unchanged: minor to adult needs an Apple `confirmed`
+  signal or the operator, so an account Nina ever read as a minor cannot
+  declare its way back to guardian;
+- active parental controls still mean not trusted, for anything;
+- a false declaration breaches Terms §4, and the guardianship proof names the
+  assurance it rested on.
+
+The `trusted_assurances` policy row still governs only the chat and Premium;
+acting for a minor no longer reads any row, so narrowing it again takes a
+migration, and the pages below change back in the same release.
+
+**One house at a time.** A claimed member of a house can no longer ask to join,
+be approved into, or create another house: the server answers
+`family_membership_exists` (P0001). The person leaves first ("Sair da casa"),
+and a titular with other members passes the house or deletes it. A new request
+or a newly created house cancels the person's other pending requests; an
+approval checks again and, when the requester joined or created a house
+meanwhile, answers `join_request_not_pending` without naming that house; a
+trigger on `family_members` refuses any second claimed row. Rows already in
+two houses before the migration stay until the person leaves; the migration
+cancels pending requests that no longer hold and removes no membership.
+Account-less child and teen profiles are outside the rule, so a child of
+separated parents may have a profile in each house. For data protection this
+means one set of house adults reads a person's profile and tasks, and no house
+learns from Nina that the person belongs to another.
+
+**Versions.** Terms §4 and §5, privacy §3A and `/familias/` §§2, 5 and 10 now
+say that an adult 18+ by Apple's range, declared or confirmed, may approve or
+add a minor as mother, father or legal guardian, and the Terms that a person
+takes part in one house at a time. Each page reads "3 de novembro de 2026".
+The one-house rule is a new restriction on every account, and since the rule
+of 2026-10-15 the recorded Terms version follows the page's date, so once the
+Terms page is live and the migration is applied the operator sets
+`current_terms_version` to `2026-11-03` (`docs/production-launch-runbook.md`
+§3, "One house at a time, and declared guardians"); every adult accepts again
+on "Os Termos mudaram." and every minor acknowledges again.
+`current_policy_version` and the minors' consent version stay `2026-09-29`:
+the consent card and the guardian's consent text did not change, and the
+privacy change is in who may decide for a minor, not in what happens to the
+data. The pages went live with the push of 2026-11-03, before the migration;
+until it is applied, the server still refuses a declared adult at a minor's
+approval and still lets a member open a second house.
+
 ## Minors
 
 Decided 2026-09-29 (D1): Nina aims for the "Livre" rating; if Apple or the
@@ -258,11 +341,13 @@ regime:
   Apple's Declared Age Range (iOS 26.4 and later), recorded only through an App
   Attest-verified endpoint. Unknown age is treated as the youngest band.
 - **A minor enters a house only through a guardian's approval** by an owner or
-  admin whose adult age Apple confirmed, with a declaration of being mother,
-  father or legal guardian, and the `account` consent, written atomically. An
-  unknown requester approved this way becomes a minor with the band the
-  guardian declared.
-- **Child and teen profiles** are created only by an Apple-confirmed adult with
+  admin whose adult age Apple reports, declared or confirmed (confirmed only
+  until the decision of 2026-11-03), with no active parental controls, with a
+  declaration of being mother, father or legal guardian, and the `account`
+  consent, written atomically. An unknown requester approved this way becomes
+  a minor with the band the guardian declared. A minor's account, like every
+  account, belongs to one house at a time.
+- **Child and teen profiles** are created only by such an adult with
   the same declaration and the `profile` consent. Profiles created before
   2026-09-29 without a guardian are deleted after
   `private.age_policy.legacy_profile_deadline`.

@@ -1,6 +1,6 @@
 # Children's Impact Assessment - Nina
 
-Last updated: 2026-10-20
+Last updated: 2026-11-03
 
 One document for every assessment the law asks of a product that children and
 adolescents are likely to use. It was written by the controller, without a
@@ -56,11 +56,15 @@ A child is under 12 and an adolescent is 12 to 17 (ECA art. 2; ECA Digital art.
   verifies an App Attest assertion and records only status, band, assurance and
   a parental-controls flag. Unknown age is the youngest band (Decreto 12.880 art.
   25 §4). A guardian-declared band that is younger wins. Nothing else reads it.
-- **Entry.** A minor or unknown-age person asks to join; an owner or admin whose
-  adult age Apple confirmed approves as mother, father or legal guardian, with a
-  highlighted consent, in one transaction.
-- **Profiles without an account.** Created only by an Apple-confirmed adult with
-  the same declaration and consent. No birth date, no photo.
+- **Entry.** A minor or unknown-age person asks to join; an owner or admin whom
+  Apple reports as 18+, declared or confirmed, with no active parental controls
+  approves as mother, father or legal guardian, with a highlighted consent, in
+  one transaction (a declared age suffices since 2026-11-03; before, only a
+  confirmed one). Every account, a minor's included, belongs to one house at a
+  time.
+- **Profiles without an account.** Created only by such an adult with the same
+  declaration and consent. No birth date, no photo. A profile is outside the
+  one-house rule, so a child of separated parents may have one in each house.
 - **A minor's own view.** Their own open tasks and today's done ones: title,
   time, category glyph. No detail line, no other member, no shopping, no chat.
 - **Supervision.** Alerts, quiet hours, a daily limit and a 7-day usage view,
@@ -68,7 +72,7 @@ A child is under 12 and an adolescent is 12 to 17 (ECA art. 2; ECA Digital art.
 - **Adult chat.** Adults with a live, current, transfer-consented AI consent
   talk to Nina. Since decision D3 (2026-10-14), an adult is anyone Apple
   reports as 18+, self-declared or confirmed, without active parental
-  controls; acting for a minor still needs an age Apple confirmed. Every
+  controls; since 2026-11-03 the same adult may also act for a minor. Every
   model-bound string is pseudonymized; minors' tasks never reach a tool.
 - **Weekly insight and workload portrait.** Minors are never carriers and are
   never drawn.
@@ -116,7 +120,7 @@ health data (ANPD legitimate-interest guide, 2024, p. 8).
 
 | Purpose | Data | Basis | Why it serves the minor | Safeguards |
 | --- | --- | --- | --- | --- |
-| Keep a child or teen profile | First name, nicknames, role, band, guardian and relationship, assigned tasks | Guardian consent, art. 14 §1 | The household can share the load of caring for the child without the child needing a device | Only an Apple-confirmed adult declaring guardianship; no birth date or photo; deleted when the last guardian withdraws |
+| Keep a child or teen profile | First name, nicknames, role, band, guardian and relationship, assigned tasks | Guardian consent, art. 14 §1 | The household can share the load of caring for the child without the child needing a device | Only an adult 18+ by Apple's range, declared or confirmed, declaring guardianship; no birth date or photo; deleted when the last guardian withdraws |
 | A minor's own account and task list | The above, plus the Apple login id, the Apple band and assurance | Guardian consent, art. 14 §1; joint acceptance at 16-17 (Código Civil art. 1.634 VII) | The minor sees what was agreed with them and marks it done, which supports autonomy without exposing the rest of the house | Own tasks only, no detail line, no writing of content, no chat, no purchases |
 | Guardian supervision | Usage minutes per day, supervision settings | Guardian consent; ECA Digital arts. 17-18 | Limits use and protects sleep, as the law's defaults intend | Minutes kept 30 days; the minor always sees who supervises (art. 17 III) |
 | Health reminders of a minor | Tasks in the health category owned by the minor | Separate guardian consent, arts. 11 I and 14 §1 | A medicine or appointment is not forgotten | Optional; enforced on the server; withdrawing it deletes the minor's health reminders, after a confirm alert (LGPD arts. 8 §5, 15 III and 16) |
@@ -141,9 +145,9 @@ is this design.
 | A minor sees a boleto reading, a health item or "cerveja" | Household view | High/Medium | Minors read only their own task title, time and glyph through one RPC; no shopping list | Low/Low |
 | A minor buys something | Paywall | Medium/Medium | Accounts Nina knows are minors never reach the paywall; the server refuses a new purchase with `premium_requires_adult`. Since D3 (2026-10-14) a self-declared adult may buy, so a minor who declared 18+ to Apple can too; Apple runs the sale, its purchase controls (Ask to Buy, Screen Time) apply where a guardian set them, and refunds go through Apple | Medium/Low (raised from Low/Low on 2026-10-14 for D3) |
 | Excessive or compulsive use (ECA Digital art. 8 IV; Decreto 12.880 art. 9) | Minor account | Medium/Medium | No feed, no streaks, no rewards, no nudges; forced quiet hours; daily limit; Screen Time recommended | Low/Low |
-| Contact with strangers | Houses | Low/High | Only approved members of one house of at most 8; no messages between people | Low/Medium |
-| A child claims to be an adult | Age | High/High | Apple band, App Attest, most protective result; unknown is a child; minor to adult only on an Apple `confirmed` signal. Since D3 (2026-10-14) a self-declared 18+ also opens the chat and Premium, never acting for a minor. A Family Sharing child's Apple Account carries the birth date its guardian set, so reading 18+ takes an Apple Account with a false birth date | Medium/High (raised from Low/High on 2026-10-14 for D3: the lie now also reaches the chat and Premium) |
-| Someone falsely claims to be a guardian | Approval | Medium/High | Only an Apple-confirmed adult already in the house, owner or admin to approve; explicit declaration; false declaration breaches the Terms §4 | Medium/High (declared, not proven) |
+| Contact with strangers | Houses | Low/High | Only approved members of one house of at most 8; no messages between people; since 2026-11-03 an account belongs to one house at a time, so a minor's account never sits in a second house of adults | Low/Medium |
+| A child claims to be an adult | Age | High/High | Apple band, App Attest, most protective result; unknown is a child; minor to adult only on an Apple `confirmed` signal. Since D3 (2026-10-14) a self-declared 18+ also opens the chat and Premium, and since 2026-11-03 acting for a minor too, as a declared guardian. An account Nina ever read as a minor still needs Apple's `confirmed` or the operator to read adult again, and active parental controls close all three. A Family Sharing child's Apple Account carries the birth date its guardian set, so reading 18+ takes an Apple Account with a false birth date | Medium/High (raised from Low/High on 2026-10-14 for D3: the lie now also reaches the chat and Premium; reassessed 2026-11-03: it can also reach another minor's approval, which the guardian row below carries, and the likelihood and severity of the lie itself are unchanged) |
+| Someone falsely claims to be a guardian | Approval | Medium/High | Only an adult Apple reports as 18+, declared or confirmed, with no active parental controls, already the owner or an admin of the house, approves; explicit declaration; a false declaration breaches the Terms §4; the guardianship records the guardian's assurance | Medium/High (declared, not proven; reassessed 2026-11-03, when a declared age began to suffice: Apple never confirms adult ages in Brazil, so the confirmed-only gate had let no Brazilian family add a child, and the guardianship was already a declaration. Accepted risk: a minor who declared 18+ to Apple and runs a house can approve another minor) |
 | A house left without an adult | Membership | Low/Medium | The minor's account pauses and shows nothing; a minor account without a house is deleted after 30 days | Low/Low |
 | A child's task detail reaches a lock screen, printer or chat | Notifications, child's day | Medium/Medium | `ChildDayRow` has no detail field; neutral notification template on a minor's device; no subtitle in any body | Low/Low |
 | Apparent sexual abuse material entered by an adult | Chat input | Low/High | Input moderation seals it, blocks the account's chat, and the operator reports it to the Polícia Federal (Decreto 12.880 art. 39); deleting the account keeps a sealed copy of its identifiers and data for the preservation period, and the block follows the same Apple ID | Low/High |
@@ -218,7 +222,7 @@ rewrite is allowed only if it still says what the cited article asks.
 | Guardian sheet card | "{nome} vai ver só as próprias tarefas e marcar o que fez." / "Não conversa com a Nina, não compra nada e não vê o resto da casa." | LGPD art. 14 §6; ECA Digital art. 7 §1 |
 | Guardian sheet card | "As tarefas de {nome} não vão para a inteligência artificial." / "Quando um adulto fala de {nome} com a Nina, o nome vai trocado por um código." | LGPD arts. 14 §3 and 33 |
 | Guardian sheet card | "Você controla avisos e tempo de uso, e pode apagar a conta quando quiser." | ECA Digital arts. 17-18 |
-| Guardian declaration | "Declaro que sou mãe, pai ou responsável legal de {nome}." | LGPD art. 14 §§1 and 5; Código Civil arts. 3 and 1.634 VII |
+| Guardian declaration | "Declaro que sou mãe, pai ou responsável legal de {nome}." | LGPD art. 14 §§1 and 5; Código Civil arts. 3 and 1.634 VII (since 2026-11-03 an adult whose 18+ Apple reports as declared also signs it, and this declaration with Apple's range is the "esforços razoáveis" of §5) |
 | Guardian consent | "Autorizo a Nina a guardar o nome, a faixa de idade e as tarefas de {nome}, e aceito os Termos e a Política de Privacidade como responsável por {nome}." | LGPD art. 14 §1; art. 8 §2 |
 | Health consent | "Autorizo registrar lembretes de saúde de {nome}, como remédio e consulta." | LGPD arts. 11 I and 14 §4 |
 | Minor welcome | "A Nina é um programa de computador, não uma pessoa." | Decreto 12.880 art. 11 I |
@@ -256,8 +260,9 @@ Mirrored word for word on `/familias/` §10:
   que a conta é acompanhada.
 - Riscos que continuam: um apelido que a casa não informou pode chegar à
   OpenAI; a idade depende do que a Apple informa e da declaração do
-  responsável; um menor que se declarou adulto na Apple conversa com a Nina; e
-  o limite de tempo é contado no próprio iPhone.
+  responsável; um menor que se declarou adulto na Apple conversa com a Nina e
+  pode responder por outro menor; e o limite de tempo é contado no próprio
+  iPhone.
 
 Followed by: "Revemos a avaliação a cada mudança que afete menores. A versão
 completa fica disponível para a ANPD quando ela pedir."
@@ -270,8 +275,10 @@ completa fica disponível para a ANPD quando ela pedir."
 - The age signal is attested by the client device, not proven by a document.
 - Guardianship is declared, not proven.
 - Apple does not confirm adult ages in Brazil, so since D3 (2026-10-14) a
-  self-declared 18+ opens the chat and Premium. A minor who declared 18+ to
-  Apple reaches both; acting for a minor still needs Apple's confirmation.
+  self-declared 18+ opens the chat and Premium, and since 2026-11-03 acting
+  for a minor too. A minor who declared 18+ to Apple reaches all three, and
+  can approve another minor as a declared guardian (Heitor's decision of
+  2026-11-03, `docs/privacy/lgpd-launch-posture.md`).
 - Redaction is best effort, and the pseudonymized transfer is still a transfer.
 - No ANPD standard clauses with OpenAI; no Zero Data Retention.
 - The scope of ECA Digital and pending ANPD regulation.
@@ -299,7 +306,10 @@ The controller reviews this document, and its public summary, whenever:
   build 18 and acknowledges the Terms of 18 October once the operator moves
   `current_terms_version` to `2026-10-18`, not run as of 2026-10-18);
 - the operator changes `trusted_assurances` (widened to `self_declared` under
-  D3; this document was reviewed for it on 2026-10-14).
+  D3; this document was reviewed for it on 2026-10-14);
+- who may act for a minor changes (`private.is_trusted_adult` took
+  `self_declared` in migration `202611030001`; this document, its summary and
+  `/familias/` were reviewed for it on 2026-11-03).
 
 Signals to read each month on TestFlight and after launch: the assurance
 distribution (`private.age_assurance_distribution()`), the number of minor

@@ -6,7 +6,7 @@ import RatingMark from "../components/RatingMark.astro";
 import { legalIdentity } from "../legal";
 import { ninaRating } from "../rating";
 
-const updatedAt = "20 de outubro de 2026";
+const updatedAt = "3 de novembro de 2026";
 const ratingReason = ninaRating.code === "14"
   ? " Essa classificação vem da assinatura do Nina Premium e da conversa com a inteligência artificial, mesmo que as duas sejam só para adultos: contas de menores não assinam e não conversam com a Nina."
   : "";
@@ -40,7 +40,12 @@ const capabilities: ReadonlyArray<{
   },
   {
     what: "Aprovar um menor, cadastrar uma criança ou um adolescente, ser responsável",
-    answers: ["Sim, declarando ser mãe, pai ou responsável legal", "Não", "Não", "Não"],
+    answers: [
+      "Sim, declarando ser mãe, pai ou responsável legal",
+      "Sim, declarando ser mãe, pai ou responsável legal",
+      "Não",
+      "Não",
+    ],
   },
   {
     what: "Ver a casa inteira: tarefas com detalhes, compras, pessoas e memórias",
@@ -180,10 +185,12 @@ const capabilities: ReadonlyArray<{
         A Apple informa ao app uma faixa de idade, nunca a data de nascimento. O que cada conta pode
         fazer depende dessa faixa. Adulto confirmado é quem a Apple confirmou ter 18 anos ou mais.
         Adulto declarado é quem informou ter 18 anos ou mais sem essa confirmação. Os dois conversam
-        com a Nina e podem assinar o Premium; só o adulto confirmado decide por uma criança ou um
-        adolescente. Uma conta com controles parentais ativos não conversa com a Nina, não assina e
-        não decide por um menor. Quando a Apple não informa a faixa, a conta é tratada como a de uma
-        criança até que a faixa seja informada.
+        com a Nina, podem assinar o Premium e podem decidir por uma criança ou um adolescente,
+        declarando ser mãe, pai ou responsável legal. Uma conta com controles parentais ativos não
+        conversa com a Nina, não assina e não decide por um menor. Quando a Apple não informa a
+        faixa, a conta é tratada como a de uma criança até que a faixa seja informada. Cada conta
+        participa de uma casa por vez, em qualquer idade. Um perfil de criança ou adolescente sem
+        conta pode existir em mais de uma casa.
       </p>
       <table class="policy-table" role="table">
         <caption class="sr-only">O que cada idade pode fazer na Nina</caption>
@@ -296,8 +303,9 @@ const capabilities: ReadonlyArray<{
         <li>
           <strong>Mentira sobre a idade:</strong> a faixa vem da Apple, o app verifica o aparelho, e
           uma conta de menor só entra com a aprovação de um responsável. Um menor que se declarou
-          adulto na Apple conversa com a Nina e pode assinar; por isso a conversa bloqueia conteúdo
-          sexual para todos, e decidir por uma criança pede idade confirmada pela Apple.
+          adulto na Apple conversa com a Nina, pode assinar e pode responder por outro menor. Por
+          isso a conversa bloqueia conteúdo sexual para todos, e quem responde por um menor declara
+          ser mãe, pai ou responsável legal; declarar isso sem ser viola os Termos.
         </li>
         <li>
           <strong>Uma casa sem responsável:</strong> a conta do menor fica pausada, sem mostrar
@@ -417,7 +425,8 @@ const capabilities: ReadonlyArray<{
         <li>
           Riscos que continuam: um apelido que a casa não informou pode chegar à OpenAI; a idade
           depende do que a Apple informa e da declaração do responsável; um menor que se declarou
-          adulto na Apple conversa com a Nina; e o limite de tempo é contado no próprio iPhone.
+          adulto na Apple conversa com a Nina e pode responder por outro menor; e o limite de tempo
+          é contado no próprio iPhone.
         </li>
       </ul>
       <p>

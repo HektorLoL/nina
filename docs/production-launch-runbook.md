@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-10-20
+Last updated: 2026-11-03
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -475,7 +475,8 @@ schema every adult would see the minor screen.
   and no paywall. Since D3 (2026-10-14, below) a self-declared adult chats and
   can buy Premium once production holds the new policy row.
 - **Children's profiles need a guardian.** An existing child profile reads "Sem
-  autorização" until an Apple-confirmed adult taps "Sou responsável"; its
+  autorização" until an Apple-confirmed adult (since `202611030001`, also a
+  self-declared one) taps "Sou responsável"; its
   "Mostrar" list is off until then.
 - **iOS 26.4 or later.** Build 10 does not install on older iPhones.
 
@@ -487,9 +488,10 @@ Apple-confirmed adults. On 2026-10-14 Heitor's own Brazilian adult account
 still read `self_declared` on every retry, and Apple does not confirm adult
 ages in Brazil, so no real adult could chat or buy. The reasoning, the legal
 reading and the rating cost are in `docs/privacy/lgpd-launch-posture.md`,
-"Decision D3". Acting for a minor stays confirmed-or-operator in
-`private.is_trusted_adult`, whatever the policy row says, and active parental
-controls still mean not trusted.
+"Decision D3". Acting for a minor stayed confirmed-or-operator in
+`private.is_trusted_adult`, whatever the policy row says, until migration
+`202611030001` (below, "One house at a time, and declared guardians") added
+`self_declared` there; active parental controls still mean not trusted.
 
 Nina records only a status, a band, how Apple obtained it and a
 parental-controls flag — never a birth date or the range's bounds — and the
@@ -505,7 +507,7 @@ Read it after each TestFlight round. What each row means:
   iOS 26.5, or an ID, payment or other check). Trusted for everything.
 - `adult` / `self_declared` — the person or their Apple Account said 18+
   without a check. Since D3: runs a house, chats after accepting the notice and
-  buys Premium; never acts for a minor.
+  buys Premium; since `202611030001` also acts for a minor.
 - `adult` / `operator` — marked by Heitor in step 6. Trusted; not evidence of
   how real users come back, so leave these out when reading the ratio.
 - `minor` / any — Apple (or a guardian's lower band) says under 18.
@@ -532,7 +534,8 @@ select private.may_use_ai('<self-declared adult auth user id>') as may_use_ai,
        private.is_trusted_adult('<same id>') as acts_for_minors;
 ```
 
-Expect `{confirmed,operator,self_declared}`, then `true` and `false`. A
+Expect `{confirmed,operator,self_declared}`, then `true` and `false` (`true`
+and `true` once `202611030001` is applied). A
 `false` in `may_use_ai` means the update did not land or that account has
 active parental controls.
 
@@ -548,7 +551,7 @@ Premium in Ajustes (and "Ver o Premium" when the day's messages run out), and
 counts toward the weekly summary once they accept. The tour lands them on Nina. They still
 cannot approve a minor ("Isso pede idade confirmada pela Apple.") or add or
 answer for a child or teen ("Só um responsável com idade confirmada pela Apple
-cadastra."). Build 12's in-app FAQ still asks
+cadastra."), until `202611030001` and build 21. Build 12's in-app FAQ still asks
 "Por que a conversa pede idade confirmada?" until people update to the next
 build. The Terms version does not change, so nobody sees "Os Termos mudaram.".
 
@@ -995,6 +998,201 @@ No row after a real app load means `cf-connecting-ip` does not reach
 PostgREST on the hosted path; look for `app_access_record_failed` in the
 Postgres logs before changing the header.
 
+### One house at a time, and declared guardians (`202611030001`)
+
+Heitor's decisions of 2026-11-03, after testing build 20. Migration
+`202611030001_one_house_and_declared_guardians.sql` makes an account belong to
+one house at a time (`request_family_join`, `create_family` and
+`approve_family_join_request` refuse a claimed member of another house, a new
+request or house cancels the person's other pending requests, a trigger on
+`family_members` refuses a second claimed row, and `private.lock_account`
+serializes it), lets a self-declared adult without parental controls act for a
+minor (`private.is_trusted_adult`), shows the majority screen once
+(`private.age_status_json`), retires unread access decisions when the person
+enters a house, and hides the person's line of a failed turn from
+`get_current_nina_state`. Builds up to 20 read every new refusal as their
+generic failure line, so the migration may go before build 21. Terms §4 and §5
+change with it, so the recorded Terms version moves once the page is live and
+the migration is applied (`docs/privacy/lgpd-launch-posture.md`, "Decision of
+2026-11-03"). Run the steps in this order, on one day.
+
+1. **Local gate.** From a clean export (`git archive` of the commit, `CLAUDE.md`
+   §12), `deno task db:reset && deno task db:test`, and `deno task test`.
+2. **Pre-check, read only, in the SQL editor.** Production must still run the
+   bodies the migration replaces, and none of the new ones:
+
+   ```sql
+   select routines.oid::regprocedure, md5(routines.prosrc)
+   from pg_proc as routines
+   join pg_namespace as namespaces on namespaces.oid = routines.pronamespace
+   where (namespaces.nspname, routines.proname) in (
+     ('public', 'create_family'),
+     ('public', 'request_family_join'),
+     ('public', 'approve_family_join_request'),
+     ('private', 'is_trusted_adult'),
+     ('private', 'age_status_json'),
+     ('public', 'get_current_nina_state'),
+     ('private', 'lock_account'),
+     ('private', 'claimed_house_elsewhere'),
+     ('private', 'enforce_one_house_per_account'),
+     ('private', 'retire_access_decisions_on_join')
+   )
+   order by 1;
+
+   select tgname from pg_trigger
+   where tgrelid = 'public.family_members'::regclass
+     and tgname in ('family_members_one_house_per_account', 'family_members_retire_access_decisions');
+
+   select max(version) from supabase_migrations.schema_migrations;
+   select current_terms_version from private.age_policy;
+   ```
+
+   Expect exactly these seven bodies (computed on 2026-11-03 from the
+   committed text of the migration each one comes from; the same method
+   reproduces the `202610140001` hashes production read), then no trigger
+   row, `202610200001` and `2026-10-18`. Any other body means production
+   drifted from the repository: stop and compare before applying.
+
+   | Function | Source | Before |
+   |---|---|---|
+   | `public.create_family(text, text)` | `202610050003` | `393198c53391330d5e351e56b432102e` |
+   | `public.create_family(text)` | `202609290004` | unchanged; not redefined |
+   | `public.request_family_join(text)` | `202609290004` | `76e908dc3ce22f5571e21e30f5084676` |
+   | `public.approve_family_join_request(uuid, text, text, text, boolean, text, boolean, text[])` | `202609290004` | `a7d8a8b1e77598b642706c3e52f4dce2` |
+   | `private.is_trusted_adult(uuid)` | `202609290002` | `a01a9549da344e967113ad5a1d8bad1e` |
+   | `private.age_status_json(uuid)` | `202609290002` | `5a8915af1a12f4f37bdeac92ef9b5a19` |
+   | `public.get_current_nina_state(uuid)` | `202609290003` | `8155f15ef66f4d0d7d88699a4d1ce9cc` |
+
+   (The query also lists `create_family(text)`, whose body the migration does
+   not touch; read its hash and expect the same one in step 4.)
+
+3. **Count what the migration will touch, read only.** No membership is
+   removed; these are the accounts the trigger will hold to the houses they
+   are in, and the requests it will cancel:
+
+   ```sql
+   select count(*) as accounts_in_more_than_one_house
+   from (
+     select user_id
+     from public.family_members
+     where user_id is not null
+     group by user_id
+     having count(distinct family_id) > 1
+   ) as doubled;
+
+   select count(*) as pending_requests_to_cancel
+   from public.family_join_requests as requests
+   where requests.status = 'pending'
+     and (
+       exists (
+         select 1 from public.family_members as members
+         where members.user_id = requests.requester_user_id
+       )
+       or exists (
+         select 1 from public.family_join_requests as newer
+         where newer.requester_user_id = requests.requester_user_id
+           and newer.status = 'pending'
+           and (newer.created_at, newer.id) > (requests.created_at, requests.id)
+       )
+     );
+   ```
+
+   Write both numbers down. An account in two houses (Heitor's build-20
+   testers) keeps both until it leaves one; tell that tester to leave one.
+4. **Apply the migration** through the Supabase MCP `apply_migration` named
+   `one_house_and_declared_guardians` with the committed file's body (or
+   `npx --yes supabase@2.110.0 db push` from the clean export, whose dry run
+   must list only this file). The MCP records a 14-digit version, so repair it
+   at once:
+
+   ```sql
+   update supabase_migrations.schema_migrations
+   set version = '202611030001'
+   where name = 'one_house_and_declared_guardians'
+     and version <> '202611030001';
+   ```
+
+5. **Read back.** Rerun the first query of step 2 and expect:
+
+   | Function | After |
+   |---|---|
+   | `public.create_family(text, text)` | `d6685aab157a9d9a08cb8c6d62f8b735` |
+   | `public.request_family_join(text)` | `131a5bddb99e811f4cc4a2fcb7541b21` |
+   | `public.approve_family_join_request(uuid, text, text, text, boolean, text, boolean, text[])` | `4acea108989c6d7c54e926cce83eff94` |
+   | `private.is_trusted_adult(uuid)` | `192f71aefd0ee5fdf42e7d7a2a04b039` |
+   | `private.age_status_json(uuid)` | `719524cec3b34de9d7f61a8851fda95f` |
+   | `public.get_current_nina_state(uuid)` | `e3aaed05b1e537f9e4f30cf530cc356d` |
+   | `private.lock_account(uuid)` | `77f658ca04c65caeb6aa4385994fd807` |
+   | `private.claimed_house_elsewhere(uuid, uuid)` | `d0f314103497944235f284f132457215` |
+   | `private.enforce_one_house_per_account()` | `1ad900296c77f5c97b8c9e061f5055ce` |
+   | `private.retire_access_decisions_on_join()` | `009ea6187fe2b6ae5dc69b19f2c065de` |
+
+   Then the two trigger rows, the rest of step 2 (`202611030001`, still
+   `2026-10-18`), the step 3 counts (the first unchanged, the second 0), and:
+
+   ```sql
+   select
+     has_function_privilege('authenticated', 'private.lock_account(uuid)', 'execute'),
+     has_function_privilege('service_role', 'private.claimed_house_elsewhere(uuid, uuid)', 'execute'),
+     has_function_privilege('authenticated', 'private.is_trusted_adult(uuid)', 'execute'),
+     has_function_privilege('authenticated', 'public.create_family(text, text)', 'execute'),
+     has_function_privilege('authenticated', 'public.request_family_join(text)', 'execute');
+
+   select private.may_use_ai('<self-declared adult auth user id>') as may_use_ai,
+          private.is_trusted_adult('<same id>') as acts_for_minors;
+   ```
+
+   Expect `false, false, false, false, true`; then `true, true` for an adult
+   whose assurance reads `self_declared` without parental controls. Rerun the
+   grant-count query of "Deleting a house" step 4: still 52 for
+   `authenticated` and 27 for `service_role`, and the foreign-key index canary
+   reads 0.
+6. **Redeploy three Edge Functions** from a clean export of the commit
+   (`git archive HEAD | tar -x -C <dir>`, `CLAUDE.md` §12), with CLI 2.110.0:
+
+   ```sh
+   for fn in nina-chat premium-subscription-sync app-store-server-notifications; do
+     npx --yes supabase@2.110.0 functions deploy "$fn" --project-ref apemftmlsjocvifbptum --use-api
+   done
+   ```
+
+   `nina-chat` answers a message over 2,000 UTF-16 units with 413
+   `input_too_large` instead of 400 `invalid_request`; the two App Store
+   functions stop an app-side sync, which carries no renewal info, from
+   clearing the renewal and notification columns a server notification
+   recorded (`_shared/app-store.ts`). Nothing else under `supabase/functions/`
+   changed since the deploys of 2026-10-19 (`git log 962baee..HEAD --
+   supabase/functions/`). Then compare `list_edge_functions` versions and
+   dates with `git log`, and check `nina-chat` still answers 400
+   `invalid_request` to an empty body with the publishable key.
+7. **Publish the Terms.** The pages went live with the documentation push of
+   2026-11-03; `https://ninai.app/termos/` must read "Atualizados em 3 de
+   novembro de 2026", §5 must say a person takes part in one house at a time,
+   and the page must keep `data-legal-launch="ready"`.
+8. **Move the recorded Terms version**, only after steps 5 and 7:
+
+   ```sql
+   update private.age_policy
+   set current_terms_version = '2026-11-03', updated_at = now()
+   where singleton;
+
+   select current_terms_version, current_policy_version, current_minor_consent_version
+   from private.age_policy;
+   ```
+
+   Expect `2026-11-03`, `2026-09-29`, `2026-09-29`. The consent card and the
+   guardian's consent text did not change, so no AI consent is withdrawn.
+
+**What testers then see.** Every adult meets "Os Termos mudaram." once and
+taps Aceitar; every minor acknowledges the Terms again. A member who opens
+another house's link, or tries to create a house, is refused (builds up to 20
+show their generic failure line; build 21 says how to leave first). A
+self-declared adult who owns or administers a house approves a minor and adds
+a child on the server; builds up to 20 still close those gates on the phone
+with a line about Apple's confirmation ("Isso pede idade confirmada pela
+Apple." at a minor's request) until people update to build 21. The local stack
+keeps `2026-09-29`, because no migration carries the version.
+
 ### Age contests and child-safety holds
 
 An age contest (Decreto 12.880 art. 27) follows `docs/age-contest-runbook.md`; a
@@ -1114,8 +1312,35 @@ development, but produces a warning because it cannot prove archive signing.
 
 ### What the next build carries
 
-Build 20 is the release candidate. If another build is cut before submission,
-it also carries these, found on 2026-10-20 and not worth a build alone:
+Build 21 (in progress) fixes Heitor's playtest of build 20 (2026-11-03) and
+replaces build 20 as the release candidate once he tests it. It needs
+migration `202611030001` in production first (§3, "One house at a time, and
+declared guardians"):
+
+- **One house at a time.** Someone already in a house who opens another
+  house's link, or chooses "Criar uma casa", is told how to leave first ("Você
+  já está numa casa. Para entrar nesta, primeiro saia da sua.", with the
+  titular's variants: pass the house or "Apagar a casa"); their own house's
+  link reads "Você já está nesta casa."; an invite held while the person
+  leaves waits and returns once they hold no house; an approval whose
+  requester went elsewhere reads "Esse pedido já não vale." and rereads the
+  house.
+- **Declared adults act for minors.** The member editor, the guardian sheets
+  and a minor's join request open for a self-declared adult without parental
+  controls; with parental controls on they say so ("Com controles parentais
+  ativos, esta conta não aprova crianças nem adolescentes."), and no line says
+  acting for a child needs an age Apple confirmed. This is the "you can't add
+  kids" error Heitor hit with an adult Apple account.
+- **Playtest polish.** A pending request polls in place and lands in the house
+  with realtime on; an age share made inside the app rereads the house without
+  the waiting screen; a retried unverifiable first load runs the age step, so a
+  new adult never lands on the minor screen; a leave or acknowledgement whose
+  answer was lost reads "A resposta não chegou. Tente de novo." and its retry
+  lands where it should.
+- The FAQ (`Nina/SupportView.swift`, `web/src/support.ts`) answers "Posso
+  estar em duas casas?" and "Quem pode incluir uma criança?".
+
+It also carries these, found on 2026-10-20 and not worth a build alone:
 
 - The account deletion sheet says what stays by law: the access records for
   the rest of their six months (Marco Civil art. 15) and the guardianship and
@@ -1377,10 +1602,11 @@ from the operator. One whose device shares no age reads as unknown, sees a
 minor's screens, and is asked in the review notes to reply with the time they
 signed in. Mark only that account, and only with `trusted = false` (Heitor's
 choice 3 of 2026-10-19): `private.operator_set_age_status` then records a
-self-declared adult, which chats and buys Premium under D3's policy row but is
-never trusted for a minor (`private.is_trusted_adult` takes `confirmed` or
-`operator` only). `true` would record `operator`, which approves, adds and
-answers for children; never use it for the reviewer.
+self-declared adult, which chats and buys Premium under D3's policy row and,
+once migration `202611030001` is applied, also approves, adds and answers for
+children, like any Brazilian adult (`private.is_trusted_adult` took `confirmed`
+or `operator` only before it). `true` would record `operator`, a mark that
+outlives the reviewer's phone; never use it for the reviewer.
 
 1. **Find the account** from the time the reviewer gives (an account made since
    build 11 carries no email):
@@ -1429,7 +1655,8 @@ answers for children; never use it for the reviewer.
           private.is_trusted_adult('<reviewer auth user id>') as acts_for_minors;
    ```
 
-   Expect `true`, `true`, `false`, then answer in the submission's messages
+   Expect `true`, `true`, `false` (`true`, `true`, `true` once
+   `202611030001` is applied), then answer in the submission's messages
    that the account is ready. The reviewer refreshes the house (pull to
    refresh, or leave and return to the app). This mark is a self-declared
    record, so unlike an `operator` mark (`202610140001`) it does not outlive

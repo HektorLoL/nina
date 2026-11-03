@@ -1,6 +1,6 @@
 # Age Rating (Classificação Indicativa) - Nina
 
-Last updated: 2026-10-19
+Last updated: 2026-11-03
 
 Nina's rating is 14, "Não recomendado para menores de 14 anos", since
 2026-10-18. That is the ClassInd coordination's reading of 2026-10-15 (§9):
@@ -22,7 +22,10 @@ constant (§8). A 14 or above went back to Heitor, and on 2026-10-18 it did.
 Heitor decided on 2026-10-14 (D3): an adult whose 18+ age Apple reports as
 self-declared may chat and buy Premium, because Apple does not confirm adult
 ages in Brazil (`docs/privacy/lgpd-launch-posture.md`, "Decision D3"). Acting
-for a minor still needs an age Apple confirmed. This weakened the age gate in
+for a minor still needed an age Apple confirmed until Heitor's decision of
+2026-11-03 (choice A, migration `202611030001`), which lets a self-declared
+adult act for a minor too, as a declared guardian; that touches no
+interactive element of the questionnaire. This weakened the age gate in
 front of the chat and the paywall, and §6 says what it was expected to cost.
 
 Heitor decided on 2026-10-18 (option A): accept 14 now. The rating changes to
@@ -98,7 +101,7 @@ of A16 or above would, and goes back to Heitor (§8).
 | Item | Answer | Rationale | Risk if App Review disagrees |
 | --- | --- | --- | --- |
 | In-app Parental Controls | Yes | A live guardian sets alerts, quiet hours and a daily limit, sees 7 days of use, exports and deletes (ECA Digital arts. 17-18). | None for the listing. |
-| In-app Age Assurance | Yes | Declared Age Range, recorded only through an App Attest-verified endpoint; server gates for every adult feature. An 18+ range, self-declared or confirmed, opens the chat and Premium; acting for a minor needs Apple's confirmation (D3). | None for the listing. |
+| In-app Age Assurance | Yes | Declared Age Range, recorded only through an App Attest-verified endpoint; server gates for every adult feature. An 18+ range, self-declared or confirmed, opens the chat and Premium (D3) and, since the decision of 2026-11-03, acting for a minor as a declared guardian. | None for the listing. |
 | Unrestricted Web Access | No | No web view or browser. | None. |
 | Advertising | No | No ads and no ad SDK. | None. |
 | Social Media | No | No feed, no discovery, no public profile. Required question since September 2026. | None expected. |
@@ -151,14 +154,15 @@ adult features, whatever the rating.
 ## 4. Review note (English)
 
 The one review note is in `docs/app-store-listing.md` §6, final as of
-2026-10-19, with its character count. The earlier draft that stood here
+2026-11-03, with its character count. The earlier draft that stood here
 (written before D3 and the rating of 14, with a "Test accounts" line that had
 no working form) was deleted that day so that only one text exists. The note
 names the rating of 14, asks §3's questions, carries the Sign in with Apple
 paragraph of `docs/production-launch-runbook.md` §6.1 word for word, and says
 how the reviewer reaches the adult features: if the review device shares no
 age, the operator marks the reviewer's account with `trusted = false`, a
-self-declared adult that chats and buys Premium but never acts for a child
+self-declared adult that chats and buys Premium (and, once migration
+`202611030001` is applied, may act for a child like any Brazilian adult)
 (Heitor's choice 3 of 2026-10-19; the statements are in the runbook's §6, "The
 reviewer's account").
 
@@ -247,7 +251,8 @@ to `'2026-10-18'` (`docs/production-launch-runbook.md` §3, "The rating of 14,
 and the Terms of 18 October"), on 2026-10-18. Every adult now meets "Os Termos
 mudaram." once and every minor acknowledges the Terms again. The AI chat and
 Premium are unchanged: adults only, by Apple's 18+ range, declared or confirmed
-(D3), and acting for a minor still needs a confirmed age. The App Store answers
+(D3), and acting for a minor needed a confirmed age until the decision of
+2026-11-03, which admits a declared one. The App Store answers
 and the review note carry 14 (§2, §4). If the análise prévia or the MJSP rate
 Nina lower, the constant goes back down by §8's steps.
 

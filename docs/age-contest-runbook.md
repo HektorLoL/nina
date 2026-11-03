@@ -1,6 +1,6 @@
 # Age contest runbook
 
-Last updated: 2026-10-14
+Last updated: 2026-11-03
 
 Decreto 12.880/2026 art. 27 gives a person a way to contest the age a service
 assigned them. In Nina the age is a band held on the server
@@ -97,7 +97,7 @@ Always choose the more protective reading when the evidence is unclear
 -- An adult Heitor has verified, or a tester (trusted: chats, buys, acts for minors).
 select private.operator_set_age_status('<auth user id>', 'adult', null, true, 'age_contest');
 
--- An adult who is not verified beyond the person's word (runs a house; since D3 also chats and buys, never acts for minors).
+-- An adult who is not verified beyond the person's word (runs a house; since D3 also chats and buys; since migration 202611030001 also acts for minors).
 select private.operator_set_age_status('<auth user id>', 'adult', null, false, 'age_contest');
 
 -- A minor, with the band: 'under_12', '12_15' or '16_17'.
@@ -107,6 +107,9 @@ select private.operator_set_age_status('<auth user id>', 'minor', '12_15', false
 The reason is a stable lowercase code (`age_contest`, `testflight`,
 `guardian_confirmed`), never free text about the person. The record's assurance
 becomes `operator` for a trusted adult and `self_declared` for an untrusted one.
+Since migration `202611030001` (Heitor's decision of 2026-11-03) both act for
+a minor; what still differs is that an `operator` mark outlives the person's
+phone (`202610140001`) and a `self_declared` one is replaced by the next signal.
 
 What each move does, with no further step:
 

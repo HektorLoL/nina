@@ -1,6 +1,6 @@
 # Record of Processing Operations - Nina
 
-Last updated: 2026-10-20
+Last updated: 2026-11-03
 
 LGPD art. 37 asks the controller and each processor to keep a record of the
 processing operations they carry out, especially those based on legitimate
@@ -126,6 +126,12 @@ processors and transfers, retention, and the controls that hold it in place.
   (art. 14 §1).
 - **Minors:** child and teen rows carry no birth date and no photo; the band is
   never in the member list outside the guardian's supervision block.
+- **One house at a time** (since migration `202611030001`, Heitor's decision
+  of 2026-11-03): an account is a member of one house only, so one set of
+  adults reads its row; a new request or house cancels its other pending
+  requests, and an approver is never told the requester belongs to another
+  house. Account-less child and teen profiles are outside the rule. Entering a
+  house marks the person's unread access decisions as read.
 - **Stored:** server.
 - **Access:** adults of the house; a requester reads their own request and
   decision. Minors read none of it.
@@ -192,8 +198,11 @@ processors and transfers, retention, and the controls that hold it in place.
   consent proof 5 years after it ends, with the user id removed on deletion and
   the hash kept. Profiles created before 2026-09-29 without a guardian are
   deleted after `private.age_policy.legacy_profile_deadline`.
-- **Controls:** only an adult whose age Apple confirmed (or the operator) can
-  declare; approval writes every row in one transaction.
+- **Controls:** only an adult whom Apple reports as 18+, declared or
+  confirmed (or the operator), with no active parental controls, can declare
+  (a declared age suffices since migration `202611030001`, Heitor's decision
+  of 2026-11-03; the guardianship records the guardian's assurance); approval
+  writes every row in one transaction.
 
 ### R6. Minors: supervision and usage minutes
 
