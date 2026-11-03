@@ -344,7 +344,7 @@ product regression, not a refactor.
   advisory lock taken *before* any row lock.
 - **One house at a time** (Heitor's decision of 2026-11-03, after his build-20
   playtest found that a member who opened another house's link joined both;
-  migration `202611030001`, not yet applied to production, §13). A claimed
+  migration `202611030001`, applied to production 2026-11-03, §13). A claimed
   member of any house cannot ask to join, be approved into or create another:
   `request_family_join` and `create_family` raise `family_membership_exists`
   (P0001), while opening one's own house's invite still lands in it. The
@@ -2507,7 +2507,7 @@ the project, not bugs to fix unprompted.
   adult, and acting for a minor needs the mark again
   (`private.operator_set_age_status('<id>', 'adult', null, true, 'testflight')`),
   which his phone's adult signals leave in place since `202610140001` was
-  applied the same day, until migration `202611030001` reaches production and
+  applied the same day; since migration `202611030001` (applied 2026-11-03)
   a self-declared adult acts for a minor without it. Every other reading in `private.age_assurance_distribution()` shows
   how a real iPhone came back. Build
   10 reaches the external group only after Beta App Review. Still open on a device, since
@@ -2805,7 +2805,7 @@ the project, not bugs to fix unprompted.
   row existed yet; the first app load is the proof that `cf-connecting-ip`
   reaches PostgREST. No build is needed.
 - **Migration `202611030001` (one house at a time, and declared guardians) is
-  not yet applied to production.** Committed in 83aeffb on 2026-11-03 from
+  applied to production (2026-11-03, Heitor's "go database").** Committed in 83aeffb on 2026-11-03 from
   Heitor's two decisions of that day (`docs/privacy/lgpd-launch-posture.md`,
   "Decision of 2026-11-03"): an account belongs to one house at a time (§4,
   "One house at a time"), and `private.is_trusted_adult` accepts
@@ -2826,8 +2826,18 @@ the project, not bugs to fix unprompted.
   Terms version move to `2026-11-03` are `docs/production-launch-runbook.md`
   §3, "One house at a time, and declared guardians". Terms §4 and §5, privacy
   §3A and `/familias/` (dated 3 November) went live with the documentation
-  push of 2026-11-03, ahead of the apply, so until it runs they describe rules
-  the server does not enforce yet. The grant counts stay 52 and 27.
+  push of 2026-11-03, a few hours ahead of the apply. The pre-check matched
+  all six replaced bodies with none of the new objects, `202610200001` and
+  Terms `2026-10-18`; one account sat in two houses and no pending request
+  needed cancelling. It went through the Supabase MCP `apply_migration` with
+  the committed body and its version row was set to `202611030001` (§12).
+  Read back the same day: all ten bodies match the runbook's post-change
+  md5s, both triggers exist, the privilege checks read `f,f,f,f,t`, the grant
+  counts stay 52 and 27, and both self-declared adults read `may_use_ai` and
+  `is_trusted_adult` true. The three functions were redeployed from a clean
+  export of 4cadc59 with CLI 2.110.0 and each answered with its own code, and
+  `current_terms_version` moved to `2026-11-03` (policy and minor consent
+  still `2026-09-29`), so every adult meets "Os Termos mudaram." once.
 - **Join requests reach Casa live from build 15 (2026-10-15).** No
   migration: the `families` bump already reached production's realtime; the
   app had subscribed twice per cold launch and kept a dead channel, and a

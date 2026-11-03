@@ -320,9 +320,9 @@ on "Os Termos mudaram." and every minor acknowledges again.
 `current_policy_version` and the minors' consent version stay `2026-09-29`:
 the consent card and the guardian's consent text did not change, and the
 privacy change is in who may decide for a minor, not in what happens to the
-data. The pages went live with the push of 2026-11-03, before the migration;
-until it is applied, the server still refuses a declared adult at a minor's
-approval and still lets a member open a second house.
+data. The pages went live with the push of 2026-11-03, a few hours before the
+migration; it was applied the same day and the Terms version moved to
+`2026-11-03` (`CLAUDE.md` §13).
 
 ## Minors
 
