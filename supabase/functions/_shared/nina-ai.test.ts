@@ -58,8 +58,8 @@ import {
   ninaInvestmentRefusal,
   ninaLegalRefusal,
   ninaMedicalRefusal,
-  ninaSupportReply,
   ninaOutputRefusal,
+  ninaSupportReply,
   ninaSystemPrompt,
 } from "./nina-chat-policy.ts";
 import { ninaDefaultDueTime } from "./nina-due-date.ts";
@@ -142,7 +142,11 @@ Deno.test("the largest turn the app can send fits under the chat body cap, slash
 });
 
 Deno.test("a chat body over the cap is read to its end and discarded before the 413, so the platform can deliver it", async () => {
-  const tooLarge = { ok: false, status: 413, error: "input_too_large" } as const;
+  const tooLarge = {
+    ok: false,
+    status: 413,
+    error: "input_too_large",
+  } as const;
   const chunkBytes = 1024 * 1024;
   const chunkCount = maxNinaChatRequestBytes / chunkBytes + 1;
   let sent = 0;
@@ -198,10 +202,14 @@ Deno.test("an endless chat body stops being read at the drain ceiling", async ()
 
 Deno.test("a message over the length cap reads as too large and one at the cap still reads", async () => {
   const turn = (message: string) =>
-    chatRequest(JSON.stringify({ family_id: familyID, message_id: messageID, message }));
+    chatRequest(
+      JSON.stringify({ family_id: familyID, message_id: messageID, message }),
+    );
 
   assertEquals(maxNinaChatMessageLength, 2000);
-  const atCap = await readNinaChatRequest(turn("a".repeat(maxNinaChatMessageLength)));
+  const atCap = await readNinaChatRequest(
+    turn("a".repeat(maxNinaChatMessageLength)),
+  );
   assert(atCap.ok);
   assertEquals(
     await readNinaChatRequest(turn("a".repeat(maxNinaChatMessageLength + 1))),
@@ -214,7 +222,11 @@ Deno.test("a message over the length cap reads as too large and one at the cap s
 });
 
 Deno.test("a chat body that is not JSON or not a turn keeps its stable codes", async () => {
-  const invalidJSON = { ok: false, status: 400, error: "invalid_json" } as const;
+  const invalidJSON = {
+    ok: false,
+    status: 400,
+    error: "invalid_json",
+  } as const;
   assertEquals(await readNinaChatRequest(chatRequest("{")), invalidJSON);
   assertEquals(
     await readNinaChatRequest(chatRequest(new Uint8Array([0x7b, 0xff, 0x7d]))),
@@ -238,11 +250,17 @@ Deno.test("no edge function reads a request body without a byte cap", async () =
   const sources: Array<[string, URL]> = [];
   for await (const entry of Deno.readDir(functionsURL)) {
     if (entry.isDirectory && !entry.name.startsWith("_")) {
-      sources.push([entry.name, new URL(`${entry.name}/index.ts`, functionsURL)]);
+      sources.push([
+        entry.name,
+        new URL(`${entry.name}/index.ts`, functionsURL),
+      ]);
     }
   }
   for await (const entry of Deno.readDir(new URL("./", import.meta.url))) {
-    if (entry.isFile && entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+    if (
+      entry.isFile && entry.name.endsWith(".ts") &&
+      !entry.name.endsWith(".test.ts")
+    ) {
       sources.push([entry.name, new URL(entry.name, import.meta.url)]);
     }
   }
@@ -1025,7 +1043,10 @@ Deno.test("each chat turn tells the model São Paulo's day and dates what it lef
   assertFalse(source.includes("toLocaleString("));
   assert(fill > source.indexOf("isStructuredOutput(structured)"));
   assert(fill < source.lastIndexOf('"complete_nina_chat_run"'));
-  assertStringIncludes(source, "names.restoreProposals(datedProposals.proposals)");
+  assertStringIncludes(
+    source,
+    "names.restoreProposals(datedProposals.proposals)",
+  );
 });
 
 Deno.test("production function keeps moderation, timeouts, and content-free logs", async () => {
@@ -1037,7 +1058,10 @@ Deno.test("production function keeps moderation, timeouts, and content-free logs
   );
   assertStringIncludes(transport, '"omni-moderation-latest"');
   assertStringIncludes(transport, "AbortSignal.timeout");
-  assertStringIncludes(source, "return await moderate(apiKey, inputs, { deadline });");
+  assertStringIncludes(
+    source,
+    "return await moderate(apiKey, inputs, { deadline });",
+  );
   assertStringIncludes(
     source,
     "return await moderate(apiKey, moderationTexts(texts), { deadline });",
@@ -1385,7 +1409,13 @@ Deno.test("a message about self-harm meets the CVV line before any model, and ot
   );
   const handler = source.slice(source.indexOf("Deno.serve("));
 
-  for (const category of ["self-harm", "self-harm/intent", "self-harm/instructions"]) {
+  for (
+    const category of [
+      "self-harm",
+      "self-harm/intent",
+      "self-harm/instructions",
+    ]
+  ) {
     assertEquals(
       moderationVerdict({
         results: [{ flagged: true, categories: { [category]: true } }],
@@ -1545,7 +1575,11 @@ Deno.test("a recipe is a prescription only beside a medicine or a dose", () => {
       "Pare o remédio da vovó.",
     ]
   ) {
-    assertEquals(deterministicSensitiveReply(message), ninaMedicalRefusal, message);
+    assertEquals(
+      deterministicSensitiveReply(message),
+      ninaMedicalRefusal,
+      message,
+    );
   }
   for (
     const message of [
@@ -1568,7 +1602,11 @@ Deno.test("a legal conclusion or an investment decision is still answered before
       "O processo tem validade jurídica? Decida por mim.",
     ]
   ) {
-    assertEquals(deterministicSensitiveReply(message), ninaLegalRefusal, message);
+    assertEquals(
+      deterministicSensitiveReply(message),
+      ninaLegalRefusal,
+      message,
+    );
   }
   for (
     const message of [
@@ -1591,7 +1629,9 @@ Deno.test("a legal conclusion or an investment decision is still answered before
     );
   }
   assertEquals(
-    deterministicSensitiveReply("Qual a dose de dipirona para uma criança de 20 kg?"),
+    deterministicSensitiveReply(
+      "Qual a dose de dipirona para uma criança de 20 kg?",
+    ),
     ninaMedicalRefusal,
   );
 });
@@ -1614,7 +1654,13 @@ Deno.test("the eval proves the false refusals answered and the true ones refused
     "Não posso concluir validade jurídica",
     "Não posso decidir investimento",
   ];
-  for (const refusal of [ninaMedicalRefusal, ninaLegalRefusal, ninaInvestmentRefusal]) {
+  for (
+    const refusal of [
+      ninaMedicalRefusal,
+      ninaLegalRefusal,
+      ninaInvestmentRefusal,
+    ]
+  ) {
     assert(refusalOpenings.some((opening) => refusal.startsWith(opening)));
   }
 
@@ -1638,7 +1684,9 @@ Deno.test("the eval proves the false refusals answered and the true ones refused
     assert(entry.expected_proposal_kinds.length > 0, entry.id);
   }
 
-  const refused = new Map(fixture.cases.map((entry) => [entry.id, entry.input]));
+  const refused = new Map(
+    fixture.cases.map((entry) => [entry.id, entry.input]),
+  );
   for (
     const [id, reply] of [
       ["legal-sensitive", ninaLegalRefusal],
@@ -1680,7 +1728,9 @@ Deno.test("an attachment is refused before anything is stored unless the server'
   );
   assert(gate > 0 && refusal > gate);
   assert(
-    handler.indexOf('return jsonResponse({ error: "adult_access_required" }, 403);') <
+    handler.indexOf(
+      'return jsonResponse({ error: "adult_access_required" }, 403);',
+    ) <
       gate,
   );
   assert(refusal < handler.indexOf('"begin_nina_chat_run"'));
@@ -1781,7 +1831,10 @@ Deno.test("maintenance deletes minor accounts without a house before any AI work
   assert(deletion < source.indexOf("if (!openAIKey)"));
   assertStringIncludes(source, '"list_minor_accounts_due_for_deletion"');
   assertStringIncludes(source, "deleteAccountInOrder(stages, accountID)");
-  assertStringIncludes(source, "text: JSON.stringify(names.deep({\n          ...candidate,");
+  assertStringIncludes(
+    source,
+    "text: JSON.stringify(names.deep({\n          ...candidate,",
+  );
   assertStringIncludes(
     source,
     "open_tasks_by_owner: names.structuredKeys(",
@@ -1818,7 +1871,9 @@ Deno.test("the app caps a message at the same length the server reads", async ()
   const swift = await Deno.readTextFile(
     new URL("../../../Nina/NinaChatView.swift", import.meta.url),
   );
-  const cap = swift.match(/enum NinaMessageLimit \{\s*static let maxLength = ([\d_]+)/);
+  const cap = swift.match(
+    /enum NinaMessageLimit \{\s*static let maxLength = ([\d_]+)/,
+  );
   assert(cap, "NinaMessageLimit.maxLength must stay a literal");
   assertEquals(Number(cap[1].replaceAll("_", "")), maxNinaChatMessageLength);
 });
