@@ -2586,7 +2586,7 @@ the project, not bugs to fix unprompted.
   warnings. Its one change: the Nina mark, the headline and the line of the
   Terms and age gates sit centred, like the welcome. Build 20 is the release
   candidate Heitor tests before any test data is deleted.
-- **Build 21 (in progress) fixes Heitor's build-20 playtest.** Heitor tested
+- **Build 21 (2026-11-03) fixes Heitor's build-20 playtest.** Heitor tested
   build 20 with two testers on 2026-11-03 and found two things: a member who
   opened another house's link joined both houses, and an adult Apple account
   could not add a child ("you can't add kids like that"), because Apple reads
@@ -2594,9 +2594,19 @@ the project, not bugs to fix unprompted.
   migration `202611030001` (next entry): the one-house refusals with how to
   leave first, the child and minor gates open to a declared adult without
   parental controls, and the playtest polish listed in
-  `docs/production-launch-runbook.md` §5, "What the next build carries". It
-  needs the migration in production first and replaces build 20 as the
-  release candidate once Heitor tests it. Not archived yet.
+  `docs/production-launch-runbook.md` §5, "What the next build carries"; a
+  sweep of nine areas (onboarding, house, tasks, reminders, chat, Premium,
+  minors, settings, iPad compatibility mode and small screens) found 63
+  candidate defects, a second reviewer confirmed 60, and commits 4bf1497,
+  4cadc59, 1fd4733 and f9ee1c9 fix 58 (two needed no app change). Archived from
+  the sources tagged `testflight-1.0-21` with `CURRENT_PROJECT_VERSION` 21,
+  after the migration reached production; the online production preflight
+  against the archive read 0 failures and 0 warnings, and the upload
+  succeeded. 707 XCTests, 400 Deno tests and 911 pgTAP tests pass. It
+  replaces build 20 as the release candidate once Heitor tests it. Still open
+  on the server: `delete-account` answering `account_not_found` for a session
+  whose user is gone, and a `guardian_count` in the member access JSON (the
+  app counts `guardian_names`, which groups two guardians with one first name).
 - **Build 19 (2026-10-19) is Heitor's last fixes.** Archived from the sources
   tagged `testflight-1.0-19` with `CURRENT_PROJECT_VERSION` 19; the online
   production preflight against the archive read 0 failures and 0 warnings.
