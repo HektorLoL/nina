@@ -1813,3 +1813,12 @@ Deno.test("no tool returns work a child, a teen or a person of unknown age owns,
     assertStringIncludes(body, "names.structuredName(String(owner)");
   }
 });
+
+Deno.test("the app caps a message at the same length the server reads", async () => {
+  const swift = await Deno.readTextFile(
+    new URL("../../../Nina/NinaChatView.swift", import.meta.url),
+  );
+  const cap = swift.match(/enum NinaMessageLimit \{\s*static let maxLength = ([\d_]+)/);
+  assert(cap, "NinaMessageLimit.maxLength must stay a literal");
+  assertEquals(Number(cap[1].replaceAll("_", "")), maxNinaChatMessageLength);
+});
