@@ -2603,7 +2603,9 @@ the project, not bugs to fix unprompted.
   after the migration reached production; the online production preflight
   against the archive read 0 failures and 0 warnings, and the upload
   succeeded. 707 XCTests, 400 Deno tests and 911 pgTAP tests pass. It
-  replaces build 20 as the release candidate once Heitor tests it. Still open
+  replaced build 20 as the release candidate when Heitor tested it on
+  2026-11-04 and found everything working (a build-20 phone still read
+  `family_membership_exists` as "convite inválido", as expected). Still open
   on the server: `delete-account` answering `account_not_found` for a session
   whose user is gone, and a `guardian_count` in the member access JSON (the
   app counts `guardian_names`, which groups two guardians with one first name).
