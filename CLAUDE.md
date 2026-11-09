@@ -2870,9 +2870,12 @@ the project, not bugs to fix unprompted.
   IARC; the filing needs a video of every feature open to classification, plus
   an access link, login and password when full access needs them), not filed
   yet; and if the Ministry rates Nina lower, the constant goes back down.
-  Release waits for it (Heitor's choice 4, 2026-10-19): version 1.0 goes to
-  App Review with "Manually release this version", and Release is pressed
-  only after the análise prévia's result or a written yes from ClassInd
+  Release no longer waits for it (Heitor's choice B of 2026-11-09, replacing
+  choice 4 of 2026-10-19): the análise prévia is filed before launch, as a
+  sign of good faith, and Release is pressed once App Review approves,
+  without waiting for the Ministry's result, accepting the risk of Portaria
+  art. 44 §3 ("não poderá ser comercializado sem a atribuição da
+  classificação indicativa"; whether it binds a non-game app is UNVERIFIED)
   (`docs/production-launch-runbook.md` §8, launch day). Build
   18 (2026-10-18, tagged `testflight-1.0-18`) is the
   first to carry the 14 mark on the welcome and the startup screen; builds up

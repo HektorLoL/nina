@@ -1588,9 +1588,9 @@ renames its pages; where a label differs, record what it is called now.
     (set and confirmed 2026-09-09);
   - both added to the version under "In-App Purchases and Subscriptions", so
     they go to review with the app's first version.
-- [ ] **Version Release: "Manually release this version"** (Heitor's choice 4
-  of 2026-10-19). An approved version then waits in "Pending Developer
-  Release" until §8.
+- [ ] **Version Release: "Manually release this version"**, so the release
+  happens on a day Heitor picks (§8). Since his choice B of 2026-11-09 it no
+  longer waits for the ClassInd result.
 - [ ] **TestFlight.** The public link carries a tester limit (§2), and is
   turned off on launch day (§8).
 
@@ -1700,8 +1700,8 @@ The technical gate cannot substitute for these approvals:
 
 ## 8. Launch day
 
-**Release waits for the Ministry: press Release only after the análise
-prévia's result or a written yes from ClassInd** (Heitor's choice 4 of
+**The análise prévia is filed before Release, and Release does not wait for
+its result** (Heitor's choice B of 2026-11-09, replacing choice 4 of
 2026-10-19; `docs/privacy/classificacao-indicativa.md` §9). The version went to
 App Review with "Manually release this version" (§6), so an approved version
 waits in "Pending Developer Release" for as long as that takes. Record the

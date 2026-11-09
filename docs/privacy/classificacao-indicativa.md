@@ -34,10 +34,10 @@ exactly as they are, for adults only; the análise prévia gets filed (not yet,
 §6); and if the Ministry later rates Nina lower, the constant changes back (§8,
 §9).
 
-Heitor decided on 2026-10-19 (choice 4): the version is submitted with
-"Manually release this version", and Release is pressed only after the
-análise prévia's result or a written yes from ClassInd (§9;
-`docs/production-launch-runbook.md` §8).
+Heitor decided on 2026-10-19 (choice 4) that Release would wait for the
+análise prévia's result. On 2026-11-09 he replaced it with choice B: the
+análise prévia is filed before launch, and Release does not wait for its
+result (§9; `docs/production-launch-runbook.md` §8).
 
 Answer the questionnaire only with the all-ages work live end to end:
 migrations, functions, the build, the web pages and the production preflight
@@ -390,6 +390,12 @@ Written so far:
   and that the repo's L, 12, 16 and 18 hexes differ slightly from the Guia's
   (p. 125); neither matters while the app draws no mark. Restoring it is one
   `ClassIndMark()` call on each of the two screens plus the preflight check.
+- 2026-11-09: Heitor replaced choice 4 with choice B: file the análise
+  prévia before launch, as a sign of good faith, and release without waiting
+  for its result. The accepted risk is Portaria art. 44 §3, read strictly
+  (UNVERIFIED for a non-game app): an MJSP notice first, an ECA fine
+  possible, and an Inova Simples company has no legal personality of its
+  own, so Heitor answers personally.
 - 2026-10-19: Heitor decided (choice 4) that the App Store version waits for
   the Ministry: it goes to App Review with "Manually release this version",
   and Release is pressed only after the análise prévia's result or a written
