@@ -653,6 +653,13 @@ struct TaskCategory: Identifiable, Codable, Hashable, CaseIterable {
         TaskCategory(id: id, title: title, symbolName: "tag", tone: tone)
     }
 
+    // A built-in category keeps its own title: a confirmed reminder's snapshot says "Casa".
+    static func stored(id: String, snapshot: TaskCategory?) -> TaskCategory {
+        allCases.first { $0.id == id }
+            ?? snapshot
+            ?? .custom(id: id, title: id.capitalized, tone: .lavender)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id
         case title

@@ -878,6 +878,19 @@ final class RemoteDecodingTests: XCTestCase {
         XCTAssertEqual(wire["due_label"] as? String, "quando der")
     }
 
+    func testAConfirmedReminderIsListedUnderItsOwnCategoryAndNeverUnderASecondCasa() throws {
+        let snapshotJSON = #"{"id":"health","title":"Casa","symbolName":"bolt","tone":"amber"}"#
+        let serverSnapshot = try JSONDecoder().decode(TaskCategory.self, from: Data(snapshotJSON.utf8))
+
+        let health = TaskCategory.stored(id: "health", snapshot: serverSnapshot)
+        XCTAssertEqual(health, .health)
+        XCTAssertEqual(health.title, "Saúde")
+
+        let custom = TaskCategory.custom(id: "jardim", title: "Jardim", tone: .mint)
+        XCTAssertEqual(TaskCategory.stored(id: "jardim", snapshot: custom), custom)
+        XCTAssertEqual(TaskCategory.stored(id: "jardim", snapshot: nil).title, "Jardim")
+    }
+
     func testSavingAProfileNeverSendsThePhoneSexOrBirthday() throws {
         let row = ProfileUpsertRow(
             id: UUID(),

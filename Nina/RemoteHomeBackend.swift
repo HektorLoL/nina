@@ -2773,9 +2773,10 @@ private struct TaskRow: Decodable {
         let decodedCategoryID = try container.decodeIfPresent(String.self, forKey: .categoryID)
             ?? TaskCategory.home.id
         categoryID = decodedCategoryID
-        categorySnapshot = (try? container.decode(TaskCategory.self, forKey: .categorySnapshot))
-            ?? TaskCategory.allCases.first(where: { $0.id == decodedCategoryID })
-            ?? .custom(id: decodedCategoryID, title: decodedCategoryID.capitalized, tone: .lavender)
+        categorySnapshot = TaskCategory.stored(
+            id: decodedCategoryID,
+            snapshot: try? container.decode(TaskCategory.self, forKey: .categorySnapshot)
+        )
         priority = try container.decodeIfPresent(String.self, forKey: .priority) ?? TaskPriority.normal.rawValue
         recurrenceRule = try container.decodeIfPresent(String.self, forKey: .recurrenceRule) ?? TaskRecurrence.none.rawValue
         remindOffsetMinutes = try container.decodeIfPresent(Int.self, forKey: .remindOffsetMinutes) ?? 0

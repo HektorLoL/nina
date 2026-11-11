@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-11-03
+Last updated: 2026-11-11
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -2609,6 +2609,15 @@ the project, not bugs to fix unprompted.
   on the server: `delete-account` answering `account_not_found` for a session
   whose user is gone, and a `guardian_count` in the member access JSON (the
   app counts `guardian_names`, which groups two guardians with one first name).
+- **Build 22 (2026-11-11) lists a confirmed reminder under its own category.**
+  `resolve_nina_proposal` writes every reminder's `category_snapshot` with the
+  title "Casa", whatever its `category_id`, so Tarefas showed a second and a
+  third "CASA" group (health and bills under that name). The app now reads a
+  built-in category id as the built-in category and ignores the snapshot's
+  title (`TaskCategory.stored`, locked by
+  `RemoteDecodingTests.testAConfirmedReminderIsListedUnderItsOwnCategoryAndNeverUnderASecondCasa`);
+  builds up to 21 still show the extra groups. No migration. Found while
+  taking the App Store screenshots; `CURRENT_PROJECT_VERSION` 22.
 - **Build 19 (2026-10-19) is Heitor's last fixes.** Archived from the sources
   tagged `testflight-1.0-19` with `CURRENT_PROJECT_VERSION` 19; the online
   production preflight against the archive read 0 failures and 0 warnings.
