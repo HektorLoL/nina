@@ -206,14 +206,54 @@ What each part rests on, and what to re-check before pasting:
   python3 -c 'import sys; print(len(sys.stdin.read().rstrip("\n")))' < notes.txt
   ```
 
-## 7. What this draft does not cover
+## 7. Screenshots
+
+Eight designed images, 1320×2868 PNG with no alpha, look "Cobalto". Heitor
+approved the look and every line on 2026-11-11; they replace the plain captures
+planned on 2026-10-19 (choice 1). Heitor uploads them himself.
+
+| # | Headline | Small line | App screen |
+|---|---|---|---|
+| 1 | Conte para a Nina. | Ela propõe. Você confirma. | Conversa: the person's line, Nina's answer, the proposal card |
+| 2 | O que a casa precisa hoje. | Urgente em vermelho. Alta em amarelo. | Hoje |
+| 3 | As compras, numa lista só. | Cada item com a sua quantidade. | Compras |
+| 4 | Sinal de sobrecarga. | Um retrato para conversar, não para cobrar. | Sinal de sobrecarga |
+| 5 | Até 8 pessoas e pets. | A Nina não ocupa vaga. | Casa |
+| 6 | Cada tarefa tem dono e data. | Sem dono, fica com a casa. | Tarefas |
+| 7 | Lembretes na hora certa. | E silêncio à noite, quando você quiser. | One task |
+| 8 | A rotina da casa, dividida. | Sem anúncios e sem rastreamento. | None: the mark on the tiles |
+
+What they keep, to re-check after any edit:
+
+- **Every app piece is a real capture**, with made-up names (Casa Aroeira: Bia,
+  Leo, Lia, Biscoito); nothing is redrawn. Screen 3 joins two captures, the
+  list and the "Editar item" sheet. Screens 1 and 8 show no full phone, so 7
+  of 8 show the app in use; Guideline 2.3.3 asks for more than half.
+- **Each line is a claim §2 or §3 already makes**, or a string the app shows:
+  line 8 is the login's own line, and "Urgente em vermelho. Alta em amarelo."
+  is the tinted rows of build 19. None sells photo or document reading, a
+  Sementes screen (no capture exists) or kids mode.
+- **No price, award, URL or "para crianças"** (Guidelines 2.3.7 and 2.3.8).
+  Nina is spoken of in the third person and is never "amiga".
+- **The mark** is the only character: no face, never rotated, closed, boxed
+  or terracotta. Its disc is lifted on screen 1 (waiting for the person) and
+  at rest elsewhere.
+- **The screens are frameless**, so Apple's rules for its device bezels do
+  not apply.
+
+The files live outside the repository, in Heitor's vault at
+`~/developer/Notes vault/My notes/Nina/App Store screenshots/`: the finals in
+`v2/`, the layouts and headlines in `_fonte-v2/build.py` (`python3 build.py`
+renders them again through headless Chrome, from the raw captures beside it
+and the fonts in this repository), and the research on 18 store listings and
+Apple's rules in `Pesquisa.md`.
+
+## 8. What this draft does not cover
 
 - The privacy questionnaire: `docs/privacy/app-store-privacy-labels.md` is the
   source, Purchase History, Health and Photos or Videos rows included (added
   2026-10-19).
-- Screenshots: plain 6.9-inch iPhone screenshots of the app, with made-up
-  names, for the first submission (Heitor's choice 1 of 2026-10-19; designed
-  images come later), plus one paywall screenshot per subscription.
+- The paywall review screenshot each subscription needs (§5).
 - The App Store Connect settings themselves (availability, devices, age
   answers, URLs, categories, the subscription group, the release mode):
   `docs/production-launch-runbook.md` §6, "App Store Connect settings".
