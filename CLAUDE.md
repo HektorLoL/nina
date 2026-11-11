@@ -2617,7 +2617,10 @@ the project, not bugs to fix unprompted.
   title (`TaskCategory.stored`, locked by
   `RemoteDecodingTests.testAConfirmedReminderIsListedUnderItsOwnCategoryAndNeverUnderASecondCasa`);
   builds up to 21 still show the extra groups. No migration. Found while
-  taking the App Store screenshots; `CURRENT_PROJECT_VERSION` 22.
+  taking the App Store screenshots. Archived from the sources tagged
+  `testflight-1.0-22` with `CURRENT_PROJECT_VERSION` 22; the online production
+  preflight against the archive read 0 failures and 0 warnings, 708 XCTests
+  pass, and the upload succeeded.
 - **Build 19 (2026-10-19) is Heitor's last fixes.** Archived from the sources
   tagged `testflight-1.0-19` with `CURRENT_PROJECT_VERSION` 19; the online
   production preflight against the archive read 0 failures and 0 warnings.
