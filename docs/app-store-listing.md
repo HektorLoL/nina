@@ -1,6 +1,6 @@
 # App Store listing — draft for version 1.0
 
-Last updated: 2026-11-03
+Last updated: 2026-11-11
 
 The text to paste into App Store Connect for the first submission. It is a
 draft: Heitor approves every line before it is pasted. The name was decided on
@@ -135,9 +135,9 @@ Each subscription also needs its own review screenshot of the paywall.
 ## 6. App Review notes (English)
 
 The one text to paste into App Review Information › Notes, as it stands on
-2026-11-03. It replaces every earlier draft, the one that was in
+2026-11-11. It replaces every earlier draft, the one that was in
 `docs/privacy/classificacao-indicativa.md` §4 included. Paste what is inside the
-fence, line breaks as they are: 3,883 characters, under Apple's 4,000.
+fence, line breaks as they are: 3,970 characters, under Apple's 4,000.
 
 ```text
 Nina is a household organizer for families in Brazil, in Brazilian Portuguese, for iPhone. A person tells Nina in a chat what the house needs; Nina proposes tasks, reminders and shopping items, and nothing is created until a person confirms it.
@@ -156,7 +156,7 @@ If your device shares no age range, Nina treats the account as a minor's, which 
 
 Sign in with Apple is the only way in. Nina requests only the full-name scope and never the email scope, and keeps only the first (given) name Apple shares; it never stores the family name, and it never asks for an email address, so an account created with this version holds none. The first name is what the other members of the household see. An adult is asked to type a first name only when Apple shared none (the person chose not to share it, or the Apple ID had already signed in to Nina, since Apple shares the name only on the first sign-in), and only when creating or joining a household. A person under 18, or anyone whose age Apple has not shared (Nina treats that account as a minor's until it does), confirms a first name, filled in from Apple's when shared, only when asking a guardian to let them join a household.
 
-Age rating: on 15 October 2026 Brazil's Ministry of Justice rating coordination (ClassInd) told us Nina tends to "not recommended for under 14" because of the in-app subscription and the generative AI chat. We accept that and set the Brazil age rating to 14. Nina sets no minimum age: a person under 18 joins a household only with a guardian's approval in the app and sees only their own tasks. Our questions:
+Age rating: on 15 October 2026 Brazil's Ministry of Justice rating coordination (ClassInd) told us Nina tends to "not recommended for under 14" because of the in-app subscription and the generative AI chat. We accept that and set the Brazil age rating to 14. On 11 November 2026 we filed ClassInd's voluntary prior review; the result is pending. Nina sets no minimum age: a person under 18 joins a household only with a guardian's approval in the app and sees only their own tasks. Our questions:
 1. Does content shared inside a closed household of up to 8 approved people count as User-Generated Content or as Messaging?
 2. The AI chat and the subscription open only for accounts the Declared Age Range API reports as 18+, self-declared or confirmed. Do these adult-only features count toward the questionnaire answers, and could they lift Brazil's rating above 14?
 3. Our Terms say some features are only for adults and set no minimum age. Does that count as a minimum age requirement?
