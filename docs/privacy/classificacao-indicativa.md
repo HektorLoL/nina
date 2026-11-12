@@ -1,6 +1,6 @@
 # Age Rating (Classificação Indicativa) - Nina
 
-Last updated: 2026-11-03
+Last updated: 2026-11-12
 
 Nina's rating is 14, "Não recomendado para menores de 14 anos", since
 2026-10-18. That is the ClassInd coordination's reading of 2026-10-15 (§9):
@@ -38,6 +38,11 @@ Heitor decided on 2026-10-19 (choice 4) that Release would wait for the
 análise prévia's result. On 2026-11-09 he replaced it with choice B: the
 análise prévia is filed before launch, and Release does not wait for its
 result (§9; `docs/production-launch-runbook.md` §8).
+
+It was filed by email on 2026-11-11, while the Sistema ClassInd was down,
+with the technical form, the video and the synopsis. On 2026-11-12 the
+Coordenação-Geral answered with protocol 08017.002928/2026-07. The result is
+pending.
 
 Answer the questionnaire only with the all-ages work live end to end:
 migrations, functions, the build, the web pages and the production preflight
