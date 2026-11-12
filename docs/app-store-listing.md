@@ -210,7 +210,11 @@ What each part rests on, and what to re-check before pasting:
 
 Eight designed images, 1320×2868 PNG with no alpha, look "Cobalto". Heitor
 approved the look and every line on 2026-11-11; they replace the plain captures
-planned on 2026-10-19 (choice 1). Heitor uploads them himself.
+planned on 2026-10-19 (choice 1). Heitor uploaded them on 2026-11-12 into the
+one iPhone slot App Store Connect asks for, "iPhone with Dynamic Island (medium
+display)", which takes 1206×2622 and not 1320×2868: the copies sent are JPEG
+with an sRGB profile, because the same images as PNG stayed in processing for
+over an hour.
 
 | # | Headline | Small line | App screen |
 |---|---|---|---|
