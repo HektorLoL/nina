@@ -1,6 +1,6 @@
 # Age Rating (Classificação Indicativa) - Nina
 
-Last updated: 2026-11-12
+Last updated: 2026-11-13
 
 Nina's rating is 14, "Não recomendado para menores de 14 anos", since
 2026-10-18. That is the ClassInd coordination's reading of 2026-10-15 (§9):
@@ -344,6 +344,16 @@ Heitor. The 14 that came back was ClassInd's (§9), and Heitor accepted it.
   attenuator for purchases (D.5.1), with its date (written below, 2026-10-15).
 - Heitor's decision on the published rating (written below, 2026-10-18).
 - What App Store Connect offered for a Brazil rating of 14 (§2).
+
+**What App Store Connect offered (2026-11-13).** The questionnaire was answered
+as in §2 (both in-app controls Yes, every capability and content row No or
+None). Its Step 1 also asks "Social Media Disabled for Users Under 13" whatever
+the Social Media answer; it was answered No, because a Yes there forces Yes on
+Social Media, User-Generated Content and Age Assurance. The answers computed a
+global 4+. The override menu offers only global tiers (9+, 13+, 16+, 18+), no
+Brazil value; overriding to 13+ made the listing read A14 for Brazil (12+ for
+Vietnam and Korea, 13+ for the 172 others), so 13+ is what was saved. Content
+Rights: "does not contain, show, or access third-party content".
 - The análise prévia protocol number and outcome, which Release waits for
   (choice 4, below).
 - The ClassInd registration of representative details.
