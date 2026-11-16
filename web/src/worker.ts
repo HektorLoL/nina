@@ -272,4 +272,18 @@ export default {
 
     return withSecurityHeaders(await env.ASSETS.fetch(request));
   },
+
+  // A free Supabase project pauses after a week without requests, so the daily ping must reach the database.
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    const startedAt = performance.now();
+    const { inviteLookup, waitlist } = await checkWaitlistDependencies(
+      waitlistEnvironment(env),
+    );
+    console.info(JSON.stringify({
+      event: "nina_web_keepalive_pinged",
+      invite_lookup: inviteLookup,
+      waitlist,
+      duration_ms: Math.round(performance.now() - startedAt),
+    }));
+  },
 } satisfies ExportedHandler<Env>;

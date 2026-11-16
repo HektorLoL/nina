@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-11-11
+Last updated: 2026-11-16
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -1771,6 +1771,13 @@ CI's `npm audit --audit-level=high`. Every deviation from the Paper boards is in
 - `wrangler.toml`'s `run_worker_first = ["/api/*", "/invite/*"]` is load-bearing.
   Remove it and the assets layer answers first — the API and the invite rewrite
   break silently in production with no test to catch it.
+- **The Worker pings the database every day** (`[triggers] crons` in
+  `wrangler.toml`, the `scheduled` handler in `worker.ts`, 09:17 UTC): it runs
+  the `/api/health` probes, so production on Supabase Free never pauses for a
+  week without requests (Heitor's choice A of 2026-11-16: launch on Free, move
+  to Pro when the first real family creates a house). It logs
+  `nina_web_keepalive_pinged`; `web/tests/keepalive.test.ts` fails if the
+  trigger or the handler goes.
 - `/invite/<code>` is a **200 rewrite** onto the `/join/` shell so the browser
   URL stays put and `invite.js` can read the code off `location.pathname`.
 - **Never add an inline `<script>` or `<style>`** — including an Astro component
