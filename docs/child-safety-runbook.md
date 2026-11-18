@@ -1,6 +1,6 @@
 # Child-safety runbook
 
-Last updated: 2026-10-20
+Last updated: 2026-11-18
 
 What the operator (Heitor) does with reports and child-safety holds. The law
 behind it: ECA Digital (Lei 15.211/2025) arts. 27–30 and 33, Decreto
@@ -343,15 +343,15 @@ researched draft instead of asking counsel, and answered on 2026-10-20 ("1A
   Polícia Federal's Director-General (art. 35): first, registration in NIDUS
   (that act within 30 days of the Portaria's publication, then 60 days to
   register); second, reports through NIDUS on art. 8's deadlines (that act up
-  to 90 days after registration closes, then up to 120 days to comply). A DOU
-  full-text search for "NIDUS" on 2026-10-19 found only the Portaria, so the
-  first act is not out. Its last day is 2026-10-28 by the strict count (the
-  MJSP's own news says 29 October). If each act comes on its last allowed
-  day, registration closes on 2026-12-27 and reporting binds from
-  2027-07-25; every later date counts from the earlier act's actual
-  publication, so a late act moves them all. Watch the DOU and gov.br/pf
-  until the act appears, then register at once. Registration (art. 7) takes
-  the company's identification; the products, services, domains or apps it
+  to 90 days after registration closes, then up to 120 days to comply). The
+  first act is Portaria DG/PF 19.107 of 2026-10-16, which opened registration;
+  the Polícia Federal confirmed it on 2026-11-18 (the Fala.BR answer below).
+  **Registration is open and closes on 2026-12-16** (art. 7). The
+  legal representative registers the company through the link on the CNCA's
+  site, signed in with their gov.br account. The second act, which opens
+  reports, comes within 90 days of that close, so by 2027-03-16; providers
+  then have 120 days to comply, and the CNCA tells every registered provider.
+  Registration (art. 7) takes the company's identification; the products, services, domains or apps it
   covers in Brazil (the iOS app `com.heitor.nina` and `ninai.app`); a legal
   representative; a technical contact; and a law-enforcement contact "para
   comunicações ordinárias e de emergência", a phone and e-mail answered at
@@ -376,8 +376,13 @@ researched draft instead of asking counsel, and answered on 2026-10-20 ("1A
   as an Ouvidoria manifestation, followed on Fala.BR; Lei 13.460/2017 art. 16
   gives it 30 days, extendable once by 30. On 2026-10-26 the Ouvidoria
   forwarded it to the Diretoria de Combate a Crimes Cibernéticos (DCIBER/PF);
-  the answer is due by 2026-11-25. The channel ends when NIDUS takes
-  Nina's reports.
+  it answered on 2026-11-18. The CNCA has no exceptional means before NIDUS
+  takes reports; it neither endorses nor refuses the MPF route, and notes
+  that Comunica PF takes facts within the Polícia Federal's attribution. For
+  an urgent case it offers `cnca.cgfic.dciber@pf.gov.br` for contact only:
+  never an image, a video or any content that depicts the abuse. So the MPF
+  stays the interim channel. The channel ends when NIDUS takes Nina's
+  reports.
 - **On the MPF, the content goes at the MPF's receipt (decided
   2026-10-20).** This follows ECA art. 241-B §2 III, a law, whose shelter
   ends "até o recebimento do material", and departs from Portaria art. 23,

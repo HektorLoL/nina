@@ -1,6 +1,6 @@
 # Nina Production Launch Runbook
 
-Last updated: 2026-11-03
+Last updated: 2026-11-18
 
 This is the release gate for Nina. A successful local build is not sufficient:
 public launch requires the repository preflight, production configuration
@@ -1521,8 +1521,8 @@ answers, the rationale per item and the review note are in
    ClassInd pictogram artwork and colours (gov.br/mj; `Nina/Theme.swift` and
    `web/src/rating.ts`), the Polícia Federal intake for child-safety reports
    (the MJSP act is Portaria MJSP 1.312/2026, but its NIDUS system takes no
-   reports yet and the interim channel is undecided:
-   `docs/child-safety-runbook.md` §5), and Apple's App Attestation Root CA
+   reports yet; the interim channel is the MPF, and registration in NIDUS
+   closes on 2026-12-16: `docs/child-safety-runbook.md` §5), and Apple's App Attestation Root CA
    (compare with the embedded copy in `_shared/app-attest.ts`). Read on
    2026-10-19 and right, so nothing changes: the CVV number 188 (cvv.org.br;
    `MinorViews.swift`, `/familias/`, the prompt), the 190 and Disque 100
