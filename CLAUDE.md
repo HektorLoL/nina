@@ -1,6 +1,6 @@
 # Nina — Operating Manual
 
-Last updated: 2026-11-16
+Last updated: 2026-11-24
 
 This is the working context for anyone (human or agent) making changes in this
 repository. It records what Nina is, the rules the code refuses to break, and
@@ -2628,6 +2628,21 @@ the project, not bugs to fix unprompted.
   `testflight-1.0-22` with `CURRENT_PROJECT_VERSION` 22; the online production
   preflight against the archive read 0 failures and 0 warnings, 708 XCTests
   pass, and the upload succeeded.
+- **Nina 1.0 (build 22) is live in the Brazil App Store since 2026-11-22.**
+  App Review asked for changes on 2026-11-18 (Guideline 2.1(b): the iPad
+  reviewer read "Não deu para carregar os planos agora." because both
+  subscriptions were sold in Brazil only and the review sandbox account is
+  in another storefront; 2.3.6: the age rating declared Parental Controls
+  and Age Assurance). Both were fixed in App Store Connect with no new
+  build: the subscriptions are on sale in all 175 storefronts (the app
+  itself stays Brazil only) and both In-App Controls read None. Approved
+  2026-11-19, released by Heitor on 2026-11-22 (manual release), the
+  public TestFlight link turned off the same day; no operator mark existed
+  to remove (the reviewer's device declared an adult). The site carries
+  the App Store badge since the Workers Builds rebuild of 2026-11-24, and
+  the online preflight read 0 failures. Still open: NIDUS registration by
+  2026-12-16 (the CNCA fixed a Cloudflare 403 on its form on 2026-11-23),
+  and Apple's Brazil Tax Form, which since 2026-11-01 asks for a CNPJ.
 - **Build 19 (2026-10-19) is Heitor's last fixes.** Archived from the sources
   tagged `testflight-1.0-19` with `CURRENT_PROJECT_VERSION` 19; the online
   production preflight against the archive read 0 failures and 0 warnings.
