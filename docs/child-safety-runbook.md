@@ -1,6 +1,6 @@
 # Child-safety runbook
 
-Last updated: 2026-11-18
+Last updated: 2026-11-24
 
 What the operator (Heitor) does with reports and child-safety holds. The law
 behind it: ECA Digital (Lei 15.211/2025) arts. 27–30 and 33, Decreto
@@ -357,6 +357,14 @@ researched draft instead of asking counsel, and answered on 2026-10-20 ("1A
   comunicações ordinárias e de emergência", a phone and e-mail answered at
   any hour. One person may hold every role (art. 7 §2). All of it goes into
   NIDUS and never into this repository.
+  **Nina registered on 2026-11-24, protocol PRC-2026-000014**, status
+  "Submetido" (in analysis; the CNCA answers by e-mail and may return it for
+  correction within 15 days). Two platforms (the iOS app, "Inteligência
+  artificial", and `ninai.app`, "Outro serviço digital"), Heitor in the three
+  required roles, and the Inova Simples certificate as the representation
+  document (no ICP signature, so it is checked by hand). The form's save had
+  answered a Cloudflare 403 for every provider until the CNCA fixed it on
+  2026-11-23.
 - **The interim channel is the Ministério Público Federal (decided
   2026-10-20).** §2 says how. The choice was between the two receivers ECA
   art. 241-B §2 III names that a company can reach: the MPF's online

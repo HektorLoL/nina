@@ -2640,9 +2640,9 @@ the project, not bugs to fix unprompted.
   public TestFlight link turned off the same day; no operator mark existed
   to remove (the reviewer's device declared an adult). The site carries
   the App Store badge since the Workers Builds rebuild of 2026-11-24, and
-  the online preflight read 0 failures. Still open: NIDUS registration by
-  2026-12-16 (the CNCA fixed a Cloudflare 403 on its form on 2026-11-23),
-  and Apple's Brazil Tax Form, which since 2026-11-01 asks for a CNPJ.
+  the online preflight read 0 failures. NIDUS registration was sent on
+  2026-11-24 (protocol PRC-2026-000014, in analysis). Still open: Apple's
+  Brazil Tax Form, which since 2026-11-01 asks for a CNPJ.
 - **Build 19 (2026-10-19) is Heitor's last fixes.** Archived from the sources
   tagged `testflight-1.0-19` with `CURRENT_PROJECT_VERSION` 19; the online
   production preflight against the archive read 0 failures and 0 warnings.

@@ -1,6 +1,6 @@
 # LGPD Launch Posture - Nina
 
-Last updated: 2026-11-18
+Last updated: 2026-11-24
 
 This is an engineering/privacy operations checklist for launch readiness. It is
 not a substitute for Brazilian legal review, but it documents the product
@@ -586,8 +586,8 @@ automatically. See `docs/production-launch-runbook.md` for ownership and order.
   that the 48-hour acknowledgement on `/denuncia/` can be met.
 - The interim channel for child-safety reports is the Ministério Público
   Federal until NIDUS takes reports (Heitor's decision of 2026-10-20,
-  `docs/child-safety-runbook.md` §2 and §5); register Nina in NIDUS by
-  2026-12-16, the close the Polícia Federal confirmed on 2026-11-18. The CVV number (188) was read at its official
+  `docs/child-safety-runbook.md` §2 and §5); Nina's NIDUS registration went in on
+  2026-11-24 (protocol PRC-2026-000014, in analysis). The CVV number (188) was read at its official
   source on 2026-10-19.
 - Confirm the ClassInd symbol colours and artwork against gov.br/mj, settle
   the App Review questions in `docs/privacy/classificacao-indicativa.md`, and
